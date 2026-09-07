@@ -16,6 +16,8 @@ export function MaterialNameField({
   readOnly,
   keepMaterialOnType,
   sx,
+  errorText,
+  onBlur,
   onChange,
   onSelect,
 }: {
@@ -24,6 +26,8 @@ export function MaterialNameField({
   readOnly?: boolean
   keepMaterialOnType?: boolean
   sx?: object
+  errorText?: string
+  onBlur?: () => void
   onChange: (name: string) => void
   onSelect: (material: StockMaterialOption | null) => void
 }) {
@@ -47,6 +51,7 @@ export function MaterialNameField({
       options={materials}
       value={selected}
       inputValue={value}
+      onBlur={onBlur}
       getOptionLabel={(option) => option.name}
       isOptionEqualToValue={(option, next) => option.id === next.id}
       filterOptions={(options, state) => {
@@ -80,6 +85,8 @@ export function MaterialNameField({
           label="Tên hàng"
           required
           sx={sx}
+          error={Boolean(errorText)}
+          helperText={errorText}
         />
       )}
     />

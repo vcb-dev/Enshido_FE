@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { Stack, Tab, Tabs, Typography } from '@mui/material'
+import { useQueryParams } from '../hooks/useQueryParams'
 import { StockPricePanel } from '../warehouses/StockPricePanel'
 
 const PRICE_SCOPES = [
@@ -8,8 +8,14 @@ const PRICE_SCOPES = [
   { code: 'nvl-tieu-hao', label: 'Kho NVL tiêu hao' },
 ] as const
 
+type ScopeCode = (typeof PRICE_SCOPES)[number]['code']
+
 export function ProductPricePage() {
-  const [scope, setScope] = useState<(typeof PRICE_SCOPES)[number]['code']>('da')
+  // Tab nằm trên URL để link chia sẻ và nút back của trình duyệt hoạt động đúng.
+  const [params, setParams] = useQueryParams({ scope: 'da' })
+  const scope = (PRICE_SCOPES.some((item) => item.code === params.scope)
+    ? params.scope
+    : 'da') as ScopeCode
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
@@ -22,7 +28,7 @@ export function ProductPricePage() {
       </Stack>
       <Tabs
         value={scope}
-        onChange={(_, next) => setScope(next)}
+        onChange={(_, next: ScopeCode) => setParams({ scope: next })}
         sx={{ flexShrink: 0, minHeight: 40, borderBottom: '1px solid #d5dbe0' }}
       >
         {PRICE_SCOPES.map((item) => (

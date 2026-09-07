@@ -1,7 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom'
 import {
-  Alert,
   Autocomplete,
   Box,
   Breadcrumbs,
@@ -11,26 +10,16 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  IconButton,
-  InputLabel,
-  LinearProgress,
   Link,
-  MenuItem,
   Paper,
-  Select,
   Stack,
-  Table,
-  TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   formatMoney,
@@ -48,6 +37,22 @@ import {
   type StockTotals,
   type UpdateStockPayload,
 } from '../api/inventory'
+import {
+  DataTable,
+  Form,
+  FormQtyField,
+  FormRow,
+  FormSelect,
+  FormTextField,
+  RowActions,
+  SearchInput,
+  SelectInput,
+  TextInput,
+  type Column,
+  type SelectOption,
+} from '../components/ui'
+import { useCrudDialog } from '../hooks/useCrudDialog'
+import { paginate, useTableParams } from '../hooks/useTableParams'
 import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
@@ -170,17 +175,11 @@ const STATUS_FILTERS: { value: 'ALL' | AvailabilityCode; label: string }[] = [
 
 function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   const profile = stockProfile(warehouseCode)
-  const colCount =
-    14 +
-    (profile.showLocation ? 1 : 0) +
-    (profile.showSku ? 1 : 0) +
-    (profile.showShapeColor ? 2 : 0) +
-    (profile.showStockCount ? 2 : 0)
   const queryClient = useQueryClient()
-  const [statusFilter, setStatusFilter] = useState<'ALL' | AvailabilityCode>('ALL')
-  const [dialog, setDialog] = useState<StockRow | null>(null)
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(8)
+  const table = useTableParams({ pageSize: 8, filters: { status: 'ALL' } })
+  const { params } = table
+  const dialog = useCrudDialog<StockRow>()
+
   const stock = useQuery({
     queryKey: ['warehouse-stock', warehouseCode],
     queryFn: () => getWarehouseStockApi(warehouseCode),
@@ -193,40 +192,68 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
   })
-  const items = stock.data?.items ?? []
+
+  const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+
   const statusCounts = useMemo(() => {
     const counts = { IN_STOCK: 0, LOW: 0, OUT_OF_STOCK: 0 }
     for (const row of items) counts[row.availability] += 1
     return counts
   }, [items])
-  const visible = useMemo(() => {
-    if (statusFilter === 'ALL') return items
-    return items.filter((row) => row.availability === statusFilter)
-  }, [items, statusFilter])
-  const filtered = statusFilter !== 'ALL'
-  const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
-  const maxPage = Math.max(0, Math.ceil(visible.length / rowsPerPage) - 1)
-  const currentPage = Math.min(page, maxPage)
-  const paged = visible.slice(
-    currentPage * rowsPerPage,
-    currentPage * rowsPerPage + rowsPerPage,
+
+  const statusOptions: SelectOption<string>[] = useMemo(
+    () =>
+      STATUS_FILTERS.map((option) => {
+        const count = option.value === 'ALL' ? items.length : statusCounts[option.value]
+        const label = `${option.label} (${count})`
+        return {
+          value: option.value,
+          label:
+            option.value === 'ALL' ? (
+              label
+            ) : (
+              <Chip
+                size="small"
+                variant="outlined"
+                color={availabilityColor(option.value)}
+                label={label}
+                sx={{ pointerEvents: 'none' }}
+              />
+            ),
+        }
+      }),
+    [items.length, statusCounts],
   )
 
-  const editing = dialog
-  const openEdit = useCallback((row: StockRow) => setDialog(row), [])
+  const visible = useMemo(() => {
+    const keyword = params.search.trim().toLowerCase()
+    return items.filter((row) => {
+      if (params.status !== 'ALL' && row.availability !== params.status) return false
+      if (!keyword) return true
+      return [row.name, row.sku ?? '', row.locationCode ?? '', row.materialType ?? ''].some(
+        (field) => field.toLowerCase().includes(keyword),
+      )
+    })
+  }, [items, params.status, params.search])
+
+  const filtered = params.status !== 'ALL' || params.search.trim() !== ''
+  const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
+  const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
+  const page = Math.min(params.page, pageCount)
+  const indexOffset = (page - 1) * params.pageSize
 
   const save = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateStockPayload }) =>
       updateWarehouseStockApi(warehouseCode, id, payload),
     onSuccess: async (row) => {
       toast.success('Đã cập nhật NVL')
-      setDialog(null)
+      dialog.close()
       queryClient.setQueryData(
         ['warehouse-stock', warehouseCode],
         (current: { items: StockRow[]; totals: StockTotals } | undefined) => {
           if (!current) return current
-          const items = current.items.map((item) => (item.id === row.id ? row : item))
-          return { ...current, items, totals: sumStockTotals(items) }
+          const next = current.items.map((item) => (item.id === row.id ? row : item))
+          return { ...current, items: next, totals: sumStockTotals(next) }
         },
       )
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
@@ -236,249 +263,332 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const columns = useMemo(
+    () => stockColumns(profile, dialog.openEdit),
+    [profile, dialog.openEdit],
+  )
+
+  const minWidth =
+    1480 -
+    (profile.showLocation ? 0 : 110) -
+    (profile.showSku ? 0 : 130) -
+    (profile.showShapeColor ? 0 : 250) +
+    (profile.showStockCount ? 240 : 0)
+
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {stock.error instanceof Error ? (
-        <Alert severity="error" sx={{ flexShrink: 0 }}>{stock.error.message}</Alert>
-      ) : null}
-
       {totals && visible.length > 0 ? (
         <StockSummaryBar totals={totals} count={visible.length} filtered={filtered} />
       ) : null}
 
-      <Paper
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{
-            flexShrink: 0,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            px: 1.5,
-            py: 1,
-            borderBottom: '1px solid #d5dbe0',
-            flexWrap: 'nowrap',
-          }}
-        >
-          <FormControl size="small" sx={{ width: 220, flex: '0 0 auto' }}>
-            <InputLabel id="stock-status-filter">Trạng thái</InputLabel>
-            <Select
-              labelId="stock-status-filter"
+      <DataTable
+        columns={columns}
+        rows={paginate(visible, page, params.pageSize)}
+        rowKey={(row) => row.id}
+        loading={stock.isFetching}
+        errorText={stock.error instanceof Error ? stock.error.message : undefined}
+        emptyText={
+          filtered
+            ? 'Không có NVL khớp bộ lọc.'
+            : 'Chưa có hàng tồn. Thêm tên hàng ở Cấu hình giá sản phẩm.'
+        }
+        variant="grid"
+        minWidth={minWidth}
+        showIndex
+        indexOffset={indexOffset}
+        rowsLabel="NVL"
+        page={page}
+        pageSize={params.pageSize}
+        total={visible.length}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        sx={{ flex: 1 }}
+        customHeader={<StockTableHeader profile={profile} />}
+        toolbar={
+          <>
+            <SearchInput
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder="Tìm tên NVL, mã, vị trí..."
+            />
+            <SelectInput
               label="Trạng thái"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as 'ALL' | AvailabilityCode)
-                setPage(0)
-              }}
-              renderValue={(value) => {
-                const opt = STATUS_FILTERS.find((item) => item.value === value)
-                const count = value === 'ALL' ? items.length : statusCounts[value]
-                const label = `${opt?.label ?? 'Tất cả'} (${count})`
-                if (value === 'ALL') return label
-                return (
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    color={availabilityColor(value)}
-                    label={label}
-                  />
-                )
-              }}
-            >
-              {STATUS_FILTERS.map((opt) => {
-                const count = opt.value === 'ALL' ? items.length : statusCounts[opt.value]
-                const label = `${opt.label} (${count})`
-                return (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.value === 'ALL' ? (
-                      label
-                    ) : (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={availabilityColor(opt.value)}
-                        label={label}
-                        sx={{ pointerEvents: 'none' }}
-                      />
-                    )}
-                  </MenuItem>
-                )
-              })}
-            </Select>
-          </FormControl>
-        </Stack>
-        <TableContainer sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {stock.isFetching ? <LinearProgress /> : null}
-          <Table
-            size="small"
-            sx={{
-              minWidth:
-                1480 -
-                (profile.showLocation ? 0 : 110) -
-                (profile.showSku ? 0 : 130) -
-                (profile.showShapeColor ? 0 : 250) +
-                (profile.showStockCount ? 240 : 0),
-              borderCollapse: 'separate',
-              borderSpacing: 0,
-              '& .MuiTableCell-root': {
-                border: '1px solid #b7c2cc',
-                py: 0.75,
-                px: 1,
-              },
-              '& .MuiTableCell-head': {
-                whiteSpace: 'nowrap',
-              },
-              '& .MuiTableHead-root': {
-                position: 'sticky',
-                top: 0,
-                zIndex: 3,
-              },
-            }}
-          >
-            <TableHead>
-              <TableRow>
-                <TableCell rowSpan={2} align="center">
-                  STT
-                </TableCell>
-                {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
-                {profile.showSku ? <TableCell rowSpan={2}>Mã NVL</TableCell> : null}
-                {profile.showShapeColor ? (
-                  <>
-                    <TableCell rowSpan={2}>Hình dạng</TableCell>
-                    <TableCell rowSpan={2}>Màu sắc</TableCell>
-                  </>
-                ) : null}
-                <TableCell rowSpan={2}>Tên NVL</TableCell>
-                <TableCell rowSpan={2} align="center">
-                  Đơn vị
-                </TableCell>
-                <TableCell align="center" colSpan={2} sx={groupHead.open}>
-                  Tồn đầu kỳ
-                </TableCell>
-                <TableCell align="center" colSpan={2} sx={groupHead.in}>
-                  Nhập
-                </TableCell>
-                <TableCell align="center" colSpan={2} sx={groupHead.out}>
-                  Xuất
-                </TableCell>
-                <TableCell align="center" colSpan={2} sx={groupHead.stock}>
-                  Tồn kho
-                </TableCell>
-                {profile.showStockCount ? (
-                  <TableCell align="center" colSpan={2} sx={groupHead.count}>
-                    Kiểm kê
-                  </TableCell>
-                ) : null}
-                <TableCell rowSpan={2} sx={groupHead.meta}>
-                  {profile.typeLabel}
-                </TableCell>
-                <TableCell rowSpan={2} align="center">
-                  Trạng thái
-                </TableCell>
-                <TableCell rowSpan={2} align="center">
-                  Hành động
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell align="right" sx={groupHead.open}>
-                  SL
-                </TableCell>
-                <TableCell align="right" sx={{ bgcolor: groupHead.open.bgcolor }}>
-                  TT
-                </TableCell>
-                <TableCell align="right" sx={groupHead.in}>
-                  SL
-                </TableCell>
-                <TableCell align="right" sx={{ bgcolor: groupHead.in.bgcolor }}>
-                  TT
-                </TableCell>
-                <TableCell align="right" sx={groupHead.out}>
-                  SL
-                </TableCell>
-                <TableCell align="right" sx={{ bgcolor: groupHead.out.bgcolor }}>
-                  TT
-                </TableCell>
-                <TableCell align="right" sx={groupHead.stock}>
-                  SL
-                </TableCell>
-                <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
-                  TT
-                </TableCell>
-                {profile.showStockCount ? (
-                  <>
-                    <TableCell align="right" sx={groupHead.count}>
-                      Tồn thực tế
-                    </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: groupHead.count.bgcolor }}>
-                      Chênh lệch
-                    </TableCell>
-                  </>
-                ) : null}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paged.map((row, index) => {
-                const stt = currentPage * rowsPerPage + index + 1
-                return (
-                  <StockOnHandRow
-                    key={row.id}
-                    row={row}
-                    stt={stt}
-                    profile={profile}
-                    onEdit={openEdit}
-                  />
-                )
-              })}
-              {!stock.isLoading && visible.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={colCount}>
-                    {stock.isLoading
-                      ? 'Đang tải…'
-                      : 'Chưa có hàng tồn. Thêm tên hàng ở Cấu hình giá sản phẩm.'}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={visible.length}
-          page={currentPage}
-          onPageChange={(_, next) => setPage(next)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(Number(event.target.value))
-            setPage(0)
-          }}
-          rowsPerPageOptions={[8, 25, 50, 100]}
-          labelRowsPerPage="Mỗi trang"
-          labelDisplayedRows={({ from, to, count }) =>
-            `${from}–${to} / ${count} NVL`
-          }
-          sx={{ flexShrink: 0, borderTop: '1px solid #d5dbe0' }}
-        />
-      </Paper>
+              options={statusOptions}
+              value={params.status}
+              onChange={(value) => table.setFilter({ status: String(value) || 'ALL' })}
+              sx={{ width: 220 }}
+              fullWidth={false}
+            />
+          </>
+        }
+      />
+
       <StockEditDialog
-        open={dialog !== null}
-        row={editing}
+        open={dialog.open}
+        row={dialog.row}
         profile={profile}
         saving={save.isPending}
-        onClose={() => setDialog(null)}
+        onClose={dialog.close}
+        onExited={dialog.clear}
         onSave={(payload) => {
-          if (!editing) return
-          save.mutate({ id: editing.id, payload })
+          if (!dialog.row) return
+          save.mutate({ id: dialog.row.id, payload })
         }}
       />
     </Stack>
+  )
+}
+
+const StockTableHeader = memo(function StockTableHeader({ profile }: { profile: StockProfile }) {
+  return (
+    <>
+      <TableRow>
+        <TableCell rowSpan={2} align="center" sx={{ width: 48 }}>
+          STT
+        </TableCell>
+        {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
+        {profile.showSku ? <TableCell rowSpan={2}>Mã NVL</TableCell> : null}
+        {profile.showShapeColor ? (
+          <>
+            <TableCell rowSpan={2}>Hình dạng</TableCell>
+            <TableCell rowSpan={2}>Màu sắc</TableCell>
+          </>
+        ) : null}
+        <TableCell rowSpan={2}>Tên NVL</TableCell>
+        <TableCell rowSpan={2} align="center">
+          Đơn vị
+        </TableCell>
+        <TableCell align="center" colSpan={2} sx={groupHead.open}>
+          Tồn đầu kỳ
+        </TableCell>
+        <TableCell align="center" colSpan={2} sx={groupHead.in}>
+          Nhập
+        </TableCell>
+        <TableCell align="center" colSpan={2} sx={groupHead.out}>
+          Xuất
+        </TableCell>
+        <TableCell align="center" colSpan={2} sx={groupHead.stock}>
+          Tồn kho
+        </TableCell>
+        {profile.showStockCount ? (
+          <TableCell align="center" colSpan={2} sx={groupHead.count}>
+            Kiểm kê
+          </TableCell>
+        ) : null}
+        <TableCell rowSpan={2} sx={groupHead.meta}>
+          {profile.typeLabel}
+        </TableCell>
+        <TableCell rowSpan={2} align="center">
+          Trạng thái
+        </TableCell>
+        <TableCell rowSpan={2} align="center">
+          Hành động
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        <TableCell align="right" sx={groupHead.open}>
+          SL
+        </TableCell>
+        <TableCell align="right" sx={{ bgcolor: groupHead.open.bgcolor }}>
+          TT
+        </TableCell>
+        <TableCell align="right" sx={groupHead.in}>
+          SL
+        </TableCell>
+        <TableCell align="right" sx={{ bgcolor: groupHead.in.bgcolor }}>
+          TT
+        </TableCell>
+        <TableCell align="right" sx={groupHead.out}>
+          SL
+        </TableCell>
+        <TableCell align="right" sx={{ bgcolor: groupHead.out.bgcolor }}>
+          TT
+        </TableCell>
+        <TableCell align="right" sx={groupHead.stock}>
+          SL
+        </TableCell>
+        <TableCell
+          align="right"
+          sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}
+        >
+          TT
+        </TableCell>
+        {profile.showStockCount ? (
+          <>
+            <TableCell align="right" sx={groupHead.count}>
+              Tồn thực tế
+            </TableCell>
+            <TableCell align="right" sx={{ bgcolor: groupHead.count.bgcolor }}>
+              Chênh lệch
+            </TableCell>
+          </>
+        ) : null}
+      </TableRow>
+    </>
+  )
+})
+
+function stockColumns(
+  profile: StockProfile,
+  onEdit: (row: StockRow) => void,
+): Column<StockRow>[] {
+  const columns: Column<StockRow>[] = []
+
+  if (profile.showLocation) {
+    columns.push({
+      key: 'locationCode',
+      header: 'Vị trí',
+      render: (row) => row.locationCode ?? '—',
+    })
+  }
+  if (profile.showSku) {
+    columns.push({
+      key: 'sku',
+      header: 'Mã NVL',
+      cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
+      render: (row) => row.sku ?? '—',
+    })
+  }
+  if (profile.showShapeColor) {
+    columns.push(
+      { key: 'shape', header: 'Hình dạng', render: (row) => row.shape ?? '—' },
+      { key: 'color', header: 'Màu sắc', render: (row) => row.color ?? '—' },
+    )
+  }
+
+  columns.push(
+    { key: 'name', header: 'Tên NVL', cellSx: { minWidth: 220 } },
+    { key: 'unit', header: 'Đơn vị', align: 'center' },
+    {
+      key: 'openingQty',
+      header: 'SL',
+      align: 'right',
+      cellSx: groupBody.open,
+      render: (row) => formatQty(row.openingQty),
+    },
+    {
+      key: 'openingAmount',
+      header: 'TT',
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.open.bgcolor },
+      render: (row) => formatMoney(row.openingAmount),
+    },
+    {
+      key: 'inQty',
+      header: 'SL',
+      align: 'right',
+      cellSx: groupBody.in,
+      render: (row) => formatQty(row.inQty),
+    },
+    {
+      key: 'inAmount',
+      header: 'TT',
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.in.bgcolor },
+      render: (row) => formatMoney(row.inAmount),
+    },
+    {
+      key: 'outQty',
+      header: 'SL',
+      align: 'right',
+      cellSx: groupBody.out,
+      render: (row) => formatQty(row.outQty),
+    },
+    {
+      key: 'outAmount',
+      header: 'TT',
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.out.bgcolor },
+      render: (row) => formatMoney(row.outAmount),
+    },
+    {
+      key: 'qty',
+      header: 'SL',
+      align: 'right',
+      cellSx: groupBody.stock,
+      render: (row) => formatQty(row.qty),
+    },
+    {
+      key: 'amount',
+      header: 'TT',
+      align: 'right',
+      cellSx: { ...groupBody.stock, borderLeft: '1px solid #b7c2cc' },
+      render: (row) => formatMoney(row.amount),
+    },
+  )
+
+  if (profile.showStockCount) {
+    columns.push(
+      {
+        key: 'countedQty',
+        header: 'Tồn thực tế',
+        align: 'right',
+        cellSx: groupBody.count,
+        render: (row) =>
+          row.countedQty == null ? (
+            '—'
+          ) : (
+            <>
+              {formatQty(row.countedQty)}
+              {row.countedAt ? (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {formatStockedDate(row.countedAt)}
+                </Typography>
+              ) : null}
+            </>
+          ),
+      },
+      {
+        key: 'countedVariance',
+        header: 'Chênh lệch',
+        align: 'right',
+        cellSx: { ...numCell, bgcolor: groupBody.count.bgcolor, fontWeight: 700 },
+        render: (row) => <VarianceCell row={row} />,
+      },
+    )
+  }
+
+  columns.push(
+    {
+      key: 'materialType',
+      header: profile.typeLabel,
+      cellSx: groupBody.meta,
+      render: (row) => row.materialType ?? '—',
+    },
+    {
+      key: 'availability',
+      header: 'Trạng thái',
+      align: 'center',
+      render: (row) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={availabilityColor(row.availability)}
+          label={row.availabilityLabel}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Hành động',
+      align: 'center',
+      render: (row) => <RowActions onEdit={() => onEdit(row)} />,
+    },
+  )
+
+  return columns
+}
+
+function VarianceCell({ row }: { row: StockRow }) {
+  if (row.countedQty == null) return <>—</>
+  const variance = Number(row.countedVariance ?? '0')
+  const tone = variance === 0 ? 'text.secondary' : variance > 0 ? '#1e8449' : '#c0392b'
+  const sign = variance > 0 ? '+' : ''
+  return (
+    <Box component="span" sx={{ color: tone }}>
+      {sign}
+      {formatQty(row.countedVariance ?? '0')}
+    </Box>
   )
 }
 
@@ -495,120 +605,6 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
     qty: sum((r) => r.qty),
     amount: sum((r) => r.amount),
   }
-}
-
-const StockOnHandRow = memo(function StockOnHandRow({
-  row,
-  stt,
-  profile,
-  onEdit,
-}: {
-  row: StockRow
-  stt: number
-  profile: StockProfile
-  onEdit: (row: StockRow) => void
-}) {
-  return (
-    <TableRow hover>
-      <TableCell align="center">{stt}</TableCell>
-      {profile.showLocation ? <TableCell>{row.locationCode ?? '—'}</TableCell> : null}
-      {profile.showSku ? (
-        <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{row.sku ?? '—'}</TableCell>
-      ) : null}
-      {profile.showShapeColor ? (
-        <>
-          <TableCell>{row.shape ?? '—'}</TableCell>
-          <TableCell>{row.color ?? '—'}</TableCell>
-        </>
-      ) : null}
-      <TableCell sx={{ minWidth: 220 }}>{row.name}</TableCell>
-      <TableCell align="center">{row.unit}</TableCell>
-      <TableCell align="right" sx={groupBody.open}>
-        {formatQty(row.openingQty)}
-      </TableCell>
-      <TableCell align="right" sx={{ ...numCell, bgcolor: groupBody.open.bgcolor }}>
-        {formatMoney(row.openingAmount)}
-      </TableCell>
-      <TableCell align="right" sx={groupBody.in}>
-        {formatQty(row.inQty)}
-      </TableCell>
-      <TableCell align="right" sx={{ ...numCell, bgcolor: groupBody.in.bgcolor }}>
-        {formatMoney(row.inAmount)}
-      </TableCell>
-      <TableCell align="right" sx={groupBody.out}>
-        {formatQty(row.outQty)}
-      </TableCell>
-      <TableCell align="right" sx={{ ...numCell, bgcolor: groupBody.out.bgcolor }}>
-        {formatMoney(row.outAmount)}
-      </TableCell>
-      <TableCell align="right" sx={groupBody.stock}>
-        {formatQty(row.qty)}
-      </TableCell>
-      <TableCell align="right" sx={{ ...groupBody.stock, borderLeft: '1px solid #b7c2cc' }}>
-        {formatMoney(row.amount)}
-      </TableCell>
-      {profile.showStockCount ? <StockCountCells row={row} /> : null}
-      <TableCell sx={groupBody.meta}>{row.materialType ?? '—'}</TableCell>
-      <TableCell align="center">
-        <Chip
-          size="small"
-          variant="outlined"
-          color={availabilityColor(row.availability)}
-          label={row.availabilityLabel}
-        />
-      </TableCell>
-      <TableCell align="center">
-        <IconButton size="small" aria-label="Chỉnh sửa" onClick={() => onEdit(row)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M4 20h4.6L19.2 9.4a1.5 1.5 0 0 0 0-2.1l-2.5-2.5a1.5 1.5 0 0 0-2.1 0L4 15.4V20Z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-            <path d="m13.2 6.2 4.6 4.6" stroke="currentColor" strokeWidth="1.8" />
-          </svg>
-        </IconButton>
-      </TableCell>
-    </TableRow>
-  )
-})
-
-/// Hai ô "Tồn thực tế" và "Chênh lệch" — chỉ hiện ở kho bật showStockCount.
-function StockCountCells({ row }: { row: StockRow }) {
-  const blank = { ...numCell, bgcolor: groupBody.count.bgcolor }
-  if (row.countedQty == null) {
-    return (
-      <>
-        <TableCell align="right" sx={groupBody.count}>
-          —
-        </TableCell>
-        <TableCell align="right" sx={blank}>
-          —
-        </TableCell>
-      </>
-    )
-  }
-  const variance = Number(row.countedVariance ?? '0')
-  const tone =
-    variance === 0 ? 'text.secondary' : variance > 0 ? '#1e8449' : '#c0392b'
-  const sign = variance > 0 ? '+' : ''
-  return (
-    <>
-      <TableCell align="right" sx={groupBody.count}>
-        {formatQty(row.countedQty)}
-        {row.countedAt ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {formatStockedDate(row.countedAt)}
-          </Typography>
-        ) : null}
-      </TableCell>
-      <TableCell align="right" sx={{ ...blank, color: tone, fontWeight: 700 }}>
-        {sign}
-        {formatQty(row.countedVariance ?? '0')}
-      </TableCell>
-    </>
-  )
 }
 
 function StockSummaryBar({
@@ -708,12 +704,49 @@ function SummaryCard({
   )
 }
 
+type StockFormValues = {
+  locationCode: string
+  sku: string
+  shapeId: string
+  colorId: string
+  name: string
+  unitId: string
+  materialTypeId: string
+  openingQty: string
+  stockUnitPrice: string
+  inQty: string
+  inAmount: string
+  outQty: string
+  outAmount: string
+  countedQty: string
+  countedAt: string
+}
+
+const EMPTY_STOCK: StockFormValues = {
+  locationCode: '',
+  sku: '',
+  shapeId: '',
+  colorId: '',
+  name: '',
+  unitId: '',
+  materialTypeId: '',
+  openingQty: '0',
+  stockUnitPrice: '0',
+  inQty: '0',
+  inAmount: '0',
+  outQty: '0',
+  outAmount: '0',
+  countedQty: '',
+  countedAt: '',
+}
+
 function StockEditDialog({
   open,
   row,
   profile,
   saving,
   onClose,
+  onExited,
   onSave,
 }: {
   open: boolean
@@ -721,6 +754,7 @@ function StockEditDialog({
   profile: StockProfile
   saving: boolean
   onClose: () => void
+  onExited: () => void
   onSave: (payload: UpdateStockPayload) => void
 }) {
   const lookups = useQuery({
@@ -730,58 +764,32 @@ function StockEditDialog({
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
   })
-  const [locationCode, setLocationCode] = useState('')
-  const [sku, setSku] = useState('')
-  const [shapeId, setShapeId] = useState('')
-  const [colorId, setColorId] = useState('')
-  const [name, setName] = useState('')
-  const [unitId, setUnitId] = useState('')
-  const [materialTypeId, setMaterialTypeId] = useState('')
-  const [openingQty, setOpeningQty] = useState('0')
-  const [stockUnitPrice, setStockUnitPrice] = useState('0')
-  const [inQty, setInQty] = useState('0')
-  const [inAmount, setInAmount] = useState('0')
-  const [outQty, setOutQty] = useState('0')
-  const [outAmount, setOutAmount] = useState('0')
-  const [countedQty, setCountedQty] = useState('')
-  const [countedAt, setCountedAt] = useState('')
+  const form = useForm<StockFormValues>({ defaultValues: EMPTY_STOCK })
 
   useEffect(() => {
     if (!open) return
-    if (!row) {
-      setLocationCode('')
-      setSku('')
-      setShapeId('')
-      setColorId('')
-      setName('')
-      setUnitId('')
-      setMaterialTypeId('')
-      setOpeningQty('0')
-      setStockUnitPrice('0')
-      setInQty('0')
-      setInAmount('0')
-      setOutQty('0')
-      setOutAmount('0')
-      setCountedQty('')
-      setCountedAt('')
-      return
-    }
-    setLocationCode(row.locationCode ?? '')
-    setSku(row.sku ?? '')
-    setShapeId(row.shapeId ?? '')
-    setColorId(row.colorId ?? '')
-    setName(row.name)
-    setUnitId(row.unitId)
-    setMaterialTypeId(row.materialTypeId ?? '')
-    setOpeningQty(qtyFromApi(row.openingQty))
-    setStockUnitPrice(row.stockUnitPrice)
-    setInQty(qtyFromApi(row.inQty))
-    setInAmount(row.inAmount)
-    setOutQty(qtyFromApi(row.outQty))
-    setOutAmount(row.outAmount)
-    setCountedQty(row.countedQty == null ? '' : qtyFromApi(row.countedQty))
-    setCountedAt(row.countedAt ?? '')
-  }, [open, row])
+    form.reset(
+      row
+        ? {
+            locationCode: row.locationCode ?? '',
+            sku: row.sku ?? '',
+            shapeId: row.shapeId ?? '',
+            colorId: row.colorId ?? '',
+            name: row.name,
+            unitId: row.unitId,
+            materialTypeId: row.materialTypeId ?? '',
+            openingQty: qtyFromApi(row.openingQty),
+            stockUnitPrice: row.stockUnitPrice,
+            inQty: qtyFromApi(row.inQty),
+            inAmount: row.inAmount,
+            outQty: qtyFromApi(row.outQty),
+            outAmount: row.outAmount,
+            countedQty: row.countedQty == null ? '' : qtyFromApi(row.countedQty),
+            countedAt: row.countedAt ?? '',
+          }
+        : EMPTY_STOCK,
+    )
+  }, [open, row, form])
 
   const colors = useMemo(() => {
     const api = lookups.data?.colors ?? []
@@ -797,44 +805,70 @@ function StockEditDialog({
     ordered.push(...byCode.values())
     return ordered
   }, [lookups.data?.colors])
-  const selectedColor = colors.find((item) => item.id === colorId) ?? null
+
+  const openingQty = form.watch('openingQty')
+  const stockUnitPrice = form.watch('stockUnitPrice')
+  const inQty = form.watch('inQty')
+  const inAmount = form.watch('inAmount')
+  const outQty = form.watch('outQty')
+  const outAmount = form.watch('outAmount')
+  const countedQty = form.watch('countedQty')
+  const countedAt = form.watch('countedAt')
+
+  // Nhập số kiểm kê mà chưa có ngày thì mặc định hôm nay.
+  useEffect(() => {
+    if (countedQty.trim() !== '' && !countedAt) form.setValue('countedAt', today())
+  }, [countedQty, countedAt, form])
+
   const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
   const qty = String((Number(openingQty) || 0) + (Number(inQty) || 0) - (Number(outQty) || 0))
   const amount = String(
     Math.round((Number(openingAmount) || 0) + (Number(inAmount) || 0) - (Number(outAmount) || 0)),
   )
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (!name.trim()) {
-      toast.error('Tên NVL không được trống')
-      return
-    }
-    if (!unitId) {
-      toast.error('Chọn đơn vị tính')
-      return
-    }
+  const unitOptions: SelectOption<string>[] = (lookups.data?.units ?? []).map((item) => ({
+    value: item.id,
+    label: item.name,
+  }))
+  const shapeOptions: SelectOption<string>[] = (lookups.data?.shapes ?? []).map((item) => ({
+    value: item.id,
+    label: item.name,
+  }))
+  const typeOptions: SelectOption<string>[] = materialTypesFor(
+    profile,
+    lookups.data?.materialTypes ?? [],
+  ).map((item) => ({ value: item.id, label: item.name }))
+
+  function submit(values: StockFormValues) {
     onSave({
-      ...(profile.showSku ? { sku } : {}),
-      ...(profile.showLocation ? { locationCode } : {}),
-      name: name.trim(),
-      unitId,
-      shapeId: profile.showShapeColor ? shapeId || null : null,
-      colorId: profile.showShapeColor ? colorId || null : null,
-      materialTypeId: materialTypeId || null,
-      openingQty,
+      ...(profile.showSku ? { sku: values.sku } : {}),
+      ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
+      name: values.name.trim(),
+      unitId: values.unitId,
+      shapeId: profile.showShapeColor ? values.shapeId || null : null,
+      colorId: profile.showShapeColor ? values.colorId || null : null,
+      materialTypeId: values.materialTypeId || null,
+      openingQty: values.openingQty,
       ...(profile.showStockCount
         ? {
-            countedQty: countedQty.trim() === '' ? null : parseQtyInput(countedQty),
-            countedAt: countedQty.trim() === '' ? null : countedAt || today(),
+            countedQty: values.countedQty.trim() === '' ? null : values.countedQty,
+            countedAt: values.countedQty.trim() === '' ? null : values.countedAt || today(),
           }
         : {}),
     })
   }
 
+  const countedDiff = Number(countedQty || '0') - Number(qty)
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <form onSubmit={onSubmit} noValidate>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="md"
+      slotProps={{ transition: { onExited } }}
+    >
+      <Form form={form} onSubmit={submit}>
         <DialogTitle sx={{ pb: 0.5 }}>
           {row ? `Chỉnh sửa ${row.name || 'NVL'}` : 'Thêm NVL'}
         </DialogTitle>
@@ -848,174 +882,94 @@ function StockEditDialog({
           }}
         >
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
-            <TextField
+            <FormTextField<StockFormValues>
+              name="name"
               label="Tên NVL"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               required
               autoFocus
               sx={{ flex: 2 }}
             />
             {profile.showLocation ? (
-              <TextField
-                label="Vị trí"
-                value={locationCode}
-                onChange={(e) => setLocationCode(e.target.value)}
-                sx={{ flex: 1 }}
-              />
+              <FormTextField<StockFormValues> name="locationCode" label="Vị trí" sx={{ flex: 1 }} />
             ) : null}
             {profile.showSku ? (
-              <TextField
-                label="Mã NVL"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                sx={{ flex: 1 }}
-              />
+              <FormTextField<StockFormValues> name="sku" label="Mã NVL" sx={{ flex: 1 }} />
             ) : null}
           </Stack>
+
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             {profile.showShapeColor ? (
               <>
-              <TextField
-                select
-                label="Hình dạng"
-                value={shapeId}
-                onChange={(e) => setShapeId(e.target.value)}
-                sx={{ flex: 1 }}
-              >
-                <MenuItem value="">—</MenuItem>
-                {(lookups.data?.shapes ?? []).map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Autocomplete
-                sx={{ flex: 1, minWidth: 0 }}
-                options={colors}
-                value={selectedColor}
-                onChange={(_, next) => setColorId(next?.id ?? '')}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                filterOptions={(options, state) => {
-                  const q = state.inputValue.trim().toLowerCase()
-                  if (!q) return options
-                  return options.filter(
-                    (item) =>
-                      item.name.toLowerCase().includes(q) ||
-                      item.code.toLowerCase().includes(q),
-                  )
-                }}
-                disablePortal
-                autoHighlight
-                openOnFocus
-                noOptionsText="Không có màu khớp"
-                renderOption={(props, option) => {
-                  const { key, ...rest } = props
-                  return (
-                    <Box component="li" key={key} {...rest} sx={{ gap: 1 }}>
-                      <ColorSwatch code={option.code} name={option.name} />
-                      {option.name}
-                    </Box>
-                  )
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Màu sắc"
-                    placeholder="Tìm màu…"
-                    slotProps={{
-                      ...params.slotProps,
-                      input: {
-                        ...params.slotProps.input,
-                        startAdornment: (
-                          <>
-                            {selectedColor ? (
-                              <Box sx={{ display: 'flex', ml: 0.5, mr: 0.75 }}>
-                                <ColorSwatch
-                                  code={selectedColor.code}
-                                  name={selectedColor.name}
-                                />
-                              </Box>
-                            ) : null}
-                            {params.slotProps.input.startAdornment}
-                          </>
-                        ),
-                      },
-                    }}
-                  />
-                )}
-              />
+                <FormSelect<StockFormValues>
+                  name="shapeId"
+                  label="Hình dạng"
+                  options={shapeOptions}
+                  clearable
+                  placeholder="—"
+                  sx={{ flex: 1 }}
+                />
+                <Controller
+                  name="colorId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <ColorField
+                      colors={colors}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
+                />
               </>
             ) : null}
-            <TextField
-              select
+            <FormSelect<StockFormValues>
+              name="unitId"
               label="Đơn vị"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
+              options={unitOptions}
               required
+              clearable={!row}
+              placeholder={!row ? 'Chọn đơn vị' : undefined}
               sx={{ flex: 1 }}
-            >
-              {!row ? <MenuItem value="">Chọn đơn vị</MenuItem> : null}
-              {(lookups.data?.units ?? []).map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
+            />
+            <FormSelect<StockFormValues>
+              name="materialTypeId"
               label={profile.typeLabel}
-              value={materialTypeId}
-              onChange={(e) => setMaterialTypeId(e.target.value)}
+              options={typeOptions}
+              clearable
+              placeholder="—"
               sx={{ flex: 1 }}
-            >
-              <MenuItem value="">—</MenuItem>
-              {materialTypesFor(profile, lookups.data?.materialTypes ?? []).map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.name}
-                </MenuItem>
-              ))}
-            </TextField>
+            />
           </Stack>
 
-          <TextField
+          <TextInput
             label="Đơn giá tồn"
             value={formatMoney(stockUnitPrice || '0')}
-            disabled
+            readOnly
             helperText="Cấu hình tại mục Cấu hình giá sản phẩm. TT đầu kỳ = SL đầu kỳ × đơn giá tồn."
           />
 
           {profile.showStockCount ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-              <TextField
+            <FormRow sx={{ alignItems: 'flex-start' }}>
+              <FormQtyField<StockFormValues>
+                name="countedQty"
                 label="Tồn thực tế (kiểm kê)"
-                value={countedQty}
-                onChange={(e) => {
-                  const next = formatQtyInput(e.target.value)
-                  setCountedQty(next)
-                  if (next.trim() !== '' && !countedAt) setCountedAt(today())
-                }}
                 placeholder="Bỏ trống nếu chưa kiểm kê"
-                sx={{ flex: 1 }}
                 helperText={
                   countedQty.trim() === ''
                     ? 'Bỏ trống = xoá kết quả kiểm kê.'
                     : `Chênh lệch so với tồn sổ sách (${formatQty(qty)}): ${
-                        Number(parseQtyInput(countedQty)) - Number(qty) > 0 ? '+' : ''
-                      }${Number(parseQtyInput(countedQty)) - Number(qty)}`
+                        countedDiff > 0 ? '+' : ''
+                      }${countedDiff}`
                 }
               />
-              <TextField
+              <FormTextField<StockFormValues>
+                name="countedAt"
                 label="Ngày kiểm kê"
                 type="date"
-                value={countedAt}
-                onChange={(e) => setCountedAt(e.target.value)}
                 disabled={countedQty.trim() === ''}
                 slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ flex: 1 }}
               />
-            </Stack>
+            </FormRow>
           ) : null}
 
           <NxtGrid
@@ -1027,10 +981,11 @@ function StockEditDialog({
             outAmount={outAmount}
             qty={qty}
             amount={amount}
-            onOpeningQty={setOpeningQty}
+            onOpeningQty={(value) => form.setValue('openingQty', value)}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn kho = Tồn đầu kỳ + Nhập − Xuất (cố định). SL {formatQty(qty)} · TT {formatMoney(amount)}
+            Tồn kho = Tồn đầu kỳ + Nhập − Xuất (cố định). SL {formatQty(qty)} · TT{' '}
+            {formatMoney(amount)}
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1041,8 +996,79 @@ function StockEditDialog({
             {row ? 'Lưu' : 'Thêm'}
           </Button>
         </DialogActions>
-      </form>
+      </Form>
     </Dialog>
+  )
+}
+
+/** Ô chọn màu kèm chấm màu — cần renderOption riêng nên không dùng AutocompleteInput. */
+function ColorField({
+  colors,
+  value,
+  onChange,
+  onBlur,
+}: {
+  colors: LookupItem[]
+  value: string
+  onChange: (value: string) => void
+  onBlur: () => void
+}) {
+  const selected = colors.find((item) => item.id === value) ?? null
+  return (
+    <Autocomplete
+      sx={{ flex: 1, minWidth: 0 }}
+      options={colors}
+      value={selected}
+      onChange={(_, next) => onChange(next?.id ?? '')}
+      onBlur={onBlur}
+      getOptionLabel={(option) => option.name}
+      isOptionEqualToValue={(option, next) => option.id === next.id}
+      filterOptions={(options, state) => {
+        const q = state.inputValue.trim().toLowerCase()
+        if (!q) return options
+        return options.filter(
+          (item) =>
+            item.name.toLowerCase().includes(q) || item.code.toLowerCase().includes(q),
+        )
+      }}
+      disablePortal
+      autoHighlight
+      openOnFocus
+      size="small"
+      noOptionsText="Không có màu khớp"
+      renderOption={(props, option) => {
+        const { key, ...rest } = props
+        return (
+          <Box component="li" key={key} {...rest} sx={{ gap: 1 }}>
+            <ColorSwatch code={option.code} name={option.name} />
+            {option.name}
+          </Box>
+        )
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Màu sắc"
+          placeholder="Tìm màu…"
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              startAdornment: (
+                <>
+                  {selected ? (
+                    <Box sx={{ display: 'flex', ml: 0.5, mr: 0.75 }}>
+                      <ColorSwatch code={selected.code} name={selected.name} />
+                    </Box>
+                  ) : null}
+                  {params.slotProps.input.startAdornment}
+                </>
+              ),
+            },
+          }}
+        />
+      )}
+    />
   )
 }
 
@@ -1147,20 +1173,41 @@ function NxtGrid({
           </Box>
         ))}
 
-        <Box sx={{ bgcolor: '#f4f6f7', fontSize: 12, fontWeight: 700, color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
+        <Box
+          sx={{
+            bgcolor: '#f4f6f7',
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'text.secondary',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
           SL
         </Box>
-        <NxtCell value={formatQtyInput(openingQty)} editable onChange={(v) => onOpeningQty(parseQtyInput(v))} />
+        <NxtCell
+          value={formatQtyInput(openingQty)}
+          editable
+          onChange={(v) => onOpeningQty(parseQtyInput(v))}
+        />
         <NxtCell value={formatQty(inQty)} />
         <NxtCell value={formatQty(outQty)} />
         <NxtCell value={formatQty(qty)} />
 
-        <Box sx={{ bgcolor: '#f4f6f7', fontSize: 12, fontWeight: 700, color: 'text.secondary', display: 'flex', alignItems: 'center', borderBottom: 'none' }}>
+        <Box
+          sx={{
+            bgcolor: '#f4f6f7',
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'text.secondary',
+            display: 'flex',
+            alignItems: 'center',
+            borderBottom: 'none',
+          }}
+        >
           TT
         </Box>
-        <NxtCell
-          value={formatMoney(openingAmount || '0')}
-        />
+        <NxtCell value={formatMoney(openingAmount || '0')} />
         <NxtCell value={formatMoney(inAmount)} />
         <NxtCell value={formatMoney(outAmount)} />
         <NxtCell value={formatMoney(amount || '0')} />
