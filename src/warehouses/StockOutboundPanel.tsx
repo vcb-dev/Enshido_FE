@@ -1,17 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { useEffect, useMemo } from 'react'
+import { Box, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useController, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
+import type { Control } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createWarehouseOutboundApi,
@@ -19,6 +10,7 @@ import {
   formatMoney,
   formatPriceOrDash,
   formatQty,
+  formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseOutboundsApi,
   getWarehouseStockApi,
@@ -30,38 +22,38 @@ import {
   type LookupItem,
   type OutboundRow,
 } from '../api/inventory'
-import { useAuth } from '../auth/AuthContext'
 import {
+  CrudDialogShell,
   DataTable,
-  Form,
   FormQtyField,
   FormRow,
   FormSearchSelect,
   FormTextField,
+  PanelSummaryCard,
+  PanelToolbar,
   RowActions,
-  SearchInput,
   SelectInput,
-  SummaryStat,
   TextInput,
   type Column,
   type SelectOption,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
-import { paginate, useTableParams } from '../hooks/useTableParams'
+import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
+import { useOperatorName } from '../hooks/useOperatorName'
+import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
-import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import { MaterialField } from './MaterialField'
+import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {
-  const { user } = useAuth()
-  const operatorName = user?.fullName?.trim() || user?.username || ''
+  const operatorName = useOperatorName()
   const queryClient = useQueryClient()
   const dialog = useCrudDialog<OutboundRow>()
   // Tách sẵn các callback ổn định để useMemo cột không chạy lại mỗi render.
   const { openView, openEdit } = dialog
   const table = useTableParams({ pageSize: 8, filters: { issuedBy: '' } })
   const { params } = table
-  const [deletingRow, setDeletingRow] = useState<OutboundRow | null>(null)
 
   const outbounds = useQuery({
     queryKey: ['warehouse-outbounds', warehouseCode],
@@ -125,6 +117,15 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const indexOffset = (page - 1) * params.pageSize
   const filtering = Boolean(params.search || params.issuedBy)
 
+  const invalidateAll = () =>
+    Promise.all(
+      [
+        ['warehouse-outbounds', warehouseCode],
+        ['warehouse-stock', warehouseCode],
+        ['warehouse-inbounds', warehouseCode],
+      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    )
+
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
       id
@@ -135,139 +136,46 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       dialog.close()
       // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
+      await invalidateAll()
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const remove = useMutation({
+  const del = useDeleteRowDialog({
     mutationFn: (row: OutboundRow) => deleteWarehouseOutboundApi(warehouseCode, row.id),
-    onSuccess: async () => {
-      toast.success('Đã xóa phiếu xuất')
-      setDeletingRow(null)
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
-      await queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
-    },
-    onError: (error: Error) => toast.error(error.message),
+    successMessage: 'Đã xóa phiếu xuất',
+    invalidateKeys: [
+      ['warehouse-outbounds', warehouseCode],
+      ['warehouse-stock', warehouseCode],
+      ['warehouse-inbounds', warehouseCode],
+    ],
   })
 
-  const columns: Column<OutboundRow>[] = useMemo(
-    () => [
-      {
-        key: 'issuedAt',
-        header: 'Ngày xuất',
-        width: 96,
-        sortable: true,
-        render: (row) => formatOutboundDate(row.issuedAt),
-      },
-      {
-        key: 'name',
-        header: 'Tên hàng',
-        width: 340,
-        sortable: true,
-        className: 'name-cell',
-        cellSx: { overflow: 'visible', textOverflow: 'clip' },
-      },
-      { key: 'unit', header: 'Đơn vị tính', width: 88 },
-      {
-        key: 'qty',
-        header: 'Số lượng',
-        width: 72,
-        numeric: true,
-        sortable: true,
-        render: (row) => formatQty(row.qty),
-      },
-      {
-        key: 'inboundUnitPrice',
-        header: 'Đơn giá xuất',
-        width: 168,
-        align: 'right',
-        cellSx: {
-          fontVariantNumeric: 'tabular-nums',
-          whiteSpace: 'normal',
-          lineHeight: 1.35,
-          overflow: 'visible',
-          textOverflow: 'clip',
-        },
-        render: (row) => (
-          <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
-        ),
-      },
-      {
-        key: 'amount',
-        header: 'Thành tiền',
-        width: 108,
-        numeric: true,
-        sortable: true,
-        cellSx: { fontWeight: 700 },
-        render: (row) => formatMoney(row.amount),
-      },
-      {
-        key: 'note',
-        header: 'Ghi chú',
-        width: 108,
-        ellipsis: true,
-        className: 'note-cell',
-        render: (row) => row.note ?? '—',
-      },
-      {
-        key: 'issuedBy',
-        header: 'Người Xuất',
-        width: 96,
-        ellipsis: true,
-        sortable: true,
-        render: (row) => row.issuedBy ?? '—',
-      },
-      {
-        key: 'receivedBy',
-        header: 'Người Nhận',
-        width: 96,
-        ellipsis: true,
-        render: (row) => row.receivedBy ?? '—',
-      },
-      {
-        key: 'actions',
-        header: 'Hành động',
-        width: 120,
-        align: 'center',
-        cellSx: { overflow: 'visible' },
-        render: (row) => (
-          <RowActions
-            onView={() => openView(row)}
-            onEdit={() => openEdit(row)}
-            onDelete={() => setDeletingRow(row)}
-          />
-        ),
-      },
-    ],
-    [openView, openEdit],
+  const columns = useMemo(
+    () => outboundColumns({ onView: openView, onEdit: openEdit, onDelete: del.request }),
+    [openView, openEdit, del.request],
   )
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
       {totals && items.length > 0 ? (
-        <Paper sx={{ p: 1.25, flexShrink: 0 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Tổng hợp xuất kho
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-            <SummaryStat label="Số lượng ( SL )" value={formatQty(totals.qty)} tone="out" />
-            <SummaryStat label="Thành tiền ( TT )" value={formatMoney(totals.amount)} tone="out" />
-            <SummaryStat
-              label={filtering ? 'Số dòng (đang lọc)' : 'Số dòng'}
-              value={String(filtering ? rows.length : items.length)}
-              tone="out"
-            />
-          </Stack>
-        </Paper>
+        <PanelSummaryCard
+          title="Tổng hợp xuất kho"
+          stats={[
+            { label: 'Số lượng ( SL )', value: formatQty(totals.qty), tone: 'out' },
+            { label: 'Thành tiền ( TT )', value: formatMoney(totals.amount), tone: 'out' },
+            {
+              label: filtering ? 'Số dòng (đang lọc)' : 'Số dòng',
+              value: String(filtering ? rows.length : items.length),
+              tone: 'out',
+            },
+          ]}
+        />
       ) : null}
 
       <DataTable
         columns={columns}
-        rows={paginate(sortOutbounds(rows, params.sort, params.dir), page, params.pageSize)}
+        rows={paginate(sortRows(rows, params.sort, params.dir), page, params.pageSize)}
         rowKey={(row) => row.id}
         loading={outbounds.isFetching}
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
@@ -286,25 +194,24 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         sx={{ flex: 1 }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
-          <>
-            <SearchInput
-              value={params.search}
-              onChange={table.setSearch}
-              placeholder="Tìm tên hàng, ghi chú, người xuất/nhận..."
-            />
-            <SelectInput
-              label="Người xuất"
-              options={issuerOptions}
-              value={params.issuedBy}
-              onChange={(value) => table.setFilter({ issuedBy: String(value) })}
-              placeholder="Tất cả"
-              sx={{ width: 180 }}
-              fullWidth={false}
-            />
-            <Button variant="contained" sx={{ ml: 'auto' }} onClick={dialog.openCreate}>
-              Thêm phiếu xuất
-            </Button>
-          </>
+          <PanelToolbar
+            search={params.search}
+            onSearchChange={table.setSearch}
+            searchPlaceholder="Tìm tên hàng, ghi chú, người xuất/nhận..."
+            filters={
+              <SelectInput
+                label="Người xuất"
+                options={issuerOptions}
+                value={params.issuedBy}
+                onChange={(value) => table.setFilter({ issuedBy: String(value) })}
+                placeholder="Tất cả"
+                sx={{ width: 180 }}
+                fullWidth={false}
+              />
+            }
+            createLabel="Thêm phiếu xuất"
+            onCreate={dialog.openCreate}
+          />
         }
       />
 
@@ -325,40 +232,118 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         }
       />
       <ConfirmDeleteDialog
-        open={Boolean(deletingRow)}
+        open={Boolean(del.row)}
         title="Xóa phiếu xuất"
         description={
-          deletingRow
-            ? `Xóa dòng ${deletingRow.name} (${formatQty(deletingRow.qty)} ${deletingRow.unit})? Tồn kho sẽ được tính lại.`
+          del.row
+            ? `Xóa dòng ${del.row.name} (${formatQty(del.row.qty)} ${del.row.unit})? Tồn kho sẽ được tính lại.`
             : ''
         }
-        deleting={remove.isPending}
-        onClose={() => setDeletingRow(null)}
-        onConfirm={() => deletingRow && remove.mutate(deletingRow)}
+        deleting={del.deleting}
+        onClose={del.cancel}
+        onConfirm={del.confirm}
       />
     </Stack>
   )
 }
 
-function sortOutbounds(rows: OutboundRow[], sort: string, dir: 'asc' | 'desc') {
-  if (!sort) return rows
-  const direction = dir === 'desc' ? -1 : 1
-  return [...rows].sort((a, b) => {
-    const left = a[sort as keyof OutboundRow]
-    const right = b[sort as keyof OutboundRow]
-    const leftNum = Number(left)
-    const rightNum = Number(right)
-    if (left !== '' && right !== '' && Number.isFinite(leftNum) && Number.isFinite(rightNum)) {
-      return (leftNum - rightNum) * direction
-    }
-    return String(left ?? '').localeCompare(String(right ?? ''), 'vi') * direction
-  })
-}
-
-function formatOutboundDate(value: string) {
-  const [y, m, d] = value.split('-')
-  if (!y || !m || !d) return value
-  return `${d}/${m}/${y}`
+function outboundColumns({
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  onView: (row: OutboundRow) => void
+  onEdit: (row: OutboundRow) => void
+  onDelete: (row: OutboundRow) => void
+}): Column<OutboundRow>[] {
+  return [
+    {
+      key: 'issuedAt',
+      header: 'Ngày xuất',
+      width: 96,
+      sortable: true,
+      render: (row) => formatStockedDate(row.issuedAt),
+    },
+    {
+      key: 'name',
+      header: 'Tên hàng',
+      width: 340,
+      sortable: true,
+      className: 'name-cell',
+      cellSx: { overflow: 'visible', textOverflow: 'clip' },
+    },
+    { key: 'unit', header: 'Đơn vị tính', width: 88 },
+    {
+      key: 'qty',
+      header: 'Số lượng',
+      width: 104,
+      numeric: true,
+      sortable: true,
+      render: (row) => formatQty(row.qty),
+    },
+    {
+      key: 'inboundUnitPrice',
+      header: 'Đơn giá xuất',
+      width: 168,
+      align: 'right',
+      cellSx: {
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'normal',
+        lineHeight: 1.35,
+        overflow: 'visible',
+        textOverflow: 'clip',
+      },
+      render: (row) => (
+        <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Thành tiền',
+      width: 108,
+      numeric: true,
+      sortable: true,
+      cellSx: { fontWeight: 700 },
+      render: (row) => formatMoney(row.amount),
+    },
+    {
+      key: 'note',
+      header: 'Ghi chú',
+      width: 108,
+      ellipsis: true,
+      className: 'note-cell',
+      render: (row) => row.note ?? '—',
+    },
+    {
+      key: 'issuedBy',
+      header: 'Người Xuất',
+      width: 96,
+      ellipsis: true,
+      sortable: true,
+      render: (row) => row.issuedBy ?? '—',
+    },
+    {
+      key: 'receivedBy',
+      header: 'Người Nhận',
+      width: 96,
+      ellipsis: true,
+      render: (row) => row.receivedBy ?? '—',
+    },
+    {
+      key: 'actions',
+      header: 'Hành động',
+      width: 120,
+      align: 'center',
+      cellSx: { overflow: 'visible' },
+      render: (row) => (
+        <RowActions
+          onView={() => onView(row)}
+          onEdit={() => onEdit(row)}
+          onDelete={() => onDelete(row)}
+        />
+      ),
+    },
+  ]
 }
 
 type OutboundFormValues = {
@@ -383,6 +368,12 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   inboundUnitPrice: '',
   note: '',
   receivedByUserId: '',
+}
+
+const OUTBOUND_TITLES = {
+  create: 'Thêm phiếu xuất',
+  edit: 'Chỉnh sửa phiếu xuất',
+  view: 'Chi tiết phiếu xuất',
 }
 
 function OutboundDialog({
@@ -493,13 +484,6 @@ function OutboundDialog({
     })
   }
 
-  const title =
-    kind === 'view'
-      ? 'Chi tiết phiếu xuất'
-      : kind === 'edit'
-        ? 'Chỉnh sửa phiếu xuất'
-        : 'Thêm phiếu xuất'
-
   const availableText = !materialId
     ? 'Chọn tên hàng'
     : available <= 0
@@ -519,196 +503,136 @@ function OutboundDialog({
   const availableError = Boolean(materialId && (available <= 0 || (qty && remaining < 0)))
 
   return (
-    <Dialog
+    <CrudDialogShell<OutboundFormValues>
       open={open}
+      kind={kind}
+      titles={OUTBOUND_TITLES}
+      form={form}
+      onSubmit={submit}
+      saving={saving}
+      submitDisabled={kind === 'create' && available <= 0}
       onClose={onClose}
-      fullWidth
-      maxWidth="md"
-      slotProps={{ transition: { onExited } }}
+      onExited={onExited}
     >
-      <Form form={form} onSubmit={submit}>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogContent
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1.5,
-            pt: 1,
-            '& .MuiFormLabel-asterisk': { color: 'error.main' },
-          }}
-        >
-          <FormRow sx={{ mt: 1 }}>
-            <FormTextField<OutboundFormValues>
-              name="issuedAt"
-              label="Ngày xuất"
-              type="date"
-              required
-              readOnly={readOnly}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <FormSearchSelect<OutboundFormValues>
-              name="unitId"
-              label="Đơn vị tính"
-              options={unitOptions}
-              required
-              readOnly={readOnly}
-              displayValue={row?.unit}
-              placeholder="Tìm đơn vị…"
-            />
-          </FormRow>
+      <FormRow sx={{ mt: 1 }}>
+        <FormTextField<OutboundFormValues>
+          name="issuedAt"
+          label="Ngày xuất"
+          type="date"
+          required
+          readOnly={readOnly}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
+        <FormSearchSelect<OutboundFormValues>
+          name="unitId"
+          label="Đơn vị tính"
+          options={unitOptions}
+          required
+          readOnly={readOnly}
+          displayValue={row?.unit}
+          placeholder="Tìm đơn vị…"
+        />
+      </FormRow>
 
-          <MaterialField kind={kind} readOnly={readOnly} materials={materials} form={form} />
+      <MaterialField
+        // Control<T> của RHF không gán được giữa các T khác nhau (hạn chế
+        // variance của thư viện), nên MaterialField nhận Control<any> và ép kiểu ở đây.
+        control={form.control as unknown as Control<any>}
+        kind={kind}
+        readOnly={readOnly}
+        materials={materials}
+        onSelect={(material) => {
+          if (!material) {
+            if (kind !== 'edit') form.setValue('materialId', null)
+            return
+          }
+          form.setValue('materialId', material.id)
+          form.setValue('sku', material.sku ?? '')
+          if (material.unitId) form.setValue('unitId', material.unitId)
+          if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
+        }}
+      />
 
-          <FormRow>
-            <TextInput
-              label="SL sẵn có"
-              value={availableText}
-              readOnly
-              helperText={availableHelper}
-              errorText={availableError ? availableHelper : undefined}
-            />
-            <FormQtyField<OutboundFormValues>
-              name="qty"
-              label="Số lượng xuất"
-              required
-              readOnly={readOnly}
-              disabled={available <= 0}
-              rules={{
-                validate: (value) => {
-                  const next = Number(value) || 0
-                  if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
-                  if (available <= 0) return 'Không có đủ số lượng để xuất'
-                  if (next > available) {
-                    return `SL sẵn có ${formatQty(String(available))}, không xuất quá số này`
-                  }
-                  return true
-                },
-              }}
-            />
-          </FormRow>
-
-          <FormRow>
-            <TextInput
-              label="Đơn giá xuất"
-              value={
-                kind === 'create'
-                  ? fifo.label
-                  : formatPriceBreakdown(row?.priceBreakdown, inboundUnitPrice)
+      <FormRow>
+        <TextInput
+          label="SL sẵn có"
+          value={availableText}
+          readOnly
+          helperText={availableHelper}
+          errorText={availableError ? availableHelper : undefined}
+        />
+        <FormQtyField<OutboundFormValues>
+          name="qty"
+          label="Số lượng xuất"
+          required
+          readOnly={readOnly}
+          disabled={available <= 0}
+          rules={{
+            validate: (value) => {
+              const next = Number(value) || 0
+              if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
+              if (available <= 0) return 'Không có đủ số lượng để xuất'
+              if (next > available) {
+                return `SL sẵn có ${formatQty(String(available))}, không xuất quá số này`
               }
-              readOnly
-              multiline
-            />
-            <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
-          </FormRow>
-          <Typography variant="caption" color="text.secondary">
-            Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
-          </Typography>
+              return true
+            },
+          }}
+        />
+      </FormRow>
 
-          <FormRow>
-            <TextInput
-              label="Người Xuất"
-              value={row?.issuedBy || operatorName || '—'}
-              required
-              readOnly
-            />
-            <FormSearchSelect<OutboundFormValues>
-              name="receivedByUserId"
-              label="Người Nhận"
-              options={userOptions}
-              required
-              readOnly={readOnly}
-              displayValue={row?.receivedBy ?? undefined}
-              placeholder="Tìm tài khoản…"
-            />
-          </FormRow>
+      <FormRow>
+        <TextInput
+          label="Đơn giá xuất"
+          value={
+            kind === 'create'
+              ? fifo.label
+              : formatPriceBreakdown(row?.priceBreakdown, inboundUnitPrice)
+          }
+          readOnly
+          multiline
+        />
+        <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
+      </FormRow>
+      <Typography variant="caption" color="text.secondary">
+        Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
+      </Typography>
 
-          <FormTextField<OutboundFormValues>
-            name="note"
-            label="Ghi chú"
-            readOnly={readOnly}
-            multiline
-            minRows={2}
-            maxRows={6}
-            sx={{
-              '& textarea': {
-                overflowWrap: 'anywhere',
-                wordBreak: 'break-all',
-                whiteSpace: 'pre-wrap',
-                overflowX: 'hidden',
-              },
-            }}
-          />
-        </DialogContent>
-        <DialogActions>
-          {kind === 'view' ? (
-            <Button onClick={onClose} variant="contained">
-              Đóng
-            </Button>
-          ) : (
-            <>
-              <Button onClick={onClose} disabled={saving}>
-                Hủy
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={saving || (kind === 'create' && available <= 0)}
-              >
-                {kind === 'edit' ? 'Lưu' : 'Thêm'}
-              </Button>
-            </>
-          )}
-        </DialogActions>
-      </Form>
-    </Dialog>
-  )
-}
+      <FormRow>
+        <TextInput
+          label="Người Xuất"
+          value={row?.issuedBy || operatorName || '—'}
+          required
+          readOnly
+        />
+        <FormSearchSelect<OutboundFormValues>
+          name="receivedByUserId"
+          label="Người Nhận"
+          options={userOptions}
+          required
+          readOnly={readOnly}
+          displayValue={row?.receivedBy ?? undefined}
+          placeholder="Tìm tài khoản…"
+        />
+      </FormRow>
 
-/** Xem chú thích ở [StockInboundPanel](./StockInboundPanel.tsx) — cùng cơ chế. */
-function MaterialField({
-  kind,
-  readOnly,
-  materials,
-  form,
-}: {
-  kind: 'create' | 'edit' | 'view'
-  readOnly: boolean
-  materials: StockMaterialOption[]
-  form: ReturnType<typeof useForm<OutboundFormValues>>
-}) {
-  const { field, fieldState } = useController({
-    name: 'name',
-    control: form.control,
-    rules: {
-      required: 'Chọn tên hàng từ Kho tồn',
-      validate: (value) =>
-        kind !== 'create' ||
-        Boolean(form.getValues('materialId')) ||
-        String(value ?? '').trim().length === 0 ||
-        'Chọn tên hàng từ danh sách, không nhập tự do',
-    },
-  })
-
-  return (
-    <MaterialNameField
-      value={field.value}
-      materials={materials}
-      readOnly={readOnly}
-      keepMaterialOnType={kind === 'edit'}
-      errorText={fieldState.error?.message}
-      onBlur={field.onBlur}
-      onChange={field.onChange}
-      onSelect={(material) => {
-        if (!material) {
-          if (kind !== 'edit') form.setValue('materialId', null)
-          return
-        }
-        form.setValue('materialId', material.id)
-        form.setValue('sku', material.sku ?? '')
-        if (material.unitId) form.setValue('unitId', material.unitId)
-        if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
-      }}
-    />
+      <FormTextField<OutboundFormValues>
+        name="note"
+        label="Ghi chú"
+        readOnly={readOnly}
+        multiline
+        minRows={2}
+        maxRows={6}
+        sx={{
+          '& textarea': {
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-all',
+            whiteSpace: 'pre-wrap',
+            overflowX: 'hidden',
+          },
+        }}
+      />
+    </CrudDialogShell>
   )
 }
 
