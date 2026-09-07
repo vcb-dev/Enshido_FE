@@ -203,19 +203,9 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
         <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         <NavItem to="/kho" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
         <List dense disablePadding sx={{ pl: 1.5 }}>
-          {WAREHOUSES.map((w) =>
-            w.bins?.length ? (
-              <NvlChinhMenu key={w.code} warehouse={w} />
-            ) : (
-              <NavItem
-                key={w.code}
-                to={warehousePath(w)}
-                icon={<PalletIcon fontSize="small" />}
-                label={w.shortName}
-                end
-              />
-            ),
-          )}
+          {WAREHOUSES.map((w) => (
+            <WarehouseMenu key={w.code} warehouse={w} />
+          ))}
         </List>
         <NavItem
           to="/cau-hinh-gia"
@@ -230,7 +220,8 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
   )
 }
 
-function NvlChinhMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
+/// Kho có bin thì xổ ra từng bin; kho không bin (kho tiêu hao) xổ thẳng 3 section tồn/nhập/xuất.
+function WarehouseMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
   const location = useLocation()
   const onThis = location.pathname.startsWith(`/kho/${warehouse.code}`)
   const [open, setOpen] = useState(onThis)
@@ -254,9 +245,11 @@ function NvlChinhMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] })
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          {warehouse.bins?.map((b) => (
-            <BinMenu key={b.code} warehouse={warehouse} bin={b} />
-          ))}
+          {warehouse.bins?.length ? (
+            warehouse.bins.map((b) => <BinMenu key={b.code} warehouse={warehouse} bin={b} />)
+          ) : (
+            <SectionLinks warehouse={warehouse} />
+          )}
         </List>
       </Collapse>
     </Box>
@@ -293,26 +286,31 @@ function BinMenu({
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          {BIN_SECTIONS.map((s) => (
-            <NavItem
-              key={s.code}
-              to={warehousePath(warehouse, bin.code, s.code)}
-              icon={<TableRowsIcon fontSize="small" />}
-              label={s.name}
-              end
-            />
-          ))}
-          {extraBinSections(bin.code).map((s) => (
-            <NavItem
-              key={s.code}
-              to={warehousePath(warehouse, bin.code, s.code)}
-              icon={<TableRowsIcon fontSize="small" />}
-              label={s.name}
-              end
-            />
-          ))}
+          <SectionLinks warehouse={warehouse} bin={bin} />
         </List>
       </Collapse>
     </Box>
+  )
+}
+
+function SectionLinks({
+  warehouse,
+  bin,
+}: {
+  warehouse: (typeof WAREHOUSES)[number]
+  bin?: StockBin
+}) {
+  return (
+    <>
+      {[...BIN_SECTIONS, ...extraBinSections(bin?.code ?? '')].map((s) => (
+        <NavItem
+          key={s.code}
+          to={warehousePath(warehouse, bin?.code, s.code)}
+          icon={<TableRowsIcon fontSize="small" />}
+          label={s.name}
+          end
+        />
+      ))}
+    </>
   )
 }
