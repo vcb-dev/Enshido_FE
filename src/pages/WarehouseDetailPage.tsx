@@ -221,6 +221,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   })
 
   const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+  const nameSuggestions = useMemo(
+    () => [...new Set(items.map((row) => row.name.trim()).filter(Boolean))],
+    [items],
+  )
 
   const statusCounts = useMemo(() => {
     const counts = { IN_STOCK: 0, LOW: 0, OUT_OF_STOCK: 0 }
@@ -432,6 +436,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         row={dialog.row}
         warehouseCode={warehouseCode}
         profile={profile}
+        nameSuggestions={nameSuggestions}
         saving={save.isPending}
         onClose={dialog.close}
         onExited={dialog.clear}
@@ -936,6 +941,7 @@ function StockEditDialog({
   row,
   warehouseCode,
   profile,
+  nameSuggestions,
   saving,
   onClose,
   onExited,
@@ -945,6 +951,7 @@ function StockEditDialog({
   row: StockRow | null
   warehouseCode: string
   profile: StockProfile
+  nameSuggestions: string[]
   saving: boolean
   onClose: () => void
   onExited: () => void
@@ -1086,6 +1093,8 @@ function StockEditDialog({
               label="Tên NVL"
               required
               autoFocus
+              suggestions={nameSuggestions}
+              helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
               sx={{ flex: 2, minWidth: 0 }}
             />
             {profile.showLocation ? (
