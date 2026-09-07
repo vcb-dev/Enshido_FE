@@ -46,8 +46,6 @@ export type StockProfile = {
   showSku: boolean
   showLocation: boolean
   showShapeColor: boolean
-  /// Hiện cột Tồn thực tế + Chênh lệch (kiểm kê tay đối chiếu sổ sách).
-  showStockCount: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -57,7 +55,6 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showSku: true,
   showLocation: true,
   showShapeColor: true,
-  showStockCount: false,
   typeLabel: 'Loại đá',
 }
 
@@ -67,7 +64,6 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showSku: true,
     showLocation: false,
     showShapeColor: false,
-    showStockCount: false,
     typeLabel: 'Nhóm',
     typeCodes: CONSUMABLE_TYPE_CODES,
   },

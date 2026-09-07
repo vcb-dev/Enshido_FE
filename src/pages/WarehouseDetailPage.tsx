@@ -29,7 +29,6 @@ import {
   formatMoney,
   formatQty,
   formatQtyInput,
-  formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseStockApi,
   parseQtyInput,
@@ -49,7 +48,6 @@ import {
   DataTable,
   Form,
   FormMoneyField,
-  FormQtyField,
   FormSearchSelect,
   FormTextField,
   RowActions,
@@ -171,14 +169,12 @@ const groupHead = {
   in: { ...split, bgcolor: '#e4f0e8', fontWeight: 700 },
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
   stock: { ...split, bgcolor: '#d6e3ee', fontWeight: 700, color: 'primary.main' },
-  count: { ...split, bgcolor: '#f1edf5', fontWeight: 700 },
 }
 const groupBody = {
   open: { ...split, ...numCell, bgcolor: '#f7f9fb' },
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
   out: { ...split, ...numCell, bgcolor: '#faf6f4' },
   stock: { ...split, ...numCell, bgcolor: '#eaf0f6', fontWeight: 700 },
-  count: { ...split, ...numCell, bgcolor: '#f8f5fa' },
 }
 
 function availabilityColor(code: AvailabilityCode) {
@@ -324,13 +320,12 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
 
   const columns = useMemo(() => stockColumns(profile, openEdit), [profile, openEdit])
 
-  // Bảng hẹp lại khi kho không dùng vị trí / hình dạng / màu, rộng thêm khi có kiểm kê.
+  // Bảng hẹp lại khi kho không dùng vị trí / hình dạng / màu.
   const minWidth =
     1480 -
     (profile.showLocation ? 0 : 110) -
     (profile.showSku ? 0 : 130) -
-    (profile.showShapeColor ? 0 : 250) +
-    (profile.showStockCount ? 240 : 0)
+    (profile.showShapeColor ? 0 : 250)
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -481,11 +476,6 @@ const StockTableHeader = memo(function StockTableHeader({
         <TableCell align="center" colSpan={2} sx={groupHead.stock}>
           Tồn kho
         </TableCell>
-        {profile.showStockCount ? (
-          <TableCell align="center" colSpan={2} sx={groupHead.count}>
-            Kiểm kê
-          </TableCell>
-        ) : null}
         <TableCell rowSpan={2}>Phân loại</TableCell>
         <TableCell rowSpan={2}>{profile.typeLabel}</TableCell>
         <TableCell rowSpan={2} align="center">
@@ -520,16 +510,6 @@ const StockTableHeader = memo(function StockTableHeader({
         <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
           TT
         </TableCell>
-        {profile.showStockCount ? (
-          <>
-            <TableCell align="right" sx={groupHead.count}>
-              Tồn thực tế
-            </TableCell>
-            <TableCell align="right" sx={{ bgcolor: groupHead.count.bgcolor }}>
-              Chênh lệch
-            </TableCell>
-          </>
-        ) : null}
       </TableRow>
     </>
   )
@@ -620,37 +600,6 @@ function stockColumns(
     },
   )
 
-  if (profile.showStockCount) {
-    columns.push(
-      {
-        key: 'countedQty',
-        header: 'Tồn thực tế',
-        align: 'right',
-        cellSx: groupBody.count,
-        render: (row) =>
-          row.countedQty == null ? (
-            '—'
-          ) : (
-            <>
-              {formatQty(row.countedQty)}
-              {row.countedAt ? (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  {formatStockedDate(row.countedAt)}
-                </Typography>
-              ) : null}
-            </>
-          ),
-      },
-      {
-        key: 'countedVariance',
-        header: 'Chênh lệch',
-        align: 'right',
-        cellSx: { ...numCell, bgcolor: groupBody.count.bgcolor, fontWeight: 700 },
-        render: (row) => <VarianceCell row={row} />,
-      },
-    )
-  }
-
   columns.push(
     { key: 'metalKindLabel', header: 'Phân loại', render: (row) => row.metalKindLabel ?? '—' },
     { key: 'materialType', header: profile.typeLabel, render: (row) => row.materialType ?? '—' },
@@ -676,20 +625,6 @@ function stockColumns(
   )
 
   return columns
-}
-
-/// Chênh lệch kiểm kê: dương = thừa so với sổ sách, âm = thiếu.
-function VarianceCell({ row }: { row: StockRow }) {
-  if (row.countedQty == null) return <>—</>
-  const variance = Number(row.countedVariance ?? '0')
-  const tone = variance === 0 ? 'text.secondary' : variance > 0 ? '#1e8449' : '#c0392b'
-  const sign = variance > 0 ? '+' : ''
-  return (
-    <Box component="span" sx={{ color: tone }}>
-      {sign}
-      {formatQty(row.countedVariance ?? '0')}
-    </Box>
-  )
 }
 
 function sumStockTotals(rows: StockRow[]): StockTotals {
@@ -977,8 +912,6 @@ type StockFormValues = {
   inAmount: string
   outQty: string
   outAmount: string
-  countedQty: string
-  countedAt: string
 }
 
 const EMPTY_STOCK: StockFormValues = {
@@ -996,8 +929,6 @@ const EMPTY_STOCK: StockFormValues = {
   inAmount: '0',
   outQty: '0',
   outAmount: '0',
-  countedQty: '',
-  countedAt: '',
 }
 
 function StockEditDialog({
@@ -1053,8 +984,6 @@ function StockEditDialog({
             inAmount: row.inAmount,
             outQty: qtyFromApi(row.outQty),
             outAmount: row.outAmount,
-            countedQty: row.countedQty == null ? '' : qtyFromApi(row.countedQty),
-            countedAt: row.countedAt ?? '',
           }
         : EMPTY_STOCK,
     )
@@ -1082,14 +1011,6 @@ function StockEditDialog({
   const inAmount = form.watch('inAmount')
   const outQty = form.watch('outQty')
   const outAmount = form.watch('outAmount')
-  const countedQty = form.watch('countedQty')
-  const countedAt = form.watch('countedAt')
-
-  // Nhập số kiểm kê mà chưa có ngày thì mặc định hôm nay.
-  useEffect(() => {
-    if (countedQty.trim() !== '' && !countedAt) form.setValue('countedAt', today())
-  }, [countedQty, countedAt, form])
-
   const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
   const qty = String((Number(openingQty) || 0) + (Number(inQty) || 0) - (Number(outQty) || 0))
   const amount = String(
@@ -1135,12 +1056,6 @@ function StockEditDialog({
       metalKind: values.metalKind ? (values.metalKind as MetalKindCode) : null,
       openingQty: values.openingQty,
       stockUnitPrice: values.stockUnitPrice || '0',
-      ...(profile.showStockCount
-        ? {
-            countedQty: values.countedQty.trim() === '' ? null : values.countedQty,
-            countedAt: values.countedQty.trim() === '' ? null : values.countedAt || today(),
-          }
-        : {}),
     })
   }
 
@@ -1251,32 +1166,6 @@ function StockEditDialog({
             />
           </Stack>
 
-          {profile.showStockCount ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-              <FormQtyField<StockFormValues>
-                name="countedQty"
-                label="Tồn thực tế (kiểm kê)"
-                placeholder="Bỏ trống nếu chưa kiểm kê"
-                sx={{ flex: 1 }}
-                helperText={
-                  countedQty.trim() === ''
-                    ? 'Bỏ trống = xoá kết quả kiểm kê.'
-                    : `Chênh lệch so với tồn sổ sách (${formatQty(qty)}): ${
-                        Number(countedQty || '0') - Number(qty) > 0 ? '+' : ''
-                      }${Number(countedQty || '0') - Number(qty)}`
-                }
-              />
-              <FormTextField<StockFormValues>
-                name="countedAt"
-                label="Ngày kiểm kê"
-                type="date"
-                disabled={countedQty.trim() === ''}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ flex: 1 }}
-              />
-            </Stack>
-          ) : null}
-
           <NxtGrid
             openingQty={openingQty}
             openingAmount={openingAmount}
@@ -1377,10 +1266,6 @@ function ColorField({
       )}
     />
   )
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 function ColorSwatch({ code, name }: { code?: string | null; name?: string | null }) {
