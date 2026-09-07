@@ -29,6 +29,7 @@ import {
   formatMoney,
   formatQty,
   formatQtyInput,
+  formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseStockApi,
   parseQtyInput,
@@ -48,6 +49,7 @@ import {
   DataTable,
   Form,
   FormMoneyField,
+  FormQtyField,
   FormSearchSelect,
   FormTextField,
   RowActions,
@@ -67,11 +69,14 @@ import {
   MOCK_OUT,
   MOCK_STOCK,
   METAL_KINDS,
+  materialTypesFor,
+  stockProfile,
   stockWarehouseCode,
   warehouseByCode,
   warehousePath,
   warehouseSectionByCode,
   type StockMove,
+  type StockProfile,
   type WarehouseSectionCode,
 } from '../warehouses/catalog'
 
@@ -166,12 +171,14 @@ const groupHead = {
   in: { ...split, bgcolor: '#e4f0e8', fontWeight: 700 },
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
   stock: { ...split, bgcolor: '#d6e3ee', fontWeight: 700, color: 'primary.main' },
+  count: { ...split, bgcolor: '#f1edf5', fontWeight: 700 },
 }
 const groupBody = {
   open: { ...split, ...numCell, bgcolor: '#f7f9fb' },
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
   out: { ...split, ...numCell, bgcolor: '#faf6f4' },
   stock: { ...split, ...numCell, bgcolor: '#eaf0f6', fontWeight: 700 },
+  count: { ...split, ...numCell, bgcolor: '#f8f5fa' },
 }
 
 function availabilityColor(code: AvailabilityCode) {
@@ -188,6 +195,7 @@ const STATUS_FILTERS: { value: 'ALL' | AvailabilityCode; label: string }[] = [
 ]
 
 function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
+  const profile = stockProfile(warehouseCode)
   const queryClient = useQueryClient()
   const dialog = useCrudDialog<StockRow>()
   // Tách sẵn callback ổn định để useMemo cột không chạy lại mỗi render.
@@ -314,7 +322,15 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const columns = useMemo(() => stockColumns(openEdit), [openEdit])
+  const columns = useMemo(() => stockColumns(profile, openEdit), [profile, openEdit])
+
+  // Bảng hẹp lại khi kho không dùng vị trí / hình dạng / màu, rộng thêm khi có kiểm kê.
+  const minWidth =
+    1480 -
+    (profile.showLocation ? 0 : 110) -
+    (profile.showSku ? 0 : 130) -
+    (profile.showShapeColor ? 0 : 250) +
+    (profile.showStockCount ? 240 : 0)
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -332,7 +348,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
           filtered ? 'Không có NVL khớp bộ lọc.' : 'Chưa có hàng tồn. Bấm Thêm NVL để tạo tên hàng.'
         }
         variant="grid"
-        minWidth={1480}
+        minWidth={minWidth}
         showIndex
         indexOffset={indexOffset}
         rowsLabel="NVL"
@@ -342,7 +358,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
         sx={{ flex: 1 }}
-        customHeader={<StockTableHeader />}
+        customHeader={<StockTableHeader profile={profile} />}
         toolbar={
           <>
             <SearchInput
@@ -420,6 +436,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         open={dialog.open}
         row={dialog.row}
         warehouseCode={warehouseCode}
+        profile={profile}
         saving={save.isPending}
         onClose={dialog.close}
         onExited={dialog.clear}
@@ -429,17 +446,25 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   )
 }
 
-const StockTableHeader = memo(function StockTableHeader() {
+const StockTableHeader = memo(function StockTableHeader({
+  profile,
+}: {
+  profile: StockProfile
+}) {
   return (
     <>
       <TableRow>
         <TableCell rowSpan={2} align="center">
           STT
         </TableCell>
-        <TableCell rowSpan={2}>Vị trí</TableCell>
-        <TableCell rowSpan={2}>Mã NVL</TableCell>
-        <TableCell rowSpan={2}>Hình dạng</TableCell>
-        <TableCell rowSpan={2}>Màu sắc</TableCell>
+        {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
+        {profile.showSku ? <TableCell rowSpan={2}>Mã NVL</TableCell> : null}
+        {profile.showShapeColor ? (
+          <>
+            <TableCell rowSpan={2}>Hình dạng</TableCell>
+            <TableCell rowSpan={2}>Màu sắc</TableCell>
+          </>
+        ) : null}
         <TableCell rowSpan={2}>Tên NVL</TableCell>
         <TableCell rowSpan={2} align="center">
           Đơn vị
@@ -456,8 +481,13 @@ const StockTableHeader = memo(function StockTableHeader() {
         <TableCell align="center" colSpan={2} sx={groupHead.stock}>
           Tồn kho
         </TableCell>
+        {profile.showStockCount ? (
+          <TableCell align="center" colSpan={2} sx={groupHead.count}>
+            Kiểm kê
+          </TableCell>
+        ) : null}
         <TableCell rowSpan={2}>Phân loại</TableCell>
-        <TableCell rowSpan={2}>Loại đá</TableCell>
+        <TableCell rowSpan={2}>{profile.typeLabel}</TableCell>
         <TableCell rowSpan={2} align="center">
           Trạng thái
         </TableCell>
@@ -490,22 +520,46 @@ const StockTableHeader = memo(function StockTableHeader() {
         <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
           TT
         </TableCell>
+        {profile.showStockCount ? (
+          <>
+            <TableCell align="right" sx={groupHead.count}>
+              Tồn thực tế
+            </TableCell>
+            <TableCell align="right" sx={{ bgcolor: groupHead.count.bgcolor }}>
+              Chênh lệch
+            </TableCell>
+          </>
+        ) : null}
       </TableRow>
     </>
   )
 })
 
-function stockColumns(onEdit: (row: StockRow) => void): Column<StockRow>[] {
-  return [
-    { key: 'locationCode', header: 'Vị trí', render: (row) => row.locationCode ?? '—' },
-    {
+function stockColumns(
+  profile: StockProfile,
+  onEdit: (row: StockRow) => void,
+): Column<StockRow>[] {
+  const columns: Column<StockRow>[] = []
+
+  if (profile.showLocation) {
+    columns.push({ key: 'locationCode', header: 'Vị trí', render: (row) => row.locationCode ?? '—' })
+  }
+  if (profile.showSku) {
+    columns.push({
       key: 'sku',
       header: 'Mã NVL',
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
       render: (row) => row.sku ?? '—',
-    },
-    { key: 'shape', header: 'Hình dạng', render: (row) => row.shape ?? '—' },
-    { key: 'color', header: 'Màu sắc', render: (row) => row.color ?? '—' },
+    })
+  }
+  if (profile.showShapeColor) {
+    columns.push(
+      { key: 'shape', header: 'Hình dạng', render: (row) => row.shape ?? '—' },
+      { key: 'color', header: 'Màu sắc', render: (row) => row.color ?? '—' },
+    )
+  }
+
+  columns.push(
     { key: 'name', header: 'Tên NVL', cellSx: { minWidth: 220 } },
     { key: 'unit', header: 'Đơn vị', align: 'center' },
     {
@@ -564,8 +618,42 @@ function stockColumns(onEdit: (row: StockRow) => void): Column<StockRow>[] {
       cellSx: { ...groupBody.stock, borderLeft: '1px solid #b7c2cc' },
       render: (row) => formatMoney(row.amount),
     },
+  )
+
+  if (profile.showStockCount) {
+    columns.push(
+      {
+        key: 'countedQty',
+        header: 'Tồn thực tế',
+        align: 'right',
+        cellSx: groupBody.count,
+        render: (row) =>
+          row.countedQty == null ? (
+            '—'
+          ) : (
+            <>
+              {formatQty(row.countedQty)}
+              {row.countedAt ? (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {formatStockedDate(row.countedAt)}
+                </Typography>
+              ) : null}
+            </>
+          ),
+      },
+      {
+        key: 'countedVariance',
+        header: 'Chênh lệch',
+        align: 'right',
+        cellSx: { ...numCell, bgcolor: groupBody.count.bgcolor, fontWeight: 700 },
+        render: (row) => <VarianceCell row={row} />,
+      },
+    )
+  }
+
+  columns.push(
     { key: 'metalKindLabel', header: 'Phân loại', render: (row) => row.metalKindLabel ?? '—' },
-    { key: 'materialType', header: 'Loại đá', render: (row) => row.materialType ?? '—' },
+    { key: 'materialType', header: profile.typeLabel, render: (row) => row.materialType ?? '—' },
     {
       key: 'availability',
       header: 'Trạng thái',
@@ -585,7 +673,23 @@ function stockColumns(onEdit: (row: StockRow) => void): Column<StockRow>[] {
       align: 'center',
       render: (row) => <RowActions onEdit={() => onEdit(row)} />,
     },
-  ]
+  )
+
+  return columns
+}
+
+/// Chênh lệch kiểm kê: dương = thừa so với sổ sách, âm = thiếu.
+function VarianceCell({ row }: { row: StockRow }) {
+  if (row.countedQty == null) return <>—</>
+  const variance = Number(row.countedVariance ?? '0')
+  const tone = variance === 0 ? 'text.secondary' : variance > 0 ? '#1e8449' : '#c0392b'
+  const sign = variance > 0 ? '+' : ''
+  return (
+    <Box component="span" sx={{ color: tone }}>
+      {sign}
+      {formatQty(row.countedVariance ?? '0')}
+    </Box>
+  )
 }
 
 function sumStockTotals(rows: StockRow[]): StockTotals {
@@ -873,6 +977,8 @@ type StockFormValues = {
   inAmount: string
   outQty: string
   outAmount: string
+  countedQty: string
+  countedAt: string
 }
 
 const EMPTY_STOCK: StockFormValues = {
@@ -890,12 +996,15 @@ const EMPTY_STOCK: StockFormValues = {
   inAmount: '0',
   outQty: '0',
   outAmount: '0',
+  countedQty: '',
+  countedAt: '',
 }
 
 function StockEditDialog({
   open,
   row,
   warehouseCode,
+  profile,
   saving,
   onClose,
   onExited,
@@ -904,6 +1013,7 @@ function StockEditDialog({
   open: boolean
   row: StockRow | null
   warehouseCode: string
+  profile: StockProfile
   saving: boolean
   onClose: () => void
   onExited: () => void
@@ -943,6 +1053,8 @@ function StockEditDialog({
             inAmount: row.inAmount,
             outQty: qtyFromApi(row.outQty),
             outAmount: row.outAmount,
+            countedQty: row.countedQty == null ? '' : qtyFromApi(row.countedQty),
+            countedAt: row.countedAt ?? '',
           }
         : EMPTY_STOCK,
     )
@@ -970,6 +1082,13 @@ function StockEditDialog({
   const inAmount = form.watch('inAmount')
   const outQty = form.watch('outQty')
   const outAmount = form.watch('outAmount')
+  const countedQty = form.watch('countedQty')
+  const countedAt = form.watch('countedAt')
+
+  // Nhập số kiểm kê mà chưa có ngày thì mặc định hôm nay.
+  useEffect(() => {
+    if (countedQty.trim() !== '' && !countedAt) form.setValue('countedAt', today())
+  }, [countedQty, countedAt, form])
 
   const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
   const qty = String((Number(openingQty) || 0) + (Number(inQty) || 0) - (Number(outQty) || 0))
@@ -995,7 +1114,10 @@ function StockEditDialog({
 
   const shapeOptions: SearchSelectOption[] = lookups.data?.shapes ?? []
   const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
-  const typeOptions: SearchSelectOption[] = lookups.data?.materialTypes ?? []
+  const typeOptions: SearchSelectOption[] = materialTypesFor(
+    profile,
+    lookups.data?.materialTypes ?? [],
+  )
   const kindOptions: SearchSelectOption[] = METAL_KINDS.map((item) => ({
     id: item.code,
     name: item.name,
@@ -1003,16 +1125,22 @@ function StockEditDialog({
 
   function submit(values: StockFormValues) {
     onSave({
-      sku: values.sku,
-      locationCode: values.locationCode,
+      ...(profile.showSku ? { sku: values.sku } : {}),
+      ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
       name: values.name.trim(),
       unitId: values.unitId,
-      shapeId: values.shapeId || null,
-      colorId: values.colorId || null,
+      shapeId: profile.showShapeColor ? values.shapeId || null : null,
+      colorId: profile.showShapeColor ? values.colorId || null : null,
       materialTypeId: values.materialTypeId || null,
       metalKind: values.metalKind ? (values.metalKind as MetalKindCode) : null,
       openingQty: values.openingQty,
       stockUnitPrice: values.stockUnitPrice || '0',
+      ...(profile.showStockCount
+        ? {
+            countedQty: values.countedQty.trim() === '' ? null : values.countedQty,
+            countedAt: values.countedQty.trim() === '' ? null : values.countedAt || today(),
+          }
+        : {}),
     })
   }
 
@@ -1045,20 +1173,24 @@ function StockEditDialog({
               autoFocus
               sx={{ flex: 2, minWidth: 0 }}
             />
-            <FormSearchSelect<StockFormValues>
-              name="locationCode"
-              label="Vị trí"
-              options={locationOptions}
-              allowClear
-              placeholder="Tìm vị trí trống…"
-              noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
-              sx={{ flex: 1, minWidth: 0 }}
-            />
-            <FormTextField<StockFormValues>
-              name="sku"
-              label="Mã NVL"
-              sx={{ flex: 1, minWidth: 0 }}
-            />
+            {profile.showLocation ? (
+              <FormSearchSelect<StockFormValues>
+                name="locationCode"
+                label="Vị trí"
+                options={locationOptions}
+                allowClear
+                placeholder="Tìm vị trí trống…"
+                noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
+                sx={{ flex: 1, minWidth: 0 }}
+              />
+            ) : null}
+            {profile.showSku ? (
+              <FormTextField<StockFormValues>
+                name="sku"
+                label="Mã NVL"
+                sx={{ flex: 1, minWidth: 0 }}
+              />
+            ) : null}
             <FormMoneyField<StockFormValues>
               name="stockUnitPrice"
               label="Đơn giá tồn"
@@ -1069,26 +1201,30 @@ function StockEditDialog({
             />
           </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <FormSearchSelect<StockFormValues>
-              name="shapeId"
-              label="Hình dạng"
-              options={shapeOptions}
-              allowClear
-              placeholder="Tìm hình dạng…"
-              sx={{ flex: 1, minWidth: 0 }}
-            />
-            <Controller
-              name="colorId"
-              control={form.control}
-              render={({ field }) => (
-                <ColorField
-                  colors={colors}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
+            {profile.showShapeColor ? (
+              <>
+                <FormSearchSelect<StockFormValues>
+                  name="shapeId"
+                  label="Hình dạng"
+                  options={shapeOptions}
+                  allowClear
+                  placeholder="Tìm hình dạng…"
+                  sx={{ flex: 1, minWidth: 0 }}
                 />
-              )}
-            />
+                <Controller
+                  name="colorId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <ColorField
+                      colors={colors}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
+                />
+              </>
+            ) : null}
             <FormSearchSelect<StockFormValues>
               name="unitId"
               label="Đơn vị"
@@ -1107,13 +1243,39 @@ function StockEditDialog({
             />
             <FormSearchSelect<StockFormValues>
               name="materialTypeId"
-              label="Loại đá"
+              label={profile.typeLabel}
               options={typeOptions}
               allowClear
               placeholder="Tìm loại đá…"
               sx={{ flex: 1, minWidth: 0 }}
             />
           </Stack>
+
+          {profile.showStockCount ? (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+              <FormQtyField<StockFormValues>
+                name="countedQty"
+                label="Tồn thực tế (kiểm kê)"
+                placeholder="Bỏ trống nếu chưa kiểm kê"
+                sx={{ flex: 1 }}
+                helperText={
+                  countedQty.trim() === ''
+                    ? 'Bỏ trống = xoá kết quả kiểm kê.'
+                    : `Chênh lệch so với tồn sổ sách (${formatQty(qty)}): ${
+                        Number(countedQty || '0') - Number(qty) > 0 ? '+' : ''
+                      }${Number(countedQty || '0') - Number(qty)}`
+                }
+              />
+              <FormTextField<StockFormValues>
+                name="countedAt"
+                label="Ngày kiểm kê"
+                type="date"
+                disabled={countedQty.trim() === ''}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ flex: 1 }}
+              />
+            </Stack>
+          ) : null}
 
           <NxtGrid
             openingQty={openingQty}
@@ -1215,6 +1377,10 @@ function ColorField({
       )}
     />
   )
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 function ColorSwatch({ code, name }: { code?: string | null; name?: string | null }) {
