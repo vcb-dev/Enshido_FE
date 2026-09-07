@@ -1,61 +1,67 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert,
-  Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
-  LinearProgress,
   Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useController, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createWarehouseInboundApi,
   deleteWarehouseInboundApi,
   formatMoney,
   formatQty,
-  formatQtyInput,
   getInventoryLookupsApi,
   getWarehouseInboundsApi,
   getWarehouseStockApi,
-  parseQtyInput,
+  moneyDigitsFromApi,
   qtyFromApi,
   updateWarehouseInboundApi,
   type CreateInboundPayload,
   type InboundRow,
+  type LookupItem,
 } from '../api/inventory'
-import { ConfirmDeleteDialog, TrashIcon } from './ConfirmDeleteDialog'
-import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
-import { SearchSelect } from './SearchSelect'
-import { useAuth } from '../auth/AuthContext'
 import { getLocationsApi } from '../api/locations'
-
-type InboundDialogState =
-  | { kind: 'create' }
-  | { kind: 'edit' | 'view'; row: InboundRow }
+import { useAuth } from '../auth/AuthContext'
+import {
+  DataTable,
+  Form,
+  FormMoneyField,
+  FormQtyField,
+  FormRow,
+  FormSearchSelect,
+  FormTextField,
+  RowActions,
+  SearchInput,
+  SelectInput,
+  SummaryStat,
+  TextInput,
+  type Column,
+  type SelectOption,
+} from '../components/ui'
+import { useCrudDialog } from '../hooks/useCrudDialog'
+import { paginate, useTableParams } from '../hooks/useTableParams'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import type { SearchSelectOption } from './SearchSelect'
 
 export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) {
   const { user } = useAuth()
   const operatorName = user?.fullName?.trim() || user?.username || ''
   const queryClient = useQueryClient()
-  const [dialog, setDialog] = useState<InboundDialogState | null>(null)
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(8)
+  const dialog = useCrudDialog<InboundRow>()
+  // Tách sẵn các callback ổn định để useMemo cột không chạy lại mỗi render.
+  const { openView, openEdit } = dialog
+  const table = useTableParams({ pageSize: 8, filters: { supplierId: '' } })
+  const { params } = table
+  const [deletingRow, setDeletingRow] = useState<InboundRow | null>(null)
+
   const inbounds = useQuery({
     queryKey: ['warehouse-inbounds', warehouseCode],
     queryFn: () => getWarehouseInboundsApi(warehouseCode),
@@ -72,52 +78,56 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     queryFn: () => getWarehouseStockApi(warehouseCode),
     staleTime: 20_000,
   })
-  const materials: StockMaterialOption[] = (stock.data?.items ?? []).map((item) => ({
-    id: item.id,
-    name: item.name,
-    sku: item.sku,
-    unitId: item.unitId,
-    unit: item.unit,
-    locationCode: item.locationCode,
-  }))
 
-  const items = inbounds.data?.items ?? []
-  const totals = inbounds.data?.totals
-  const maxPage = Math.max(0, Math.ceil(items.length / rowsPerPage) - 1)
-  const currentPage = Math.min(page, maxPage)
-  const paged = items.slice(
-    currentPage * rowsPerPage,
-    currentPage * rowsPerPage + rowsPerPage,
+  const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
+  const suppliers = useMemo(() => lookups.data?.suppliers ?? [], [lookups.data?.suppliers])
+  const materials: StockMaterialOption[] = useMemo(
+    () =>
+      (stock.data?.items ?? []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        sku: item.sku,
+        unitId: item.unitId,
+        unit: item.unit,
+        locationCode: item.locationCode,
+      })),
+    [stock.data?.items],
   )
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [deletingRow, setDeletingRow] = useState<InboundRow | null>(null)
-  const editing = dialog?.kind === 'edit' || dialog?.kind === 'view' ? dialog.row : null
-  const readOnly = dialog?.kind === 'view'
 
-  function openDialog(next: InboundDialogState) {
-    setDialog(next)
-    setDialogOpen(true)
-  }
+  const items = useMemo(() => inbounds.data?.items ?? [], [inbounds.data?.items])
+  const totals = inbounds.data?.totals
 
-  function closeDialog() {
-    setDialogOpen(false)
-  }
+  const supplierOptions: SelectOption<string>[] = useMemo(
+    () => suppliers.map((item) => ({ value: item.id, label: item.name })),
+    [suppliers],
+  )
+
+  const rows = useMemo(() => {
+    const keyword = params.search.trim().toLowerCase()
+    return items.filter((row) => {
+      if (params.supplierId && row.supplierId !== params.supplierId) return false
+      if (!keyword) return true
+      return [row.name, row.note ?? '', row.supplierSku ?? '', row.supplierName ?? ''].some(
+        (field) => field.toLowerCase().includes(keyword),
+      )
+    })
+  }, [items, params.search, params.supplierId])
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
+  const page = Math.min(params.page, pageCount)
+  const indexOffset = (page - 1) * params.pageSize
+  const filtering = Boolean(params.search || params.supplierId)
 
   const save = useMutation({
-    mutationFn: ({
-      id,
-      payload,
-    }: {
-      id?: string
-      payload: CreateInboundPayload
-    }) =>
+    mutationFn: ({ id, payload }: { id?: string; payload: CreateInboundPayload }) =>
       id
         ? updateWarehouseInboundApi(warehouseCode, id, payload)
         : createWarehouseInboundApi(warehouseCode, payload),
     onSuccess: async (_row, input) => {
       toast.success(input.id ? 'Đã cập nhật NVL nhập kho' : 'Đã thêm NVL')
-      closeDialog()
-      if (!input.id) setPage(9999)
+      dialog.close()
+      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
+      if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
       await queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
@@ -138,141 +148,165 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const columns: Column<InboundRow>[] = useMemo(
+    () => [
+      {
+        key: 'receivedAt',
+        header: 'Ngày nhập',
+        width: 108,
+        sortable: true,
+        render: (row) => formatInboundDate(row.receivedAt),
+      },
+      { key: 'name', header: 'Tên hàng', ellipsis: true, sortable: true },
+      { key: 'unit', header: 'Đơn vị tính', width: 88 },
+      {
+        key: 'qty',
+        header: 'Số lượng',
+        width: 80,
+        numeric: true,
+        sortable: true,
+        render: (row) => formatQty(row.qty),
+      },
+      {
+        key: 'unitPrice',
+        header: 'Đơn giá',
+        width: 108,
+        numeric: true,
+        sortable: true,
+        render: (row) => formatMoney(Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice),
+      },
+      {
+        key: 'amount',
+        header: 'Thành tiền',
+        width: 120,
+        numeric: true,
+        sortable: true,
+        cellSx: { fontWeight: 700 },
+        render: (row) => formatMoney(row.amount),
+      },
+      {
+        key: 'note',
+        header: 'Ghi chú',
+        width: 120,
+        ellipsis: true,
+        render: (row) => row.note ?? '—',
+      },
+      {
+        key: 'enteredBy',
+        header: 'Người nhập',
+        width: 110,
+        ellipsis: true,
+        sortable: true,
+        render: (row) => row.enteredBy ?? '—',
+      },
+      {
+        key: 'supplierSku',
+        header: 'Mã hàng NCC',
+        width: 100,
+        ellipsis: true,
+        render: (row) => row.supplierSku ?? '—',
+      },
+      {
+        key: 'supplierName',
+        header: 'NCC',
+        width: 92,
+        ellipsis: true,
+        render: (row) => row.supplierName ?? '—',
+      },
+      {
+        key: 'actions',
+        header: 'Hành động',
+        width: 120,
+        align: 'center',
+        cellSx: { overflow: 'visible' },
+        render: (row) => (
+          <RowActions
+            onView={() => openView(row)}
+            onEdit={() => openEdit(row)}
+            onDelete={() => setDeletingRow(row)}
+          />
+        ),
+      },
+    ],
+    [openView, openEdit],
+  )
+
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {inbounds.error instanceof Error ? (
-        <Alert severity="error" sx={{ flexShrink: 0 }}>
-          {inbounds.error.message}
-        </Alert>
-      ) : null}
-
       {totals && items.length > 0 ? (
         <Paper sx={{ p: 1.25, flexShrink: 0 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
             Tổng hợp nhập kho
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-            <SummaryStat label="Số lượng ( SL )" value={formatQty(totals.qty)} />
-            <SummaryStat label="Thành tiền ( TT )" value={formatMoney(totals.amount)} />
-            <SummaryStat label="Số dòng" value={String(items.length)} />
+            <SummaryStat label="Số lượng ( SL )" value={formatQty(totals.qty)} tone="in" />
+            <SummaryStat label="Thành tiền ( TT )" value={formatMoney(totals.amount)} tone="in" />
+            <SummaryStat
+              label={filtering ? 'Số dòng (đang lọc)' : 'Số dòng'}
+              value={String(filtering ? rows.length : items.length)}
+              tone="in"
+            />
           </Stack>
         </Paper>
       ) : null}
 
-      <Paper
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <Stack
-          direction="row"
-          sx={{
-            flexShrink: 0,
-            justifyContent: 'flex-end',
-            px: 1.5,
-            py: 1,
-            borderBottom: '1px solid #d5dbe0',
-          }}
-        >
-          <Button variant="contained" onClick={() => openDialog({ kind: 'create' })}>
-            Thêm NVL
-          </Button>
-        </Stack>
-        <TableContainer sx={{ flex: 1, minHeight: 0, overflowX: 'hidden', overflowY: 'auto' }}>
-          {inbounds.isFetching ? <LinearProgress /> : null}
-          <Table
-            size="small"
-            sx={{
-              width: '100%',
-              tableLayout: 'fixed',
-              borderCollapse: 'separate',
-              borderSpacing: 0,
-              '& .MuiTableCell-root': {
-                border: '1px solid #b7c2cc',
-                py: 0.75,
-                px: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              },
-              '& .MuiTableHead-root': {
-                position: 'sticky',
-                top: 0,
-                zIndex: 3,
-              },
-            }}
-          >
-            <TableHead>
-              <TableRow>
-                <TableCell align="center" sx={{ width: 48 }}>STT</TableCell>
-                <TableCell sx={{ width: 108 }}>Ngày nhập</TableCell>
-                <TableCell>Tên hàng</TableCell>
-                <TableCell sx={{ width: 88 }}>Đơn vị tính</TableCell>
-                <TableCell align="right" sx={{ width: 80 }}>Số lượng</TableCell>
-                <TableCell align="right" sx={{ width: 108 }}>Đơn giá</TableCell>
-                <TableCell align="right" sx={{ width: 120 }}>Thành tiền</TableCell>
-                <TableCell sx={{ width: 120 }}>Ghi chú</TableCell>
-                <TableCell sx={{ width: 110 }}>Người nhập</TableCell>
-                <TableCell sx={{ width: 100 }}>Mã hàng NCC</TableCell>
-                <TableCell sx={{ width: 92 }}>NCC</TableCell>
-                <TableCell align="center" sx={{ width: 120, overflow: 'visible' }}>Hành động</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paged.map((row, index) => (
-                <InboundRowView
-                  key={row.id}
-                  row={row}
-                  stt={currentPage * rowsPerPage + index + 1}
-                  onView={(row) => openDialog({ kind: 'view', row })}
-                  onEdit={(row) => openDialog({ kind: 'edit', row })}
-                  onDelete={(row) => setDeletingRow(row)}
-                />
-              ))}
-              {!inbounds.isLoading && items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={12}>Chưa có dòng nhập kho.</TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={items.length}
-          page={currentPage}
-          onPageChange={(_, next) => setPage(next)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(Number(event.target.value))
-            setPage(0)
-          }}
-          rowsPerPageOptions={[8, 25, 50, 100]}
-          labelRowsPerPage="Mỗi trang"
-          labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count} dòng`}
-          sx={{ flexShrink: 0, borderTop: '1px solid #d5dbe0' }}
-        />
-      </Paper>
+      <DataTable
+        columns={columns}
+        rows={paginate(sortInbounds(rows, params.sort, params.dir), page, params.pageSize)}
+        rowKey={(row) => row.id}
+        loading={inbounds.isFetching}
+        errorText={inbounds.error instanceof Error ? inbounds.error.message : undefined}
+        emptyText={filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Chưa có dòng nhập kho.'}
+        variant="grid"
+        fixedLayout
+        showIndex
+        indexOffset={indexOffset}
+        sort={table.sortState}
+        onSortChange={table.toggleSort}
+        page={page}
+        pageSize={params.pageSize}
+        total={rows.length}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        sx={{ flex: 1 }}
+        toolbar={
+          <>
+            <SearchInput
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder="Tìm tên hàng, ghi chú, NCC..."
+            />
+            <SelectInput
+              label="NCC"
+              options={supplierOptions}
+              value={params.supplierId}
+              onChange={(value) => table.setFilter({ supplierId: String(value) })}
+              placeholder="Tất cả"
+              sx={{ width: 180 }}
+              fullWidth={false}
+            />
+            <Button variant="contained" sx={{ ml: 'auto' }} onClick={dialog.openCreate}>
+              Thêm NVL
+            </Button>
+          </>
+        }
+      />
 
       <InboundDialog
-        open={dialogOpen}
-        kind={dialog?.kind ?? 'create'}
-        row={editing}
-        readOnly={readOnly}
+        open={dialog.open}
+        kind={dialog.kind}
+        row={dialog.row}
+        readOnly={dialog.readOnly}
         saving={save.isPending}
-        units={lookups.data?.units ?? []}
-        suppliers={lookups.data?.suppliers ?? []}
+        units={units}
+        suppliers={suppliers}
         materials={materials}
         warehouseCode={warehouseCode}
         operatorName={operatorName}
-        onClose={closeDialog}
-        onExited={() => setDialog(null)}
+        onClose={dialog.close}
+        onExited={dialog.clear}
         onSave={(payload) =>
-          save.mutate({ id: dialog?.kind === 'edit' ? editing?.id : undefined, payload })
+          save.mutate({ id: dialog.kind === 'edit' ? dialog.row?.id : undefined, payload })
         }
       />
       <ConfirmDeleteDialog
@@ -291,118 +325,53 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        bgcolor: '#f2f8f4',
-        border: '1px solid #b7c2cc',
-        borderLeft: '4px solid #1e8449',
-        borderRadius: 1,
-        px: 1.25,
-        py: 1,
-      }}
-    >
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
-function InboundRowView({
-  row,
-  stt,
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  row: InboundRow
-  stt: number
-  onView: (row: InboundRow) => void
-  onEdit: (row: InboundRow) => void
-  onDelete: (row: InboundRow) => void
-}) {
-  return (
-    <TableRow hover>
-      <TableCell align="center">{stt}</TableCell>
-      <TableCell>{formatInboundDate(row.receivedAt)}</TableCell>
-      <EllipsisCell text={row.name} />
-      <TableCell>{row.unit}</TableCell>
-      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        {formatQty(row.qty)}
-      </TableCell>
-      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        {formatMoney(Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice)}
-      </TableCell>
-      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
-        {formatMoney(row.amount)}
-      </TableCell>
-      <EllipsisCell text={row.note ?? '—'} />
-      <EllipsisCell text={row.enteredBy ?? '—'} />
-      <EllipsisCell text={row.supplierSku ?? '—'} />
-      <EllipsisCell text={row.supplierName ?? '—'} />
-      <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-        <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
-          <IconButton size="small" aria-label="Xem" onClick={() => onView(row)}>
-            <EyeIcon />
-          </IconButton>
-          <IconButton size="small" aria-label="Chỉnh sửa" onClick={() => onEdit(row)}>
-            <PencilIcon />
-          </IconButton>
-          <IconButton size="small" aria-label="Xóa" color="error" onClick={() => onDelete(row)}>
-            <TrashIcon />
-          </IconButton>
-        </Stack>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function EllipsisCell({ text }: { text: string }) {
-  return (
-    <Tooltip title={text} disableHoverListener={!text || text === '—'}>
-      <TableCell>{text}</TableCell>
-    </Tooltip>
-  )
-}
-
-function EyeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M2.4 12S6 5.8 12 5.8 21.6 12 21.6 12 18 18.2 12 18.2 2.4 12 2.4 12Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 20h4.6L19.2 9.4a1.5 1.5 0 0 0 0-2.1l-2.5-2.5a1.5 1.5 0 0 0-2.1 0L4 15.4V20Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="m13.2 6.2 4.6 4.6" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  )
+function sortInbounds(rows: InboundRow[], sort: string, dir: 'asc' | 'desc') {
+  if (!sort) return rows
+  const direction = dir === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    const left = a[sort as keyof InboundRow]
+    const right = b[sort as keyof InboundRow]
+    const leftNum = Number(left)
+    const rightNum = Number(right)
+    if (left !== '' && right !== '' && Number.isFinite(leftNum) && Number.isFinite(rightNum)) {
+      return (leftNum - rightNum) * direction
+    }
+    return String(left ?? '').localeCompare(String(right ?? ''), 'vi') * direction
+  })
 }
 
 function formatInboundDate(value: string) {
   const [y, m, d] = value.split('-')
   if (!y || !m || !d) return value
   return `${d}/${m}/${y}`
+}
+
+type InboundFormValues = {
+  receivedAt: string
+  name: string
+  sku: string
+  materialId: string | null
+  unitId: string
+  locationCode: string
+  qty: string
+  unitPrice: string
+  note: string
+  supplierSku: string
+  supplierId: string
+}
+
+const EMPTY_INBOUND: InboundFormValues = {
+  receivedAt: '',
+  name: '',
+  sku: '',
+  materialId: null,
+  unitId: '',
+  locationCode: '',
+  qty: '',
+  unitPrice: '',
+  note: '',
+  supplierSku: '',
+  supplierId: '',
 }
 
 function InboundDialog({
@@ -425,8 +394,8 @@ function InboundDialog({
   row: InboundRow | null
   readOnly: boolean
   saving: boolean
-  units: { id: string; name: string }[]
-  suppliers: { id: string; name: string }[]
+  units: LookupItem[]
+  suppliers: LookupItem[]
   materials: StockMaterialOption[]
   warehouseCode: string
   operatorName: string
@@ -434,60 +403,46 @@ function InboundDialog({
   onExited: () => void
   onSave: (payload: CreateInboundPayload) => void
 }) {
+  const form = useForm<InboundFormValues>({ defaultValues: EMPTY_INBOUND })
   const locations = useQuery({
     queryKey: ['warehouse-locations', warehouseCode],
     queryFn: () => getLocationsApi(warehouseCode),
     enabled: open,
     staleTime: 20_000,
   })
-  const [receivedAt, setReceivedAt] = useState('')
-  const [name, setName] = useState('')
-  const [sku, setSku] = useState('')
-  const [materialId, setMaterialId] = useState<string | null>(null)
-  const [unitId, setUnitId] = useState('')
-  const [locationCode, setLocationCode] = useState('')
-  const [qty, setQty] = useState('')
-  const [unitPrice, setUnitPrice] = useState('')
-  const [note, setNote] = useState('')
-  const [supplierSku, setSupplierSku] = useState('')
-  const [supplierId, setSupplierId] = useState('')
 
   useEffect(() => {
     if (!open) return
-    if (row) {
-      setReceivedAt(row.receivedAt)
-      setName(row.name)
-      setSku(row.sku ?? '')
-      setMaterialId(row.materialId)
-      setUnitId(
-        row.unitId ??
-          units.find((item) => item.name === row.unit)?.id ??
-          units[0]?.id ??
-          '',
-      )
-      setQty(qtyFromApi(row.qty))
-      setUnitPrice(moneyDigitsFromApi(Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice))
-      setNote(row.note ?? '')
-      setSupplierSku(row.supplierSku ?? '')
-      setSupplierId(row.supplierId ?? '')
-      setLocationCode(
-        materials.find((item) => item.id === row.materialId)?.locationCode ?? '',
-      )
-      return
-    }
-    setReceivedAt(new Date().toISOString().slice(0, 10))
-    setName('')
-    setSku('')
-    setMaterialId(null)
-    setUnitId(units[0]?.id ?? '')
-    setLocationCode('')
-    setQty('')
-    setUnitPrice('')
-    setNote('')
-    setSupplierSku('')
-    setSupplierId('')
-  }, [open, row, units, materials])
+    form.reset(
+      row
+        ? {
+            receivedAt: row.receivedAt,
+            name: row.name,
+            sku: row.sku ?? '',
+            materialId: row.materialId,
+            unitId:
+              row.unitId ?? units.find((item) => item.name === row.unit)?.id ?? units[0]?.id ?? '',
+            locationCode:
+              materials.find((item) => item.id === row.materialId)?.locationCode ?? '',
+            qty: qtyFromApi(row.qty),
+            unitPrice: moneyDigitsFromApi(
+              Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice,
+            ),
+            note: row.note ?? '',
+            supplierSku: row.supplierSku ?? '',
+            supplierId: row.supplierId ?? '',
+          }
+        : {
+            ...EMPTY_INBOUND,
+            receivedAt: new Date().toISOString().slice(0, 10),
+            unitId: units[0]?.id ?? '',
+          },
+    )
+  }, [open, row, units, materials, form])
 
+  const qty = form.watch('qty')
+  const unitPrice = form.watch('unitPrice')
+  const locationCode = form.watch('locationCode')
   const amount = useMemo(() => {
     const q = Number(qty)
     const p = Number(unitPrice)
@@ -495,48 +450,24 @@ function InboundDialog({
     return String(Math.round(q * p))
   }, [qty, unitPrice])
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (readOnly) return
-    if (!name.trim() || (kind === 'create' && !materialId)) {
-      toast.error('Chọn tên hàng từ Kho tồn')
-      return
-    }
-    if (!qty || Number(qty) < 0) {
-      toast.error('Số lượng không hợp lệ')
-      return
-    }
-    if (!unitId) {
-      toast.error('Chọn đơn vị tính')
-      return
-    }
-    onSave({
-      receivedAt,
-      name: name.trim(),
-      sku: sku.trim() || undefined,
-      materialId,
-      unitId: unitId || undefined,
-      unitName: units.find((u) => u.id === unitId)?.name,
-      qty,
-      stockUnitPrice: '0',
-      unitPrice: unitPrice || '0',
-      amount: amount || String(Math.round((Number(qty) || 0) * (Number(unitPrice) || 0))),
-      note: note.trim() || undefined,
-      supplierSku: supplierSku.trim() || undefined,
-      supplierId: supplierId || undefined,
-      applyToStock: !row,
-      locationCode: locationCode || null,
-    })
-  }
+  const unitOptions: SearchSelectOption[] = units.map((unit) => ({
+    id: unit.id,
+    name: unit.name,
+  }))
+  const supplierOptions: SearchSelectOption[] = suppliers.map((item) => ({
+    id: item.id,
+    name: item.name,
+  }))
 
-  const locationOptions = useMemo(() => {
+  // Chỉ gợi ý ô kệ còn trống, trừ ô đang gán cho chính NVL này.
+  const locationOptions: SearchSelectOption[] = useMemo(() => {
     const slots = locations.data?.items ?? []
     const opts = slots
       .filter((slot) => !slot.occupied || slot.code === locationCode)
       .map((slot) => ({
         id: slot.code,
         name: slot.code,
-        secondary: slot.occupied ? slot.materialName ?? 'Đang dùng' : 'Trống',
+        secondary: slot.occupied ? (slot.materialName ?? 'Đang dùng') : 'Trống',
       }))
     if (locationCode && !opts.some((item) => item.id === locationCode)) {
       opts.unshift({ id: locationCode, name: locationCode, secondary: 'Hiện tại' })
@@ -544,11 +475,29 @@ function InboundDialog({
     return opts
   }, [locationCode, locations.data?.items])
 
-  const title =
-    kind === 'view' ? 'Chi tiết NVL' : kind === 'edit' ? 'Chỉnh sửa NVL' : 'Thêm NVL'
-  const fieldSx = readOnly
-    ? { '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#1b2a38', color: '#1b2a38' } }
-    : undefined
+  function submit(values: InboundFormValues) {
+    if (readOnly) return
+    onSave({
+      receivedAt: values.receivedAt,
+      name: values.name.trim(),
+      sku: values.sku.trim() || undefined,
+      materialId: values.materialId,
+      unitId: values.unitId || undefined,
+      unitName: units.find((unit) => unit.id === values.unitId)?.name,
+      qty: values.qty,
+      stockUnitPrice: '0',
+      unitPrice: values.unitPrice || '0',
+      amount:
+        amount || String(Math.round((Number(values.qty) || 0) * (Number(values.unitPrice) || 0))),
+      note: values.note.trim() || undefined,
+      supplierSku: values.supplierSku.trim() || undefined,
+      supplierId: values.supplierId || undefined,
+      applyToStock: !row,
+      locationCode: values.locationCode || null,
+    })
+  }
+
+  const title = kind === 'view' ? 'Chi tiết NVL' : kind === 'edit' ? 'Chỉnh sửa NVL' : 'Thêm NVL'
 
   return (
     <Dialog
@@ -558,7 +507,7 @@ function InboundDialog({
       maxWidth="md"
       slotProps={{ transition: { onExited } }}
     >
-      <form onSubmit={onSubmit} noValidate>
+      <Form form={form} onSubmit={submit}>
         <DialogTitle>{title}</DialogTitle>
         <DialogContent
           sx={{
@@ -569,121 +518,94 @@ function InboundDialog({
             '& .MuiFormLabel-asterisk': { color: 'error.main' },
           }}
         >
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1 }}>
-            <TextField
+          <FormRow columns={3} sx={{ mt: 1 }}>
+            <FormTextField<InboundFormValues>
+              name="receivedAt"
               label="Ngày nhập"
               type="date"
-              value={receivedAt}
-              onChange={(e) => setReceivedAt(e.target.value)}
               required
-              disabled={readOnly}
-              sx={fieldSx}
+              readOnly={readOnly}
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <SearchSelect
+            <FormSearchSelect<InboundFormValues>
+              name="unitId"
               label="Đơn vị tính"
-              valueId={unitId}
-              options={units}
+              options={unitOptions}
               required
               readOnly={readOnly}
               displayValue={row?.unit}
               placeholder="Tìm đơn vị…"
-              sx={fieldSx}
-              onChange={setUnitId}
             />
-            <TextField
+            <TextInput
               label="Người nhập"
               value={row?.enteredBy || operatorName || '—'}
               required
-              disabled
-              sx={fieldSx}
+              readOnly
             />
-          </Stack>
-          <MaterialNameField
-            value={name}
-            materials={materials}
+          </FormRow>
+
+          <MaterialField
+            kind={kind}
             readOnly={readOnly}
-            keepMaterialOnType={kind === 'edit'}
-            sx={fieldSx}
-            onChange={setName}
-            onSelect={(material) => {
-              if (!material) {
-                if (kind !== 'edit') setMaterialId(null)
-                return
-              }
-              setMaterialId(material.id)
-              setSku(material.sku ?? '')
-              setUnitId(material.unitId || unitId)
-              setLocationCode(material.locationCode ?? '')
-            }}
+            materials={materials}
+            form={form}
           />
-          <SearchSelect
+
+          <FormSearchSelect<InboundFormValues>
+            name="locationCode"
             label="Vị trí"
-            valueId={locationCode}
             options={locationOptions}
             allowClear
             readOnly={readOnly}
             displayValue={locationCode || '—'}
             placeholder="Tìm vị trí trống…"
             noOptionsText="Chưa có vị trí. Cấu hình ở mục Cấu hình → Vị trí."
-            sx={fieldSx}
-            onChange={setLocationCode}
           />
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
+
+          <FormRow columns={3}>
+            <FormQtyField<InboundFormValues>
+              name="qty"
               label="Số lượng"
-              value={formatQtyInput(qty)}
-              onChange={(e) => setQty(parseQtyInput(e.target.value))}
               required
-              disabled={readOnly}
-              sx={fieldSx}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              readOnly={readOnly}
+              rules={{
+                validate: (value) =>
+                  (Number(value) || 0) > 0 || 'Số lượng phải lớn hơn 0',
+              }}
             />
-            <TextField
+            <FormMoneyField<InboundFormValues>
+              name="unitPrice"
               label="Đơn giá"
-              value={formatMoneyInput(unitPrice)}
-              onChange={(e) => setUnitPrice(moneyDigitsFromInput(e.target.value))}
-              disabled={readOnly}
-              sx={fieldSx}
-              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+              readOnly={readOnly}
             />
-            <TextField
-              label="Thành tiền"
-              value={amount ? formatMoney(amount) : ''}
-              disabled
-              sx={fieldSx}
-            />
-          </Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <SearchSelect
+            <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
+          </FormRow>
+
+          <FormRow>
+            <FormSearchSelect<InboundFormValues>
+              name="supplierId"
               label="NCC"
-              valueId={supplierId}
-              options={suppliers}
+              options={supplierOptions}
+              allowClear
               readOnly={readOnly}
               displayValue={row?.supplierName ?? undefined}
               placeholder="Tìm NCC…"
-              allowClear
-              sx={fieldSx}
-              onChange={setSupplierId}
             />
-            <TextField
+            <FormTextField<InboundFormValues>
+              name="supplierSku"
               label="Mã hàng NCC"
-              value={readOnly ? supplierSku || '—' : supplierSku}
-              onChange={(e) => setSupplierSku(e.target.value)}
-              disabled={readOnly}
-              sx={fieldSx}
+              readOnly={readOnly}
             />
-          </Stack>
-          <TextField
+          </FormRow>
+
+          <FormTextField<InboundFormValues>
+            name="note"
             label="Ghi chú"
-            value={readOnly ? note || '—' : note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={readOnly}
+            readOnly={readOnly}
             multiline
             minRows={2}
             maxRows={6}
             sx={{
-              ...fieldSx,
               '& textarea': {
                 overflowWrap: 'anywhere',
                 wordBreak: 'break-all',
@@ -709,22 +631,58 @@ function InboundDialog({
             </>
           )}
         </DialogActions>
-      </form>
+      </Form>
     </Dialog>
   )
 }
 
-function moneyDigitsFromApi(value: string) {
-  const n = Number(value)
-  if (!Number.isFinite(n) || n === 0) return ''
-  return String(Math.round(n))
-}
+/**
+ * Tên hàng phải chọn từ danh mục NVL — chọn xong thì điền luôn mã và đơn vị,
+ * nên field này cần đọc/ghi nhiều ô cùng lúc thay vì chỉ một giá trị.
+ */
+function MaterialField({
+  kind,
+  readOnly,
+  materials,
+  form,
+}: {
+  kind: 'create' | 'edit' | 'view'
+  readOnly: boolean
+  materials: StockMaterialOption[]
+  form: ReturnType<typeof useForm<InboundFormValues>>
+}) {
+  const { field, fieldState } = useController({
+    name: 'name',
+    control: form.control,
+    rules: {
+      required: 'Chọn tên hàng từ Kho tồn',
+      validate: (value) =>
+        kind !== 'create' ||
+        Boolean(form.getValues('materialId')) ||
+        String(value ?? '').trim().length === 0 ||
+        'Chọn tên hàng từ danh sách, không nhập tự do',
+    },
+  })
 
-function moneyDigitsFromInput(value: string) {
-  return value.replace(/[^\d]/g, '')
-}
-
-function formatMoneyInput(value: string) {
-  if (!value) return ''
-  return formatMoney(value)
+  return (
+    <MaterialNameField
+      value={field.value}
+      materials={materials}
+      readOnly={readOnly}
+      keepMaterialOnType={kind === 'edit'}
+      errorText={fieldState.error?.message}
+      onBlur={field.onBlur}
+      onChange={field.onChange}
+      onSelect={(material) => {
+        if (!material) {
+          if (kind !== 'edit') form.setValue('materialId', null)
+          return
+        }
+        form.setValue('materialId', material.id)
+        form.setValue('sku', material.sku ?? '')
+        if (material.unitId) form.setValue('unitId', material.unitId)
+        form.setValue('locationCode', material.locationCode ?? '')
+      }}
+    />
+  )
 }

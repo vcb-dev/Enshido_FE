@@ -153,6 +153,24 @@ export function formatPriceOrDash(value: string) {
   return formatMoney(value)
 }
 
+/** Giá trị tiền từ API về chuỗi chỉ có chữ số, dùng làm state của ô nhập. */
+export function moneyDigitsFromApi(value: string) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n === 0) return ''
+  return String(Math.round(n))
+}
+
+/** Bỏ mọi ký tự không phải chữ số khi người dùng gõ tiền. */
+export function moneyDigitsFromInput(value: string) {
+  return value.replace(/[^\d]/g, '')
+}
+
+/** Chuỗi chữ số về dạng có phân cách nghìn để hiển thị trong ô nhập. */
+export function formatMoneyInput(value: string) {
+  if (!value) return ''
+  return formatMoney(value)
+}
+
 function parseYmd(value: string) {
   const [year, month, day] = value.split('-').map(Number)
   if (!year || !month || !day) return null

@@ -33,7 +33,8 @@ import {
   updateLocationApi,
   type LocationSlot,
 } from '../api/locations'
-import { ConfirmDeleteDialog, TrashIcon } from '../warehouses/ConfirmDeleteDialog'
+import { TrashIcon } from '../components/ui'
+import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { formatQty } from '../api/inventory'
 
 const WAREHOUSE_CODE = 'nvl-chinh'

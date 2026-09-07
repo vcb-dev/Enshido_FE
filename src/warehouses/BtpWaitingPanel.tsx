@@ -40,7 +40,8 @@ import {
   qtyFromApi,
 } from '../api/inventory'
 import { useAuth } from '../auth/AuthContext'
-import { ConfirmDeleteDialog, TrashIcon } from './ConfirmDeleteDialog'
+import { TrashIcon } from '../components/ui'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { SearchSelect } from './SearchSelect'
 
 type DialogState = { kind: 'create' } | { kind: 'edit' | 'view'; row: BtpWaitingRow }

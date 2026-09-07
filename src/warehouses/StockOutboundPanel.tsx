@@ -1,28 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert,
   Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
-  LinearProgress,
   Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useController, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createWarehouseOutboundApi,
@@ -30,33 +19,50 @@ import {
   formatMoney,
   formatPriceOrDash,
   formatQty,
-  formatQtyInput,
   getInventoryLookupsApi,
   getWarehouseOutboundsApi,
   getWarehouseStockApi,
-  parseQtyInput,
+  moneyDigitsFromApi,
   qtyFromApi,
   updateWarehouseOutboundApi,
   type CreateOutboundPayload,
   type DirectoryUser,
+  type LookupItem,
   type OutboundRow,
 } from '../api/inventory'
-import { ConfirmDeleteDialog, TrashIcon } from './ConfirmDeleteDialog'
-import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
-import { SearchSelect } from './SearchSelect'
 import { useAuth } from '../auth/AuthContext'
-
-type OutboundDialogState =
-  | { kind: 'create' }
-  | { kind: 'edit' | 'view'; row: OutboundRow }
+import {
+  DataTable,
+  Form,
+  FormQtyField,
+  FormRow,
+  FormSearchSelect,
+  FormTextField,
+  RowActions,
+  SearchInput,
+  SelectInput,
+  SummaryStat,
+  TextInput,
+  type Column,
+  type SelectOption,
+} from '../components/ui'
+import { useCrudDialog } from '../hooks/useCrudDialog'
+import { paginate, useTableParams } from '../hooks/useTableParams'
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import type { SearchSelectOption } from './SearchSelect'
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {
   const { user } = useAuth()
   const operatorName = user?.fullName?.trim() || user?.username || ''
   const queryClient = useQueryClient()
-  const [dialog, setDialog] = useState<OutboundDialogState | null>(null)
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(8)
+  const dialog = useCrudDialog<OutboundRow>()
+  // Tách sẵn các callback ổn định để useMemo cột không chạy lại mỗi render.
+  const { openView, openEdit } = dialog
+  const table = useTableParams({ pageSize: 8, filters: { issuedBy: '' } })
+  const { params } = table
+  const [deletingRow, setDeletingRow] = useState<OutboundRow | null>(null)
+
   const outbounds = useQuery({
     queryKey: ['warehouse-outbounds', warehouseCode],
     queryFn: () => getWarehouseOutboundsApi(warehouseCode),
@@ -73,53 +79,62 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     queryFn: () => getWarehouseStockApi(warehouseCode),
     staleTime: 20_000,
   })
-  const materials: StockMaterialOption[] = (stock.data?.items ?? []).map((item) => ({
-    id: item.id,
-    name: item.name,
-    sku: item.sku,
-    unitId: item.unitId,
-    unit: item.unit,
-    qty: item.qty,
-    priceLayers: item.priceLayers,
-  }))
 
-  const items = outbounds.data?.items ?? []
-  const totals = outbounds.data?.totals
-  const maxPage = Math.max(0, Math.ceil(items.length / rowsPerPage) - 1)
-  const currentPage = Math.min(page, maxPage)
-  const paged = items.slice(
-    currentPage * rowsPerPage,
-    currentPage * rowsPerPage + rowsPerPage,
+  const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
+  const users = useMemo(() => lookups.data?.users ?? [], [lookups.data?.users])
+  const materials: StockMaterialOption[] = useMemo(
+    () =>
+      (stock.data?.items ?? []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        sku: item.sku,
+        unitId: item.unitId,
+        unit: item.unit,
+        qty: item.qty,
+        priceLayers: item.priceLayers,
+      })),
+    [stock.data?.items],
   )
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [deletingRow, setDeletingRow] = useState<OutboundRow | null>(null)
-  const editing = dialog?.kind === 'edit' || dialog?.kind === 'view' ? dialog.row : null
-  const readOnly = dialog?.kind === 'view'
 
-  function openDialog(next: OutboundDialogState) {
-    setDialog(next)
-    setDialogOpen(true)
-  }
+  const items = useMemo(() => outbounds.data?.items ?? [], [outbounds.data?.items])
+  const totals = outbounds.data?.totals
 
-  function closeDialog() {
-    setDialogOpen(false)
-  }
+  // Người xuất là text tự do nên danh sách lọc lấy từ chính dữ liệu đang có.
+  const issuerOptions: SelectOption<string>[] = useMemo(() => {
+    const names = new Set<string>()
+    for (const row of items) if (row.issuedBy?.trim()) names.add(row.issuedBy.trim())
+    return [...names].sort((a, b) => a.localeCompare(b, 'vi')).map((name) => ({
+      value: name,
+      label: name,
+    }))
+  }, [items])
+
+  const rows = useMemo(() => {
+    const keyword = params.search.trim().toLowerCase()
+    return items.filter((row) => {
+      if (params.issuedBy && (row.issuedBy ?? '').trim() !== params.issuedBy) return false
+      if (!keyword) return true
+      return [row.name, row.note ?? '', row.issuedBy ?? '', row.receivedBy ?? ''].some((field) =>
+        field.toLowerCase().includes(keyword),
+      )
+    })
+  }, [items, params.search, params.issuedBy])
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
+  const page = Math.min(params.page, pageCount)
+  const indexOffset = (page - 1) * params.pageSize
+  const filtering = Boolean(params.search || params.issuedBy)
 
   const save = useMutation({
-    mutationFn: ({
-      id,
-      payload,
-    }: {
-      id?: string
-      payload: CreateOutboundPayload
-    }) =>
+    mutationFn: ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
       id
         ? updateWarehouseOutboundApi(warehouseCode, id, payload)
         : createWarehouseOutboundApi(warehouseCode, payload),
     onSuccess: async (_row, input) => {
       toast.success(input.id ? 'Đã cập nhật NVL xuất kho' : 'Đã ghi phiếu xuất')
-      closeDialog()
-      if (!input.id) setPage(9999)
+      dialog.close()
+      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
+      if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
       await queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
@@ -139,147 +154,174 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const columns: Column<OutboundRow>[] = useMemo(
+    () => [
+      {
+        key: 'issuedAt',
+        header: 'Ngày xuất',
+        width: 96,
+        sortable: true,
+        render: (row) => formatOutboundDate(row.issuedAt),
+      },
+      {
+        key: 'name',
+        header: 'Tên hàng',
+        width: 340,
+        sortable: true,
+        className: 'name-cell',
+        cellSx: { overflow: 'visible', textOverflow: 'clip' },
+      },
+      { key: 'unit', header: 'Đơn vị tính', width: 88 },
+      {
+        key: 'qty',
+        header: 'Số lượng',
+        width: 72,
+        numeric: true,
+        sortable: true,
+        render: (row) => formatQty(row.qty),
+      },
+      {
+        key: 'inboundUnitPrice',
+        header: 'Đơn giá xuất',
+        width: 168,
+        align: 'right',
+        cellSx: {
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'normal',
+          lineHeight: 1.35,
+          overflow: 'visible',
+          textOverflow: 'clip',
+        },
+        render: (row) => (
+          <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
+        ),
+      },
+      {
+        key: 'amount',
+        header: 'Thành tiền',
+        width: 108,
+        numeric: true,
+        sortable: true,
+        cellSx: { fontWeight: 700 },
+        render: (row) => formatMoney(row.amount),
+      },
+      {
+        key: 'note',
+        header: 'Ghi chú',
+        width: 108,
+        ellipsis: true,
+        className: 'note-cell',
+        render: (row) => row.note ?? '—',
+      },
+      {
+        key: 'issuedBy',
+        header: 'Người Xuất',
+        width: 96,
+        ellipsis: true,
+        sortable: true,
+        render: (row) => row.issuedBy ?? '—',
+      },
+      {
+        key: 'receivedBy',
+        header: 'Người Nhận',
+        width: 96,
+        ellipsis: true,
+        render: (row) => row.receivedBy ?? '—',
+      },
+      {
+        key: 'actions',
+        header: 'Hành động',
+        width: 120,
+        align: 'center',
+        cellSx: { overflow: 'visible' },
+        render: (row) => (
+          <RowActions
+            onView={() => openView(row)}
+            onEdit={() => openEdit(row)}
+            onDelete={() => setDeletingRow(row)}
+          />
+        ),
+      },
+    ],
+    [openView, openEdit],
+  )
+
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {outbounds.error instanceof Error ? (
-        <Alert severity="error" sx={{ flexShrink: 0 }}>
-          {outbounds.error.message}
-        </Alert>
-      ) : null}
-
       {totals && items.length > 0 ? (
         <Paper sx={{ p: 1.25, flexShrink: 0 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
             Tổng hợp xuất kho
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-            <SummaryStat label="Số lượng ( SL )" value={formatQty(totals.qty)} />
-            <SummaryStat label="Thành tiền ( TT )" value={formatMoney(totals.amount)} />
-            <SummaryStat label="Số dòng" value={String(items.length)} />
+            <SummaryStat label="Số lượng ( SL )" value={formatQty(totals.qty)} tone="out" />
+            <SummaryStat label="Thành tiền ( TT )" value={formatMoney(totals.amount)} tone="out" />
+            <SummaryStat
+              label={filtering ? 'Số dòng (đang lọc)' : 'Số dòng'}
+              value={String(filtering ? rows.length : items.length)}
+              tone="out"
+            />
           </Stack>
         </Paper>
       ) : null}
 
-      <Paper
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <Stack
-          direction="row"
-          sx={{
-            flexShrink: 0,
-            justifyContent: 'flex-end',
-            px: 1.5,
-            py: 1,
-            borderBottom: '1px solid #d5dbe0',
-          }}
-        >
-          <Button variant="contained" onClick={() => openDialog({ kind: 'create' })}>
-            Thêm phiếu xuất
-          </Button>
-        </Stack>
-        <TableContainer sx={{ flex: 1, minHeight: 0, overflowX: 'hidden', overflowY: 'auto' }}>
-          {outbounds.isFetching ? <LinearProgress /> : null}
-          <Table
-            size="small"
-            sx={{
-              width: '100%',
-              tableLayout: 'fixed',
-              borderCollapse: 'separate',
-              borderSpacing: 0,
-              '& .MuiTableCell-root': {
-                border: '1px solid #b7c2cc',
-                py: 0.75,
-                px: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              },
-              '& .MuiTableCell-root.name-cell': {
-                overflow: 'visible',
-                textOverflow: 'clip',
-              },
-              '& .MuiTableCell-root.note-cell': {
-                width: 108,
-                maxWidth: 108,
-              },
-              '& .MuiTableHead-root': {
-                position: 'sticky',
-                top: 0,
-                zIndex: 3,
-              },
-            }}
-          >
-            <TableHead>
-              <TableRow>
-                <TableCell align="center" sx={{ width: 44 }}>STT</TableCell>
-                <TableCell sx={{ width: 96 }}>Ngày xuất</TableCell>
-                <TableCell className="name-cell" sx={{ width: 340 }}>Tên hàng</TableCell>
-                <TableCell sx={{ width: 88 }}>Đơn vị tính</TableCell>
-                <TableCell align="right" sx={{ width: 72 }}>Số lượng</TableCell>
-                <TableCell align="right" sx={{ width: 168 }}>Đơn giá xuất</TableCell>
-                <TableCell align="right" sx={{ width: 108 }}>Thành tiền</TableCell>
-                <TableCell className="note-cell" sx={{ width: 108, maxWidth: 108 }}>Ghi chú</TableCell>
-                <TableCell sx={{ width: 96 }}>Người Xuất</TableCell>
-                <TableCell sx={{ width: 96 }}>Người Nhận</TableCell>
-                <TableCell align="center" sx={{ width: 120, overflow: 'visible' }}>Hành động</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paged.map((row, index) => (
-                <OutboundRowView
-                  key={row.id}
-                  row={row}
-                  stt={currentPage * rowsPerPage + index + 1}
-                  onView={(row) => openDialog({ kind: 'view', row })}
-                  onEdit={(row) => openDialog({ kind: 'edit', row })}
-                  onDelete={(row) => setDeletingRow(row)}
-                />
-              ))}
-              {!outbounds.isLoading && items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11}>Chưa có dòng xuất kho.</TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={items.length}
-          page={currentPage}
-          onPageChange={(_, next) => setPage(next)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(Number(event.target.value))
-            setPage(0)
-          }}
-          rowsPerPageOptions={[8, 25, 50, 100]}
-          labelRowsPerPage="Mỗi trang"
-          labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count} dòng`}
-          sx={{ flexShrink: 0, borderTop: '1px solid #d5dbe0' }}
-        />
-      </Paper>
+      <DataTable
+        columns={columns}
+        rows={paginate(sortOutbounds(rows, params.sort, params.dir), page, params.pageSize)}
+        rowKey={(row) => row.id}
+        loading={outbounds.isFetching}
+        errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
+        emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
+        variant="grid"
+        fixedLayout
+        showIndex
+        indexOffset={indexOffset}
+        sort={table.sortState}
+        onSortChange={table.toggleSort}
+        page={page}
+        pageSize={params.pageSize}
+        total={rows.length}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        sx={{ flex: 1 }}
+        tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
+        toolbar={
+          <>
+            <SearchInput
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder="Tìm tên hàng, ghi chú, người xuất/nhận..."
+            />
+            <SelectInput
+              label="Người xuất"
+              options={issuerOptions}
+              value={params.issuedBy}
+              onChange={(value) => table.setFilter({ issuedBy: String(value) })}
+              placeholder="Tất cả"
+              sx={{ width: 180 }}
+              fullWidth={false}
+            />
+            <Button variant="contained" sx={{ ml: 'auto' }} onClick={dialog.openCreate}>
+              Thêm phiếu xuất
+            </Button>
+          </>
+        }
+      />
 
       <OutboundDialog
-        open={dialogOpen}
-        kind={dialog?.kind ?? 'create'}
-        row={editing}
-        readOnly={readOnly}
+        open={dialog.open}
+        kind={dialog.kind}
+        row={dialog.row}
+        readOnly={dialog.readOnly}
         saving={save.isPending}
-        units={lookups.data?.units ?? []}
-        users={lookups.data?.users ?? []}
+        units={units}
+        users={users}
         materials={materials}
         operatorName={operatorName}
-        onClose={closeDialog}
-        onExited={() => setDialog(null)}
+        onClose={dialog.close}
+        onExited={dialog.clear}
         onSave={(payload) =>
-          save.mutate({ id: dialog?.kind === 'edit' ? editing?.id : undefined, payload })
+          save.mutate({ id: dialog.kind === 'edit' ? dialog.row?.id : undefined, payload })
         }
       />
       <ConfirmDeleteDialog
@@ -298,129 +340,49 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   )
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        bgcolor: '#faf6f4',
-        border: '1px solid #b7c2cc',
-        borderLeft: '4px solid #c0392b',
-        borderRadius: 1,
-        px: 1.25,
-        py: 1,
-      }}
-    >
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
-function OutboundRowView({
-  row,
-  stt,
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  row: OutboundRow
-  stt: number
-  onView: (row: OutboundRow) => void
-  onEdit: (row: OutboundRow) => void
-  onDelete: (row: OutboundRow) => void
-}) {
-  return (
-    <TableRow hover>
-      <TableCell align="center">{stt}</TableCell>
-      <TableCell>{formatOutboundDate(row.issuedAt)}</TableCell>
-      <TableCell className="name-cell">{row.name}</TableCell>
-      <TableCell>{row.unit}</TableCell>
-      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        {formatQty(row.qty)}
-      </TableCell>
-      <TableCell
-        align="right"
-        sx={{
-          fontVariantNumeric: 'tabular-nums',
-          whiteSpace: 'normal',
-          lineHeight: 1.35,
-          overflow: 'visible',
-          textOverflow: 'clip',
-        }}
-      >
-        <PriceBreakdownView
-          breakdown={row.priceBreakdown}
-          fallback={row.inboundUnitPrice}
-        />
-      </TableCell>
-      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
-        {formatMoney(row.amount)}
-      </TableCell>
-      <EllipsisCell className="note-cell" text={row.note ?? '—'} />
-      <EllipsisCell text={row.issuedBy ?? '—'} />
-      <EllipsisCell text={row.receivedBy ?? '—'} />
-      <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-        <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
-          <IconButton size="small" aria-label="Xem" onClick={() => onView(row)}>
-            <EyeIcon />
-          </IconButton>
-          <IconButton size="small" aria-label="Chỉnh sửa" onClick={() => onEdit(row)}>
-            <PencilIcon />
-          </IconButton>
-          <IconButton size="small" aria-label="Xóa" color="error" onClick={() => onDelete(row)}>
-            <TrashIcon />
-          </IconButton>
-        </Stack>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function EllipsisCell({ text, className }: { text: string; className?: string }) {
-  return (
-    <Tooltip title={text} disableHoverListener={!text || text === '—'}>
-      <TableCell className={className}>{text}</TableCell>
-    </Tooltip>
-  )
-}
-
-function EyeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M2.4 12S6 5.8 12 5.8 21.6 12 21.6 12 18 18.2 12 18.2 2.4 12 2.4 12Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
-function PencilIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 20h4.6L19.2 9.4a1.5 1.5 0 0 0 0-2.1l-2.5-2.5a1.5 1.5 0 0 0-2.1 0L4 15.4V20Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="m13.2 6.2 4.6 4.6" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  )
+function sortOutbounds(rows: OutboundRow[], sort: string, dir: 'asc' | 'desc') {
+  if (!sort) return rows
+  const direction = dir === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    const left = a[sort as keyof OutboundRow]
+    const right = b[sort as keyof OutboundRow]
+    const leftNum = Number(left)
+    const rightNum = Number(right)
+    if (left !== '' && right !== '' && Number.isFinite(leftNum) && Number.isFinite(rightNum)) {
+      return (leftNum - rightNum) * direction
+    }
+    return String(left ?? '').localeCompare(String(right ?? ''), 'vi') * direction
+  })
 }
 
 function formatOutboundDate(value: string) {
   const [y, m, d] = value.split('-')
   if (!y || !m || !d) return value
   return `${d}/${m}/${y}`
+}
+
+type OutboundFormValues = {
+  issuedAt: string
+  name: string
+  sku: string
+  materialId: string | null
+  unitId: string
+  qty: string
+  inboundUnitPrice: string
+  note: string
+  receivedByUserId: string
+}
+
+const EMPTY_OUTBOUND: OutboundFormValues = {
+  issuedAt: '',
+  name: '',
+  sku: '',
+  materialId: null,
+  unitId: '',
+  qty: '',
+  inboundUnitPrice: '',
+  note: '',
+  receivedByUserId: '',
 }
 
 function OutboundDialog({
@@ -442,63 +404,53 @@ function OutboundDialog({
   row: OutboundRow | null
   readOnly: boolean
   saving: boolean
-  units: { id: string; name: string }[]
+  units: LookupItem[]
   users: DirectoryUser[]
-  materials: StockMaterialOption[]
   operatorName: string
+  materials: StockMaterialOption[]
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateOutboundPayload) => void
 }) {
-  const [issuedAt, setIssuedAt] = useState('')
-  const [name, setName] = useState('')
-  const [sku, setSku] = useState('')
-  const [materialId, setMaterialId] = useState<string | null>(null)
-  const [unitId, setUnitId] = useState('')
-  const [qty, setQty] = useState('')
-  const [inboundUnitPrice, setInboundUnitPrice] = useState('')
-  const [note, setNote] = useState('')
-  const [receivedByUserId, setReceivedByUserId] = useState('')
+  const form = useForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
 
   useEffect(() => {
     if (!open) return
-    if (row) {
-      setIssuedAt(row.issuedAt)
-      setName(row.name)
-      setSku(row.sku ?? '')
-      setMaterialId(row.materialId)
-      setUnitId(
-        row.unitId ??
-          units.find((item) => item.name === row.unit)?.id ??
-          units[0]?.id ??
-          '',
-      )
-      setQty(qtyFromApi(row.qty))
-      setInboundUnitPrice(moneyDigitsFromApi(row.inboundUnitPrice))
-      setNote(row.note ?? '')
-      setReceivedByUserId(
-        row.receivedByUserId ??
-          users.find(
-            (item) => item.fullName === row.receivedBy || item.username === row.receivedBy,
-          )?.id ??
-          '',
-      )
-      return
-    }
-    setIssuedAt(new Date().toISOString().slice(0, 10))
-    setName('')
-    setSku('')
-    setMaterialId(null)
-    setUnitId(units[0]?.id ?? '')
-    setQty('')
-    setInboundUnitPrice('')
-    setNote('')
-    setReceivedByUserId('')
-  }, [open, row, units, users])
+    form.reset(
+      row
+        ? {
+            issuedAt: row.issuedAt,
+            name: row.name,
+            sku: row.sku ?? '',
+            materialId: row.materialId,
+            unitId:
+              row.unitId ?? units.find((item) => item.name === row.unit)?.id ?? units[0]?.id ?? '',
+            qty: qtyFromApi(row.qty),
+            inboundUnitPrice: moneyDigitsFromApi(row.inboundUnitPrice),
+            note: row.note ?? '',
+            receivedByUserId:
+              row.receivedByUserId ??
+              users.find(
+                (item) => item.fullName === row.receivedBy || item.username === row.receivedBy,
+              )?.id ??
+              '',
+          }
+        : {
+            ...EMPTY_OUTBOUND,
+            issuedAt: new Date().toISOString().slice(0, 10),
+            unitId: units[0]?.id ?? '',
+          },
+    )
+  }, [open, row, units, users, form])
+
+  const materialId = form.watch('materialId')
+  const qty = form.watch('qty')
+  const inboundUnitPrice = form.watch('inboundUnitPrice')
 
   const selected = materials.find((item) => item.id === materialId)
   const available = useMemo(() => {
     const onHand = Number(qtyFromApi(selected?.qty ?? '0'))
+    // Khi sửa, số đã xuất của chính dòng này được cộng lại vào tồn khả dụng.
     if (kind !== 'create' && row && row.materialId === materialId) {
       return onHand + Number(qtyFromApi(row.qty))
     }
@@ -509,57 +461,62 @@ function OutboundDialog({
     () => takeFifoLayers(selected?.priceLayers ?? [], Number(qty) || 0),
     [qty, selected?.priceLayers],
   )
-  const amount = kind === 'create' ? fifo.amount : row ? String(Math.round(Number(row.amount) || 0)) : ''
+  const amount =
+    kind === 'create' ? fifo.amount : row ? String(Math.round(Number(row.amount) || 0)) : ''
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
+  const unitOptions: SearchSelectOption[] = units.map((unit) => ({
+    id: unit.id,
+    name: unit.name,
+  }))
+  const userOptions: SearchSelectOption[] = users.map((item) => ({
+    id: item.id,
+    name: item.fullName,
+    secondary: item.username,
+  }))
+
+  function submit(values: OutboundFormValues) {
     if (readOnly) return
-    if (!name.trim() || (kind === 'create' && !materialId)) {
-      toast.error('Chọn tên hàng từ Kho tồn')
-      return
-    }
-    if (!qty || Number(qty) <= 0) {
-      toast.error('Số lượng xuất phải lớn hơn 0')
-      return
-    }
-    if (!unitId) {
-      toast.error('Chọn đơn vị tính')
-      return
-    }
-    if (available <= 0) {
-      toast.error('Không có đủ số lượng để xuất')
-      return
-    }
-    if (Number(qty) > available) {
-      toast.error(`SL sẵn có ${formatQty(String(available))}, không xuất quá số này`)
-      return
-    }
-    if (!receivedByUserId && (kind === 'create' || !row?.receivedBy)) {
-      toast.error('Chọn người nhận')
-      return
-    }
     onSave({
-      issuedAt,
-      name: name.trim(),
-      sku: sku.trim() || undefined,
-      materialId,
-      unitId: unitId || undefined,
-      unitName: units.find((u) => u.id === unitId)?.name,
-      qty,
+      issuedAt: values.issuedAt,
+      name: values.name.trim(),
+      sku: values.sku.trim() || undefined,
+      materialId: values.materialId,
+      unitId: values.unitId || undefined,
+      unitName: units.find((unit) => unit.id === values.unitId)?.name,
+      qty: values.qty,
       stockUnitPrice: '0',
       inboundUnitPrice: '0',
       amount: '0',
-      note: note.trim() || undefined,
-      receivedByUserId: receivedByUserId || undefined,
+      note: values.note.trim() || undefined,
+      receivedByUserId: values.receivedByUserId || undefined,
       applyToStock: !row,
     })
   }
 
   const title =
-    kind === 'view' ? 'Chi tiết phiếu xuất' : kind === 'edit' ? 'Chỉnh sửa phiếu xuất' : 'Thêm phiếu xuất'
-  const fieldSx = readOnly
-    ? { '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#1b2a38', color: '#1b2a38' } }
-    : undefined
+    kind === 'view'
+      ? 'Chi tiết phiếu xuất'
+      : kind === 'edit'
+        ? 'Chỉnh sửa phiếu xuất'
+        : 'Thêm phiếu xuất'
+
+  const availableText = !materialId
+    ? 'Chọn tên hàng'
+    : available <= 0
+      ? 'Không có đủ số lượng để xuất'
+      : `${formatQty(String(available))}${selected?.unit ? ` ${selected.unit}` : ''}`
+
+  const availableHelper = !materialId
+    ? 'Tồn hiện tại, trừ dần khi xuất'
+    : available <= 0
+      ? 'Hàng này đã hết tồn'
+      : qty
+        ? remaining < 0
+          ? 'Vượt quá số lượng sẵn có'
+          : `Còn lại ${formatQty(String(remaining))}${selected?.unit ? ` ${selected.unit}` : ''}`
+        : 'Tồn hiện tại, trừ dần khi xuất'
+
+  const availableError = Boolean(materialId && (available <= 0 || (qty && remaining < 0)))
 
   return (
     <Dialog
@@ -569,7 +526,7 @@ function OutboundDialog({
       maxWidth="md"
       slotProps={{ transition: { onExited } }}
     >
-      <form onSubmit={onSubmit} noValidate>
+      <Form form={form} onSubmit={submit}>
         <DialogTitle>{title}</DialogTitle>
         <DialogContent
           sx={{
@@ -580,138 +537,99 @@ function OutboundDialog({
             '& .MuiFormLabel-asterisk': { color: 'error.main' },
           }}
         >
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1 }}>
-            <TextField
+          <FormRow sx={{ mt: 1 }}>
+            <FormTextField<OutboundFormValues>
+              name="issuedAt"
               label="Ngày xuất"
               type="date"
-              value={issuedAt}
-              onChange={(e) => setIssuedAt(e.target.value)}
               required
-              disabled={readOnly}
-              sx={fieldSx}
+              readOnly={readOnly}
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <SearchSelect
+            <FormSearchSelect<OutboundFormValues>
+              name="unitId"
               label="Đơn vị tính"
-              valueId={unitId}
-              options={units}
+              options={unitOptions}
               required
               readOnly={readOnly}
               displayValue={row?.unit}
               placeholder="Tìm đơn vị…"
-              sx={fieldSx}
-              onChange={setUnitId}
             />
-          </Stack>
-          <MaterialNameField
-            value={name}
-            materials={materials}
-            readOnly={readOnly}
-            keepMaterialOnType={kind === 'edit'}
-            sx={fieldSx}
-            onChange={setName}
-            onSelect={(material) => {
-              if (!material) {
-                if (kind !== 'edit') setMaterialId(null)
-                return
-              }
-              setMaterialId(material.id)
-              setSku(material.sku ?? '')
-              setUnitId(material.unitId || unitId)
-              if (Number(qtyFromApi(material.qty ?? '0')) <= 0) setQty('')
-            }}
-          />
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
+          </FormRow>
+
+          <MaterialField kind={kind} readOnly={readOnly} materials={materials} form={form} />
+
+          <FormRow>
+            <TextInput
               label="SL sẵn có"
-              value={
-                !materialId
-                  ? 'Chọn tên hàng'
-                  : available <= 0
-                    ? 'Không có đủ số lượng để xuất'
-                    : `${formatQty(String(available))}${selected?.unit ? ` ${selected.unit}` : ''}`
-              }
-              disabled
-              sx={fieldSx}
-              helperText={
-                !materialId
-                  ? 'Tồn hiện tại, trừ dần khi xuất'
-                  : available <= 0
-                    ? 'Hàng này đã hết tồn'
-                    : qty
-                      ? remaining < 0
-                        ? 'Vượt quá số lượng sẵn có'
-                        : `Còn lại ${formatQty(String(remaining))}${selected?.unit ? ` ${selected.unit}` : ''}`
-                      : 'Tồn hiện tại, trừ dần khi xuất'
-              }
-              error={Boolean(materialId && (available <= 0 || (qty && remaining < 0)))}
+              value={availableText}
+              readOnly
+              helperText={availableHelper}
+              errorText={availableError ? availableHelper : undefined}
             />
-            <TextField
+            <FormQtyField<OutboundFormValues>
+              name="qty"
               label="Số lượng xuất"
-              value={formatQtyInput(qty)}
-              onChange={(e) => setQty(parseQtyInput(e.target.value))}
               required
-              disabled={readOnly || available <= 0}
-              sx={fieldSx}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+              readOnly={readOnly}
+              disabled={available <= 0}
+              rules={{
+                validate: (value) => {
+                  const next = Number(value) || 0
+                  if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
+                  if (available <= 0) return 'Không có đủ số lượng để xuất'
+                  if (next > available) {
+                    return `SL sẵn có ${formatQty(String(available))}, không xuất quá số này`
+                  }
+                  return true
+                },
+              }}
             />
-          </Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
+          </FormRow>
+
+          <FormRow>
+            <TextInput
               label="Đơn giá xuất"
               value={
                 kind === 'create'
                   ? fifo.label
                   : formatPriceBreakdown(row?.priceBreakdown, inboundUnitPrice)
               }
-              disabled
+              readOnly
               multiline
-              sx={fieldSx}
             />
-            <TextField
-              label="Thành tiền"
-              value={amount ? formatMoney(amount) : ''}
-              disabled
-              sx={fieldSx}
-            />
-          </Stack>
+            <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
+          </FormRow>
           <Typography variant="caption" color="text.secondary">
             Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
           </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
+
+          <FormRow>
+            <TextInput
               label="Người Xuất"
               value={row?.issuedBy || operatorName || '—'}
               required
-              disabled
-              sx={fieldSx}
+              readOnly
             />
-            <SearchSelect
+            <FormSearchSelect<OutboundFormValues>
+              name="receivedByUserId"
               label="Người Nhận"
-              valueId={receivedByUserId}
-              options={users.map((item) => ({
-                id: item.id,
-                name: item.fullName,
-                secondary: item.username,
-              }))}
+              options={userOptions}
               required
               readOnly={readOnly}
               displayValue={row?.receivedBy ?? undefined}
               placeholder="Tìm tài khoản…"
-              sx={fieldSx}
-              onChange={setReceivedByUserId}
             />
-          </Stack>
-          <TextField
+          </FormRow>
+
+          <FormTextField<OutboundFormValues>
+            name="note"
             label="Ghi chú"
-            value={readOnly ? note || '—' : note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={readOnly}
+            readOnly={readOnly}
             multiline
             minRows={2}
             maxRows={6}
             sx={{
-              ...fieldSx,
               '& textarea': {
                 overflowWrap: 'anywhere',
                 wordBreak: 'break-all',
@@ -741,15 +659,57 @@ function OutboundDialog({
             </>
           )}
         </DialogActions>
-      </form>
+      </Form>
     </Dialog>
   )
 }
 
-function moneyDigitsFromApi(value: string) {
-  const n = Number(value)
-  if (!Number.isFinite(n) || n === 0) return ''
-  return String(Math.round(n))
+/** Xem chú thích ở [StockInboundPanel](./StockInboundPanel.tsx) — cùng cơ chế. */
+function MaterialField({
+  kind,
+  readOnly,
+  materials,
+  form,
+}: {
+  kind: 'create' | 'edit' | 'view'
+  readOnly: boolean
+  materials: StockMaterialOption[]
+  form: ReturnType<typeof useForm<OutboundFormValues>>
+}) {
+  const { field, fieldState } = useController({
+    name: 'name',
+    control: form.control,
+    rules: {
+      required: 'Chọn tên hàng từ Kho tồn',
+      validate: (value) =>
+        kind !== 'create' ||
+        Boolean(form.getValues('materialId')) ||
+        String(value ?? '').trim().length === 0 ||
+        'Chọn tên hàng từ danh sách, không nhập tự do',
+    },
+  })
+
+  return (
+    <MaterialNameField
+      value={field.value}
+      materials={materials}
+      readOnly={readOnly}
+      keepMaterialOnType={kind === 'edit'}
+      errorText={fieldState.error?.message}
+      onBlur={field.onBlur}
+      onChange={field.onChange}
+      onSelect={(material) => {
+        if (!material) {
+          if (kind !== 'edit') form.setValue('materialId', null)
+          return
+        }
+        form.setValue('materialId', material.id)
+        form.setValue('sku', material.sku ?? '')
+        if (material.unitId) form.setValue('unitId', material.unitId)
+        if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
+      }}
+    />
+  )
 }
 
 function PriceBreakdownView({

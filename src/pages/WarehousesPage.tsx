@@ -1,20 +1,56 @@
+import { useMemo } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
+import { Button, Chip, Stack, Typography } from '@mui/material'
+import { DataTable, type Column } from '../components/ui'
 import {
-  Button,
-  Chip,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
-import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath } from '../warehouses/catalog'
+  WAREHOUSES,
+  WAREHOUSE_SECTIONS,
+  warehousePath,
+  type WarehouseDef,
+} from '../warehouses/catalog'
 
 export function WarehousesPage() {
+  // Danh sách kho là hằng số trong mã nguồn nên không cần lọc / phân trang.
+  const columns: Column<WarehouseDef>[] = useMemo(
+    () => [
+      { key: 'name', header: 'Kho', cellSx: { fontWeight: 600 } },
+      { key: 'description', header: 'Mô tả' },
+      {
+        key: 'sections',
+        header: 'Mục',
+        render: (warehouse) =>
+          warehouse.sections ? (
+            <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {WAREHOUSE_SECTIONS.map((section) => (
+                <Chip
+                  key={section.code}
+                  size="small"
+                  variant="outlined"
+                  label={section.name}
+                  component={RouterLink}
+                  to={warehousePath(warehouse, section.code)}
+                  clickable
+                />
+              ))}
+            </Stack>
+          ) : (
+            '—'
+          ),
+      },
+      {
+        key: 'actions',
+        header: '',
+        width: 120,
+        render: (warehouse) => (
+          <Button component={RouterLink} to={warehousePath(warehouse)} size="small">
+            Mở kho
+          </Button>
+        ),
+      },
+    ],
+    [],
+  )
+
   return (
     <Stack spacing={2}>
       <Stack>
@@ -24,50 +60,12 @@ export function WarehousesPage() {
         </Typography>
       </Stack>
 
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Kho</TableCell>
-              <TableCell>Mô tả</TableCell>
-              <TableCell>Mục</TableCell>
-              <TableCell width={120} />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {WAREHOUSES.map((w) => (
-              <TableRow key={w.code} hover>
-                <TableCell sx={{ fontWeight: 600 }}>{w.name}</TableCell>
-                <TableCell>{w.description}</TableCell>
-                <TableCell>
-                  {w.sections ? (
-                    <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      {WAREHOUSE_SECTIONS.map((s) => (
-                        <Chip
-                          key={s.code}
-                          size="small"
-                          variant="outlined"
-                          label={s.name}
-                          component={RouterLink}
-                          to={warehousePath(w, s.code)}
-                          clickable
-                        />
-                      ))}
-                    </Stack>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Button component={RouterLink} to={warehousePath(w)} size="small">
-                    Mở kho
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <DataTable
+        columns={columns}
+        rows={WAREHOUSES}
+        rowKey={(warehouse) => warehouse.code}
+        stickyHeader={false}
+      />
     </Stack>
   )
 }

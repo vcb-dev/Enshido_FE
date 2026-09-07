@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { Autocomplete, TextField } from '@mui/material'
 
 export type SearchSelectOption = {
@@ -19,7 +20,11 @@ export function SearchSelect({
   noOptionsText = 'Không có kết quả',
   size = 'medium',
   disablePortal = true,
+  errorText,
+  helperText,
+  inputRef,
   sx,
+  onBlur,
   onChange,
 }: {
   label: string
@@ -34,7 +39,12 @@ export function SearchSelect({
   noOptionsText?: string
   size?: 'small' | 'medium'
   disablePortal?: boolean
+  /** Có giá trị thì ô chuyển sang trạng thái lỗi và hiện thông báo này. */
+  errorText?: string
+  helperText?: string
+  inputRef?: Ref<HTMLInputElement>
   sx?: object
+  onBlur?: () => void
   onChange: (id: string) => void
 }) {
   if (readOnly) {
@@ -45,6 +55,8 @@ export function SearchSelect({
         required={required}
         disabled
         sx={sx}
+        error={Boolean(errorText)}
+        helperText={errorText ?? helperText}
       />
     )
   }
@@ -58,6 +70,7 @@ export function SearchSelect({
       options={options}
       value={selected}
       onChange={(_, next) => onChange(next?.id ?? '')}
+      onBlur={onBlur}
       getOptionLabel={(option) => option.name}
       isOptionEqualToValue={(a, b) => a.id === b.id}
       filterOptions={(opts, state) => {
@@ -91,6 +104,9 @@ export function SearchSelect({
           required={required}
           placeholder={placeholder}
           size={size}
+          inputRef={inputRef}
+          error={Boolean(errorText)}
+          helperText={errorText ?? helperText}
         />
       )}
     />
