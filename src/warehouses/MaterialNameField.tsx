@@ -7,6 +7,7 @@ export type StockMaterialOption = {
   unitId: string
   unit: string
   qty?: string
+  locationCode?: string | null
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
 }
 
@@ -73,7 +74,7 @@ export function MaterialNameField({
       }}
       autoHighlight
       openOnFocus
-      noOptionsText="Chưa có NVL. Thêm tên hàng ở Cấu hình giá sản phẩm."
+      noOptionsText="Chưa có NVL. Thêm tên hàng ở Kho tồn."
       renderInput={(params) => (
         <TextField
           {...params}

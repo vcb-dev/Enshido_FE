@@ -20,15 +20,16 @@ import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
+import SettingsIcon from '@mui/icons-material/Settings'
+import PlaceIcon from '@mui/icons-material/Place'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
-import SellIcon from '@mui/icons-material/Sell'
 import SouthIcon from '@mui/icons-material/South'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
-import { BIN_SECTIONS, extraBinSections, WAREHOUSES, warehousePath, type StockBin } from '../warehouses/catalog'
+import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
 
@@ -203,15 +204,21 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
         <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         <NavItem to="/kho" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
         <List dense disablePadding sx={{ pl: 1.5 }}>
-          {WAREHOUSES.map((w) => (
-            <WarehouseMenu key={w.code} warehouse={w} />
-          ))}
+          {WAREHOUSES.map((w) =>
+            w.sections ? (
+              <WarehouseSectionMenu key={w.code} warehouse={w} />
+            ) : (
+              <NavItem
+                key={w.code}
+                to={warehousePath(w)}
+                icon={<PalletIcon fontSize="small" />}
+                label={w.shortName}
+                end
+              />
+            ),
+          )}
         </List>
-        <NavItem
-          to="/cau-hinh-gia"
-          icon={<SellIcon fontSize="small" />}
-          label="Cấu hình giá sản phẩm"
-        />
+        <ConfigMenu />
         {canManageUsers ? (
           <NavItem to="/users" icon={<PeopleIcon fontSize="small" />} label="Nhân sự" />
         ) : null}
@@ -220,8 +227,42 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
   )
 }
 
-/// Kho có bin thì xổ ra từng bin; kho không bin (kho tiêu hao) xổ thẳng 3 section tồn/nhập/xuất.
-function WarehouseMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
+function ConfigMenu() {
+  const location = useLocation()
+  const onThis = location.pathname.startsWith('/cau-hinh')
+  const [open, setOpen] = useState(onThis)
+
+  useEffect(() => {
+    if (onThis) setOpen(true)
+  }, [onThis])
+
+  return (
+    <Box>
+      <ListItemButton
+        selected={onThis}
+        onClick={() => setOpen((v) => !v)}
+        sx={{ borderRadius: 1, mb: 0.5 }}
+      >
+        <ListItemIcon sx={{ minWidth: 36 }}>
+          <SettingsIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText primary="Cấu hình" />
+        {open ? <NorthIcon sx={{ fontSize: 12 }} /> : <SouthIcon sx={{ fontSize: 12 }} />}
+      </ListItemButton>
+      <Collapse in={open} timeout="auto" unmountOnExit>
+        <List dense disablePadding sx={{ pl: 2 }}>
+          <NavItem
+            to="/cau-hinh/vi-tri"
+            icon={<PlaceIcon fontSize="small" />}
+            label="Vị trí"
+          />
+        </List>
+      </Collapse>
+    </Box>
+  )
+}
+
+function WarehouseSectionMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
   const location = useLocation()
   const onThis = location.pathname.startsWith(`/kho/${warehouse.code}`)
   const [open, setOpen] = useState(onThis)
@@ -245,72 +286,17 @@ function WarehouseMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          {warehouse.bins?.length ? (
-            warehouse.bins.map((b) => <BinMenu key={b.code} warehouse={warehouse} bin={b} />)
-          ) : (
-            <SectionLinks warehouse={warehouse} />
-          )}
+          {WAREHOUSE_SECTIONS.map((s) => (
+            <NavItem
+              key={s.code}
+              to={warehousePath(warehouse, s.code)}
+              icon={<TableRowsIcon fontSize="small" />}
+              label={s.name}
+              end
+            />
+          ))}
         </List>
       </Collapse>
     </Box>
-  )
-}
-
-function BinMenu({
-  warehouse,
-  bin,
-}: {
-  warehouse: (typeof WAREHOUSES)[number]
-  bin: StockBin
-}) {
-  const location = useLocation()
-  const onThis = location.pathname.startsWith(`/kho/${warehouse.code}/${bin.code}`)
-  const [open, setOpen] = useState(onThis)
-
-  useEffect(() => {
-    if (onThis) setOpen(true)
-  }, [onThis])
-
-  return (
-    <Box>
-      <ListItemButton
-        selected={onThis}
-        onClick={() => setOpen((v) => !v)}
-        sx={{ borderRadius: 1, mb: 0.5 }}
-      >
-        <ListItemIcon sx={{ minWidth: 36 }}>
-          <PalletIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText primary={bin.name} />
-        {open ? <NorthIcon sx={{ fontSize: 12 }} /> : <SouthIcon sx={{ fontSize: 12 }} />}
-      </ListItemButton>
-      <Collapse in={open} timeout="auto" unmountOnExit>
-        <List dense disablePadding sx={{ pl: 2 }}>
-          <SectionLinks warehouse={warehouse} bin={bin} />
-        </List>
-      </Collapse>
-    </Box>
-  )
-}
-
-function SectionLinks({
-  warehouse,
-  bin,
-}: {
-  warehouse: (typeof WAREHOUSES)[number]
-  bin?: StockBin
-}) {
-  return (
-    <>
-      {[...BIN_SECTIONS, ...extraBinSections(bin?.code ?? '')].map((s) => (
-        <NavItem
-          key={s.code}
-          to={warehousePath(warehouse, bin?.code, s.code)}
-          icon={<TableRowsIcon fontSize="small" />}
-          label={s.name}
-          end
-        />
-      ))}
-    </>
   )
 }

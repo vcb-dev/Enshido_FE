@@ -36,30 +36,39 @@ import {
   formatMoney,
   formatQty,
   formatQtyInput,
-  formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseStockApi,
   parseQtyInput,
   qtyFromApi,
   updateWarehouseStockApi,
+  createWarehouseStockApi,
   type AvailabilityCode,
   type LookupItem,
+  type MetalKindCode,
   type StockRow,
   type StockTotals,
   type UpdateStockPayload,
 } from '../api/inventory'
 import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
+import { getLocationsApi } from '../api/locations'
+import { SearchSelect } from '../warehouses/SearchSelect'
+import { BtpWaitingPanel } from '../warehouses/BtpWaitingPanel'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import {
-  binSectionByCode,
-  materialTypesFor,
-  stockProfile,
+  MOCK_IN,
+  MOCK_OUT,
+  MOCK_STOCK,
+  METAL_KINDS,
   stockWarehouseCode,
   warehouseByCode,
   warehousePath,
-  type StockProfile,
+  warehouseSectionByCode,
+  type StockMove,
+  type WarehouseSectionCode,
 } from '../warehouses/catalog'
+
+const LEGACY_BINS = new Set(['bac', 'da'])
 
 export function WarehouseDetailPage() {
   const { code, bin, section } = useParams<{
@@ -68,40 +77,38 @@ export function WarehouseDetailPage() {
     section?: string
   }>()
 
-  if (code === 'ban-thanh-pham') {
-    return <Navigate to="/kho/nvl-chinh/bac/btp" replace />
+  if (code === 'ban-thanh-pham' || (code === 'btp-cho-vao-da' && (bin || section))) {
+    return <Navigate to="/kho/btp-cho-vao-da" replace />
+  }
+
+  if (code === 'nvl-chinh' && bin && LEGACY_BINS.has(bin)) {
+    const next = section === 'btp' || !section ? 'ton' : section
+    return <Navigate to={`/kho/nvl-chinh/${next}`} replace />
   }
 
   const warehouse = warehouseByCode(code ?? '')
-  const hasBins = Boolean(warehouse?.bins?.length)
-  const activeBin = warehouse?.bins?.find((b) => b.code === bin)
-  // Kho không có bin (kho tiêu hao) đi thẳng /kho/:code/:section — param `bin` chính là section.
-  const sectionCode = hasBins ? section : bin
-  const activeSection = binSectionByCode(sectionCode, bin)
-
   if (!warehouse) {
     return <Navigate to="/kho" replace />
   }
 
-  if (sectionCode === 'gia') {
-    return <Navigate to="/cau-hinh-gia" replace />
+  const sectionCode = warehouse.sections
+    ? (bin as WarehouseSectionCode | undefined)
+    : (section as WarehouseSectionCode | undefined)
+  const activeSection = warehouseSectionByCode(sectionCode)
+
+  if (section === 'gia' || bin === 'gia') {
+    return <Navigate to="/kho/nvl-chinh/ton" replace />
   }
 
-  if (hasBins && (!bin || !activeBin)) {
-    return <Navigate to={warehousePath(warehouse)} replace />
+  if (warehouse.sections && !activeSection) {
+    return <Navigate to={warehousePath(warehouse, 'ton')} replace />
   }
 
-  if (!activeSection) {
-    return <Navigate to={warehousePath(warehouse, activeBin?.code, 'ton')} replace />
-  }
-
-  const stockKey = stockWarehouseCode(warehouse, activeBin?.code, sectionCode)
-  const title = `${activeSection.name} — ${activeBin?.name ?? warehouse.shortName}`
-  const subtitle = hasBins
-    ? activeSection.code === 'btp'
-      ? 'Bán thành phẩm đã gia công, chờ gắn đá — thuộc Kho bạc.'
-      : `${activeBin?.name} thuộc ${warehouse.name}.`
-    : warehouse.description
+  const stockKey = stockWarehouseCode(warehouse)
+  const items = MOCK_STOCK[stockKey] ?? []
+  const title = activeSection ? `${activeSection.name} — ${warehouse.shortName}` : warehouse.name
+  const subtitle = warehouse.description
+  const useLiveMoves = Boolean(warehouse.sections)
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
@@ -109,13 +116,12 @@ export function WarehouseDetailPage() {
         <Link component={RouterLink} to="/kho" underline="hover" color="inherit">
           Kho
         </Link>
-        {activeBin ? (
+        {activeSection ? (
           <Typography color="text.secondary">{warehouse.shortName}</Typography>
         ) : null}
-        {activeBin ? (
-          <Typography color="text.secondary">{activeBin.name}</Typography>
-        ) : null}
-        <Typography color="text.primary">{activeSection.name}</Typography>
+        <Typography color="text.primary">
+          {activeSection?.name ?? warehouse.shortName}
+        </Typography>
       </Breadcrumbs>
 
       <Stack sx={{ flexShrink: 0 }}>
@@ -125,12 +131,22 @@ export function WarehouseDetailPage() {
         </Typography>
       </Stack>
 
-      {activeSection.code === 'nhap' ? (
-        <StockInboundPanel key={`${stockKey}-nhap`} warehouseCode={stockKey} />
-      ) : activeSection.code === 'xuat' ? (
-        <StockOutboundPanel key={`${stockKey}-xuat`} warehouseCode={stockKey} />
+      {warehouse.code === 'btp-cho-vao-da' ? (
+        <BtpWaitingPanel warehouseCode={warehouse.code} />
+      ) : activeSection?.code === 'nhap' ? (
+        useLiveMoves ? (
+          <StockInboundPanel warehouseCode={stockKey} />
+        ) : (
+          <MoveTable key={`${stockKey}-nhap`} kind="nhap" binCode={stockKey} items={items} />
+        )
+      ) : activeSection?.code === 'xuat' ? (
+        useLiveMoves ? (
+          <StockOutboundPanel warehouseCode={stockKey} />
+        ) : (
+          <MoveTable key={`${stockKey}-xuat`} kind="xuat" binCode={stockKey} items={items} />
+        )
       ) : (
-        <StockOnHandTable key={`${stockKey}-ton`} warehouseCode={stockKey} />
+        <StockOnHandTable warehouseCode={stockKey} />
       )}
     </Stack>
   )
@@ -143,16 +159,12 @@ const groupHead = {
   in: { ...split, bgcolor: '#e4f0e8', fontWeight: 700 },
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
   stock: { ...split, bgcolor: '#d6e3ee', fontWeight: 700, color: 'primary.main' },
-  meta: { ...split, bgcolor: '#f4f6f7', fontWeight: 700 },
-  count: { ...split, bgcolor: '#f1edf5', fontWeight: 700 },
 }
 const groupBody = {
   open: { ...split, ...numCell, bgcolor: '#f7f9fb' },
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
   out: { ...split, ...numCell, bgcolor: '#faf6f4' },
   stock: { ...split, ...numCell, bgcolor: '#eaf0f6', fontWeight: 700 },
-  meta: { ...split },
-  count: { ...split, ...numCell, bgcolor: '#f8f5fa' },
 }
 
 function availabilityColor(code: AvailabilityCode) {
@@ -169,29 +181,32 @@ const STATUS_FILTERS: { value: 'ALL' | AvailabilityCode; label: string }[] = [
 ]
 
 function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
-  const profile = stockProfile(warehouseCode)
-  const colCount =
-    14 +
-    (profile.showLocation ? 1 : 0) +
-    (profile.showSku ? 1 : 0) +
-    (profile.showShapeColor ? 2 : 0) +
-    (profile.showStockCount ? 2 : 0)
   const queryClient = useQueryClient()
+  const [nameFilter, setNameFilter] = useState('')
+  const [shapeFilter, setShapeFilter] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [stoneFilter, setStoneFilter] = useState('')
+  const [kindFilter, setKindFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | AvailabilityCode>('ALL')
-  const [dialog, setDialog] = useState<StockRow | null>(null)
+  const [dialog, setDialog] = useState<'create' | StockRow | null>(null)
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(8)
   const stock = useQuery({
     queryKey: ['warehouse-stock', warehouseCode],
     queryFn: () => getWarehouseStockApi(warehouseCode),
-    staleTime: 0,
+    staleTime: 20_000,
     placeholderData: keepPreviousData,
   })
-  useQuery({
+  const lookups = useQuery({
     queryKey: ['inventory-lookups'],
     queryFn: getInventoryLookupsApi,
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
+  })
+  const locationSlots = useQuery({
+    queryKey: ['warehouse-locations', warehouseCode],
+    queryFn: () => getLocationsApi(warehouseCode),
+    staleTime: 20_000,
   })
   const items = stock.data?.items ?? []
   const statusCounts = useMemo(() => {
@@ -199,11 +214,36 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     for (const row of items) counts[row.availability] += 1
     return counts
   }, [items])
+  const locationOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const slot of locationSlots.data?.items ?? []) names.add(slot.code)
+    for (const row of items) {
+      const loc = row.locationCode?.trim()
+      if (loc) names.add(loc)
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, 'vi'))
+      .map((name) => ({ id: name, name }))
+  }, [items, locationSlots.data?.items])
   const visible = useMemo(() => {
-    if (statusFilter === 'ALL') return items
-    return items.filter((row) => row.availability === statusFilter)
-  }, [items, statusFilter])
-  const filtered = statusFilter !== 'ALL'
+    const q = nameFilter.trim().toLowerCase()
+    return items.filter((row) => {
+      if (q && !row.name.toLowerCase().includes(q) && !(row.sku ?? '').toLowerCase().includes(q)) {
+        return false
+      }
+      if (shapeFilter && row.shapeId !== shapeFilter && row.shape !== shapeFilter) return false
+      if (locationFilter && (row.locationCode ?? '') !== locationFilter) return false
+      if (stoneFilter && row.materialTypeId !== stoneFilter && row.materialType !== stoneFilter) {
+        return false
+      }
+      if (kindFilter && row.metalKind !== kindFilter) return false
+      if (statusFilter !== 'ALL' && row.availability !== statusFilter) return false
+      return true
+    })
+  }, [items, nameFilter, shapeFilter, locationFilter, stoneFilter, kindFilter, statusFilter])
+  const filtered =
+    Boolean(nameFilter.trim() || shapeFilter || locationFilter || stoneFilter || kindFilter) ||
+    statusFilter !== 'ALL'
   const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
   const maxPage = Math.max(0, Math.ceil(visible.length / rowsPerPage) - 1)
   const currentPage = Math.min(page, maxPage)
@@ -212,26 +252,32 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     currentPage * rowsPerPage + rowsPerPage,
   )
 
-  const editing = dialog
+  const editing = dialog && dialog !== 'create' ? dialog : null
   const openEdit = useCallback((row: StockRow) => setDialog(row), [])
 
   const save = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateStockPayload }) =>
-      updateWarehouseStockApi(warehouseCode, id, payload),
-    onSuccess: async (row) => {
-      toast.success('Đã cập nhật NVL')
+    mutationFn: ({ id, payload }: { id?: string; payload: UpdateStockPayload }) =>
+      id
+        ? updateWarehouseStockApi(warehouseCode, id, payload)
+        : createWarehouseStockApi(warehouseCode, payload),
+    onSuccess: async (row, input) => {
+      toast.success(input.id ? 'Đã cập nhật NVL' : 'Đã thêm NVL')
       setDialog(null)
+      if (!input.id) setPage(9999)
       queryClient.setQueryData(
         ['warehouse-stock', warehouseCode],
         (current: { items: StockRow[]; totals: StockTotals } | undefined) => {
           if (!current) return current
-          const items = current.items.map((item) => (item.id === row.id ? row : item))
+          const items = input.id
+            ? current.items.map((item) => (item.id === row.id ? row : item))
+            : [...current.items, row]
           return { ...current, items, totals: sumStockTotals(items) }
         },
       )
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -256,76 +302,161 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         }}
       >
         <Stack
-          direction="row"
           spacing={1}
           sx={{
             flexShrink: 0,
-            alignItems: 'center',
-            justifyContent: 'space-between',
             px: 1.5,
             py: 1,
             borderBottom: '1px solid #d5dbe0',
-            flexWrap: 'nowrap',
           }}
         >
-          <FormControl size="small" sx={{ width: 220, flex: '0 0 auto' }}>
-            <InputLabel id="stock-status-filter">Trạng thái</InputLabel>
-            <Select
-              labelId="stock-status-filter"
-              label="Trạng thái"
-              value={statusFilter}
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          >
+            <TextField
+              size="small"
+              label="Tên NVL"
+              value={nameFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as 'ALL' | AvailabilityCode)
+                setNameFilter(e.target.value)
                 setPage(0)
               }}
-              renderValue={(value) => {
-                const opt = STATUS_FILTERS.find((item) => item.value === value)
-                const count = value === 'ALL' ? items.length : statusCounts[value]
-                const label = `${opt?.label ?? 'Tất cả'} (${count})`
-                if (value === 'ALL') return label
-                return (
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    color={availabilityColor(value)}
-                    label={label}
-                  />
-                )
+              placeholder="Tìm tên hoặc mã…"
+              sx={{ flex: '1 1 180px', minWidth: 160, maxWidth: 260 }}
+            />
+            <SearchSelect
+              label="Hình dạng"
+              valueId={shapeFilter}
+              options={lookups.data?.shapes ?? []}
+              allowClear
+              size="small"
+              disablePortal={false}
+              placeholder="Tìm hình dạng…"
+              sx={{ flex: '1 1 150px', minWidth: 150, maxWidth: 220 }}
+              onChange={(id) => {
+                setShapeFilter(id)
+                setPage(0)
               }}
-            >
-              {STATUS_FILTERS.map((opt) => {
-                const count = opt.value === 'ALL' ? items.length : statusCounts[opt.value]
-                const label = `${opt.label} (${count})`
-                return (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.value === 'ALL' ? (
-                      label
-                    ) : (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={availabilityColor(opt.value)}
-                        label={label}
-                        sx={{ pointerEvents: 'none' }}
-                      />
-                    )}
-                  </MenuItem>
-                )
-              })}
-            </Select>
-          </FormControl>
+            />
+            <SearchSelect
+              label="Vị trí"
+              valueId={locationFilter}
+              options={locationOptions}
+              allowClear
+              size="small"
+              disablePortal={false}
+              placeholder="Tìm vị trí…"
+              sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 200 }}
+              onChange={(id) => {
+                setLocationFilter(id)
+                setPage(0)
+              }}
+            />
+            <SearchSelect
+              label="Loại đá"
+              valueId={stoneFilter}
+              options={lookups.data?.materialTypes ?? []}
+              allowClear
+              size="small"
+              disablePortal={false}
+              placeholder="Tìm loại đá…"
+              sx={{ flex: '1 1 150px', minWidth: 150, maxWidth: 220 }}
+              onChange={(id) => {
+                setStoneFilter(id)
+                setPage(0)
+              }}
+            />
+            <SearchSelect
+              label="Phân loại"
+              valueId={kindFilter}
+              options={METAL_KINDS.map((item) => ({ id: item.code, name: item.name }))}
+              allowClear
+              size="small"
+              disablePortal={false}
+              placeholder="Tìm phân loại…"
+              sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 200 }}
+              onChange={(id) => {
+                setKindFilter(id)
+                setPage(0)
+              }}
+            />
+            <FormControl size="small" sx={{ width: 200, flex: '0 0 auto' }}>
+              <InputLabel id="stock-status-filter">Trạng thái</InputLabel>
+              <Select
+                labelId="stock-status-filter"
+                label="Trạng thái"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as 'ALL' | AvailabilityCode)
+                  setPage(0)
+                }}
+                renderValue={(value) => {
+                  const opt = STATUS_FILTERS.find((item) => item.value === value)
+                  const count = value === 'ALL' ? items.length : statusCounts[value]
+                  const label = `${opt?.label ?? 'Tất cả'} (${count})`
+                  if (value === 'ALL') return label
+                  return (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={availabilityColor(value)}
+                      label={label}
+                    />
+                  )
+                }}
+              >
+                {STATUS_FILTERS.map((opt) => {
+                  const count = opt.value === 'ALL' ? items.length : statusCounts[opt.value]
+                  const label = `${opt.label} (${count})`
+                  return (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      {opt.value === 'ALL' ? (
+                        label
+                      ) : (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={availabilityColor(opt.value)}
+                          label={label}
+                          sx={{ pointerEvents: 'none' }}
+                        />
+                      )}
+                    </MenuItem>
+                  )
+                })}
+              </Select>
+            </FormControl>
+            {filtered ? (
+              <Button
+                size="small"
+                onClick={() => {
+                  setNameFilter('')
+                  setShapeFilter('')
+                  setLocationFilter('')
+                  setStoneFilter('')
+                  setKindFilter('')
+                  setStatusFilter('ALL')
+                  setPage(0)
+                }}
+              >
+                Xóa lọc
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button variant="contained" onClick={() => setDialog('create')}>
+              Thêm NVL
+            </Button>
+          </Stack>
         </Stack>
         <TableContainer sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           {stock.isFetching ? <LinearProgress /> : null}
           <Table
             size="small"
             sx={{
-              minWidth:
-                1480 -
-                (profile.showLocation ? 0 : 110) -
-                (profile.showSku ? 0 : 130) -
-                (profile.showShapeColor ? 0 : 250) +
-                (profile.showStockCount ? 240 : 0),
+              minWidth: 1480,
               borderCollapse: 'separate',
               borderSpacing: 0,
               '& .MuiTableCell-root': {
@@ -348,14 +479,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
                 <TableCell rowSpan={2} align="center">
                   STT
                 </TableCell>
-                {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
-                {profile.showSku ? <TableCell rowSpan={2}>Mã NVL</TableCell> : null}
-                {profile.showShapeColor ? (
-                  <>
-                    <TableCell rowSpan={2}>Hình dạng</TableCell>
-                    <TableCell rowSpan={2}>Màu sắc</TableCell>
-                  </>
-                ) : null}
+                <TableCell rowSpan={2}>Vị trí</TableCell>
+                <TableCell rowSpan={2}>Mã NVL</TableCell>
+                <TableCell rowSpan={2}>Hình dạng</TableCell>
+                <TableCell rowSpan={2}>Màu sắc</TableCell>
                 <TableCell rowSpan={2}>Tên NVL</TableCell>
                 <TableCell rowSpan={2} align="center">
                   Đơn vị
@@ -372,14 +499,8 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
                 <TableCell align="center" colSpan={2} sx={groupHead.stock}>
                   Tồn kho
                 </TableCell>
-                {profile.showStockCount ? (
-                  <TableCell align="center" colSpan={2} sx={groupHead.count}>
-                    Kiểm kê
-                  </TableCell>
-                ) : null}
-                <TableCell rowSpan={2} sx={groupHead.meta}>
-                  {profile.typeLabel}
-                </TableCell>
+                <TableCell rowSpan={2}>Phân loại</TableCell>
+                <TableCell rowSpan={2}>Loại đá</TableCell>
                 <TableCell rowSpan={2} align="center">
                   Trạng thái
                 </TableCell>
@@ -412,16 +533,6 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
                 <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
                   TT
                 </TableCell>
-                {profile.showStockCount ? (
-                  <>
-                    <TableCell align="right" sx={groupHead.count}>
-                      Tồn thực tế
-                    </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: groupHead.count.bgcolor }}>
-                      Chênh lệch
-                    </TableCell>
-                  </>
-                ) : null}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -432,17 +543,16 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
                     key={row.id}
                     row={row}
                     stt={stt}
-                    profile={profile}
                     onEdit={openEdit}
                   />
                 )
               })}
               {!stock.isLoading && visible.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={colCount}>
-                    {stock.isLoading
-                      ? 'Đang tải…'
-                      : 'Chưa có hàng tồn. Thêm tên hàng ở Cấu hình giá sản phẩm.'}
+                  <TableCell colSpan={19}>
+                    {filtered
+                      ? 'Không có NVL khớp bộ lọc.'
+                      : 'Chưa có hàng tồn. Bấm Thêm NVL để tạo tên hàng.'}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -470,12 +580,11 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       <StockEditDialog
         open={dialog !== null}
         row={editing}
-        profile={profile}
+        warehouseCode={warehouseCode}
         saving={save.isPending}
         onClose={() => setDialog(null)}
         onSave={(payload) => {
-          if (!editing) return
-          save.mutate({ id: editing.id, payload })
+          save.mutate({ id: editing?.id, payload })
         }}
       />
     </Stack>
@@ -500,27 +609,19 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
 const StockOnHandRow = memo(function StockOnHandRow({
   row,
   stt,
-  profile,
   onEdit,
 }: {
   row: StockRow
   stt: number
-  profile: StockProfile
   onEdit: (row: StockRow) => void
 }) {
   return (
     <TableRow hover>
       <TableCell align="center">{stt}</TableCell>
-      {profile.showLocation ? <TableCell>{row.locationCode ?? '—'}</TableCell> : null}
-      {profile.showSku ? (
-        <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{row.sku ?? '—'}</TableCell>
-      ) : null}
-      {profile.showShapeColor ? (
-        <>
-          <TableCell>{row.shape ?? '—'}</TableCell>
-          <TableCell>{row.color ?? '—'}</TableCell>
-        </>
-      ) : null}
+      <TableCell>{row.locationCode ?? '—'}</TableCell>
+      <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{row.sku ?? '—'}</TableCell>
+      <TableCell>{row.shape ?? '—'}</TableCell>
+      <TableCell>{row.color ?? '—'}</TableCell>
       <TableCell sx={{ minWidth: 220 }}>{row.name}</TableCell>
       <TableCell align="center">{row.unit}</TableCell>
       <TableCell align="right" sx={groupBody.open}>
@@ -547,8 +648,8 @@ const StockOnHandRow = memo(function StockOnHandRow({
       <TableCell align="right" sx={{ ...groupBody.stock, borderLeft: '1px solid #b7c2cc' }}>
         {formatMoney(row.amount)}
       </TableCell>
-      {profile.showStockCount ? <StockCountCells row={row} /> : null}
-      <TableCell sx={groupBody.meta}>{row.materialType ?? '—'}</TableCell>
+      <TableCell>{row.metalKindLabel ?? '—'}</TableCell>
+      <TableCell>{row.materialType ?? '—'}</TableCell>
       <TableCell align="center">
         <Chip
           size="small"
@@ -573,43 +674,6 @@ const StockOnHandRow = memo(function StockOnHandRow({
     </TableRow>
   )
 })
-
-/// Hai ô "Tồn thực tế" và "Chênh lệch" — chỉ hiện ở kho bật showStockCount.
-function StockCountCells({ row }: { row: StockRow }) {
-  const blank = { ...numCell, bgcolor: groupBody.count.bgcolor }
-  if (row.countedQty == null) {
-    return (
-      <>
-        <TableCell align="right" sx={groupBody.count}>
-          —
-        </TableCell>
-        <TableCell align="right" sx={blank}>
-          —
-        </TableCell>
-      </>
-    )
-  }
-  const variance = Number(row.countedVariance ?? '0')
-  const tone =
-    variance === 0 ? 'text.secondary' : variance > 0 ? '#1e8449' : '#c0392b'
-  const sign = variance > 0 ? '+' : ''
-  return (
-    <>
-      <TableCell align="right" sx={groupBody.count}>
-        {formatQty(row.countedQty)}
-        {row.countedAt ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {formatStockedDate(row.countedAt)}
-          </Typography>
-        ) : null}
-      </TableCell>
-      <TableCell align="right" sx={{ ...blank, color: tone, fontWeight: 700 }}>
-        {sign}
-        {formatQty(row.countedVariance ?? '0')}
-      </TableCell>
-    </>
-  )
-}
 
 function StockSummaryBar({
   totals,
@@ -708,17 +772,175 @@ function SummaryCard({
   )
 }
 
+function MoveTable({
+  kind,
+  binCode,
+  items,
+}: {
+  kind: 'nhap' | 'xuat'
+  binCode: string
+  items: typeof MOCK_STOCK[string]
+}) {
+  const seed = kind === 'nhap' ? MOCK_IN[binCode] ?? [] : MOCK_OUT[binCode] ?? []
+  const [rows, setRows] = useState<StockMove[]>(seed)
+  const [open, setOpen] = useState(false)
+
+  const label = kind === 'nhap' ? 'phiếu nhập' : 'phiếu xuất'
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
+        <Button variant="contained" onClick={() => setOpen(true)}>
+          Tạo {label}
+        </Button>
+      </Stack>
+      <TableContainer component={Paper}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Số phiếu</TableCell>
+              <TableCell>Ngày</TableCell>
+              <TableCell>Mã</TableCell>
+              <TableCell>Tên hàng</TableCell>
+              <TableCell align="right">Số lượng</TableCell>
+              <TableCell>Đơn vị</TableCell>
+              <TableCell>Ghi chú</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.docNo} hover>
+                <TableCell>{row.docNo}</TableCell>
+                <TableCell>{row.date}</TableCell>
+                <TableCell>{row.sku}</TableCell>
+                <TableCell>{row.name}</TableCell>
+                <TableCell align="right">{row.qty}</TableCell>
+                <TableCell>{row.unit}</TableCell>
+                <TableCell>{row.note ?? '—'}</TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7}>Chưa có {label}.</TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <MoveDialog
+        open={open}
+        kind={kind}
+        items={items}
+        onClose={() => setOpen(false)}
+        onSave={(move) => {
+          setRows((prev) => [move, ...prev])
+          setOpen(false)
+          toast.success(`Đã tạo ${label}`)
+        }}
+      />
+    </Stack>
+  )
+}
+
+function MoveDialog({
+  open,
+  kind,
+  items,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  kind: 'nhap' | 'xuat'
+  items: typeof MOCK_STOCK[string]
+  onClose: () => void
+  onSave: (move: StockMove) => void
+}) {
+  const [sku, setSku] = useState(items[0]?.sku ?? '')
+  const [qty, setQty] = useState('0')
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setSku(items[0]?.sku ?? '')
+    setQty('0')
+    setNote('')
+  }, [open, items])
+
+  const selected = useMemo(() => items.find((i) => i.sku === sku), [items, sku])
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    const amount = Number(qty)
+    if (!selected || !Number.isFinite(amount) || amount <= 0) {
+      toast.error('Số lượng không hợp lệ')
+      return
+    }
+    const prefix = kind === 'nhap' ? 'PN' : 'PX'
+    onSave({
+      docNo: `${prefix}-${Date.now().toString().slice(-6)}`,
+      date: new Date().toISOString().slice(0, 10),
+      sku: selected.sku,
+      name: selected.name,
+      qty: amount,
+      unit: selected.unit,
+      note: note.trim() || undefined,
+    })
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <form onSubmit={onSubmit}>
+        <DialogTitle>{kind === 'nhap' ? 'Tạo phiếu nhập' : 'Tạo phiếu xuất'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
+          <SearchSelect
+            label="Hàng"
+            valueId={sku}
+            options={items.map((item) => ({
+              id: item.sku,
+              name: `${item.sku} — ${item.name}`,
+            }))}
+            required
+            placeholder="Tìm hàng…"
+            sx={{ mt: 1 }}
+            onChange={setSku}
+          />
+          <TextField
+            label="Số lượng"
+            type="number"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            required
+            slotProps={{ htmlInput: { min: 0.01, step: 'any' } }}
+          />
+          <TextField
+            label="Ghi chú"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Hủy</Button>
+          <Button type="submit" variant="contained">
+            Lưu
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
+  )
+}
+
 function StockEditDialog({
   open,
   row,
-  profile,
+  warehouseCode,
   saving,
   onClose,
   onSave,
 }: {
   open: boolean
   row: StockRow | null
-  profile: StockProfile
+  warehouseCode: string
   saving: boolean
   onClose: () => void
   onSave: (payload: UpdateStockPayload) => void
@@ -730,6 +952,12 @@ function StockEditDialog({
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
   })
+  const locationSlots = useQuery({
+    queryKey: ['warehouse-locations', warehouseCode],
+    queryFn: () => getLocationsApi(warehouseCode),
+    enabled: open,
+    staleTime: 20_000,
+  })
   const [locationCode, setLocationCode] = useState('')
   const [sku, setSku] = useState('')
   const [shapeId, setShapeId] = useState('')
@@ -737,14 +965,13 @@ function StockEditDialog({
   const [name, setName] = useState('')
   const [unitId, setUnitId] = useState('')
   const [materialTypeId, setMaterialTypeId] = useState('')
+  const [metalKind, setMetalKind] = useState('')
   const [openingQty, setOpeningQty] = useState('0')
   const [stockUnitPrice, setStockUnitPrice] = useState('0')
   const [inQty, setInQty] = useState('0')
   const [inAmount, setInAmount] = useState('0')
   const [outQty, setOutQty] = useState('0')
   const [outAmount, setOutAmount] = useState('0')
-  const [countedQty, setCountedQty] = useState('')
-  const [countedAt, setCountedAt] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -756,14 +983,13 @@ function StockEditDialog({
       setName('')
       setUnitId('')
       setMaterialTypeId('')
+      setMetalKind('SILVER')
       setOpeningQty('0')
-      setStockUnitPrice('0')
+      setStockUnitPrice('')
       setInQty('0')
       setInAmount('0')
       setOutQty('0')
       setOutAmount('0')
-      setCountedQty('')
-      setCountedAt('')
       return
     }
     setLocationCode(row.locationCode ?? '')
@@ -773,14 +999,13 @@ function StockEditDialog({
     setName(row.name)
     setUnitId(row.unitId)
     setMaterialTypeId(row.materialTypeId ?? '')
+    setMetalKind(row.metalKind ?? '')
     setOpeningQty(qtyFromApi(row.openingQty))
-    setStockUnitPrice(row.stockUnitPrice)
+    setStockUnitPrice(moneyDigitsFromApi(row.stockUnitPrice))
     setInQty(qtyFromApi(row.inQty))
     setInAmount(row.inAmount)
     setOutQty(qtyFromApi(row.outQty))
     setOutAmount(row.outAmount)
-    setCountedQty(row.countedQty == null ? '' : qtyFromApi(row.countedQty))
-    setCountedAt(row.countedAt ?? '')
   }, [open, row])
 
   const colors = useMemo(() => {
@@ -815,20 +1040,16 @@ function StockEditDialog({
       return
     }
     onSave({
-      ...(profile.showSku ? { sku } : {}),
-      ...(profile.showLocation ? { locationCode } : {}),
+      sku,
+      locationCode,
       name: name.trim(),
       unitId,
-      shapeId: profile.showShapeColor ? shapeId || null : null,
-      colorId: profile.showShapeColor ? colorId || null : null,
+      shapeId: shapeId || null,
+      colorId: colorId || null,
       materialTypeId: materialTypeId || null,
+      metalKind: metalKind ? (metalKind as MetalKindCode) : null,
       openingQty,
-      ...(profile.showStockCount
-        ? {
-            countedQty: countedQty.trim() === '' ? null : parseQtyInput(countedQty),
-            countedAt: countedQty.trim() === '' ? null : countedAt || today(),
-          }
-        : {}),
+      stockUnitPrice: stockUnitPrice || '0',
     })
   }
 
@@ -854,169 +1075,141 @@ function StockEditDialog({
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
-              sx={{ flex: 2 }}
+              sx={{ flex: 2, minWidth: 0 }}
             />
-            {profile.showLocation ? (
-              <TextField
-                label="Vị trí"
-                value={locationCode}
-                onChange={(e) => setLocationCode(e.target.value)}
-                sx={{ flex: 1 }}
-              />
-            ) : null}
-            {profile.showSku ? (
-              <TextField
-                label="Mã NVL"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                sx={{ flex: 1 }}
-              />
-            ) : null}
+            <SearchSelect
+              label="Vị trí"
+              valueId={locationCode}
+              options={(() => {
+                const slots = locationSlots.data?.items ?? []
+                const opts = slots
+                  .filter((slot) => !slot.occupied || slot.code === locationCode)
+                  .map((slot) => ({
+                    id: slot.code,
+                    name: slot.code,
+                    secondary: slot.occupied ? slot.materialName ?? 'Đang dùng' : 'Trống',
+                  }))
+                if (locationCode && !opts.some((item) => item.id === locationCode)) {
+                  opts.unshift({ id: locationCode, name: locationCode, secondary: 'Hiện tại' })
+                }
+                return opts
+              })()}
+              allowClear
+              placeholder="Tìm vị trí trống…"
+              noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
+              sx={{ flex: 1, minWidth: 0 }}
+              onChange={setLocationCode}
+            />
+            <TextField
+              label="Mã NVL"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              sx={{ flex: 1, minWidth: 0 }}
+            />
+            <TextField
+              label="Đơn giá tồn"
+              value={formatMoney(stockUnitPrice || '0')}
+              onChange={(e) => setStockUnitPrice(moneyDigitsFromInput(e.target.value))}
+              sx={{ flex: 1, minWidth: 0, maxWidth: { sm: 180 } }}
+              slotProps={{
+                htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
+              }}
+            />
           </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            {profile.showShapeColor ? (
-              <>
-              <TextField
-                select
-                label="Hình dạng"
-                value={shapeId}
-                onChange={(e) => setShapeId(e.target.value)}
-                sx={{ flex: 1 }}
-              >
-                <MenuItem value="">—</MenuItem>
-                {(lookups.data?.shapes ?? []).map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Autocomplete
-                sx={{ flex: 1, minWidth: 0 }}
-                options={colors}
-                value={selectedColor}
-                onChange={(_, next) => setColorId(next?.id ?? '')}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                filterOptions={(options, state) => {
-                  const q = state.inputValue.trim().toLowerCase()
-                  if (!q) return options
-                  return options.filter(
-                    (item) =>
-                      item.name.toLowerCase().includes(q) ||
-                      item.code.toLowerCase().includes(q),
-                  )
-                }}
-                disablePortal
-                autoHighlight
-                openOnFocus
-                noOptionsText="Không có màu khớp"
-                renderOption={(props, option) => {
-                  const { key, ...rest } = props
-                  return (
-                    <Box component="li" key={key} {...rest} sx={{ gap: 1 }}>
-                      <ColorSwatch code={option.code} name={option.name} />
-                      {option.name}
-                    </Box>
-                  )
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Màu sắc"
-                    placeholder="Tìm màu…"
-                    slotProps={{
-                      ...params.slotProps,
-                      input: {
-                        ...params.slotProps.input,
-                        startAdornment: (
-                          <>
-                            {selectedColor ? (
-                              <Box sx={{ display: 'flex', ml: 0.5, mr: 0.75 }}>
-                                <ColorSwatch
-                                  code={selectedColor.code}
-                                  name={selectedColor.name}
-                                />
-                              </Box>
-                            ) : null}
-                            {params.slotProps.input.startAdornment}
-                          </>
-                        ),
-                      },
-                    }}
-                  />
-                )}
-              />
-              </>
-            ) : null}
-            <TextField
-              select
+            <SearchSelect
+              label="Hình dạng"
+              valueId={shapeId}
+              options={lookups.data?.shapes ?? []}
+              allowClear
+              placeholder="Tìm hình dạng…"
+              sx={{ flex: 1, minWidth: 0 }}
+              onChange={setShapeId}
+            />
+            <Autocomplete
+              sx={{ flex: 1, minWidth: 0 }}
+              options={colors}
+              value={selectedColor}
+              onChange={(_, next) => setColorId(next?.id ?? '')}
+              getOptionLabel={(option) => option.name}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              filterOptions={(options, state) => {
+                const q = state.inputValue.trim().toLowerCase()
+                if (!q) return options
+                return options.filter(
+                  (item) =>
+                    item.name.toLowerCase().includes(q) ||
+                    item.code.toLowerCase().includes(q),
+                )
+              }}
+              disablePortal
+              autoHighlight
+              openOnFocus
+              noOptionsText="Không có màu khớp"
+              renderOption={(props, option) => {
+                const { key, ...rest } = props
+                return (
+                  <Box component="li" key={key} {...rest} sx={{ gap: 1 }}>
+                    <ColorSwatch code={option.code} name={option.name} />
+                    {option.name}
+                  </Box>
+                )
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Màu sắc"
+                  placeholder="Tìm màu…"
+                  slotProps={{
+                    ...params.slotProps,
+                    input: {
+                      ...params.slotProps.input,
+                      startAdornment: (
+                        <>
+                          {selectedColor ? (
+                            <Box sx={{ display: 'flex', ml: 0.5, mr: 0.75 }}>
+                              <ColorSwatch
+                                code={selectedColor.code}
+                                name={selectedColor.name}
+                              />
+                            </Box>
+                          ) : null}
+                          {params.slotProps.input.startAdornment}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              )}
+            />
+            <SearchSelect
               label="Đơn vị"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
+              valueId={unitId}
+              options={lookups.data?.units ?? []}
               required
-              sx={{ flex: 1 }}
-            >
-              {!row ? <MenuItem value="">Chọn đơn vị</MenuItem> : null}
-              {(lookups.data?.units ?? []).map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label={profile.typeLabel}
-              value={materialTypeId}
-              onChange={(e) => setMaterialTypeId(e.target.value)}
-              sx={{ flex: 1 }}
-            >
-              <MenuItem value="">—</MenuItem>
-              {materialTypesFor(profile, lookups.data?.materialTypes ?? []).map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.name}
-                </MenuItem>
-              ))}
-            </TextField>
+              placeholder="Tìm đơn vị…"
+              sx={{ flex: 1, minWidth: 0 }}
+              onChange={setUnitId}
+            />
+            <SearchSelect
+              label="Phân loại"
+              valueId={metalKind}
+              options={METAL_KINDS.map((item) => ({ id: item.code, name: item.name }))}
+              allowClear
+              placeholder="Tìm phân loại…"
+              sx={{ flex: 1, minWidth: 0 }}
+              onChange={setMetalKind}
+            />
+            <SearchSelect
+              label="Loại đá"
+              valueId={materialTypeId}
+              options={lookups.data?.materialTypes ?? []}
+              allowClear
+              placeholder="Tìm loại đá…"
+              sx={{ flex: 1, minWidth: 0 }}
+              onChange={setMaterialTypeId}
+            />
           </Stack>
-
-          <TextField
-            label="Đơn giá tồn"
-            value={formatMoney(stockUnitPrice || '0')}
-            disabled
-            helperText="Cấu hình tại mục Cấu hình giá sản phẩm. TT đầu kỳ = SL đầu kỳ × đơn giá tồn."
-          />
-
-          {profile.showStockCount ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-              <TextField
-                label="Tồn thực tế (kiểm kê)"
-                value={countedQty}
-                onChange={(e) => {
-                  const next = formatQtyInput(e.target.value)
-                  setCountedQty(next)
-                  if (next.trim() !== '' && !countedAt) setCountedAt(today())
-                }}
-                placeholder="Bỏ trống nếu chưa kiểm kê"
-                sx={{ flex: 1 }}
-                helperText={
-                  countedQty.trim() === ''
-                    ? 'Bỏ trống = xoá kết quả kiểm kê.'
-                    : `Chênh lệch so với tồn sổ sách (${formatQty(qty)}): ${
-                        Number(parseQtyInput(countedQty)) - Number(qty) > 0 ? '+' : ''
-                      }${Number(parseQtyInput(countedQty)) - Number(qty)}`
-                }
-              />
-              <TextField
-                label="Ngày kiểm kê"
-                type="date"
-                value={countedAt}
-                onChange={(e) => setCountedAt(e.target.value)}
-                disabled={countedQty.trim() === ''}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ flex: 1 }}
-              />
-            </Stack>
-          ) : null}
 
           <NxtGrid
             openingQty={openingQty}
@@ -1030,7 +1223,10 @@ function StockEditDialog({
             onOpeningQty={setOpeningQty}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn kho = Tồn đầu kỳ + Nhập − Xuất (cố định). SL {formatQty(qty)} · TT {formatMoney(amount)}
+            Tồn kho = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
+            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1044,10 +1240,6 @@ function StockEditDialog({
       </form>
     </Dialog>
   )
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 function ColorSwatch({ code, name }: { code?: string | null; name?: string | null }) {
@@ -1215,4 +1407,14 @@ function NxtCell({
       />
     </Box>
   )
+}
+
+function moneyDigitsFromApi(value: string) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n === 0) return ''
+  return String(Math.round(n))
+}
+
+function moneyDigitsFromInput(value: string) {
+  return value.replace(/[^\d]/g, '')
 }

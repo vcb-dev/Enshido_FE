@@ -8,7 +8,6 @@ import {
   DialogContent,
   DialogTitle,
   LinearProgress,
-  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -23,6 +22,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { createUserApi, listUsersApi, type RoleCode } from '../api/auth'
+import { SearchSelect } from '../warehouses/SearchSelect'
 
 export function UsersPage() {
   const queryClient = useQueryClient()
@@ -155,15 +155,17 @@ function CreateUserDialog({
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <TextField
-            select
+          <SearchSelect
             label="Vai trò"
-            value={roleCode}
-            onChange={(e) => setRoleCode(e.target.value as RoleCode)}
-          >
-            <MenuItem value="ADMIN">ADMIN</MenuItem>
-            <MenuItem value="USER">USER</MenuItem>
-          </TextField>
+            valueId={roleCode}
+            options={[
+              { id: 'ADMIN', name: 'ADMIN' },
+              { id: 'USER', name: 'USER' },
+            ]}
+            required
+            placeholder="Tìm vai trò…"
+            onChange={(id) => setRoleCode((id as RoleCode) || 'USER')}
+          />
           <TextField
             label="Bộ phận"
             value={department}

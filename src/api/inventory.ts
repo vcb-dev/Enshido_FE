@@ -25,9 +25,17 @@ export type InventoryLookups = {
   shapes: LookupItem[]
   colors: LookupItem[]
   suppliers?: LookupItem[]
+  users?: DirectoryUser[]
+}
+
+export type DirectoryUser = {
+  id: string
+  username: string
+  fullName: string
 }
 
 export type ClassificationCode = 'RAW_MATERIAL' | 'CONSUMABLE' | 'SEMI_FINISHED'
+export type MetalKindCode = 'SILVER' | 'GOLD' | 'STONE' | 'ALLOY' | 'COPPER'
 
 export type StockRow = {
   id: string
@@ -63,6 +71,8 @@ export type StockRow = {
   materialType: string | null
   classificationCode: ClassificationCode
   classification: string
+  metalKind: MetalKindCode | null
+  metalKindLabel: string | null
   availability: AvailabilityCode
   availabilityLabel: string
 }
@@ -207,6 +217,7 @@ export type UpdateStockPayload = {
   colorId?: string | null
   materialTypeId?: string | null
   classification?: ClassificationCode
+  metalKind?: MetalKindCode | null
   openingQty?: string
   openingAmount?: string
   stockUnitPrice?: string
@@ -258,6 +269,7 @@ export type InboundRow = {
   unitPrice: string
   amount: string
   note: string | null
+  enteredBy: string | null
   supplierSku: string | null
   supplierId: string | null
   supplierName: string | null
@@ -291,6 +303,7 @@ export type CreateInboundPayload = {
   supplierId?: string | null
   supplierName?: string
   applyToStock?: boolean
+  locationCode?: string | null
 }
 
 export function getWarehouseInboundsApi(code: string) {
@@ -336,6 +349,7 @@ export type OutboundRow = {
   note: string | null
   issuedBy: string | null
   receivedBy: string | null
+  receivedByUserId: string | null
   materialId: string | null
   priceBreakdown?: { qty: string; unitPrice: string; source: 'opening' | 'inbound' }[]
 }
@@ -365,6 +379,7 @@ export type CreateOutboundPayload = {
   note?: string
   issuedBy?: string
   receivedBy?: string
+  receivedByUserId?: string | null
   applyToStock?: boolean
 }
 

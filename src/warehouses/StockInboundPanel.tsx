@@ -9,7 +9,6 @@ import {
   DialogTitle,
   IconButton,
   LinearProgress,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -42,12 +41,17 @@ import {
 } from '../api/inventory'
 import { ConfirmDeleteDialog, TrashIcon } from './ConfirmDeleteDialog'
 import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import { SearchSelect } from './SearchSelect'
+import { useAuth } from '../auth/AuthContext'
+import { getLocationsApi } from '../api/locations'
 
 type InboundDialogState =
   | { kind: 'create' }
   | { kind: 'edit' | 'view'; row: InboundRow }
 
 export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) {
+  const { user } = useAuth()
+  const operatorName = user?.fullName?.trim() || user?.username || ''
   const queryClient = useQueryClient()
   const [dialog, setDialog] = useState<InboundDialogState | null>(null)
   const [page, setPage] = useState(0)
@@ -74,6 +78,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     sku: item.sku,
     unitId: item.unitId,
     unit: item.unit,
+    locationCode: item.locationCode,
   }))
 
   const items = inbounds.data?.items ?? []
@@ -116,6 +121,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       await queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       await queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
+      await queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -209,7 +215,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
                 <TableCell align="right" sx={{ width: 80 }}>Số lượng</TableCell>
                 <TableCell align="right" sx={{ width: 108 }}>Đơn giá</TableCell>
                 <TableCell align="right" sx={{ width: 120 }}>Thành tiền</TableCell>
-                <TableCell sx={{ width: 140 }}>Ghi chú</TableCell>
+                <TableCell sx={{ width: 120 }}>Ghi chú</TableCell>
+                <TableCell sx={{ width: 110 }}>Người nhập</TableCell>
                 <TableCell sx={{ width: 100 }}>Mã hàng NCC</TableCell>
                 <TableCell sx={{ width: 92 }}>NCC</TableCell>
                 <TableCell align="center" sx={{ width: 120, overflow: 'visible' }}>Hành động</TableCell>
@@ -228,7 +235,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
               ))}
               {!inbounds.isLoading && items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11}>Chưa có dòng nhập kho.</TableCell>
+                  <TableCell colSpan={12}>Chưa có dòng nhập kho.</TableCell>
                 </TableRow>
               ) : null}
             </TableBody>
@@ -260,6 +267,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         units={lookups.data?.units ?? []}
         suppliers={lookups.data?.suppliers ?? []}
         materials={materials}
+        warehouseCode={warehouseCode}
+        operatorName={operatorName}
         onClose={closeDialog}
         onExited={() => setDialog(null)}
         onSave={(payload) =>
@@ -334,10 +343,11 @@ function InboundRowView({
         {formatMoney(row.amount)}
       </TableCell>
       <EllipsisCell text={row.note ?? '—'} />
+      <EllipsisCell text={row.enteredBy ?? '—'} />
       <EllipsisCell text={row.supplierSku ?? '—'} />
       <EllipsisCell text={row.supplierName ?? '—'} />
       <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-        <Stack direction="row" spacing={0} justifyContent="center">
+        <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
           <IconButton size="small" aria-label="Xem" onClick={() => onView(row)}>
             <EyeIcon />
           </IconButton>
@@ -404,6 +414,8 @@ function InboundDialog({
   units,
   suppliers,
   materials,
+  warehouseCode,
+  operatorName,
   onClose,
   onExited,
   onSave,
@@ -416,15 +428,24 @@ function InboundDialog({
   units: { id: string; name: string }[]
   suppliers: { id: string; name: string }[]
   materials: StockMaterialOption[]
+  warehouseCode: string
+  operatorName: string
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateInboundPayload) => void
 }) {
+  const locations = useQuery({
+    queryKey: ['warehouse-locations', warehouseCode],
+    queryFn: () => getLocationsApi(warehouseCode),
+    enabled: open,
+    staleTime: 20_000,
+  })
   const [receivedAt, setReceivedAt] = useState('')
   const [name, setName] = useState('')
   const [sku, setSku] = useState('')
   const [materialId, setMaterialId] = useState<string | null>(null)
   const [unitId, setUnitId] = useState('')
+  const [locationCode, setLocationCode] = useState('')
   const [qty, setQty] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
   const [note, setNote] = useState('')
@@ -449,6 +470,9 @@ function InboundDialog({
       setNote(row.note ?? '')
       setSupplierSku(row.supplierSku ?? '')
       setSupplierId(row.supplierId ?? '')
+      setLocationCode(
+        materials.find((item) => item.id === row.materialId)?.locationCode ?? '',
+      )
       return
     }
     setReceivedAt(new Date().toISOString().slice(0, 10))
@@ -456,12 +480,13 @@ function InboundDialog({
     setSku('')
     setMaterialId(null)
     setUnitId(units[0]?.id ?? '')
+    setLocationCode('')
     setQty('')
     setUnitPrice('')
     setNote('')
     setSupplierSku('')
     setSupplierId('')
-  }, [open, row, units])
+  }, [open, row, units, materials])
 
   const amount = useMemo(() => {
     const q = Number(qty)
@@ -474,11 +499,15 @@ function InboundDialog({
     event.preventDefault()
     if (readOnly) return
     if (!name.trim() || (kind === 'create' && !materialId)) {
-      toast.error('Chọn tên hàng từ Cấu hình giá sản phẩm')
+      toast.error('Chọn tên hàng từ Kho tồn')
       return
     }
     if (!qty || Number(qty) < 0) {
       toast.error('Số lượng không hợp lệ')
+      return
+    }
+    if (!unitId) {
+      toast.error('Chọn đơn vị tính')
       return
     }
     onSave({
@@ -496,8 +525,24 @@ function InboundDialog({
       supplierSku: supplierSku.trim() || undefined,
       supplierId: supplierId || undefined,
       applyToStock: !row,
+      locationCode: locationCode || null,
     })
   }
+
+  const locationOptions = useMemo(() => {
+    const slots = locations.data?.items ?? []
+    const opts = slots
+      .filter((slot) => !slot.occupied || slot.code === locationCode)
+      .map((slot) => ({
+        id: slot.code,
+        name: slot.code,
+        secondary: slot.occupied ? slot.materialName ?? 'Đang dùng' : 'Trống',
+      }))
+    if (locationCode && !opts.some((item) => item.id === locationCode)) {
+      opts.unshift({ id: locationCode, name: locationCode, secondary: 'Hiện tại' })
+    }
+    return opts
+  }, [locationCode, locations.data?.items])
 
   const title =
     kind === 'view' ? 'Chi tiết NVL' : kind === 'edit' ? 'Chỉnh sửa NVL' : 'Thêm NVL'
@@ -535,23 +580,24 @@ function InboundDialog({
               sx={fieldSx}
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <TextField
-              select={!readOnly}
+            <SearchSelect
               label="Đơn vị tính"
-              value={readOnly ? units.find((item) => item.id === unitId)?.name || row?.unit || '—' : unitId}
-              onChange={(e) => setUnitId(e.target.value)}
+              valueId={unitId}
+              options={units}
               required
-              disabled={readOnly}
+              readOnly={readOnly}
+              displayValue={row?.unit}
+              placeholder="Tìm đơn vị…"
               sx={fieldSx}
-            >
-              {readOnly
-                ? null
-                : units.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.name}
-                    </MenuItem>
-                  ))}
-            </TextField>
+              onChange={setUnitId}
+            />
+            <TextField
+              label="Người nhập"
+              value={row?.enteredBy || operatorName || '—'}
+              required
+              disabled
+              sx={fieldSx}
+            />
           </Stack>
           <MaterialNameField
             value={name}
@@ -568,7 +614,20 @@ function InboundDialog({
               setMaterialId(material.id)
               setSku(material.sku ?? '')
               setUnitId(material.unitId || unitId)
+              setLocationCode(material.locationCode ?? '')
             }}
+          />
+          <SearchSelect
+            label="Vị trí"
+            valueId={locationCode}
+            options={locationOptions}
+            allowClear
+            readOnly={readOnly}
+            displayValue={locationCode || '—'}
+            placeholder="Tìm vị trí trống…"
+            noOptionsText="Chưa có vị trí. Cấu hình ở mục Cấu hình → Vị trí."
+            sx={fieldSx}
+            onChange={setLocationCode}
           />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField
@@ -596,29 +655,17 @@ function InboundDialog({
             />
           </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
-              select={!readOnly}
+            <SearchSelect
               label="NCC"
-              value={
-                readOnly
-                  ? suppliers.find((item) => item.id === supplierId)?.name ||
-                    row?.supplierName ||
-                    '—'
-                  : supplierId
-              }
-              onChange={(e) => setSupplierId(e.target.value)}
-              disabled={readOnly}
+              valueId={supplierId}
+              options={suppliers}
+              readOnly={readOnly}
+              displayValue={row?.supplierName ?? undefined}
+              placeholder="Tìm NCC…"
+              allowClear
               sx={fieldSx}
-            >
-              {readOnly ? null : <MenuItem value="">—</MenuItem>}
-              {readOnly
-                ? null
-                : suppliers.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.name}
-                    </MenuItem>
-                  ))}
-            </TextField>
+              onChange={setSupplierId}
+            />
             <TextField
               label="Mã hàng NCC"
               value={readOnly ? supplierSku || '—' : supplierSku}
