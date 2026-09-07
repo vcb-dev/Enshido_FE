@@ -79,7 +79,7 @@ export function MaterialNameField({
       }}
       autoHighlight
       openOnFocus
-      noOptionsText="Chưa có NVL. Thêm tên hàng ở Kho tồn."
+      noOptionsText="Chưa có NVL. Thêm tên hàng ở Tồn."
       renderInput={(params) => (
         <TextField
           {...params}

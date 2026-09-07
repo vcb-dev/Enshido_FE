@@ -479,7 +479,7 @@ const StockTableHeader = memo(function StockTableHeader({
           Xuất
         </TableCell>
         <TableCell align="center" colSpan={2} sx={groupHead.stock}>
-          Tồn kho
+          Tồn
         </TableCell>
         <TableCell rowSpan={2}>Phân loại</TableCell>
         <TableCell rowSpan={2}>{profile.typeLabel}</TableCell>
@@ -678,7 +678,7 @@ function StockSummaryBar({
         <SummaryCard title="Tồn đầu kỳ" tone="open" sl={totals.openingQty} tt={totals.openingAmount} />
         <SummaryCard title="Nhập" tone="in" sl={totals.inQty} tt={totals.inAmount} />
         <SummaryCard title="Xuất" tone="out" sl={totals.outQty} tt={totals.outAmount} />
-        <SummaryCard title="Tồn kho" tone="stock" sl={totals.qty} tt={totals.amount} />
+        <SummaryCard title="Tồn" tone="stock" sl={totals.qty} tt={totals.amount} />
       </Box>
     </Paper>
   )
@@ -1187,7 +1187,7 @@ function StockEditDialog({
             onOpeningQty={(value) => form.setValue('openingQty', value)}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn kho = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
+            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
             TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
@@ -1319,7 +1319,7 @@ function NxtGrid({
     { key: 'open', label: 'Tồn đầu kỳ', bg: '#edf1f4', note: 'TT = SL × đơn giá tồn' },
     { key: 'in', label: 'Nhập', bg: '#e4f0e8', note: 'Tổng phiếu nhập (Σ SL × đơn giá)' },
     { key: 'out', label: 'Xuất', bg: '#f3ebe7', note: 'Tổng phiếu xuất theo ngày' },
-    { key: 'stock', label: 'Tồn kho', bg: '#d6e3ee', note: 'Công thức cố định' },
+    { key: 'stock', label: 'Tồn', bg: '#d6e3ee', note: 'Công thức cố định' },
   ] as const
 
   return (
