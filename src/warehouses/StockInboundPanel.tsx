@@ -347,7 +347,7 @@ function InboundRowView({
       <EllipsisCell text={row.supplierSku ?? '—'} />
       <EllipsisCell text={row.supplierName ?? '—'} />
       <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-        <Stack direction="row" spacing={0} justifyContent="center">
+        <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
           <IconButton size="small" aria-label="Xem" onClick={() => onView(row)}>
             <EyeIcon />
           </IconButton>

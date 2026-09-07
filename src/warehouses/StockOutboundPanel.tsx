@@ -365,7 +365,7 @@ function OutboundRowView({
       <EllipsisCell text={row.issuedBy ?? '—'} />
       <EllipsisCell text={row.receivedBy ?? '—'} />
       <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-        <Stack direction="row" spacing={0} justifyContent="center">
+        <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
           <IconButton size="small" aria-label="Xem" onClick={() => onView(row)}>
             <EyeIcon />
           </IconButton>
@@ -750,11 +750,6 @@ function moneyDigitsFromApi(value: string) {
   const n = Number(value)
   if (!Number.isFinite(n) || n === 0) return ''
   return String(Math.round(n))
-}
-
-function formatMoneyInput(value: string) {
-  if (!value) return ''
-  return formatMoney(value)
 }
 
 function PriceBreakdownView({

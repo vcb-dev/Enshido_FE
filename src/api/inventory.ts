@@ -53,6 +53,11 @@ export type StockRow = {
   openingQty: string
   openingAmount: string
   stockUnitPrice: string
+  /// Số kiểm kê thực tế; null = chưa kiểm kê.
+  countedQty: string | null
+  countedAt: string | null
+  /// countedQty − qty. Dương = thừa so với sổ sách, âm = thiếu.
+  countedVariance: string | null
   /** Ngày bắt đầu tồn kho (YYYY-MM-DD): lần nhập đầu, hoặc ngày tạo NVL nếu chưa nhập. */
   stockedAt?: string | null
   inQty: string
@@ -222,6 +227,8 @@ export type UpdateStockPayload = {
   outAmount?: string
   qty?: string
   amount?: string
+  countedQty?: string | null
+  countedAt?: string | null
 }
 
 export function getInventoryLookupsApi() {

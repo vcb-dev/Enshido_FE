@@ -314,8 +314,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
             direction="row"
             spacing={1}
             useFlexGap
-            flexWrap="wrap"
-            sx={{ alignItems: 'center' }}
+            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
           >
             <TextField
               size="small"

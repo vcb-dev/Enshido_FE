@@ -210,7 +210,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
                   <EllipsisCell text={row.note ?? '—'} />
                   <EllipsisCell text={row.enteredBy ?? '—'} />
                   <TableCell align="center" sx={{ overflow: 'visible', whiteSpace: 'nowrap' }}>
-                    <Stack direction="row" spacing={0} justifyContent="center">
+                    <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
                       <IconButton size="small" aria-label="Xem" onClick={() => openDialog({ kind: 'view', row })}>
                         <EyeIcon />
                       </IconButton>
