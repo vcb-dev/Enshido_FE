@@ -62,12 +62,12 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
 }
 
 const STOCK_PROFILES: Record<string, StockProfile> = {
-  // Vật tư tiêu hao không có hình dạng / màu / vị trí kệ, nhưng cần kiểm kê tay.
+  // Vật tư tiêu hao không có hình dạng / màu / vị trí kệ.
   'nvl-tieu-hao': {
     showSku: true,
     showLocation: false,
     showShapeColor: false,
-    showStockCount: true,
+    showStockCount: false,
     typeLabel: 'Nhóm',
     typeCodes: CONSUMABLE_TYPE_CODES,
   },

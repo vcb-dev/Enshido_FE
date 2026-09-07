@@ -96,3 +96,22 @@ export function paginate<T>(rows: T[], page: number, pageSize: number): T[] {
   const start = (page - 1) * pageSize
   return rows.slice(start, start + pageSize)
 }
+
+/**
+ * Sắp xếp phía client theo `sort`/`dir` từ [useTableParams](#useTableParams).
+ * So sánh số nếu cả hai vế parse được thành số, ngược lại so sánh chữ theo bảng chữ cái tiếng Việt.
+ */
+export function sortRows<T>(rows: T[], sort: string, dir: SortDir): T[] {
+  if (!sort) return rows
+  const direction = dir === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    const left = (a as Record<string, unknown>)[sort]
+    const right = (b as Record<string, unknown>)[sort]
+    const leftNum = Number(left)
+    const rightNum = Number(right)
+    if (left !== '' && right !== '' && Number.isFinite(leftNum) && Number.isFinite(rightNum)) {
+      return (leftNum - rightNum) * direction
+    }
+    return String(left ?? '').localeCompare(String(right ?? ''), 'vi') * direction
+  })
+}

@@ -212,7 +212,13 @@ export function DataTable<T>({
                       align={column.align ?? (column.numeric ? 'right' : undefined)}
                       className={column.className}
                       sortDirection={active ? sort.dir : false}
-                      sx={{ width: column.width, whiteSpace: 'nowrap', ...column.headSx }}
+                      sx={{
+                        width: column.width,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        ...column.headSx,
+                      }}
                     >
                       {column.sortable && onSortChange ? (
                         <TableSortLabel
