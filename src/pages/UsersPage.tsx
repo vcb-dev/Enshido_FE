@@ -1,98 +1,152 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert,
   Button,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  LinearProgress,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
   Typography,
-  Paper,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { createUserApi, listUsersApi, type RoleCode } from '../api/auth'
-import { SearchSelect } from '../warehouses/SearchSelect'
+import { createUserApi, listUsersApi, type RoleCode, type UserRow } from '../api/auth'
+import {
+  DataTable,
+  Form,
+  FormCheckbox,
+  FormRow,
+  FormSelect,
+  FormTextField,
+  SearchInput,
+  type Column,
+  type SelectOption,
+} from '../components/ui'
+import { paginate, useTableParams } from '../hooks/useTableParams'
+
+const ROLE_OPTIONS: SelectOption<RoleCode>[] = [
+  { value: 'ADMIN', label: 'ADMIN' },
+  { value: 'USER', label: 'USER' },
+]
+
+const COLUMNS: Column<UserRow>[] = [
+  { key: 'fullName', header: 'Họ tên', sortable: true },
+  { key: 'username', header: 'Tài khoản', sortable: true },
+  { key: 'roleCode', header: 'Vai trò', sortable: true },
+  { key: 'department', header: 'Bộ phận', sortable: true },
+  {
+    key: 'isActive',
+    header: 'Trạng thái',
+    render: (row) => (
+      <Chip
+        size="small"
+        label={row.isActive ? 'Đang dùng' : 'Ngưng'}
+        color={row.isActive ? 'success' : 'default'}
+        variant="outlined"
+      />
+    ),
+  },
+]
 
 export function UsersPage() {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const users = useQuery({ queryKey: ['users'], queryFn: listUsersApi })
+  const table = useTableParams({ pageSize: 25, sort: 'fullName' })
+  const { params } = table
+
+  // API /users chưa nhận tham số lọc nên lọc & phân trang tại client.
+  // Khi backend hỗ trợ, chỉ cần đổi thành listUsersApi(params) — queryKey đã có sẵn params.
+  const users = useQuery({ queryKey: ['users', params], queryFn: listUsersApi })
+
+  const rows = useMemo(() => {
+    const all = users.data ?? []
+    const keyword = params.search.trim().toLowerCase()
+    const matched = keyword
+      ? all.filter((user) =>
+          [user.fullName, user.username, user.department ?? ''].some((field) =>
+            field.toLowerCase().includes(keyword),
+          ),
+        )
+      : all
+    if (!params.sort) return matched
+    const direction = params.dir === 'desc' ? -1 : 1
+    return [...matched].sort((a, b) => {
+      const left = String(a[params.sort as keyof UserRow] ?? '')
+      const right = String(b[params.sort as keyof UserRow] ?? '')
+      return left.localeCompare(right, 'vi') * direction
+    })
+  }, [users.data, params.search, params.sort, params.dir])
+
+  // Giữ trang hợp lệ khi bộ lọc thu hẹp kết quả.
+  const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
+  const page = Math.min(params.page, pageCount)
 
   return (
-    <Stack spacing={2}>
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Stack>
-          <Typography variant="h5">Nhân sự</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Tài khoản đăng nhập hệ thống xưởng.
-          </Typography>
-        </Stack>
-        <Button variant="contained" onClick={() => setOpen(true)}>
-          Thêm nhân sự
-        </Button>
+    <Stack spacing={2} sx={{ minHeight: 0, flex: 1 }}>
+      <Stack>
+        <Typography variant="h5">Nhân sự</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Tài khoản đăng nhập hệ thống xưởng.
+        </Typography>
       </Stack>
 
-      {users.error instanceof Error ? <Alert severity="error">{users.error.message}</Alert> : null}
-
-      <TableContainer component={Paper}>
-        {users.isFetching ? <LinearProgress /> : null}
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Họ tên</TableCell>
-              <TableCell>Tài khoản</TableCell>
-              <TableCell>Vai trò</TableCell>
-              <TableCell>Bộ phận</TableCell>
-              <TableCell>Trạng thái</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(users.data ?? []).map((u) => (
-              <TableRow key={u.id} hover>
-                <TableCell>{u.fullName}</TableCell>
-                <TableCell>{u.username}</TableCell>
-                <TableCell>{u.roleCode}</TableCell>
-                <TableCell>{u.department ?? '—'}</TableCell>
-                <TableCell>
-                  <Chip
-                    size="small"
-                    label={u.isActive ? 'Đang dùng' : 'Ngưng'}
-                    color={u.isActive ? 'success' : 'default'}
-                    variant="outlined"
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {!users.isLoading && (users.data?.length ?? 0) === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5}>Chưa có nhân sự.</TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <DataTable
+        columns={COLUMNS}
+        rows={paginate(rows, page, params.pageSize)}
+        rowKey={(row) => row.id}
+        loading={users.isFetching}
+        errorText={users.error instanceof Error ? users.error.message : undefined}
+        emptyText={params.search ? 'Không tìm thấy nhân sự phù hợp.' : 'Chưa có nhân sự.'}
+        rowsLabel="nhân sự"
+        sort={table.sortState}
+        onSortChange={table.toggleSort}
+        page={page}
+        pageSize={params.pageSize}
+        total={rows.length}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        toolbar={
+          <>
+            <SearchInput
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder="Tìm theo tên, tài khoản, bộ phận..."
+            />
+            <Button variant="contained" sx={{ ml: 'auto' }} onClick={() => setOpen(true)}>
+              Thêm nhân sự
+            </Button>
+          </>
+        }
+      />
 
       <CreateUserDialog
         open={open}
         onClose={() => setOpen(false)}
-        onCreated={() => {
-          setOpen(false)
-          void queryClient.invalidateQueries({ queryKey: ['users'] })
-        }}
+        onCreated={() => void queryClient.invalidateQueries({ queryKey: ['users'] })}
       />
     </Stack>
   )
+}
+
+type UserFormValues = {
+  fullName: string
+  username: string
+  password: string
+  roleCode: RoleCode
+  department: string
+  /** Chỉ dùng cho giao diện: giữ hộp thoại mở để nhập tiếp người sau. */
+  keepOpen: boolean
+}
+
+const EMPTY_USER: UserFormValues = {
+  fullName: '',
+  username: '',
+  password: '',
+  roleCode: 'USER',
+  department: '',
+  keepOpen: false,
 }
 
 function CreateUserDialog({
@@ -104,73 +158,67 @@ function CreateUserDialog({
   onClose: () => void
   onCreated: () => void
 }) {
-  const [username, setUsername] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [password, setPassword] = useState('')
-  const [roleCode, setRoleCode] = useState<RoleCode>('USER')
-  const [department, setDepartment] = useState('')
+  const form = useForm<UserFormValues>({ defaultValues: EMPTY_USER })
+
+  useEffect(() => {
+    if (open) form.reset(EMPTY_USER)
+  }, [open, form])
 
   const mutation = useMutation({
-    mutationFn: createUserApi,
-    onSuccess: () => {
+    mutationFn: (values: UserFormValues) =>
+      createUserApi({
+        username: values.username.trim(),
+        fullName: values.fullName.trim(),
+        password: values.password,
+        roleCode: values.roleCode,
+        department: values.department.trim() || undefined,
+      }),
+    onSuccess: (_data, values) => {
       toast.success('Đã tạo nhân sự')
       onCreated()
+      if (values.keepOpen) form.reset({ ...EMPTY_USER, keepOpen: true })
+      else onClose()
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (error: Error) => toast.error(error.message),
   })
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault()
-    mutation.mutate({
-      username: username.trim(),
-      fullName: fullName.trim(),
-      password,
-      roleCode,
-      department: department.trim() || undefined,
-    })
-  }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <form onSubmit={onSubmit}>
+      <Form form={form} onSubmit={(values) => mutation.mutate(values)}>
         <DialogTitle>Thêm nhân sự</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
-          <TextField
+          <FormTextField<UserFormValues>
+            name="fullName"
             label="Họ tên"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
             required
+            autoFocus
             sx={{ mt: 1 }}
           />
-          <TextField
-            label="Tài khoản"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-          <TextField
-            label="Mật khẩu"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <SearchSelect
-            label="Vai trò"
-            valueId={roleCode}
-            options={[
-              { id: 'ADMIN', name: 'ADMIN' },
-              { id: 'USER', name: 'USER' },
-            ]}
-            required
-            placeholder="Tìm vai trò…"
-            onChange={(id) => setRoleCode((id as RoleCode) || 'USER')}
-          />
-          <TextField
-            label="Bộ phận"
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-          />
+          <FormRow>
+            <FormTextField<UserFormValues>
+              name="username"
+              label="Tài khoản"
+              required
+              rules={{ minLength: { value: 3, message: 'Tối thiểu 3 ký tự' } }}
+            />
+            <FormTextField<UserFormValues>
+              name="password"
+              label="Mật khẩu"
+              type="password"
+              required
+              rules={{ minLength: { value: 6, message: 'Tối thiểu 6 ký tự' } }}
+            />
+          </FormRow>
+          <FormRow>
+            <FormSelect<UserFormValues, RoleCode>
+              name="roleCode"
+              label="Vai trò"
+              options={ROLE_OPTIONS}
+              required
+            />
+            <FormTextField<UserFormValues> name="department" label="Bộ phận" />
+          </FormRow>
+          <FormCheckbox<UserFormValues> name="keepOpen" label="Lưu xong tiếp tục thêm người khác" />
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>
@@ -178,7 +226,7 @@ function CreateUserDialog({
             Lưu
           </Button>
         </DialogActions>
-      </form>
+      </Form>
     </Dialog>
   )
 }
