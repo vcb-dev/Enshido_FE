@@ -6,7 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { UsersPage } from './pages/UsersPage'
 import { WarehousesPage } from './pages/WarehousesPage'
 import { WarehouseDetailPage } from './pages/WarehouseDetailPage'
-import { ProductPricePage } from './pages/ProductPricePage'
+import { LocationsPage } from './pages/LocationsPage'
 
 export default function App() {
   return (
@@ -16,7 +16,9 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/kho" element={<WarehousesPage />} />
-          <Route path="/cau-hinh-gia" element={<ProductPricePage />} />
+          <Route path="/cau-hinh-gia" element={<Navigate to="/kho" replace />} />
+          <Route path="/cau-hinh" element={<Navigate to="/cau-hinh/vi-tri" replace />} />
+          <Route path="/cau-hinh/vi-tri" element={<LocationsPage />} />
           <Route path="/kho/:code" element={<WarehouseDetailPage />} />
           <Route path="/kho/:code/:bin" element={<WarehouseDetailPage />} />
           <Route path="/kho/:code/:bin/:section" element={<WarehouseDetailPage />} />

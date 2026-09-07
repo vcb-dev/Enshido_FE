@@ -9,7 +9,6 @@ import {
   DialogTitle,
   IconButton,
   LinearProgress,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -39,16 +38,21 @@ import {
   qtyFromApi,
   updateWarehouseOutboundApi,
   type CreateOutboundPayload,
+  type DirectoryUser,
   type OutboundRow,
 } from '../api/inventory'
 import { ConfirmDeleteDialog, TrashIcon } from './ConfirmDeleteDialog'
 import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import { SearchSelect } from './SearchSelect'
+import { useAuth } from '../auth/AuthContext'
 
 type OutboundDialogState =
   | { kind: 'create' }
   | { kind: 'edit' | 'view'; row: OutboundRow }
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {
+  const { user } = useAuth()
+  const operatorName = user?.fullName?.trim() || user?.username || ''
   const queryClient = useQueryClient()
   const [dialog, setDialog] = useState<OutboundDialogState | null>(null)
   const [page, setPage] = useState(0)
@@ -269,7 +273,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         readOnly={readOnly}
         saving={save.isPending}
         units={lookups.data?.units ?? []}
+        users={lookups.data?.users ?? []}
         materials={materials}
+        operatorName={operatorName}
         onClose={closeDialog}
         onExited={() => setDialog(null)}
         onSave={(payload) =>
@@ -424,7 +430,9 @@ function OutboundDialog({
   readOnly,
   saving,
   units,
+  users,
   materials,
+  operatorName,
   onClose,
   onExited,
   onSave,
@@ -435,7 +443,9 @@ function OutboundDialog({
   readOnly: boolean
   saving: boolean
   units: { id: string; name: string }[]
+  users: DirectoryUser[]
   materials: StockMaterialOption[]
+  operatorName: string
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateOutboundPayload) => void
@@ -448,8 +458,7 @@ function OutboundDialog({
   const [qty, setQty] = useState('')
   const [inboundUnitPrice, setInboundUnitPrice] = useState('')
   const [note, setNote] = useState('')
-  const [issuedBy, setIssuedBy] = useState('')
-  const [receivedBy, setReceivedBy] = useState('')
+  const [receivedByUserId, setReceivedByUserId] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -467,8 +476,13 @@ function OutboundDialog({
       setQty(qtyFromApi(row.qty))
       setInboundUnitPrice(moneyDigitsFromApi(row.inboundUnitPrice))
       setNote(row.note ?? '')
-      setIssuedBy(row.issuedBy ?? '')
-      setReceivedBy(row.receivedBy ?? '')
+      setReceivedByUserId(
+        row.receivedByUserId ??
+          users.find(
+            (item) => item.fullName === row.receivedBy || item.username === row.receivedBy,
+          )?.id ??
+          '',
+      )
       return
     }
     setIssuedAt(new Date().toISOString().slice(0, 10))
@@ -479,9 +493,8 @@ function OutboundDialog({
     setQty('')
     setInboundUnitPrice('')
     setNote('')
-    setIssuedBy('')
-    setReceivedBy('')
-  }, [open, row, units])
+    setReceivedByUserId('')
+  }, [open, row, units, users])
 
   const selected = materials.find((item) => item.id === materialId)
   const available = useMemo(() => {
@@ -502,11 +515,15 @@ function OutboundDialog({
     event.preventDefault()
     if (readOnly) return
     if (!name.trim() || (kind === 'create' && !materialId)) {
-      toast.error('Chọn tên hàng từ Cấu hình giá sản phẩm')
+      toast.error('Chọn tên hàng từ Kho tồn')
       return
     }
     if (!qty || Number(qty) <= 0) {
       toast.error('Số lượng xuất phải lớn hơn 0')
+      return
+    }
+    if (!unitId) {
+      toast.error('Chọn đơn vị tính')
       return
     }
     if (available <= 0) {
@@ -515,6 +532,10 @@ function OutboundDialog({
     }
     if (Number(qty) > available) {
       toast.error(`SL sẵn có ${formatQty(String(available))}, không xuất quá số này`)
+      return
+    }
+    if (!receivedByUserId && (kind === 'create' || !row?.receivedBy)) {
+      toast.error('Chọn người nhận')
       return
     }
     onSave({
@@ -529,8 +550,7 @@ function OutboundDialog({
       inboundUnitPrice: '0',
       amount: '0',
       note: note.trim() || undefined,
-      issuedBy: issuedBy.trim() || undefined,
-      receivedBy: receivedBy.trim() || undefined,
+      receivedByUserId: receivedByUserId || undefined,
       applyToStock: !row,
     })
   }
@@ -571,23 +591,17 @@ function OutboundDialog({
               sx={fieldSx}
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <TextField
-              select={!readOnly}
+            <SearchSelect
               label="Đơn vị tính"
-              value={readOnly ? units.find((item) => item.id === unitId)?.name || row?.unit || '—' : unitId}
-              onChange={(e) => setUnitId(e.target.value)}
+              valueId={unitId}
+              options={units}
               required
-              disabled={readOnly}
+              readOnly={readOnly}
+              displayValue={row?.unit}
+              placeholder="Tìm đơn vị…"
               sx={fieldSx}
-            >
-              {readOnly
-                ? null
-                : units.map((item) => (
-                    <MenuItem key={item.id} value={item.id}>
-                      {item.name}
-                    </MenuItem>
-                  ))}
-            </TextField>
+              onChange={setUnitId}
+            />
           </Stack>
           <MaterialNameField
             value={name}
@@ -667,17 +681,25 @@ function OutboundDialog({
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField
               label="Người Xuất"
-              value={readOnly ? issuedBy || '—' : issuedBy}
-              onChange={(e) => setIssuedBy(e.target.value)}
-              disabled={readOnly}
+              value={row?.issuedBy || operatorName || '—'}
+              required
+              disabled
               sx={fieldSx}
             />
-            <TextField
+            <SearchSelect
               label="Người Nhận"
-              value={readOnly ? receivedBy || '—' : receivedBy}
-              onChange={(e) => setReceivedBy(e.target.value)}
-              disabled={readOnly}
+              valueId={receivedByUserId}
+              options={users.map((item) => ({
+                id: item.id,
+                name: item.fullName,
+                secondary: item.username,
+              }))}
+              required
+              readOnly={readOnly}
+              displayValue={row?.receivedBy ?? undefined}
+              placeholder="Tìm tài khoản…"
               sx={fieldSx}
+              onChange={setReceivedByUserId}
             />
           </Stack>
           <TextField

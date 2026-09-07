@@ -12,7 +12,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { WAREHOUSES, warehousePath } from '../warehouses/catalog'
+import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath } from '../warehouses/catalog'
 
 export function WarehousesPage() {
   return (
@@ -20,7 +20,7 @@ export function WarehousesPage() {
       <Stack>
         <Typography variant="h5">Kho</Typography>
         <Typography variant="body2" color="text.secondary">
-          2 kho: Kho NVL chính (bạc gồm tồn / nhập / xuất / BTP chờ vào đá; đá gồm tồn / nhập / xuất) và Kho NVL tiêu hao. Đơn giá tồn cấu hình ở mục Cấu hình giá sản phẩm.
+          Kho NVL chính (tồn / nhập / xuất), sổ Kho BTP chờ vào đá, và Kho NVL tiêu hao.
         </Typography>
       </Stack>
 
@@ -30,7 +30,7 @@ export function WarehousesPage() {
             <TableRow>
               <TableCell>Kho</TableCell>
               <TableCell>Mô tả</TableCell>
-              <TableCell>Kho con</TableCell>
+              <TableCell>Mục</TableCell>
               <TableCell width={120} />
             </TableRow>
           </TableHead>
@@ -40,16 +40,16 @@ export function WarehousesPage() {
                 <TableCell sx={{ fontWeight: 600 }}>{w.name}</TableCell>
                 <TableCell>{w.description}</TableCell>
                 <TableCell>
-                  {w.bins?.length ? (
+                  {w.sections ? (
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      {w.bins.map((b) => (
+                      {WAREHOUSE_SECTIONS.map((s) => (
                         <Chip
-                          key={b.code}
+                          key={s.code}
                           size="small"
                           variant="outlined"
-                          label={b.name}
+                          label={s.name}
                           component={RouterLink}
-                          to={warehousePath(w, b.code)}
+                          to={warehousePath(w, s.code)}
                           clickable
                         />
                       ))}
