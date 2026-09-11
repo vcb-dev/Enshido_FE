@@ -30,6 +30,7 @@ import {
   FormSearchSelect,
   FormTextField,
   PanelSummaryCard,
+  FILTER_FIELD_SX,
   PanelToolbar,
   RowActions,
   SelectInput,
@@ -115,7 +116,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
-  const filtering = Boolean(params.search || params.issuedBy)
+  const filtering = table.hasFilters
 
   const invalidateAll = () =>
     Promise.all(
@@ -157,7 +158,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       {totals && items.length > 0 ? (
         <PanelSummaryCard
           title="Tổng hợp xuất kho"
@@ -182,6 +183,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
         variant="grid"
         fixedLayout
+        minWidth={1372}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -191,7 +193,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
           <PanelToolbar
@@ -205,10 +207,12 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
                 value={params.issuedBy}
                 onChange={(value) => table.setFilter({ issuedBy: String(value) })}
                 placeholder="Tất cả"
-                sx={{ width: 180 }}
+                sx={FILTER_FIELD_SX}
                 fullWidth={false}
               />
             }
+            filterCount={table.filterCount}
+            onClearFilters={table.reset}
             createLabel="Thêm phiếu xuất"
             onCreate={dialog.openCreate}
           />
@@ -259,6 +263,7 @@ function outboundColumns({
   return [
     {
       key: 'issuedAt',
+      card: 'meta',
       header: 'Ngày xuất',
       width: 96,
       sortable: true,
@@ -266,6 +271,7 @@ function outboundColumns({
     },
     {
       key: 'name',
+      card: 'title',
       header: 'Tên hàng',
       width: 340,
       sortable: true,
@@ -316,6 +322,7 @@ function outboundColumns({
     },
     {
       key: 'issuedBy',
+      card: 'meta',
       header: 'Người Xuất',
       width: 96,
       ellipsis: true,
@@ -331,6 +338,7 @@ function outboundColumns({
     },
     {
       key: 'actions',
+      card: 'actions',
       header: 'Hành động',
       width: 120,
       align: 'center',

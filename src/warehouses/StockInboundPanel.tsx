@@ -30,6 +30,7 @@ import {
   FormSearchSelect,
   FormTextField,
   PanelSummaryCard,
+  FILTER_FIELD_SX,
   PanelToolbar,
   RowActions,
   SelectInput,
@@ -109,7 +110,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
-  const filtering = Boolean(params.search || params.supplierId)
+  const filtering = table.hasFilters
 
   const invalidateAll = () =>
     Promise.all(
@@ -152,7 +153,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       {totals && items.length > 0 ? (
         <PanelSummaryCard
           title="Tổng hợp nhập kho"
@@ -177,6 +178,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         emptyText={filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Chưa có dòng nhập kho.'}
         variant="grid"
         fixedLayout
+        minWidth={1340}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -186,7 +188,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         toolbar={
           <PanelToolbar
             search={params.search}
@@ -199,10 +201,12 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
                 value={params.supplierId}
                 onChange={(value) => table.setFilter({ supplierId: String(value) })}
                 placeholder="Tất cả"
-                sx={{ width: 180 }}
+                sx={FILTER_FIELD_SX}
                 fullWidth={false}
               />
             }
+            filterCount={table.filterCount}
+            onClearFilters={table.reset}
             createLabel="Thêm NVL"
             onCreate={dialog.openCreate}
           />
@@ -254,12 +258,13 @@ function inboundColumns({
   return [
     {
       key: 'receivedAt',
+      card: 'meta',
       header: 'Ngày nhập',
       width: 108,
       sortable: true,
       render: (row) => formatStockedDate(row.receivedAt),
     },
-    { key: 'name', header: 'Tên hàng', ellipsis: true, sortable: true },
+    { key: 'name', card: 'title', header: 'Tên hàng', ellipsis: true, sortable: true },
     { key: 'unit', header: 'Đơn vị tính', width: 88 },
     {
       key: 'qty',
@@ -310,6 +315,7 @@ function inboundColumns({
     },
     {
       key: 'supplierName',
+      card: 'meta',
       header: 'NCC',
       width: 92,
       ellipsis: true,
@@ -317,6 +323,7 @@ function inboundColumns({
     },
     {
       key: 'actions',
+      card: 'actions',
       header: 'Hành động',
       width: 120,
       align: 'center',

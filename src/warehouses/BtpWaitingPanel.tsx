@@ -72,7 +72,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
-  const filtering = Boolean(params.search)
+  const filtering = table.hasFilters
 
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: UpsertBtpWaitingPayload }) =>
@@ -101,7 +101,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       {totals && items.length > 0 ? (
         <PanelSummaryCard
           title="Tổng hợp BTP chờ vào đá"
@@ -125,6 +125,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
         emptyText={filtering ? 'Không có dòng khớp bộ lọc.' : 'Chưa có dòng BTP chờ vào đá.'}
         variant="grid"
         fixedLayout
+        minWidth={1240}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -134,12 +135,14 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         toolbar={
           <PanelToolbar
             search={params.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Tìm tên, thợ nguội, ghi chú..."
+            filterCount={table.filterCount}
+            onClearFilters={table.reset}
             createLabel="Thêm dòng"
             onCreate={dialog.openCreate}
           />
@@ -185,6 +188,7 @@ function btpColumns({
   return [
     {
       key: 'receivedAt',
+      card: 'meta',
       header: 'Ngày nhập',
       width: 108,
       sortable: true,
@@ -192,13 +196,14 @@ function btpColumns({
     },
     {
       key: 'craftsmanName',
+      card: 'meta',
       header: 'Thợ nguội',
       width: 140,
       ellipsis: true,
       sortable: true,
       render: (row) => row.craftsmanName || '—',
     },
-    { key: 'name', header: 'Tên bán thành phẩm', ellipsis: true, sortable: true },
+    { key: 'name', card: 'title', header: 'Tên bán thành phẩm', ellipsis: true, sortable: true },
     { key: 'unit', header: 'Đơn vị tính', width: 88 },
     {
       key: 'qty',
@@ -233,6 +238,7 @@ function btpColumns({
     },
     {
       key: 'actions',
+      card: 'actions',
       header: 'Hành động',
       width: 120,
       align: 'center',

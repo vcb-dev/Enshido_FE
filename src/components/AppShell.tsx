@@ -16,6 +16,7 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
+import LogoutIcon from '@mui/icons-material/Logout'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
@@ -45,8 +46,13 @@ function initials(name?: string, username?: string) {
 export function AppShell() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const canManageUsers = can(user, Permission.USERS_MANAGE)
+
+  // Đóng drawer sau mỗi lần điều hướng — kể cả từ breadcrumb hay tab, không chỉ
+  // từ menu bên trong drawer.
+  useEffect(() => setMobileOpen(false), [location.pathname])
 
   async function onLogout() {
     await logout()
@@ -70,8 +76,13 @@ export function AppShell() {
           >
             <TableRowsIcon />
           </IconButton>
-          <Typography variant="subtitle1" sx={{ flex: 1 }}>
-            Hệ thống quản lý xưởng
+          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0 }}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              Hệ thống quản lý xưởng
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              Enshido
+            </Box>
           </Typography>
 
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
@@ -94,9 +105,20 @@ export function AppShell() {
                 {user?.roleLabel ?? user?.roleCode}
               </Typography>
             </Box>
-            <Button variant="outlined" onClick={() => void onLogout()}>
+            <Button
+              variant="outlined"
+              onClick={() => void onLogout()}
+              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+            >
               Đăng xuất
             </Button>
+            <IconButton
+              aria-label="Đăng xuất"
+              onClick={() => void onLogout()}
+              sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+            >
+              <LogoutIcon fontSize="small" />
+            </IconButton>
           </Stack>
         </Toolbar>
       </AppBar>
@@ -135,7 +157,7 @@ export function AppShell() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 2,
+          p: { xs: 1.5, md: 2 },
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
           minWidth: 0,
           height: '100%',
