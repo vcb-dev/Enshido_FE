@@ -91,36 +91,6 @@ export const METAL_KINDS: Array<{ code: MetalKindCode; name: string }> = [
   { code: 'COPPER', name: 'Đồng' },
 ]
 
-export type StockItem = {
-  sku: string
-  name: string
-  unit: string
-  qty: number
-  note?: string
-}
-
-export type StockMove = {
-  docNo: string
-  date: string
-  sku: string
-  name: string
-  qty: number
-  unit: string
-  note?: string
-}
-
-export const MOCK_STOCK: Record<string, StockItem[]> = {
-  'nvl-tieu-hao': [
-    { sku: 'CS-GLUE', name: 'Keo gắn', unit: 'chai', qty: 0 },
-    { sku: 'CS-SAND', name: 'Giấy nhám', unit: 'tờ', qty: 0 },
-    { sku: 'CS-POL', name: 'Sáp đánh bóng', unit: 'thỏi', qty: 0 },
-  ],
-}
-
-export const MOCK_IN: Record<string, StockMove[]> = {}
-
-export const MOCK_OUT: Record<string, StockMove[]> = {}
-
 export function warehouseByCode(code: string) {
   return WAREHOUSES.find((w) => w.code === code)
 }

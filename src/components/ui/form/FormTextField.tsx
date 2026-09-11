@@ -6,7 +6,10 @@ import { withRequiredRule } from './field'
 import type { FormFieldBaseProps } from './field'
 
 export type FormTextFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
-  Omit<TextInputProps, 'name' | 'value' | 'onChange' | 'onBlur' | 'errorText' | 'inputRef'>
+  Omit<TextInputProps, 'name' | 'value' | 'onChange' | 'onBlur' | 'errorText' | 'inputRef'> & {
+    /** Chuẩn hoá giá trị ngay khi gõ, vd: `(v) => v.replace(/\D/g, '')` chỉ giữ chữ số. */
+    transform?: (value: string) => string
+  }
 
 /** Ô nhập văn bản nối với react-hook-form qua Controller. */
 export function FormTextField<T extends FieldValues>({
@@ -14,6 +17,7 @@ export function FormTextField<T extends FieldValues>({
   control,
   rules,
   required,
+  transform,
   ...props
 }: FormTextFieldProps<T>) {
   const { field, fieldState } = useController({
@@ -21,13 +25,18 @@ export function FormTextField<T extends FieldValues>({
     control,
     rules: withRequiredRule(rules, required),
   })
-  const { ref, value, ...rest } = field
+  const { ref, value, onChange, ...rest } = field
 
   return (
     <TextInput
       {...props}
       {...rest}
       value={value ?? ''}
+      onChange={
+        transform
+          ? (event) => onChange(transform(event.target.value))
+          : onChange
+      }
       inputRef={ref}
       required={required}
       errorText={fieldState.error?.message}

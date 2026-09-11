@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { Button, Chip, Stack, Typography } from '@mui/material'
-import { DataTable, type Column } from '../components/ui'
+import { Button, Chip, Stack } from '@mui/material'
+import { DataTable, PageHeader, type Column } from '../components/ui'
 import {
   WAREHOUSES,
   WAREHOUSE_SECTIONS,
@@ -53,12 +53,10 @@ export function WarehousesPage() {
 
   return (
     <Stack spacing={2}>
-      <Stack>
-        <Typography variant="h5">Kho</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Kho NVL chính (tồn / nhập / xuất), sổ Kho BTP chờ vào đá, và Kho NVL tiêu hao.
-        </Typography>
-      </Stack>
+      <PageHeader
+        title="Kho"
+        subtitle="Kho NVL chính (tồn / nhập / xuất), sổ Kho BTP chờ vào đá, và Kho NVL tiêu hao."
+      />
 
       <DataTable
         columns={columns}

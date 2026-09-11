@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
-  Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -20,6 +19,7 @@ import {
   FormRow,
   FormSelect,
   FormTextField,
+  PageHeader,
   SearchInput,
   type Column,
   type SelectOption,
@@ -84,13 +84,8 @@ export function UsersPage() {
   const page = Math.min(params.page, pageCount)
 
   return (
-    <Stack spacing={2} sx={{ minHeight: 0, flex: 1 }}>
-      <Stack>
-        <Typography variant="h5">Nhân sự</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Tài khoản đăng nhập hệ thống xưởng.
-        </Typography>
-      </Stack>
+    <Stack spacing={2} sx={{ flex: { md: 1 }, minHeight: { md: 0 } }}>
+      <PageHeader title="Nhân sự" subtitle="Tài khoản đăng nhập hệ thống xưởng." />
 
       <DataTable
         columns={COLUMNS}
