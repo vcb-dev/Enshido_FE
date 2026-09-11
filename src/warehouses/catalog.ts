@@ -11,9 +11,9 @@ export type WarehouseDef = {
 }
 
 export const WAREHOUSE_SECTIONS: Array<{ code: WarehouseSectionCode; name: string }> = [
-  { code: 'ton', name: 'Kho tồn' },
-  { code: 'nhap', name: 'Kho nhập' },
-  { code: 'xuat', name: 'Kho xuất' },
+  { code: 'ton', name: 'Tồn' },
+  { code: 'nhap', name: 'Nhập' },
+  { code: 'xuat', name: 'Xuất' },
 ]
 
 export const WAREHOUSES: WarehouseDef[] = [

@@ -18,13 +18,13 @@ const GROUPS = [
   { key: 'open', label: 'Tồn đầu kỳ', bg: '#edf1f4', note: 'TT = SL × đơn giá tồn' },
   { key: 'in', label: 'Nhập', bg: '#e4f0e8', note: 'Tổng phiếu nhập (Σ SL × đơn giá)' },
   { key: 'out', label: 'Xuất', bg: '#f3ebe7', note: 'Tổng phiếu xuất theo ngày' },
-  { key: 'stock', label: 'Tồn kho', bg: '#d6e3ee', note: 'Công thức cố định' },
+  { key: 'stock', label: 'Tồn', bg: '#d6e3ee', note: 'Công thức cố định' },
 ] as const
 
 const LINE = '#b7c2cc'
 
 /**
- * Lưới 4 nhóm (Tồn đầu kỳ / Nhập / Xuất / Tồn kho) × 2 dòng SL / TT, dùng chung
+ * Lưới 4 nhóm (Tồn đầu kỳ / Nhập / Xuất / Tồn) × 2 dòng SL / TT, dùng chung
  * cho hộp thoại sửa NVL và thẻ NVL trên màn hẹp.
  *
  * Đường kẻ là khe `gap` 1px trên nền `LINE` — mọi ô con đều có nền đục nên khe

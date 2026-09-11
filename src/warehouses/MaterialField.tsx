@@ -27,7 +27,7 @@ export function MaterialField({
     name: 'name',
     control,
     rules: {
-      required: 'Chọn tên hàng từ Kho tồn',
+      required: 'Chọn tên hàng từ Tồn',
       validate: (value, formValues: any) =>
         kind !== 'create' ||
         Boolean(formValues.materialId) ||

@@ -1,6 +1,9 @@
 export { READ_ONLY_FIELD_SX, TextInput } from './TextInput'
 export type { TextInputProps } from './TextInput'
 
+export { SuggestTextInput, excelPrefixMatch } from './SuggestTextInput'
+export type { SuggestTextInputProps } from './SuggestTextInput'
+
 export { EyeIcon, PencilIcon, PlusIcon, TrashIcon } from './icons'
 
 export { RowActions } from './RowActions'

@@ -195,7 +195,7 @@ const STOCK_GROUPS = {
   open: { key: 'open', label: 'Tồn đầu kỳ', headSx: groupHead.open },
   in: { key: 'in', label: 'Nhập', headSx: groupHead.in },
   out: { key: 'out', label: 'Xuất', headSx: groupHead.out },
-  stock: { key: 'stock', label: 'Tồn kho', headSx: groupHead.stock },
+  stock: { key: 'stock', label: 'Tồn', headSx: groupHead.stock },
 } satisfies Record<string, ColumnGroup>
 
 const groupBody = {
@@ -249,6 +249,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   })
 
   const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+  const nameSuggestions = useMemo(
+    () => [...new Set(items.map((row) => row.name.trim()).filter(Boolean))],
+    [items],
+  )
 
   const statusCounts = useMemo(() => {
     const counts = { IN_STOCK: 0, LOW: 0, OUT_OF_STOCK: 0 }
@@ -462,6 +466,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         row={dialog.row}
         warehouseCode={warehouseCode}
         profile={profile}
+        nameSuggestions={nameSuggestions}
         saving={save.isPending}
         onClose={dialog.close}
         onExited={dialog.clear}
@@ -739,7 +744,7 @@ function StockSummaryBar({
         <SummaryTile title="Tồn đầu kỳ" tone="open" rows={statRows(totals.openingQty, totals.openingAmount)} />
         <SummaryTile title="Nhập" tone="in" rows={statRows(totals.inQty, totals.inAmount)} />
         <SummaryTile title="Xuất" tone="out" rows={statRows(totals.outQty, totals.outAmount)} />
-        <SummaryTile title="Tồn kho" tone="stock" rows={statRows(totals.qty, totals.amount)} />
+        <SummaryTile title="Tồn" tone="stock" rows={statRows(totals.qty, totals.amount)} />
       </Box>
     </Paper>
   )
@@ -792,6 +797,7 @@ function StockEditDialog({
   row,
   warehouseCode,
   profile,
+  nameSuggestions,
   saving,
   onClose,
   onExited,
@@ -801,6 +807,7 @@ function StockEditDialog({
   row: StockRow | null
   warehouseCode: string
   profile: StockProfile
+  nameSuggestions: string[]
   saving: boolean
   onClose: () => void
   onExited: () => void
@@ -945,6 +952,8 @@ function StockEditDialog({
               label="Tên NVL"
               required
               autoFocus
+              suggestions={nameSuggestions}
+              helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
               sx={{ flex: 2, minWidth: 0 }}
             />
             {profile.showLocation ? (
@@ -1034,7 +1043,7 @@ function StockEditDialog({
             }}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn kho = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
+            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
             TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
