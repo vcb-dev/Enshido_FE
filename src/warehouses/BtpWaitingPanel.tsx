@@ -388,7 +388,6 @@ function BtpDialog({
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
-          required
           readOnly
         />
       </FormRow>

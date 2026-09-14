@@ -125,6 +125,21 @@ export function parseQtyInput(value: string) {
   return intPart
 }
 
+/**
+ * Ô số lượng / trọng lượng hiển thị "." là phân cách nghìn và "," là thập phân (1.250,5).
+ * Người dùng hay gõ "12.5" nên ký tự "." hoặc "," vừa gõ đều coi là dấu thập phân —
+ * nếu để nguyên, "." bị bỏ và 12.5 thành 125. Đã có phần thập phân thì bỏ ký tự vừa gõ.
+ */
+export function typedDecimalAsComma(input: HTMLInputElement | HTMLTextAreaElement, typed: string | null) {
+  const raw = input.value
+  if (typed !== '.' && typed !== ',') return raw
+  const caret = input.selectionStart ?? raw.length
+  const before = raw.slice(0, Math.max(0, caret - 1))
+  const after = raw.slice(caret)
+  if (`${before}${after}`.includes(',')) return `${before}${after}`
+  return `${before},${after}`
+}
+
 export function formatQtyInput(raw: string) {
   if (!raw) return ''
   const hasDot = raw.includes('.')
@@ -362,6 +377,8 @@ export type OutboundRow = {
   receivedBy: string | null
   receivedByUserId: string | null
   materialId: string | null
+  /** Mã đơn sản xuất dùng NVL này. */
+  productionOrderCode: string | null
   priceBreakdown?: { qty: string; unitPrice: string; source: 'opening' | 'inbound' }[]
 }
 
@@ -392,6 +409,8 @@ export type CreateOutboundPayload = {
   receivedBy?: string
   receivedByUserId?: string | null
   applyToStock?: boolean
+  /** Rỗng = bỏ gắn đơn. */
+  productionOrderCode?: string | null
 }
 
 export function getWarehouseOutboundsApi(code: string) {

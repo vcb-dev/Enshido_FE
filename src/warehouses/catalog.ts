@@ -1,6 +1,6 @@
 export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao'
 
-export type WarehouseSectionCode = 'ton' | 'nhap' | 'xuat'
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -11,10 +11,17 @@ export type WarehouseDef = {
 }
 
 export const WAREHOUSE_SECTIONS: Array<{ code: WarehouseSectionCode; name: string }> = [
-  { code: 'ton', name: 'Tồn' },
-  { code: 'nhap', name: 'Nhập' },
-  { code: 'xuat', name: 'Xuất' },
+  { code: 'stock', name: 'Tồn' },
+  { code: 'inbound', name: 'Nhập' },
+  { code: 'outbound', name: 'Xuất' },
 ]
+
+/** Mã mục kho trên URL cũ (/kho/nvl-chinh/ton) → mã hiện tại. */
+export const LEGACY_SECTION_CODES: Record<string, WarehouseSectionCode> = {
+  ton: 'stock',
+  nhap: 'inbound',
+  xuat: 'outbound',
+}
 
 export const WAREHOUSES: WarehouseDef[] = [
   {
@@ -106,7 +113,7 @@ export function stockWarehouseCode(warehouse: WarehouseDef) {
 
 export function warehousePath(warehouse: WarehouseDef, section?: WarehouseSectionCode) {
   if (warehouse.sections) {
-    return `/kho/${warehouse.code}/${section ?? 'ton'}`
+    return `/warehouses/${warehouse.code}/${section ?? 'stock'}`
   }
-  return `/kho/${warehouse.code}`
+  return `/warehouses/${warehouse.code}`
 }

@@ -60,7 +60,9 @@ export function CrudDialogShell<T extends FieldValues>({
             flexDirection: 'column',
             gap: 1.5,
             pt: 1,
-            '& .MuiFormLabel-asterisk': { color: 'error.main' },
+            // Dấu * chỉ để báo ô phải điền — chế độ xem không điền gì nên ẩn đi.
+            '& .MuiFormLabel-asterisk':
+              kind === 'view' ? { display: 'none' } : { color: 'error.main' },
           }}
         >
           {children}

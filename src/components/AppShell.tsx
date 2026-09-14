@@ -26,6 +26,8 @@ import PlaceIcon from '@mui/icons-material/Place'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import Inventory2Icon from '@mui/icons-material/Inventory2'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -224,7 +226,8 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
         <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
-        <NavItem to="/kho" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
+        <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
+        <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
         <List dense disablePadding sx={{ pl: 1.5 }}>
           {WAREHOUSES.map((w) =>
             w.sections ? (
@@ -239,6 +242,12 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
               />
             ),
           )}
+          <NavItem
+            to="/finished-goods"
+            icon={<Inventory2Icon fontSize="small" />}
+            label="Kho thành phẩm"
+            end={false}
+          />
         </List>
         <ConfigMenu />
         {canManageUsers ? (
@@ -251,7 +260,7 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
 
 function ConfigMenu() {
   const location = useLocation()
-  const onThis = location.pathname.startsWith('/cau-hinh')
+  const onThis = location.pathname.startsWith('/settings')
   const [open, setOpen] = useState(onThis)
 
   useEffect(() => {
@@ -274,7 +283,7 @@ function ConfigMenu() {
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
           <NavItem
-            to="/cau-hinh/vi-tri"
+            to="/settings/locations"
             icon={<PlaceIcon fontSize="small" />}
             label="Vị trí"
           />
@@ -286,7 +295,7 @@ function ConfigMenu() {
 
 function WarehouseSectionMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
   const location = useLocation()
-  const onThis = location.pathname.startsWith(`/kho/${warehouse.code}`)
+  const onThis = location.pathname.startsWith(`/warehouses/${warehouse.code}`)
   const [open, setOpen] = useState(onThis)
 
   useEffect(() => {

@@ -85,17 +85,17 @@ export function WarehouseDetailPage() {
   }>()
 
   if (code === 'ban-thanh-pham' || (code === 'btp-cho-vao-da' && (bin || section))) {
-    return <Navigate to="/kho/btp-cho-vao-da" replace />
+    return <Navigate to="/warehouses/btp-cho-vao-da" replace />
   }
 
   if (code === 'nvl-chinh' && bin && LEGACY_BINS.has(bin)) {
-    const next = section === 'btp' || !section ? 'ton' : section
-    return <Navigate to={`/kho/nvl-chinh/${next}`} replace />
+    const next = section === 'btp' || !section ? 'stock' : section
+    return <Navigate to={`/warehouses/nvl-chinh/${next}`} replace />
   }
 
   const warehouse = warehouseByCode(code ?? '')
   if (!warehouse) {
-    return <Navigate to="/kho" replace />
+    return <Navigate to="/warehouses" replace />
   }
 
   const sectionCode = warehouse.sections
@@ -104,11 +104,11 @@ export function WarehouseDetailPage() {
   const activeSection = warehouseSectionByCode(sectionCode)
 
   if (section === 'gia' || bin === 'gia') {
-    return <Navigate to="/kho/nvl-chinh/ton" replace />
+    return <Navigate to="/warehouses/nvl-chinh/stock" replace />
   }
 
   if (warehouse.sections && !activeSection) {
-    return <Navigate to={warehousePath(warehouse, 'ton')} replace />
+    return <Navigate to={warehousePath(warehouse, 'stock')} replace />
   }
 
   const stockKey = stockWarehouseCode(warehouse)
@@ -131,7 +131,7 @@ export function WarehouseDetailPage() {
         compactSubtitle
         breadcrumbs={
           <Breadcrumbs>
-            <Link component={RouterLink} to="/kho" underline="hover" color="inherit">
+            <Link component={RouterLink} to="/warehouses" underline="hover" color="inherit">
               Kho
             </Link>
             {activeSection ? (
@@ -171,9 +171,9 @@ export function WarehouseDetailPage() {
 
       {warehouse.code === 'btp-cho-vao-da' ? (
         <BtpWaitingPanel warehouseCode={warehouse.code} />
-      ) : activeSection?.code === 'nhap' ? (
+      ) : activeSection?.code === 'inbound' ? (
         <StockInboundPanel warehouseCode={stockKey} />
-      ) : activeSection?.code === 'xuat' ? (
+      ) : activeSection?.code === 'outbound' ? (
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />

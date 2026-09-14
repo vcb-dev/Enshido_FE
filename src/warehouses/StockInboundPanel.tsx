@@ -528,7 +528,6 @@ function InboundDialog({
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
-          required
           readOnly
         />
       </FormRow>

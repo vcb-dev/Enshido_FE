@@ -1,6 +1,6 @@
 import { Fragment } from 'react'
 import { Box, TextField, Typography } from '@mui/material'
-import { formatMoney, formatQty, formatQtyInput, parseQtyInput } from '../api/inventory'
+import { formatMoney, formatQty, formatQtyInput, parseQtyInput, typedDecimalAsComma } from '../api/inventory'
 import { useIsMobile } from '../hooks/useBreakpoint'
 
 export type StockFigures = {
@@ -211,7 +211,7 @@ function EditableCell({ value, onChange }: { value: string; onChange: (value: st
     <Box sx={{ p: '4px !important', bgcolor: '#fff' }}>
       <TextField
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data))}
         size="small"
         fullWidth
         hiddenLabel

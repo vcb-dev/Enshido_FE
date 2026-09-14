@@ -8,8 +8,10 @@ export function canAccessPath(
 ): boolean {
   const p = (path.split('?')[0] || '/').replace(/\/$/, '') || '/'
   if (p === '/' || p === '') return true
-  if (p === '/kho' || p.startsWith('/kho/')) return true
-  if (p === '/cau-hinh' || p.startsWith('/cau-hinh/')) return true
+  if (p === '/warehouses' || p.startsWith('/warehouses/')) return true
+  if (p === '/settings' || p.startsWith('/settings/')) return true
+  if (p === '/orders' || p.startsWith('/orders/')) return true
+  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return true
   if (p === '/users') {
     return user.roleCode === 'ADMIN' || user.permissions?.includes('users.manage') === true
   }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Stack, Typography } from '@mui/material'
+import { Box, Link, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
+import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   createWarehouseOutboundApi,
@@ -22,6 +23,8 @@ import {
   type LookupItem,
   type OutboundRow,
 } from '../api/inventory'
+import { listOrderOptionsApi } from '../api/productionOrders'
+import { STATUS_META } from '../orders/catalog'
 import {
   CrudDialogShell,
   DataTable,
@@ -72,6 +75,20 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     queryFn: () => getWarehouseStockApi(warehouseCode),
     staleTime: 20_000,
   })
+  const orderOptionsQuery = useQuery({
+    queryKey: ['production-order-options'],
+    queryFn: () => listOrderOptionsApi(),
+    staleTime: 60_000,
+  })
+  const orderOptions: SearchSelectOption[] = useMemo(
+    () =>
+      (orderOptionsQuery.data ?? []).map((order) => ({
+        id: order.code,
+        name: order.code,
+        secondary: `${STATUS_META[order.status].label} · ${order.description}`,
+      })),
+    [orderOptionsQuery.data],
+  )
 
   const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
   const users = useMemo(() => lookups.data?.users ?? [], [lookups.data?.users])
@@ -107,7 +124,13 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     return items.filter((row) => {
       if (params.issuedBy && (row.issuedBy ?? '').trim() !== params.issuedBy) return false
       if (!keyword) return true
-      return [row.name, row.note ?? '', row.issuedBy ?? '', row.receivedBy ?? ''].some((field) =>
+      return [
+        row.name,
+        row.note ?? '',
+        row.issuedBy ?? '',
+        row.receivedBy ?? '',
+        row.productionOrderCode ?? '',
+      ].some((field) =>
         field.toLowerCase().includes(keyword),
       )
     })
@@ -124,6 +147,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         ['warehouse-outbounds', warehouseCode],
         ['warehouse-stock', warehouseCode],
         ['warehouse-inbounds', warehouseCode],
+        // NVL gắn đơn đổi thì chi phí đơn đổi theo.
+        ['production-order-costing'],
       ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
 
@@ -183,7 +208,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
         variant="grid"
         fixedLayout
-        minWidth={1372}
+        minWidth={1460}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -199,7 +224,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
           <PanelToolbar
             search={params.search}
             onSearchChange={table.setSearch}
-            searchPlaceholder="Tìm tên hàng, ghi chú, người xuất/nhận..."
+            searchPlaceholder="Tìm tên hàng, mã đơn SX, ghi chú, người xuất/nhận..."
             filters={
               <SelectInput
                 label="Người xuất"
@@ -228,6 +253,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         units={units}
         users={users}
         materials={materials}
+        orderOptions={orderOptions}
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
@@ -277,6 +303,20 @@ function outboundColumns({
       sortable: true,
       className: 'name-cell',
       cellSx: { overflow: 'visible', textOverflow: 'clip' },
+    },
+    {
+      key: 'productionOrderCode',
+      header: 'Mã đơn SX',
+      width: 88,
+      sortable: true,
+      render: (row) =>
+        row.productionOrderCode ? (
+          <Link component={RouterLink} to={`/orders/${row.productionOrderCode}`} sx={{ fontWeight: 600 }}>
+            {row.productionOrderCode}
+          </Link>
+        ) : (
+          '—'
+        ),
     },
     { key: 'unit', header: 'Đơn vị tính', width: 88 },
     {
@@ -364,6 +404,7 @@ type OutboundFormValues = {
   inboundUnitPrice: string
   note: string
   receivedByUserId: string
+  productionOrderCode: string
 }
 
 const EMPTY_OUTBOUND: OutboundFormValues = {
@@ -376,6 +417,7 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   inboundUnitPrice: '',
   note: '',
   receivedByUserId: '',
+  productionOrderCode: '',
 }
 
 const OUTBOUND_TITLES = {
@@ -393,6 +435,7 @@ function OutboundDialog({
   units,
   users,
   materials,
+  orderOptions,
   operatorName,
   onClose,
   onExited,
@@ -407,6 +450,7 @@ function OutboundDialog({
   users: DirectoryUser[]
   operatorName: string
   materials: StockMaterialOption[]
+  orderOptions: SearchSelectOption[]
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateOutboundPayload) => void
@@ -433,6 +477,7 @@ function OutboundDialog({
                 (item) => item.fullName === row.receivedBy || item.username === row.receivedBy,
               )?.id ??
               '',
+            productionOrderCode: row.productionOrderCode ?? '',
           }
         : {
             ...EMPTY_OUTBOUND,
@@ -489,6 +534,7 @@ function OutboundDialog({
       note: values.note.trim() || undefined,
       receivedByUserId: values.receivedByUserId || undefined,
       applyToStock: !row,
+      productionOrderCode: values.productionOrderCode || null,
     })
   }
 
@@ -522,7 +568,7 @@ function OutboundDialog({
       onClose={onClose}
       onExited={onExited}
     >
-      <FormRow sx={{ mt: 1 }}>
+      <FormRow columns={3} sx={{ mt: 1 }}>
         <FormTextField<OutboundFormValues>
           name="issuedAt"
           label="Ngày xuất"
@@ -539,6 +585,16 @@ function OutboundDialog({
           readOnly={readOnly}
           displayValue={row?.unit}
           placeholder="Tìm đơn vị…"
+        />
+        <FormSearchSelect<OutboundFormValues>
+          name="productionOrderCode"
+          label="Mã đơn SX"
+          options={orderOptions}
+          allowClear
+          readOnly={readOnly}
+          displayValue={row?.productionOrderCode ?? undefined}
+          placeholder="Chọn đơn dùng NVL…"
+          noOptionsText="Không có đơn đang sản xuất"
         />
       </FormRow>
 
@@ -610,7 +666,6 @@ function OutboundDialog({
         <TextInput
           label="Người Xuất"
           value={row?.issuedBy || operatorName || '—'}
-          required
           readOnly
         />
         <FormSearchSelect<OutboundFormValues>

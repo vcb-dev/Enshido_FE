@@ -37,7 +37,6 @@ export function MaterialNameField({
       <TextField
         label="Tên hàng"
         value={value || '—'}
-        required
         disabled
         sx={sx}
       />
