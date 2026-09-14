@@ -75,12 +75,14 @@ export function SearchSelect({
       isOptionEqualToValue={(a, b) => a.id === b.id}
       filterOptions={(opts, state) => {
         const q = state.inputValue.trim().toLowerCase()
-        if (!q) return opts
-        return opts.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) ||
-            (item.secondary ?? '').toLowerCase().includes(q),
-        )
+        const matched = !q
+          ? opts
+          : opts.filter(
+              (item) =>
+                item.name.toLowerCase().includes(q) ||
+                (item.secondary ?? '').toLowerCase().includes(q),
+            )
+        return matched.slice(0, 50)
       }}
       disableClearable={!allowClear && Boolean(selected)}
       disabled={disabled}

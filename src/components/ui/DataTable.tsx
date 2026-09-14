@@ -37,6 +37,8 @@ export type Column<T> = {
   cellSx?: SxProps<Theme>
   headSx?: SxProps<Theme>
   className?: string
+  /** Ô lọc trên hàng filter, cùng cột với tiêu đề. */
+  filter?: ReactNode
 }
 
 export type DataTableProps<T> = {
@@ -103,6 +105,18 @@ const GRID_TABLE_SX = {
     px: 1,
   },
   '& .MuiTableCell-head': { whiteSpace: 'nowrap' },
+  '& .col-filter-row .MuiTableCell-root': {
+    border: '0 !important',
+    borderTop: '0 !important',
+    bgcolor: '#fff !important',
+    backgroundColor: '#fff !important',
+    backgroundImage: 'none',
+    py: '4px !important',
+    px: '4px !important',
+    whiteSpace: 'normal',
+    overflow: 'visible',
+    boxShadow: 'none',
+  },
 } as const
 
 function defaultCell(value: unknown): ReactNode {
@@ -151,6 +165,7 @@ export function DataTable<T>({
   const rowCount = total ?? rows.length
   const showSkeleton = loading && rows.length === 0
   const colCount = columns.length + (showIndex ? 1 : 0)
+  const showFilterRow = !customHeader && columns.some((column) => column.filter != null)
 
   return (
     <Paper
@@ -166,7 +181,6 @@ export function DataTable<T>({
             gap: 1,
             alignItems: 'center',
             flexShrink: 0,
-            borderBottom: '1px solid #d5dbe0',
           }}
         >
           {toolbar}
@@ -196,6 +210,14 @@ export function DataTable<T>({
             }}
           >
             <TableHead>
+              {showFilterRow ? (
+                <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
+                  {showIndex ? <TableCell /> : null}
+                  {columns.map((column) => (
+                    <TableCell key={column.key}>{column.filter}</TableCell>
+                  ))}
+                </TableRow>
+              ) : null}
               {customHeader ?? (
               <TableRow>
                 {showIndex ? (

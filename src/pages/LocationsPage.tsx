@@ -35,6 +35,7 @@ import {
 } from '../api/locations'
 import { TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { formatQty } from '../api/inventory'
 
 const WAREHOUSE_CODE = 'nvl-chinh'
@@ -56,15 +57,17 @@ export function LocationsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(25)
   const [deleting, setDeleting] = useState<LocationSlot | null>(null)
   const [viewing, setViewing] = useState<LocationSlot | null>(null)
+  const searchFilter = useDebouncedValue(search, 300)
 
   const locations = useQuery({
     queryKey: ['warehouse-locations', WAREHOUSE_CODE],
     queryFn: () => getLocationsApi(WAREHOUSE_CODE),
+    staleTime: 60_000,
   })
 
   const items = locations.data?.items ?? []
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = searchFilter.trim().toLowerCase()
     return items.filter((row) => {
       if (status === 'free' && row.occupied) return false
       if (status === 'used' && !row.occupied) return false
@@ -77,16 +80,15 @@ export function LocationsPage() {
         String(row.position).includes(q)
       )
     })
-  }, [items, search, status])
+  }, [items, searchFilter, status])
   const maxPage = Math.max(0, Math.ceil(visible.length / rowsPerPage) - 1)
   const currentPage = Math.min(page, maxPage)
   const paged = visible.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
-  const freeCount = items.filter((row) => !row.occupied).length
+  const freeCount = useMemo(() => items.filter((row) => !row.occupied).length, [items])
   const usedCount = items.length - freeCount
 
   async function refreshLocations() {
     await queryClient.invalidateQueries({ queryKey: ['warehouse-locations', WAREHOUSE_CODE] })
-    await queryClient.invalidateQueries({ queryKey: ['warehouse-stock', WAREHOUSE_CODE] })
   }
 
   const generate = useMutation({
@@ -111,6 +113,7 @@ export function LocationsPage() {
       toast.success(`Đã cập nhật vị trí ${row.code}`)
       setEditing(null)
       await refreshLocations()
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', WAREHOUSE_CODE] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -224,7 +227,7 @@ export function LocationsPage() {
           flexDirection: 'column',
         }}
       >
-        {locations.isFetching ? <LinearProgress /> : null}
+        {locations.isLoading ? <LinearProgress /> : null}
         <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <Table
             size="small"

@@ -10,9 +10,13 @@ import {
   Typography,
 } from '@mui/material'
 import { useAuth } from '../auth/AuthContext'
+import { SCREEN_GROUPS } from '../auth/screens'
 
 export function DashboardPage() {
   const { user } = useAuth()
+  const screenLabels = SCREEN_GROUPS.flatMap((group) => group.items)
+    .filter((item) => user?.permissions?.includes(item.key))
+    .map((item) => item.label)
 
   return (
     <Stack spacing={2}>
@@ -29,10 +33,10 @@ export function DashboardPage() {
                 Quyền
               </TableCell>
               <TableCell>
-                {user?.permissions?.length ? (
+                {screenLabels.length ? (
                   <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                    {user.permissions.map((p) => (
-                      <Chip key={p} size="small" label={p} variant="outlined" />
+                    {screenLabels.map((label) => (
+                      <Chip key={label} size="small" label={label} variant="outlined" />
                     ))}
                   </Stack>
                 ) : (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
@@ -21,7 +21,10 @@ import {
   type DirectoryUser,
   type LookupItem,
   type OutboundRow,
+  type StockRow,
 } from '../api/inventory'
+import { listCatalogsApi } from '../api/catalogs'
+import { getLocationsApi } from '../api/locations'
 import {
   CrudDialogShell,
   DataTable,
@@ -29,13 +32,8 @@ import {
   FormRow,
   FormSearchSelect,
   FormTextField,
-  PanelSummaryCard,
-  PanelToolbar,
   RowActions,
-  SelectInput,
   TextInput,
-  type Column,
-  type SelectOption,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
@@ -45,20 +43,74 @@ import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { MaterialField } from './MaterialField'
 import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
+import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
+import { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
+import { stockProfile } from './catalog'
+import {
+  CATALOG_FILTER_DEFAULTS,
+  hasActiveCatalogFilters,
+  headerTotal,
+  matchesCatalogFilters,
+  sumMoveTotals,
+  uniqueFilterOptions,
+} from './stockFilters'
+import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {
+  const profile = stockProfile(warehouseCode)
+  const outboundProfile = useMemo(() => {
+    const hidden = { showLocation: false }
+    if (warehouseCode === 'nvl-chinh') {
+      return {
+        ...profile,
+        ...hidden,
+        showShapeColor: false,
+        showType: false,
+        showNvlCategory: false,
+      }
+    }
+    if (warehouseCode === 'btp-cho-vao-da') {
+      return {
+        ...profile,
+        ...hidden,
+        showBtpCategory: false,
+        showBodyMetal: false,
+        showProductKind: false,
+      }
+    }
+    if (warehouseCode === 'nvl-tieu-hao') {
+      return { ...profile, ...hidden, showType: false }
+    }
+    return { ...profile, ...hidden }
+  }, [profile, warehouseCode])
+  const showUnit = false
   const operatorName = useOperatorName()
   const queryClient = useQueryClient()
   const dialog = useCrudDialog<OutboundRow>()
   // Tách sẵn các callback ổn định để useMemo cột không chạy lại mỗi render.
   const { openView, openEdit } = dialog
-  const table = useTableParams({ pageSize: 8, filters: { issuedBy: '' } })
+  const table = useTableParams({
+    pageSize: 8,
+    filters: { ...CATALOG_FILTER_DEFAULTS, issuedBy: '', receivedBy: '', unit: '', color: '' },
+  })
   const { params } = table
+  const catalogFilterParams = useMemo(() => {
+    if (warehouseCode === 'nvl-chinh') {
+      return { ...params, shape: '', stone: '', kind: '', color: '', location: '' }
+    }
+    if (warehouseCode === 'btp-cho-vao-da') {
+      return { ...params, location: '', kind: '', bodyMetal: '', productKind: '' }
+    }
+    if (warehouseCode === 'nvl-tieu-hao') {
+      return { ...params, location: '', stone: '' }
+    }
+    return { ...params, location: '' }
+  }, [params, warehouseCode])
 
   const outbounds = useQuery({
     queryKey: ['warehouse-outbounds', warehouseCode],
     queryFn: () => getWarehouseOutboundsApi(warehouseCode),
-    staleTime: 20_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
@@ -66,10 +118,24 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     queryFn: getInventoryLookupsApi,
     staleTime: 30 * 60_000,
   })
+  const btpCatalogs = useQuery({
+    queryKey: ['catalogs', 'OTHER'],
+    queryFn: () => listCatalogsApi('OTHER'),
+    enabled: profile.showBtpCategory || profile.showBodyMetal || profile.showProductKind,
+    staleTime: 5 * 60_000,
+  })
   const stock = useQuery({
     queryKey: ['warehouse-stock', warehouseCode],
     queryFn: () => getWarehouseStockApi(warehouseCode),
-    staleTime: 20_000,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+    enabled: dialog.open,
+  })
+  const locationSlots = useQuery({
+    queryKey: ['warehouse-locations', warehouseCode],
+    queryFn: () => getLocationsApi(warehouseCode),
+    staleTime: 60_000,
+    enabled: profile.showLocation,
   })
 
   const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
@@ -87,42 +153,74 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       })),
     [stock.data?.items],
   )
+  const stockById = useMemo(() => {
+    const map = new Map<string, StockRow>()
+    for (const item of stock.data?.items ?? []) map.set(item.id, item)
+    return map
+  }, [stock.data?.items])
 
   const items = useMemo(() => outbounds.data?.items ?? [], [outbounds.data?.items])
-  const totals = outbounds.data?.totals
+  const apiTotals = outbounds.data?.totals
+  const stockItems = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+  const catalogFilters = useCatalogFilterOptions(profile, lookups.data, btpCatalogs.data, stockItems)
 
-  // Người xuất là text tự do nên danh sách lọc lấy từ chính dữ liệu đang có.
-  const issuerOptions: SelectOption<string>[] = useMemo(() => {
+  const issuerOptions = useMemo(() => uniqueFilterOptions(items.map((row) => row.issuedBy)), [items])
+  const receiverOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.receivedBy)),
+    [items],
+  )
+  const unitOptions = useMemo(() => uniqueFilterOptions(items.map((row) => row.unit)), [items])
+  const locationOptions = useMemo(() => {
     const names = new Set<string>()
-    for (const row of items) if (row.issuedBy?.trim()) names.add(row.issuedBy.trim())
-    return [...names].sort((a, b) => a.localeCompare(b, 'vi')).map((name) => ({
-      value: name,
-      label: name,
-    }))
-  }, [items])
+    for (const slot of locationSlots.data?.items ?? []) names.add(slot.code)
+    for (const row of stock.data?.items ?? []) {
+      const loc = row.locationCode?.trim()
+      if (loc) names.add(loc)
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, 'vi'))
+      .map((name) => ({ id: name, name }))
+  }, [locationSlots.data?.items, stock.data?.items])
 
   const rows = useMemo(() => {
-    const keyword = params.search.trim().toLowerCase()
+    const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
+      const catalog = row.materialId ? stockById.get(row.materialId) : undefined
+      if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
+      if (showUnit && params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
+      if (
+        outboundProfile.showShapeColor &&
+        params.color &&
+        catalog?.colorId !== params.color &&
+        catalog?.color !== params.color
+      ) {
+        return false
+      }
+      if (!matchesCatalogFilters(catalog, catalogFilterParams, outboundProfile)) return false
       if (params.issuedBy && (row.issuedBy ?? '').trim() !== params.issuedBy) return false
-      if (!keyword) return true
-      return [row.name, row.note ?? '', row.issuedBy ?? '', row.receivedBy ?? ''].some((field) =>
-        field.toLowerCase().includes(keyword),
-      )
+      if (params.receivedBy && (row.receivedBy ?? '').trim() !== params.receivedBy) return false
+      return true
     })
-  }, [items, params.search, params.issuedBy])
+  }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById])
 
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
-  const filtering = Boolean(params.search || params.issuedBy)
+  const filtering =
+    Boolean(
+      params.search.trim() ||
+        params.issuedBy ||
+        params.receivedBy ||
+        (showUnit && params.unit) ||
+        (outboundProfile.showShapeColor && params.color),
+    ) || hasActiveCatalogFilters(catalogFilterParams)
+  const totals = filtering ? sumMoveTotals(rows) : apiTotals
 
-  const invalidateAll = () =>
+  const invalidateRelated = () =>
     Promise.all(
       [
         ['warehouse-outbounds', warehouseCode],
         ['warehouse-stock', warehouseCode],
-        ['warehouse-inbounds', warehouseCode],
       ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
 
@@ -132,11 +230,19 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         ? updateWarehouseOutboundApi(warehouseCode, id, payload)
         : createWarehouseOutboundApi(warehouseCode, payload),
     onSuccess: async (_row, input) => {
-      toast.success(input.id ? 'Đã cập nhật NVL xuất kho' : 'Đã ghi phiếu xuất')
+      toast.success(
+        input.id ? `Đã cập nhật ${profile.noun} xuất kho` : `Đã ghi phiếu xuất`,
+      )
       dialog.close()
-      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      await invalidateAll()
+      await invalidateRelated()
+      const dest = input.payload.destWarehouseCode
+      if (dest && dest !== warehouseCode) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', dest] }),
+          queryClient.invalidateQueries({ queryKey: ['warehouse-stock', dest] }),
+        ])
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -147,41 +253,210 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     invalidateKeys: [
       ['warehouse-outbounds', warehouseCode],
       ['warehouse-stock', warehouseCode],
-      ['warehouse-inbounds', warehouseCode],
     ],
   })
 
-  const columns = useMemo(
-    () => outboundColumns({ onView: openView, onEdit: openEdit, onDelete: del.request }),
-    [openView, openEdit, del.request],
+  const columns = useMemo(() => {
+    const stockOf = (row: OutboundRow) =>
+      row.materialId ? stockById.get(row.materialId) : undefined
+    return [
+      {
+        key: 'issuedAt',
+        header: 'Ngày xuất',
+        width: 96,
+        sortable: true,
+        render: (row: OutboundRow) => formatStockedDate(row.issuedAt),
+      },
+      ...catalogColumnsBeforeName(outboundProfile, stockOf, (row) => row.sku, {
+        location: outboundProfile.showLocation
+          ? { valueId: params.location, options: locationOptions, onChange: (id) => table.setFilter({ location: id }) }
+          : undefined,
+        shape: outboundProfile.showShapeColor
+          ? { valueId: params.shape, options: catalogFilters.shapeOptions, onChange: (id) => table.setFilter({ shape: id }) }
+          : undefined,
+        color: outboundProfile.showShapeColor
+          ? { valueId: params.color, options: catalogFilters.colorOptions, onChange: (id) => table.setFilter({ color: id }) }
+          : undefined,
+      }),
+      {
+        key: 'name',
+        header: profile.nameLabel,
+        width: 220,
+        sortable: true,
+        className: 'name-cell',
+        cellSx: { overflow: 'visible', textOverflow: 'clip' },
+        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+      },
+      ...(showUnit
+        ? [
+            {
+              key: 'unit',
+              header: 'Đơn vị tính',
+              width: 88,
+              filter: (
+                <ColumnHeaderFilter
+                  valueId={params.unit}
+                  options={unitOptions}
+                  onChange={(id) => table.setFilter({ unit: id })}
+                />
+              ),
+            },
+          ]
+        : []),
+      {
+        key: 'qty',
+        header: headerTotal('Số lượng', totals?.qty, formatQty),
+        width: 120,
+        numeric: true,
+        sortable: true,
+        render: (row: OutboundRow) => formatQty(row.qty),
+      },
+      {
+        key: 'inboundUnitPrice',
+        header: 'Đơn giá xuất',
+        width: 168,
+        align: 'right' as const,
+        cellSx: {
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'normal',
+          lineHeight: 1.35,
+          overflow: 'visible',
+          textOverflow: 'clip',
+        },
+        render: (row: OutboundRow) => (
+          <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
+        ),
+      },
+      {
+        key: 'amount',
+        header: headerTotal('Thành tiền', totals?.amount, formatMoney),
+        width: 130,
+        numeric: true,
+        sortable: true,
+        cellSx: { fontWeight: 700 },
+        render: (row: OutboundRow) => formatMoney(row.amount),
+      },
+      ...catalogColumnsAfterAmount(outboundProfile, stockOf, {
+        kind:
+          outboundProfile.showNvlCategory || outboundProfile.showBtpCategory
+            ? { valueId: params.kind, options: catalogFilters.kindFilterOptions, onChange: (id) => table.setFilter({ kind: id }) }
+            : undefined,
+        type: outboundProfile.showType
+          ? { valueId: params.stone, options: catalogFilters.typeFilterOptions, onChange: (id) => table.setFilter({ stone: id }) }
+          : undefined,
+        bodyMetal: outboundProfile.showBodyMetal
+          ? {
+              valueId: params.bodyMetal,
+              options: catalogFilters.bodyMetalOptions,
+              onChange: (id) => table.setFilter({ bodyMetal: id }),
+            }
+          : undefined,
+        productKind: outboundProfile.showProductKind
+          ? {
+              valueId: params.productKind,
+              options: catalogFilters.productKindOptions,
+              onChange: (id) => table.setFilter({ productKind: id }),
+            }
+          : undefined,
+      }),
+      {
+        key: 'note',
+        header: 'Ghi chú',
+        width: 108,
+        ellipsis: true,
+        className: 'note-cell',
+        render: (row: OutboundRow) => row.note ?? '—',
+      },
+      {
+        key: 'issuedBy',
+        header: 'Người Xuất',
+        width: 96,
+        ellipsis: true,
+        sortable: true,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.issuedBy}
+            options={issuerOptions}
+            onChange={(id) => table.setFilter({ issuedBy: id })}
+          />
+        ),
+        render: (row: OutboundRow) => row.issuedBy ?? '—',
+      },
+      {
+        key: 'receivedBy',
+        header: 'Người Nhận',
+        width: 96,
+        ellipsis: true,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.receivedBy}
+            options={receiverOptions}
+            onChange={(id) => table.setFilter({ receivedBy: id })}
+          />
+        ),
+        render: (row: OutboundRow) => row.receivedBy ?? '—',
+      },
+      {
+        key: 'actions',
+        header: 'Hành động',
+        width: 120,
+        align: 'center' as const,
+        cellSx: { overflow: 'visible' },
+        render: (row: OutboundRow) => (
+          <RowActions
+            onView={() => openView(row)}
+            onEdit={() => openEdit(row)}
+            onDelete={() => del.request(row)}
+          />
+        ),
+      },
+    ]
+  }, [
+    catalogFilters,
+    del.request,
+    issuerOptions,
+    locationOptions,
+    openEdit,
+    openView,
+    params.bodyMetal,
+    params.color,
+    params.issuedBy,
+    params.kind,
+    params.location,
+    params.productKind,
+    params.receivedBy,
+    params.search,
+    params.shape,
+    params.stone,
+    params.unit,
+    outboundProfile,
+    profile,
+    showUnit,
+    receiverOptions,
+    stockById,
+    table.setFilter,
+    table.setSearch,
+    totals?.amount,
+    totals?.qty,
+    unitOptions,
+  ])
+
+  const pagedRows = useMemo(
+    () => paginate(sortRows(rows, params.sort, params.dir), page, params.pageSize),
+    [page, params.dir, params.pageSize, params.sort, rows],
   )
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {totals && items.length > 0 ? (
-        <PanelSummaryCard
-          title="Tổng hợp xuất kho"
-          stats={[
-            { label: 'Số lượng ( SL )', value: formatQty(totals.qty), tone: 'out' },
-            { label: 'Thành tiền ( TT )', value: formatMoney(totals.amount), tone: 'out' },
-            {
-              label: filtering ? 'Số dòng (đang lọc)' : 'Số dòng',
-              value: String(filtering ? rows.length : items.length),
-              tone: 'out',
-            },
-          ]}
-        />
-      ) : null}
-
       <DataTable
         columns={columns}
-        rows={paginate(sortRows(rows, params.sort, params.dir), page, params.pageSize)}
+        rows={pagedRows}
         rowKey={(row) => row.id}
-        loading={outbounds.isFetching}
+        loading={outbounds.isLoading}
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
         variant="grid"
-        fixedLayout
+        minWidth={1480}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -194,24 +469,17 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         sx={{ flex: 1 }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
-          <PanelToolbar
-            search={params.search}
-            onSearchChange={table.setSearch}
-            searchPlaceholder="Tìm tên hàng, ghi chú, người xuất/nhận..."
-            filters={
-              <SelectInput
-                label="Người xuất"
-                options={issuerOptions}
-                value={params.issuedBy}
-                onChange={(value) => table.setFilter({ issuedBy: String(value) })}
-                placeholder="Tất cả"
-                sx={{ width: 180 }}
-                fullWidth={false}
-              />
-            }
-            createLabel="Thêm phiếu xuất"
-            onCreate={dialog.openCreate}
-          />
+          <>
+            {filtering ? (
+              <Button size="small" onClick={table.reset}>
+                Xóa lọc
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button variant="contained" onClick={dialog.openCreate}>
+              {profile.outboundLabel}
+            </Button>
+          </>
         }
       />
 
@@ -224,6 +492,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         units={units}
         users={users}
         materials={materials}
+        materialsLoading={stock.isFetching}
+        warehouseCode={warehouseCode}
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
@@ -245,105 +515,6 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       />
     </Stack>
   )
-}
-
-function outboundColumns({
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  onView: (row: OutboundRow) => void
-  onEdit: (row: OutboundRow) => void
-  onDelete: (row: OutboundRow) => void
-}): Column<OutboundRow>[] {
-  return [
-    {
-      key: 'issuedAt',
-      header: 'Ngày xuất',
-      width: 96,
-      sortable: true,
-      render: (row) => formatStockedDate(row.issuedAt),
-    },
-    {
-      key: 'name',
-      header: 'Tên hàng',
-      width: 340,
-      sortable: true,
-      className: 'name-cell',
-      cellSx: { overflow: 'visible', textOverflow: 'clip' },
-    },
-    { key: 'unit', header: 'Đơn vị tính', width: 88 },
-    {
-      key: 'qty',
-      header: 'Số lượng',
-      width: 104,
-      numeric: true,
-      sortable: true,
-      render: (row) => formatQty(row.qty),
-    },
-    {
-      key: 'inboundUnitPrice',
-      header: 'Đơn giá xuất',
-      width: 168,
-      align: 'right',
-      cellSx: {
-        fontVariantNumeric: 'tabular-nums',
-        whiteSpace: 'normal',
-        lineHeight: 1.35,
-        overflow: 'visible',
-        textOverflow: 'clip',
-      },
-      render: (row) => (
-        <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
-      ),
-    },
-    {
-      key: 'amount',
-      header: 'Thành tiền',
-      width: 108,
-      numeric: true,
-      sortable: true,
-      cellSx: { fontWeight: 700 },
-      render: (row) => formatMoney(row.amount),
-    },
-    {
-      key: 'note',
-      header: 'Ghi chú',
-      width: 108,
-      ellipsis: true,
-      className: 'note-cell',
-      render: (row) => row.note ?? '—',
-    },
-    {
-      key: 'issuedBy',
-      header: 'Người Xuất',
-      width: 96,
-      ellipsis: true,
-      sortable: true,
-      render: (row) => row.issuedBy ?? '—',
-    },
-    {
-      key: 'receivedBy',
-      header: 'Người Nhận',
-      width: 96,
-      ellipsis: true,
-      render: (row) => row.receivedBy ?? '—',
-    },
-    {
-      key: 'actions',
-      header: 'Hành động',
-      width: 120,
-      align: 'center',
-      cellSx: { overflow: 'visible' },
-      render: (row) => (
-        <RowActions
-          onView={() => onView(row)}
-          onEdit={() => onEdit(row)}
-          onDelete={() => onDelete(row)}
-        />
-      ),
-    },
-  ]
 }
 
 type OutboundFormValues = {
@@ -370,12 +541,6 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   receivedByUserId: '',
 }
 
-const OUTBOUND_TITLES = {
-  create: 'Thêm phiếu xuất',
-  edit: 'Chỉnh sửa phiếu xuất',
-  view: 'Chi tiết phiếu xuất',
-}
-
 function OutboundDialog({
   open,
   kind,
@@ -385,6 +550,8 @@ function OutboundDialog({
   units,
   users,
   materials,
+  materialsLoading,
+  warehouseCode,
   operatorName,
   onClose,
   onExited,
@@ -398,11 +565,14 @@ function OutboundDialog({
   units: LookupItem[]
   users: DirectoryUser[]
   operatorName: string
+  warehouseCode: string
   materials: StockMaterialOption[]
+  materialsLoading?: boolean
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateOutboundPayload) => void
 }) {
+  const profile = stockProfile(warehouseCode)
   const form = useForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
 
   useEffect(() => {
@@ -436,6 +606,7 @@ function OutboundDialog({
 
   const materialId = form.watch('materialId')
   const qty = form.watch('qty')
+  const sku = form.watch('sku')
   const inboundUnitPrice = form.watch('inboundUnitPrice')
 
   const selected = materials.find((item) => item.id === materialId)
@@ -464,7 +635,6 @@ function OutboundDialog({
     name: item.fullName,
     secondary: item.username,
   }))
-
   function submit(values: OutboundFormValues) {
     if (readOnly) return
     onSave({
@@ -506,10 +676,15 @@ function OutboundDialog({
     <CrudDialogShell<OutboundFormValues>
       open={open}
       kind={kind}
-      titles={OUTBOUND_TITLES}
+      titles={{
+        create: profile.outboundLabel,
+        edit: 'Chỉnh sửa phiếu xuất',
+        view: 'Chi tiết phiếu xuất',
+      }}
       form={form}
       onSubmit={submit}
       saving={saving}
+      submitLabel={profile.outboundLabel}
       submitDisabled={kind === 'create' && available <= 0}
       onClose={onClose}
       onExited={onExited}
@@ -534,24 +709,32 @@ function OutboundDialog({
         />
       </FormRow>
 
-      <MaterialField
-        // Control<T> của RHF không gán được giữa các T khác nhau (hạn chế
-        // variance của thư viện), nên MaterialField nhận Control<any> và ép kiểu ở đây.
-        control={form.control as unknown as Control<any>}
-        kind={kind}
-        readOnly={readOnly}
-        materials={materials}
-        onSelect={(material) => {
-          if (!material) {
-            if (kind !== 'edit') form.setValue('materialId', null)
-            return
-          }
-          form.setValue('materialId', material.id)
-          form.setValue('sku', material.sku ?? '')
-          if (material.unitId) form.setValue('unitId', material.unitId)
-          if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
-        }}
-      />
+      <FormRow>
+        <MaterialField
+          // Control<T> của RHF không gán được giữa các T khác nhau (hạn chế
+          // variance của thư viện), nên MaterialField nhận Control<any> và ép kiểu ở đây.
+          control={form.control as unknown as Control<any>}
+          kind={kind}
+          readOnly={readOnly}
+          materials={materials}
+          loading={materialsLoading}
+          noun={profile.noun}
+          nameLabel={profile.nameLabel}
+          createLabel={profile.createLabel}
+          onSelect={(material) => {
+            if (!material) {
+              if (kind !== 'edit') form.setValue('materialId', null)
+              form.setValue('sku', '')
+              return
+            }
+            form.setValue('materialId', material.id)
+            form.setValue('sku', material.sku ?? '')
+            if (material.unitId) form.setValue('unitId', material.unitId)
+            if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
+          }}
+        />
+        <TextInput label={profile.skuLabel} value={sku || '—'} readOnly />
+      </FormRow>
 
       <FormRow>
         <TextInput

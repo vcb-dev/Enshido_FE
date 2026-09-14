@@ -13,6 +13,8 @@ export type CrudDialogShellProps<T extends FieldValues> = {
   saving: boolean
   /** Điều kiện khoá thêm cho nút Lưu/Thêm ngoài `saving` (vd: hết hàng để xuất). Không ảnh hưởng nút Hủy. */
   submitDisabled?: boolean
+  /** Nhãn nút khi tạo mới. Mặc định `Thêm`. */
+  submitLabel?: string
   onClose: () => void
   onExited: () => void
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
@@ -32,6 +34,7 @@ export function CrudDialogShell<T extends FieldValues>({
   onSubmit,
   saving,
   submitDisabled,
+  submitLabel = 'Thêm',
   onClose,
   onExited,
   maxWidth = 'md',
@@ -69,7 +72,7 @@ export function CrudDialogShell<T extends FieldValues>({
                 Hủy
               </Button>
               <Button type="submit" variant="contained" disabled={saving || submitDisabled}>
-                {kind === 'edit' ? 'Lưu' : 'Thêm'}
+                {kind === 'edit' ? 'Lưu' : submitLabel}
               </Button>
             </>
           )}

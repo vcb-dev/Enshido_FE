@@ -9,13 +9,29 @@ export type AuthUser = {
   fullName: string
   roleCode: RoleCode
   extraRoles?: RoleCode[]
+  allowedScreens?: string[]
   department: string | null
   roleLabel?: string
   permissions?: string[]
 }
 
-export type LoginResponse = {
+export type InventoryLookups = {
+  units: { id: string; code: string; name: string }[]
+  materialTypes: { id: string; code: string; name: string }[]
+  shapes: { id: string; code: string; name: string }[]
+  colors: { id: string; code: string; name: string }[]
+  suppliers?: { id: string; code: string; name: string }[]
+  otherClasses?: { id: string; code: string; name: string }[]
+  bodyMetals?: { id: string; code: string; name: string }[]
+  btpCategories?: { id: string; code: string; name: string }[]
+  productKinds?: { id: string; code: string; name: string }[]
+  users?: { id: string; username: string; fullName: string }[]
+}
+
+export type SessionResponse = {
   user: AuthUser
+  lookups?: InventoryLookups
+  expiresAt?: string
 }
 
 type ApiErrorBody = {
@@ -102,12 +118,20 @@ export async function apiFetch<T>(
 }
 
 export async function loginApi(username: string, password: string) {
-  return apiFetch<LoginResponse>(
+  return apiFetch<SessionResponse>(
     '/auth/login',
     {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     },
+    false,
+  )
+}
+
+export async function refreshApi() {
+  return apiFetch<SessionResponse>(
+    '/auth/refresh',
+    { method: 'POST', body: '{}' },
     false,
   )
 }
@@ -121,7 +145,7 @@ export async function logoutApi() {
 }
 
 export async function meApi() {
-  return apiFetch<AuthUser>('/auth/me')
+  return apiFetch<SessionResponse>('/auth/me')
 }
 
 export type UserRow = {
@@ -131,6 +155,7 @@ export type UserRow = {
   fullName: string
   roleCode: RoleCode
   extraRoles?: RoleCode[]
+  allowedScreens?: string[]
   department: string | null
   isActive: boolean
   createdAt: string
@@ -146,9 +171,27 @@ export async function createUserApi(payload: {
   fullName: string
   roleCode: RoleCode
   department?: string
+  allowedScreens?: string[]
 }) {
   return apiFetch<UserRow>('/users', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateUserApi(
+  id: string,
+  payload: {
+    fullName?: string
+    roleCode?: RoleCode
+    department?: string
+    isActive?: boolean
+    password?: string
+    allowedScreens?: string[]
+  },
+) {
+  return apiFetch<UserRow>(`/users/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }

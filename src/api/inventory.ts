@@ -12,11 +12,14 @@ export type WarehouseNode = {
 }
 
 export type AvailabilityCode = 'IN_STOCK' | 'LOW' | 'OUT_OF_STOCK'
+export type MetalKindCode = 'SILVER' | 'GOLD' | 'STONE' | 'ALLOY' | 'COPPER'
 
 export type LookupItem = {
   id: string
   code: string
   name: string
+  metalKind?: MetalKindCode | 'OTHER' | null
+  group?: string
 }
 
 export type InventoryLookups = {
@@ -25,6 +28,11 @@ export type InventoryLookups = {
   shapes: LookupItem[]
   colors: LookupItem[]
   suppliers?: LookupItem[]
+  otherClasses?: LookupItem[]
+  consumableCategories?: LookupItem[]
+  bodyMetals?: LookupItem[]
+  btpCategories?: LookupItem[]
+  productKinds?: LookupItem[]
   users?: DirectoryUser[]
 }
 
@@ -35,7 +43,6 @@ export type DirectoryUser = {
 }
 
 export type ClassificationCode = 'RAW_MATERIAL' | 'CONSUMABLE' | 'SEMI_FINISHED'
-export type MetalKindCode = 'SILVER' | 'GOLD' | 'STONE' | 'ALLOY' | 'COPPER'
 
 export type StockRow = {
   id: string
@@ -64,6 +71,14 @@ export type StockRow = {
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
   materialTypeId: string | null
   materialType: string | null
+  otherClassId: string | null
+  otherClass: string | null
+  otherClassParentId: string | null
+  otherClassParent: string | null
+  bodyMetalId: string | null
+  bodyMetal: string | null
+  productKindId: string | null
+  productKind: string | null
   classificationCode: ClassificationCode
   classification: string
   metalKind: MetalKindCode | null
@@ -231,6 +246,11 @@ export type UpdateStockPayload = {
   materialTypeId?: string | null
   classification?: ClassificationCode
   metalKind?: MetalKindCode | null
+  otherClassName?: string | null
+  otherClassId?: string | null
+  bodyMetalId?: string | null
+  productKindId?: string | null
+  btpCategoryId?: string | null
   openingQty?: string
   openingAmount?: string
   stockUnitPrice?: string
@@ -285,6 +305,8 @@ export type InboundRow = {
   supplierId: string | null
   supplierName: string | null
   materialId: string | null
+  sourceWarehouseCode?: string | null
+  sourceWarehouseName?: string | null
 }
 
 export type InboundTotals = {
@@ -315,6 +337,7 @@ export type CreateInboundPayload = {
   supplierName?: string
   applyToStock?: boolean
   locationCode?: string | null
+  otherClassId?: string | null
 }
 
 export function getWarehouseInboundsApi(code: string) {
@@ -362,6 +385,8 @@ export type OutboundRow = {
   receivedBy: string | null
   receivedByUserId: string | null
   materialId: string | null
+  destWarehouseCode?: string | null
+  destWarehouseName?: string | null
   priceBreakdown?: { qty: string; unitPrice: string; source: 'opening' | 'inbound' }[]
 }
 
@@ -392,6 +417,7 @@ export type CreateOutboundPayload = {
   receivedBy?: string
   receivedByUserId?: string | null
   applyToStock?: boolean
+  destWarehouseCode?: string | null
 }
 
 export function getWarehouseOutboundsApi(code: string) {

@@ -43,40 +43,49 @@ import {
   type UpdateStockPayload,
 } from '../api/inventory'
 import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
+import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
 import {
   DataTable,
   Form,
   FormMoneyField,
+  FormRow,
   FormSearchSelect,
   FormTextField,
   RowActions,
-  SearchInput,
-  SelectInput,
   type Column,
-  type SelectOption,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { paginate, useTableParams } from '../hooks/useTableParams'
+import { CategorySelect } from '../warehouses/CategorySelect'
+import { ColumnHeaderFilter, ColumnHeaderSearch } from '../warehouses/ColumnHeaderFilter'
 import { SearchSelect, type SearchSelectOption } from '../warehouses/SearchSelect'
-import { BtpWaitingPanel } from '../warehouses/BtpWaitingPanel'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import {
   MOCK_IN,
   MOCK_OUT,
   MOCK_STOCK,
-  METAL_KINDS,
+  CATEGORY_GROUPS,
+  CONSUMABLE_CATEGORIES,
+  catalogChildren,
   materialTypesFor,
   stockProfile,
   stockWarehouseCode,
   warehouseByCode,
   warehousePath,
   warehouseSectionByCode,
+  withFallback,
   type StockMove,
   type StockProfile,
   type WarehouseSectionCode,
 } from '../warehouses/catalog'
+import {
+  CATALOG_FILTER_DEFAULTS,
+  hasActiveCatalogFilters,
+  matchesCatalogFilters,
+  uniqueFilterOptions,
+} from '../warehouses/stockFilters'
 
 const LEGACY_BINS = new Set(['bac', 'da'])
 
@@ -87,8 +96,8 @@ export function WarehouseDetailPage() {
     section?: string
   }>()
 
-  if (code === 'ban-thanh-pham' || (code === 'btp-cho-vao-da' && (bin || section))) {
-    return <Navigate to="/kho/btp-cho-vao-da" replace />
+  if (code === 'ban-thanh-pham') {
+    return <Navigate to="/kho/btp-cho-vao-da/ton" replace />
   }
 
   if (code === 'nvl-chinh' && bin && LEGACY_BINS.has(bin)) {
@@ -141,9 +150,7 @@ export function WarehouseDetailPage() {
         </Typography>
       </Stack>
 
-      {warehouse.code === 'btp-cho-vao-da' ? (
-        <BtpWaitingPanel warehouseCode={warehouse.code} />
-      ) : activeSection?.code === 'nhap' ? (
+      {activeSection?.code === 'nhap' ? (
         useLiveMoves ? (
           <StockInboundPanel warehouseCode={stockKey} />
         ) : (
@@ -198,14 +205,14 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   const { openEdit } = dialog
   const table = useTableParams({
     pageSize: 8,
-    filters: { shape: '', location: '', stone: '', kind: '', status: 'ALL' },
+    filters: { ...CATALOG_FILTER_DEFAULTS, unit: '', color: '', status: 'ALL' },
   })
   const { params } = table
 
   const stock = useQuery({
     queryKey: ['warehouse-stock', warehouseCode],
     queryFn: () => getWarehouseStockApi(warehouseCode),
-    staleTime: 20_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
@@ -214,10 +221,17 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
   })
+  const btpCatalogs = useQuery({
+    queryKey: ['catalogs', 'OTHER'],
+    queryFn: () => listCatalogsApi('OTHER'),
+    enabled: profile.showBtpCategory || profile.showBodyMetal || profile.showProductKind,
+    staleTime: 5 * 60_000,
+  })
   const locationSlots = useQuery({
     queryKey: ['warehouse-locations', warehouseCode],
     queryFn: () => getLocationsApi(warehouseCode),
-    staleTime: 20_000,
+    staleTime: 60_000,
+    enabled: profile.showLocation,
   })
 
   const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
@@ -245,50 +259,62 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       .map((name) => ({ id: name, name }))
   }, [items, locationSlots.data?.items])
 
-  const statusOptions: SelectOption<string>[] = useMemo(
+  const statusFilterOptions = useMemo(
     () =>
-      STATUS_FILTERS.map((option) => {
-        const count = option.value === 'ALL' ? items.length : statusCounts[option.value]
-        const label = `${option.label} (${count})`
-        return {
-          value: option.value,
-          label:
-            option.value === 'ALL' ? (
-              label
-            ) : (
-              <Chip
-                size="small"
-                variant="outlined"
-                color={availabilityColor(option.value)}
-                label={label}
-                sx={{ pointerEvents: 'none' }}
-              />
-            ),
-        }
-      }),
-    [items.length, statusCounts],
+      STATUS_FILTERS.filter((option) => option.value !== 'ALL').map((option) => ({
+        id: option.value,
+        name: `${option.label} (${statusCounts[option.value]})`,
+      })),
+    [statusCounts],
   )
 
+  const unitOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.unit)),
+    [items],
+  )
+  const colorOptions = useMemo(() => {
+    const fromLookups = (lookups.data?.colors ?? []).map((item) => ({ id: item.id, name: item.name }))
+    const extra = uniqueFilterOptions(items.map((row) => row.color)).filter(
+      (item) => !fromLookups.some((row) => row.id === item.id || row.name === item.name),
+    )
+    return [...fromLookups, ...extra]
+  }, [items, lookups.data?.colors])
+  const typeFilterOptions = useMemo(() => {
+    if (profile.typeCodes) return lookups.data?.consumableCategories ?? []
+    return [...(lookups.data?.materialTypes ?? []), ...(lookups.data?.otherClasses ?? [])]
+  }, [lookups.data, profile.typeCodes])
+  const kindFilterOptions = useMemo(() => {
+    if (profile.showBtpCategory) {
+      return withFallback(
+        lookups.data?.btpCategories,
+        catalogChildren(btpCatalogs.data, 'danh-muc-btp'),
+      )
+    }
+    return CATEGORY_GROUPS.map((item) => ({ id: item.code, name: item.name }))
+  }, [lookups.data?.btpCategories, btpCatalogs.data, profile.showBtpCategory])
+
   const visible = useMemo(() => {
-    const q = params.search.trim().toLowerCase()
+    const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
-      if (q && !row.name.toLowerCase().includes(q) && !(row.sku ?? '').toLowerCase().includes(q)) {
+      if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
+      if (params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
+      if (params.color && row.colorId !== params.color && row.color !== params.color) return false
+      if (!matchesCatalogFilters(row, params, profile)) return false
+      if (
+        profile.showStatus &&
+        params.status !== 'ALL' &&
+        row.availability !== params.status
+      ) {
         return false
       }
-      if (params.shape && row.shapeId !== params.shape && row.shape !== params.shape) return false
-      if (params.location && (row.locationCode ?? '') !== params.location) return false
-      if (params.stone && row.materialTypeId !== params.stone && row.materialType !== params.stone) {
-        return false
-      }
-      if (params.kind && row.metalKind !== params.kind) return false
-      if (params.status !== 'ALL' && row.availability !== params.status) return false
       return true
     })
-  }, [items, params.search, params.shape, params.location, params.stone, params.kind, params.status])
+  }, [items, params.search, params.unit, params.color, params.shape, params.location, params.stone, params.kind, params.bodyMetal, params.productKind, params.status, profile])
 
   const filtered =
-    Boolean(params.search.trim() || params.shape || params.location || params.stone || params.kind) ||
-    params.status !== 'ALL'
+    Boolean(params.search.trim() || params.unit || params.color) ||
+    hasActiveCatalogFilters(params) ||
+    (profile.showStatus && params.status !== 'ALL')
   const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
@@ -300,7 +326,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         ? updateWarehouseStockApi(warehouseCode, id, payload)
         : createWarehouseStockApi(warehouseCode, payload),
     onSuccess: async (row, input) => {
-      toast.success(input.id ? 'Đã cập nhật NVL' : 'Đã thêm NVL')
+      toast.success(input.id ? `Đã cập nhật ${profile.noun}` : `Đã thêm ${profile.noun}`)
       dialog.close()
       // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
       if (!input.id) table.setPage(Math.ceil((visible.length + 1) / params.pageSize))
@@ -309,14 +335,13 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         (current: { items: StockRow[]; totals: StockTotals } | undefined) => {
           if (!current) return current
           const next = input.id
-            ? current.items.map((item) => (item.id === row.id ? row : item))
+            ? current.items.map((item) =>
+                item.id === row.id ? { ...item, ...row, priceLayers: row.priceLayers ?? item.priceLayers } : item,
+              )
             : [...current.items, row]
           return { ...current, items: next, totals: sumStockTotals(next) }
         },
       )
-      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
-      void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', warehouseCode] })
-      void queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', warehouseCode] })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -329,95 +354,112 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     1480 -
     (profile.showLocation ? 0 : 110) -
     (profile.showSku ? 0 : 130) -
-    (profile.showShapeColor ? 0 : 250)
+    (profile.showShapeColor ? 0 : 250) +
+    (profile.showBodyMetal ? 140 : 0) +
+    (profile.showProductKind ? 160 : 0) -
+    (profile.showStatus ? 0 : 110)
 
   return (
     <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {totals && visible.length > 0 ? (
-        <StockSummaryBar totals={totals} count={visible.length} filtered={filtered} />
-      ) : null}
-
       <DataTable
         columns={columns}
         rows={paginate(visible, page, params.pageSize)}
         rowKey={(row) => row.id}
-        loading={stock.isFetching}
+        loading={stock.isLoading}
         errorText={stock.error instanceof Error ? stock.error.message : undefined}
-        emptyText={
-          filtered ? 'Không có NVL khớp bộ lọc.' : 'Chưa có hàng tồn. Bấm Thêm NVL để tạo tên hàng.'
-        }
+        emptyText={filtered ? profile.emptyFiltered : profile.emptyText}
         variant="grid"
         minWidth={minWidth}
         showIndex
         indexOffset={indexOffset}
-        rowsLabel="NVL"
+        rowsLabel={profile.noun}
         page={page}
         pageSize={params.pageSize}
         total={visible.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
         sx={{ flex: 1 }}
-        customHeader={<StockTableHeader profile={profile} />}
+        customHeader={
+          <StockTableHeader
+            profile={profile}
+            totals={totals}
+            nameSearch={params.search}
+            onNameSearch={table.setSearch}
+            location={
+              profile.showLocation
+                ? { valueId: params.location, options: locationOptions, onChange: (id) => table.setFilter({ location: id }) }
+                : undefined
+            }
+            shape={
+              profile.showShapeColor
+                ? {
+                    valueId: params.shape,
+                    options: lookups.data?.shapes ?? [],
+                    onChange: (id) => table.setFilter({ shape: id }),
+                  }
+                : undefined
+            }
+            color={
+              profile.showShapeColor
+                ? { valueId: params.color, options: colorOptions, onChange: (id) => table.setFilter({ color: id }) }
+                : undefined
+            }
+            unit={{ valueId: params.unit, options: unitOptions, onChange: (id) => table.setFilter({ unit: id }) }}
+            kind={
+              profile.showNvlCategory || profile.showBtpCategory
+                ? {
+                    valueId: params.kind,
+                    options: kindFilterOptions,
+                    onChange: (id) => table.setFilter({ kind: id }),
+                  }
+                : undefined
+            }
+            type={
+              profile.showType
+                ? {
+                    valueId: params.stone,
+                    options: typeFilterOptions,
+                    onChange: (id) => table.setFilter({ stone: id }),
+                  }
+                : undefined
+            }
+            bodyMetal={
+              profile.showBodyMetal
+                ? {
+                    valueId: params.bodyMetal,
+                    options: withFallback(
+                      lookups.data?.bodyMetals,
+                      catalogChildren(btpCatalogs.data, 'chat-lieu'),
+                    ),
+                    onChange: (id) => table.setFilter({ bodyMetal: id }),
+                  }
+                : undefined
+            }
+            productKind={
+              profile.showProductKind
+                ? {
+                    valueId: params.productKind,
+                    options: withFallback(
+                      lookups.data?.productKinds,
+                      catalogChildren(btpCatalogs.data, 'phan-loai-san-pham'),
+                    ),
+                    onChange: (id) => table.setFilter({ productKind: id }),
+                  }
+                : undefined
+            }
+            status={
+              profile.showStatus
+                ? {
+                    valueId: params.status === 'ALL' ? '' : params.status,
+                    options: statusFilterOptions,
+                    onChange: (id) => table.setFilter({ status: id || 'ALL' }),
+                  }
+                : undefined
+            }
+          />
+        }
         toolbar={
           <>
-            <SearchInput
-              value={params.search}
-              onChange={table.setSearch}
-              placeholder="Tìm tên NVL hoặc mã…"
-              sx={{ flex: '1 1 180px', minWidth: 160, maxWidth: 260 }}
-            />
-            <SearchSelect
-              label="Hình dạng"
-              valueId={params.shape}
-              options={lookups.data?.shapes ?? []}
-              allowClear
-              size="small"
-              disablePortal={false}
-              placeholder="Tìm hình dạng…"
-              sx={{ flex: '1 1 150px', minWidth: 150, maxWidth: 220 }}
-              onChange={(id) => table.setFilter({ shape: id })}
-            />
-            <SearchSelect
-              label="Vị trí"
-              valueId={params.location}
-              options={locationOptions}
-              allowClear
-              size="small"
-              disablePortal={false}
-              placeholder="Tìm vị trí…"
-              sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 200 }}
-              onChange={(id) => table.setFilter({ location: id })}
-            />
-            <SearchSelect
-              label="Loại đá"
-              valueId={params.stone}
-              options={lookups.data?.materialTypes ?? []}
-              allowClear
-              size="small"
-              disablePortal={false}
-              placeholder="Tìm loại đá…"
-              sx={{ flex: '1 1 150px', minWidth: 150, maxWidth: 220 }}
-              onChange={(id) => table.setFilter({ stone: id })}
-            />
-            <SearchSelect
-              label="Phân loại"
-              valueId={params.kind}
-              options={METAL_KINDS.map((item) => ({ id: item.code, name: item.name }))}
-              allowClear
-              size="small"
-              disablePortal={false}
-              placeholder="Tìm phân loại…"
-              sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 200 }}
-              onChange={(id) => table.setFilter({ kind: id })}
-            />
-            <SelectInput
-              label="Trạng thái"
-              options={statusOptions}
-              value={params.status}
-              onChange={(value) => table.setFilter({ status: String(value) || 'ALL' })}
-              sx={{ width: 200, flex: '0 0 auto' }}
-              fullWidth={false}
-            />
             {filtered ? (
               <Button size="small" onClick={table.reset}>
                 Xóa lọc
@@ -425,7 +467,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
             <Button variant="contained" onClick={dialog.openCreate}>
-              Thêm NVL
+              {profile.createLabel}
             </Button>
           </>
         }
@@ -446,26 +488,127 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   )
 }
 
+type HeaderFilter = {
+  valueId: string
+  options: Array<{ id: string; name: string }>
+  onChange: (id: string) => void
+}
+
+const FILTER_CELL_SX = {
+  border: '0 !important',
+  bgcolor: '#fff !important',
+  backgroundColor: '#fff !important',
+  py: '4px !important',
+  px: '4px !important',
+  whiteSpace: 'normal',
+  overflow: 'visible',
+  boxShadow: 'none',
+} as const
+
 const StockTableHeader = memo(function StockTableHeader({
   profile,
+  totals,
+  nameSearch,
+  onNameSearch,
+  location,
+  shape,
+  color,
+  unit,
+  kind,
+  type,
+  bodyMetal,
+  productKind,
+  status,
 }: {
   profile: StockProfile
+  totals?: StockTotals
+  nameSearch: string
+  onNameSearch: (value: string) => void
+  location?: HeaderFilter
+  shape?: HeaderFilter
+  color?: HeaderFilter
+  unit: HeaderFilter
+  kind?: HeaderFilter
+  type?: HeaderFilter
+  bodyMetal?: HeaderFilter
+  productKind?: HeaderFilter
+  status?: HeaderFilter
 }) {
+  const showKind = profile.showNvlCategory || profile.showBtpCategory
   return (
     <>
+      <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
+        <TableCell sx={FILTER_CELL_SX} />
+        {profile.showLocation ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            {location ? <ColumnHeaderFilter {...location} /> : null}
+          </TableCell>
+        ) : null}
+        {profile.showSku ? <TableCell sx={FILTER_CELL_SX} /> : null}
+        {profile.showShapeColor ? (
+          <>
+            <TableCell sx={FILTER_CELL_SX}>
+              {shape ? <ColumnHeaderFilter {...shape} /> : null}
+            </TableCell>
+            <TableCell sx={FILTER_CELL_SX}>
+              {color ? <ColumnHeaderFilter {...color} /> : null}
+            </TableCell>
+          </>
+        ) : null}
+        <TableCell sx={FILTER_CELL_SX}>
+          <ColumnHeaderSearch
+            value={nameSearch}
+            onChange={onNameSearch}
+            placeholder="Tìm tên…"
+          />
+        </TableCell>
+        <TableCell sx={FILTER_CELL_SX}>
+          <ColumnHeaderFilter {...unit} />
+        </TableCell>
+        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
+        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
+        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
+        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
+        {kind ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            <ColumnHeaderFilter {...kind} />
+          </TableCell>
+        ) : null}
+        {type ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            <ColumnHeaderFilter {...type} />
+          </TableCell>
+        ) : null}
+        {bodyMetal ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            <ColumnHeaderFilter {...bodyMetal} />
+          </TableCell>
+        ) : null}
+        {productKind ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            <ColumnHeaderFilter {...productKind} />
+          </TableCell>
+        ) : null}
+        {status ? (
+          <TableCell sx={FILTER_CELL_SX}>
+            <ColumnHeaderFilter {...status} />
+          </TableCell>
+        ) : null}
+        <TableCell sx={FILTER_CELL_SX} />
+      </TableRow>
       <TableRow>
         <TableCell rowSpan={2} align="center">
           STT
         </TableCell>
         {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
-        {profile.showSku ? <TableCell rowSpan={2}>Mã NVL</TableCell> : null}
+        {profile.showSku ? <TableCell rowSpan={2}>{profile.skuLabel}</TableCell> : null}
         {profile.showShapeColor ? (
           <>
             <TableCell rowSpan={2}>Hình dạng</TableCell>
             <TableCell rowSpan={2}>Màu sắc</TableCell>
           </>
         ) : null}
-        <TableCell rowSpan={2}>Tên NVL</TableCell>
+        <TableCell rowSpan={2}>{profile.nameLabel}</TableCell>
         <TableCell rowSpan={2} align="center">
           Đơn vị
         </TableCell>
@@ -481,39 +624,45 @@ const StockTableHeader = memo(function StockTableHeader({
         <TableCell align="center" colSpan={2} sx={groupHead.stock}>
           Tồn
         </TableCell>
-        <TableCell rowSpan={2}>Phân loại</TableCell>
-        <TableCell rowSpan={2}>{profile.typeLabel}</TableCell>
-        <TableCell rowSpan={2} align="center">
-          Trạng thái
-        </TableCell>
+        {showKind ? (
+          <TableCell rowSpan={2}>{profile.showBtpCategory ? 'Danh mục BTP' : 'Danh mục'}</TableCell>
+        ) : null}
+        {profile.showType ? <TableCell rowSpan={2}>{profile.typeLabel}</TableCell> : null}
+        {profile.showBodyMetal ? <TableCell rowSpan={2}>Chất liệu</TableCell> : null}
+        {profile.showProductKind ? <TableCell rowSpan={2}>Phân loại sản phẩm</TableCell> : null}
+        {profile.showStatus ? (
+          <TableCell rowSpan={2} align="center">
+            Trạng thái
+          </TableCell>
+        ) : null}
         <TableCell rowSpan={2} align="center">
           Hành động
         </TableCell>
       </TableRow>
       <TableRow>
         <TableCell align="right" sx={groupHead.open}>
-          SL
+          {qtyLabel(totals?.openingQty)}
         </TableCell>
         <TableCell align="right" sx={{ bgcolor: groupHead.open.bgcolor }}>
-          TT
+          {ttLabel(totals?.openingAmount)}
         </TableCell>
         <TableCell align="right" sx={groupHead.in}>
-          SL
+          {qtyLabel(totals?.inQty)}
         </TableCell>
         <TableCell align="right" sx={{ bgcolor: groupHead.in.bgcolor }}>
-          TT
+          {ttLabel(totals?.inAmount)}
         </TableCell>
         <TableCell align="right" sx={groupHead.out}>
-          SL
+          {qtyLabel(totals?.outQty)}
         </TableCell>
         <TableCell align="right" sx={{ bgcolor: groupHead.out.bgcolor }}>
-          TT
+          {ttLabel(totals?.outAmount)}
         </TableCell>
         <TableCell align="right" sx={groupHead.stock}>
-          SL
+          {qtyLabel(totals?.qty)}
         </TableCell>
         <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
-          TT
+          {ttLabel(totals?.amount)}
         </TableCell>
       </TableRow>
     </>
@@ -532,7 +681,7 @@ function stockColumns(
   if (profile.showSku) {
     columns.push({
       key: 'sku',
-      header: 'Mã NVL',
+      header: profile.skuLabel,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
       render: (row) => row.sku ?? '—',
     })
@@ -545,7 +694,7 @@ function stockColumns(
   }
 
   columns.push(
-    { key: 'name', header: 'Tên NVL', cellSx: { minWidth: 220 } },
+    { key: 'name', header: profile.nameLabel, cellSx: { minWidth: 220 } },
     { key: 'unit', header: 'Đơn vị', align: 'center' },
     {
       key: 'openingQty',
@@ -605,10 +754,42 @@ function stockColumns(
     },
   )
 
-  columns.push(
-    { key: 'metalKindLabel', header: 'Phân loại', render: (row) => row.metalKindLabel ?? '—' },
-    { key: 'materialType', header: profile.typeLabel, render: (row) => row.materialType ?? '—' },
-    {
+  if (profile.showNvlCategory || profile.showBtpCategory) {
+    columns.push({
+      key: 'metalKindLabel',
+      header: profile.showBtpCategory ? 'Danh mục BTP' : 'Danh mục',
+      render: (row) =>
+        profile.showBtpCategory ? (row.otherClass ?? '—') : (row.metalKindLabel ?? '—'),
+    })
+  }
+  if (profile.showType) {
+    columns.push({
+      key: 'materialType',
+      header: profile.typeLabel,
+      render: (row) => {
+        if (profile.typeCodes) {
+          return row.otherClass ?? row.otherClassParent ?? row.materialType ?? '—'
+        }
+        return row.materialType ?? '—'
+      },
+    })
+  }
+  if (profile.showBodyMetal) {
+    columns.push({
+      key: 'bodyMetal',
+      header: 'Chất liệu',
+      render: (row) => row.bodyMetal ?? '—',
+    })
+  }
+  if (profile.showProductKind) {
+    columns.push({
+      key: 'productKind',
+      header: 'Phân loại sản phẩm',
+      render: (row) => row.productKind ?? '—',
+    })
+  }
+  if (profile.showStatus) {
+    columns.push({
       key: 'availability',
       header: 'Trạng thái',
       align: 'center',
@@ -620,7 +801,9 @@ function stockColumns(
           label={row.availabilityLabel}
         />
       ),
-    },
+    })
+  }
+  columns.push(
     {
       key: 'actions',
       header: 'Hành động',
@@ -630,6 +813,14 @@ function stockColumns(
   )
 
   return columns
+}
+
+function qtyLabel(value?: string) {
+  return value == null ? 'SL' : `SL (${formatQty(value)})`
+}
+
+function ttLabel(value?: string) {
+  return value == null ? 'TT' : `TT (${formatMoney(value)})`
 }
 
 function sumStockTotals(rows: StockRow[]): StockTotals {
@@ -645,103 +836,6 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
     qty: sum((r) => r.qty),
     amount: sum((r) => r.amount),
   }
-}
-
-function StockSummaryBar({
-  totals,
-  count,
-  filtered,
-}: {
-  totals: StockTotals
-  count: number
-  filtered: boolean
-}) {
-  return (
-    <Paper sx={{ p: 1.25, flexShrink: 0 }}>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
-        sx={{ mb: 1, alignItems: { sm: 'baseline' }, justifyContent: 'space-between' }}
-      >
-        <Typography variant="subtitle2">Tổng hợp nhập-xuất-tồn</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {filtered ? `Đang lọc · ${count} NVL` : `Toàn kho · ${count} NVL`}
-        </Typography>
-      </Stack>
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 1,
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
-        }}
-      >
-        <SummaryCard title="Tồn đầu kỳ" tone="open" sl={totals.openingQty} tt={totals.openingAmount} />
-        <SummaryCard title="Nhập" tone="in" sl={totals.inQty} tt={totals.inAmount} />
-        <SummaryCard title="Xuất" tone="out" sl={totals.outQty} tt={totals.outAmount} />
-        <SummaryCard title="Tồn" tone="stock" sl={totals.qty} tt={totals.amount} />
-      </Box>
-    </Paper>
-  )
-}
-
-function SummaryCard({
-  title,
-  tone,
-  sl,
-  tt,
-}: {
-  title: string
-  tone: 'open' | 'in' | 'out' | 'stock'
-  sl: string
-  tt: string
-}) {
-  const colors = {
-    open: { bg: '#f7f9fb', bar: '#5d6d7e' },
-    in: { bg: '#f2f8f4', bar: '#1e8449' },
-    out: { bg: '#faf6f4', bar: '#b9770e' },
-    stock: { bg: '#eaf0f6', bar: '#1b4f72' },
-  }[tone]
-
-  return (
-    <Box
-      sx={{
-        bgcolor: colors.bg,
-        border: '1px solid #b7c2cc',
-        borderLeft: `4px solid ${colors.bar}`,
-        borderRadius: 1,
-        px: 1.25,
-        py: 1,
-      }}
-    >
-      <Typography variant="subtitle2" sx={{ mb: 0.75, color: colors.bar }}>
-        {title}
-      </Typography>
-      <Stack spacing={0.35}>
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
-          <Typography variant="caption" color="text.secondary">
-            Số lượng (SL):
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: colors.bar, fontVariantNumeric: 'tabular-nums' }}
-          >
-            {formatQty(sl)}
-          </Typography>
-        </Stack>
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
-          <Typography variant="caption" color="text.secondary">
-            Thành tiền (TT):
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: colors.bar, fontVariantNumeric: 'tabular-nums' }}
-          >
-            {formatMoney(tt)}
-          </Typography>
-        </Stack>
-      </Stack>
-    </Box>
-  )
 }
 
 function MoveTable({
@@ -763,7 +857,7 @@ function MoveTable({
     <Stack spacing={2}>
       <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
         <Button variant="contained" onClick={() => setOpen(true)}>
-          Tạo {label}
+          {kind === 'nhap' ? 'Nhập NVL' : 'Xuất NVL'}
         </Button>
       </Stack>
       <TableContainer component={Paper}>
@@ -863,7 +957,7 @@ function MoveDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <form onSubmit={onSubmit}>
-        <DialogTitle>{kind === 'nhap' ? 'Tạo phiếu nhập' : 'Tạo phiếu xuất'}</DialogTitle>
+        <DialogTitle>{kind === 'nhap' ? 'Nhập NVL' : 'Xuất NVL'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
           <SearchSelect
             label="Hàng"
@@ -911,6 +1005,9 @@ type StockFormValues = {
   unitId: string
   materialTypeId: string
   metalKind: string
+  bodyMetalId: string
+  productKindId: string
+  btpCategoryId: string
   openingQty: string
   stockUnitPrice: string
   inQty: string
@@ -927,7 +1024,10 @@ const EMPTY_STOCK: StockFormValues = {
   name: '',
   unitId: '',
   materialTypeId: '',
-  metalKind: 'SILVER',
+  metalKind: '',
+  bodyMetalId: '',
+  productKindId: '',
+  btpCategoryId: '',
   openingQty: '0',
   stockUnitPrice: '',
   inQty: '0',
@@ -965,11 +1065,23 @@ function StockEditDialog({
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
   })
+  const btpCatalogs = useQuery({
+    queryKey: ['catalogs', 'OTHER'],
+    queryFn: () => listCatalogsApi('OTHER'),
+    enabled: open && (profile.showBtpCategory || profile.showBodyMetal || profile.showProductKind),
+    staleTime: 5 * 60_000,
+  })
+  const nvlCatalogs = useQuery({
+    queryKey: ['catalogs', 'CATALOG'],
+    queryFn: () => listCatalogsApi('CATALOG'),
+    enabled: open && Boolean(profile.typeCodes),
+    staleTime: 5 * 60_000,
+  })
   const locationSlots = useQuery({
     queryKey: ['warehouse-locations', warehouseCode],
     queryFn: () => getLocationsApi(warehouseCode),
     enabled: open,
-    staleTime: 20_000,
+    staleTime: 60_000,
   })
 
   useEffect(() => {
@@ -983,8 +1095,11 @@ function StockEditDialog({
             colorId: row.colorId ?? '',
             name: row.name,
             unitId: row.unitId,
-            materialTypeId: row.materialTypeId ?? '',
-            metalKind: row.metalKind ?? '',
+            materialTypeId: row.otherClassId ?? row.materialTypeId ?? '',
+            metalKind: row.otherClassId ? 'OTHER' : (row.metalKind ?? ''),
+            bodyMetalId: row.bodyMetalId ?? '',
+            productKindId: row.productKindId ?? '',
+            btpCategoryId: row.otherClassId ?? '',
             openingQty: qtyFromApi(row.openingQty),
             stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
             inQty: qtyFromApi(row.inQty),
@@ -995,6 +1110,32 @@ function StockEditDialog({
         : EMPTY_STOCK,
     )
   }, [open, row, form])
+
+  const locationCode = form.watch('locationCode')
+  const metalKind = form.watch('metalKind')
+  const isStone = metalKind === 'STONE'
+  const typeOptions: LookupItem[] = materialTypesFor(
+    profile,
+    lookups.data?.materialTypes ?? [],
+  )
+  const otherOptions: LookupItem[] = (lookups.data?.otherClasses ?? []).map((item) => ({
+    ...item,
+    metalKind: 'OTHER',
+  }))
+  const nestedTypes = typeOptions.filter((item) => item.metalKind)
+  const categoryOptions = [...nestedTypes, ...otherOptions]
+  const consumableOptions: LookupItem[] = withFallback(
+    lookups.data?.consumableCategories,
+    CONSUMABLE_CATEGORIES.flatMap((item) => {
+      const hit = nvlCatalogs.data?.find((row) => row.code === item.code && !row.parentId)
+      return hit ? [{ id: hit.id, code: hit.code, name: hit.name }] : []
+    }),
+  )
+
+  useEffect(() => {
+    if (!open || isStone) return
+    form.setValue('shapeId', '')
+  }, [open, isStone, form])
 
   const colors = useMemo(() => {
     const api = lookups.data?.colors ?? []
@@ -1011,7 +1152,6 @@ function StockEditDialog({
     return ordered
   }, [lookups.data?.colors])
 
-  const locationCode = form.watch('locationCode')
   const openingQty = form.watch('openingQty')
   const stockUnitPrice = form.watch('stockUnitPrice')
   const inQty = form.watch('inQty')
@@ -1042,25 +1182,55 @@ function StockEditDialog({
 
   const shapeOptions: SearchSelectOption[] = lookups.data?.shapes ?? []
   const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
-  const typeOptions: SearchSelectOption[] = materialTypesFor(
-    profile,
-    lookups.data?.materialTypes ?? [],
-  )
-  const kindOptions: SearchSelectOption[] = METAL_KINDS.map((item) => ({
-    id: item.code,
-    name: item.name,
-  }))
+  const flatTypeOptions: SearchSelectOption[] = typeOptions
 
   function submit(values: StockFormValues) {
+    if (profile.showBtpCategory) {
+      onSave({
+        name: values.name.trim(),
+        unitId: values.unitId,
+        materialTypeId: null,
+        metalKind: null,
+        otherClassName: null,
+        btpCategoryId: values.btpCategoryId || null,
+        bodyMetalId: values.bodyMetalId || null,
+        productKindId: values.productKindId || null,
+        openingQty: values.openingQty,
+        stockUnitPrice: values.stockUnitPrice || '0',
+      })
+      return
+    }
+    const picked = categoryOptions.find((item) => item.id === values.materialTypeId)
+    if (profile.typeCodes) {
+      onSave({
+        ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
+        name: values.name.trim(),
+        unitId: values.unitId,
+        materialTypeId: null,
+        metalKind: null,
+        otherClassName: null,
+        otherClassId: values.materialTypeId || null,
+        openingQty: values.openingQty,
+        stockUnitPrice: values.stockUnitPrice || '0',
+      })
+      return
+    }
+    const isOther = picked?.metalKind === 'OTHER' || values.metalKind === 'OTHER'
     onSave({
-      ...(profile.showSku ? { sku: values.sku } : {}),
       ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
       name: values.name.trim(),
       unitId: values.unitId,
-      shapeId: profile.showShapeColor ? values.shapeId || null : null,
+      shapeId: profile.showShapeColor && picked?.metalKind === 'STONE' ? values.shapeId || null : null,
       colorId: profile.showShapeColor ? values.colorId || null : null,
-      materialTypeId: values.materialTypeId || null,
-      metalKind: values.metalKind ? (values.metalKind as MetalKindCode) : null,
+      materialTypeId: isOther ? null : values.materialTypeId || null,
+      metalKind: isOther
+        ? null
+        : picked?.metalKind && picked.metalKind !== 'OTHER'
+          ? picked.metalKind
+          : values.metalKind
+            ? (values.metalKind as MetalKindCode)
+            : null,
+      otherClassName: isOther ? picked?.name ?? null : null,
       openingQty: values.openingQty,
       stockUnitPrice: values.stockUnitPrice || '0',
     })
@@ -1075,28 +1245,132 @@ function StockEditDialog({
       slotProps={{ transition: { onExited } }}
     >
       <Form form={form} onSubmit={submit}>
-        <DialogTitle sx={{ pb: 0.5 }}>
-          {row ? `Chỉnh sửa ${row.name || 'NVL'}` : 'Thêm NVL'}
+        <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
+          {row ? `Chỉnh sửa ${row.name || profile.noun}` : profile.createLabel}
         </DialogTitle>
         <DialogContent
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 1.5,
+            gap: 2,
             pt: 1,
+            overflowX: 'hidden',
             '& .MuiFormLabel-asterisk': { color: 'error.main' },
           }}
         >
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
-            <FormTextField<StockFormValues>
-              name="name"
-              label="Tên NVL"
+          <FormTextField<StockFormValues>
+            name="name"
+            label={profile.nameLabel}
+            required
+            autoFocus
+            suggestions={nameSuggestions}
+            helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
+            sx={{ mt: 1.5 }}
+          />
+          <FormRow columns={3}>
+            {profile.showBtpCategory ? (
+              <FormSearchSelect<StockFormValues>
+                name="bodyMetalId"
+                label="Chất liệu"
+                options={withFallback(
+                  lookups.data?.bodyMetals,
+                  catalogChildren(btpCatalogs.data, 'chat-lieu'),
+                )}
+                allowClear
+                placeholder="Tìm chất liệu…"
+              />
+            ) : profile.typeCodes ? (
+              <FormSearchSelect<StockFormValues>
+                name="materialTypeId"
+                label="Danh mục"
+                options={consumableOptions}
+                required
+                placeholder="Chọn danh mục…"
+                rules={{ required: 'Vui lòng chọn danh mục' }}
+              />
+            ) : nestedTypes.length ? (
+              <Controller
+                name="materialTypeId"
+                control={form.control}
+                rules={{ required: `Vui lòng chọn ${profile.categoryLabel}` }}
+                render={({ field, fieldState }) => (
+                  <CategorySelect
+                    label={profile.categoryLabel}
+                    valueId={field.value}
+                    options={categoryOptions}
+                    required
+                    errorText={fieldState.error?.message}
+                    onBlur={field.onBlur}
+                    onChange={(typeId, kind) => {
+                      field.onChange(typeId)
+                      form.setValue('metalKind', kind)
+                    }}
+                  />
+                )}
+              />
+            ) : (
+              <FormSearchSelect<StockFormValues>
+                name="materialTypeId"
+                label={profile.typeLabel}
+                options={flatTypeOptions}
+                allowClear
+                placeholder="Tìm nhóm…"
+              />
+            )}
+            {profile.showBtpCategory ? (
+              <FormSearchSelect<StockFormValues>
+                name="btpCategoryId"
+                label="Danh mục BTP"
+                options={withFallback(
+                  lookups.data?.btpCategories,
+                  catalogChildren(btpCatalogs.data, 'danh-muc-btp'),
+                )}
+                allowClear
+                placeholder="Tìm danh mục BTP…"
+              />
+            ) : null}
+            {profile.showProductKind ? (
+              <FormSearchSelect<StockFormValues>
+                name="productKindId"
+                label="Phân loại sản phẩm"
+                options={withFallback(
+                  lookups.data?.productKinds,
+                  catalogChildren(btpCatalogs.data, 'phan-loai-san-pham'),
+                )}
+                allowClear
+                placeholder="Tìm phân loại sản phẩm…"
+              />
+            ) : null}
+            <FormSearchSelect<StockFormValues>
+              name="unitId"
+              label="Đơn vị"
+              options={unitOptions}
               required
-              autoFocus
-              suggestions={nameSuggestions}
-              helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
-              sx={{ flex: 2, minWidth: 0 }}
+              placeholder="Tìm đơn vị…"
             />
+            {profile.showShapeColor ? (
+              <Controller
+                name="colorId"
+                control={form.control}
+                render={({ field }) => (
+                  <ColorField
+                    colors={colors}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
+              />
+            ) : null}
+            {profile.showShapeColor && isStone ? (
+              <FormSearchSelect<StockFormValues>
+                name="shapeId"
+                label="Hình dạng"
+                options={shapeOptions}
+                allowClear
+                placeholder="Tìm hình dạng…"
+              />
+            ) : null}
             {profile.showLocation ? (
               <FormSearchSelect<StockFormValues>
                 name="locationCode"
@@ -1105,75 +1379,16 @@ function StockEditDialog({
                 allowClear
                 placeholder="Tìm vị trí trống…"
                 noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
-                sx={{ flex: 1, minWidth: 0 }}
-              />
-            ) : null}
-            {profile.showSku ? (
-              <FormTextField<StockFormValues>
-                name="sku"
-                label="Mã NVL"
-                sx={{ flex: 1, minWidth: 0 }}
               />
             ) : null}
             <FormMoneyField<StockFormValues>
               name="stockUnitPrice"
               label="Đơn giá tồn"
-              sx={{ flex: 1, minWidth: 0, maxWidth: { sm: 180 } }}
               slotProps={{
                 htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
               }}
             />
-          </Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            {profile.showShapeColor ? (
-              <>
-                <FormSearchSelect<StockFormValues>
-                  name="shapeId"
-                  label="Hình dạng"
-                  options={shapeOptions}
-                  allowClear
-                  placeholder="Tìm hình dạng…"
-                  sx={{ flex: 1, minWidth: 0 }}
-                />
-                <Controller
-                  name="colorId"
-                  control={form.control}
-                  render={({ field }) => (
-                    <ColorField
-                      colors={colors}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                    />
-                  )}
-                />
-              </>
-            ) : null}
-            <FormSearchSelect<StockFormValues>
-              name="unitId"
-              label="Đơn vị"
-              options={unitOptions}
-              required
-              placeholder="Tìm đơn vị…"
-              sx={{ flex: 1, minWidth: 0 }}
-            />
-            <FormSearchSelect<StockFormValues>
-              name="metalKind"
-              label="Phân loại"
-              options={kindOptions}
-              allowClear
-              placeholder="Tìm phân loại…"
-              sx={{ flex: 1, minWidth: 0 }}
-            />
-            <FormSearchSelect<StockFormValues>
-              name="materialTypeId"
-              label={profile.typeLabel}
-              options={typeOptions}
-              allowClear
-              placeholder="Tìm loại đá…"
-              sx={{ flex: 1, minWidth: 0 }}
-            />
-          </Stack>
+          </FormRow>
 
           <NxtGrid
             openingQty={openingQty}
@@ -1198,7 +1413,7 @@ function StockEditDialog({
             Hủy
           </Button>
           <Button type="submit" variant="contained" disabled={saving}>
-            {row ? 'Lưu' : 'Thêm'}
+            {row ? 'Lưu' : profile.createLabel}
           </Button>
         </DialogActions>
       </Form>
@@ -1221,7 +1436,7 @@ function ColorField({
   const selected = colors.find((item) => item.id === value) ?? null
   return (
     <Autocomplete
-      sx={{ flex: 1, minWidth: 0 }}
+      sx={{ width: '100%', minWidth: 0 }}
       options={colors}
       value={selected}
       onChange={(_, next) => onChange(next?.id ?? '')}
@@ -1230,11 +1445,13 @@ function ColorField({
       isOptionEqualToValue={(option, next) => option.id === next.id}
       filterOptions={(options, state) => {
         const q = state.inputValue.trim().toLowerCase()
-        if (!q) return options
-        return options.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) || item.code.toLowerCase().includes(q),
-        )
+        const matched = !q
+          ? options
+          : options.filter(
+              (item) =>
+                item.name.toLowerCase().includes(q) || item.code.toLowerCase().includes(q),
+            )
+        return matched.slice(0, 50)
       }}
       disablePortal
       autoHighlight

@@ -4,7 +4,7 @@ export type { TextInputProps } from './TextInput'
 export { SuggestTextInput, excelPrefixMatch } from './SuggestTextInput'
 export type { SuggestTextInputProps } from './SuggestTextInput'
 
-export { EyeIcon, PencilIcon, TrashIcon } from './icons'
+export { EyeIcon, PencilIcon, TrashIcon, LockIcon, UnlockIcon } from './icons'
 
 export { RowActions } from './RowActions'
 export type { RowActionsProps } from './RowActions'

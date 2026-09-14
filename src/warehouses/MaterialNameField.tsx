@@ -8,6 +8,7 @@ export type StockMaterialOption = {
   unit: string
   qty?: string
   locationCode?: string | null
+  otherClassId?: string | null
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
 }
 
@@ -16,6 +17,11 @@ export function MaterialNameField({
   materials,
   readOnly,
   keepMaterialOnType,
+  loading,
+  noun = 'NVL',
+  nameLabel,
+  createLabel = 'Nhập NVL',
+  allowCreate,
   sx,
   errorText,
   onBlur,
@@ -26,16 +32,22 @@ export function MaterialNameField({
   materials: StockMaterialOption[]
   readOnly?: boolean
   keepMaterialOnType?: boolean
+  loading?: boolean
+  noun?: string
+  nameLabel?: string
+  createLabel?: string
+  allowCreate?: boolean
   sx?: object
   errorText?: string
   onBlur?: () => void
   onChange: (name: string) => void
   onSelect: (material: StockMaterialOption | null) => void
 }) {
+  const fieldLabel = nameLabel ?? `Tên ${noun}`
   if (readOnly) {
     return (
       <TextField
-        label="Tên hàng"
+        label={fieldLabel}
         value={value || '—'}
         required
         disabled
@@ -57,12 +69,14 @@ export function MaterialNameField({
       isOptionEqualToValue={(option, next) => option.id === next.id}
       filterOptions={(options, state) => {
         const q = state.inputValue.trim().toLowerCase()
-        if (!q) return options
-        return options.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) ||
-            (item.sku ?? '').toLowerCase().includes(q),
-        )
+        const matched = !q
+          ? options
+          : options.filter(
+              (item) =>
+                item.name.toLowerCase().includes(q) ||
+                (item.sku ?? '').toLowerCase().includes(q),
+            )
+        return matched.slice(0, 50)
       }}
       onInputChange={(_, next, reason) => {
         onChange(next)
@@ -79,11 +93,18 @@ export function MaterialNameField({
       }}
       autoHighlight
       openOnFocus
-      noOptionsText="Chưa có NVL. Thêm tên hàng ở Tồn."
+      loading={loading}
+      noOptionsText={
+        loading
+          ? `Đang tải ${noun}…`
+          : allowCreate
+            ? `Chưa có ${noun} khớp. Gõ tên mới.`
+            : `Chưa có ${noun}. ${createLabel} ở Tồn.`
+      }
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Tên hàng"
+          label={fieldLabel}
           required
           sx={sx}
           error={Boolean(errorText)}

@@ -26,9 +26,10 @@ export const WAREHOUSES: WarehouseDef[] = [
   },
   {
     code: 'btp-cho-vao-da',
-    name: 'Kho BTP chờ vào đá',
-    shortName: 'Kho BTP chờ vào đá',
-    description: 'Sổ bán thành phẩm chờ gắn đá — không nhập / xuất / tồn.',
+    name: 'Kho BTP',
+    shortName: 'Kho BTP',
+    description: 'Nhập, xuất và tồn bán thành phẩm. Xuất từ kho khác có thể chuyển sang đây.',
+    sections: true,
   },
   {
     code: 'nvl-tieu-hao',
@@ -46,26 +47,91 @@ export type StockProfile = {
   showSku: boolean
   showLocation: boolean
   showShapeColor: boolean
+  showType: boolean
+  showBodyMetal: boolean
+  showProductKind: boolean
+  showBtpCategory: boolean
+  showNvlCategory: boolean
+  showStatus: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
+  noun: string
+  nameLabel: string
+  skuLabel: string
+  categoryLabel: string
+  createLabel: string
+  inboundLabel: string
+  outboundLabel: string
+  searchPlaceholder: string
+  emptyText: string
+  emptyFiltered: string
+}
+
+const NVL_COPY = {
+  noun: 'NVL',
+  nameLabel: 'Tên NVL',
+  skuLabel: 'Mã NVL',
+  categoryLabel: 'Danh mục NVL',
+  createLabel: 'Nhập NVL',
+  inboundLabel: 'Nhập NVL',
+  outboundLabel: 'Xuất NVL',
+  searchPlaceholder: 'Tìm tên NVL hoặc mã…',
+  emptyText: 'Chưa có hàng tồn. Bấm Nhập NVL để tạo tên hàng.',
+  emptyFiltered: 'Không có NVL khớp bộ lọc.',
 }
 
 const DEFAULT_STOCK_PROFILE: StockProfile = {
   showSku: true,
   showLocation: true,
   showShapeColor: true,
-  typeLabel: 'Loại đá',
+  showType: true,
+  showBodyMetal: false,
+  showProductKind: false,
+  showBtpCategory: false,
+  showNvlCategory: true,
+  showStatus: true,
+  typeLabel: 'Chất loại',
+  ...NVL_COPY,
 }
 
 const STOCK_PROFILES: Record<string, StockProfile> = {
+  'btp-cho-vao-da': {
+    showSku: true,
+    showLocation: false,
+    showShapeColor: false,
+    showType: false,
+    showBodyMetal: true,
+    showProductKind: true,
+    showBtpCategory: true,
+    showNvlCategory: false,
+    showStatus: false,
+    typeLabel: 'Chất loại',
+    noun: 'BTP',
+    nameLabel: 'Tên BTP',
+    skuLabel: 'Mã BTP',
+    categoryLabel: 'Danh mục BTP',
+    createLabel: 'Nhập BTP',
+    inboundLabel: 'Nhập BTP',
+    outboundLabel: 'Xuất BTP',
+    searchPlaceholder: 'Tìm tên BTP hoặc mã…',
+    emptyText: 'Chưa có hàng tồn. Bấm Nhập BTP để tạo tên hàng.',
+    emptyFiltered: 'Không có BTP khớp bộ lọc.',
+  },
   // Vật tư tiêu hao không có hình dạng / màu / vị trí kệ.
   'nvl-tieu-hao': {
     showSku: true,
     showLocation: false,
     showShapeColor: false,
-    typeLabel: 'Nhóm',
+    showType: true,
+    showBodyMetal: false,
+    showProductKind: false,
+    showBtpCategory: false,
+    showNvlCategory: false,
+    showStatus: true,
+    typeLabel: 'Danh mục',
     typeCodes: CONSUMABLE_TYPE_CODES,
+    ...NVL_COPY,
   },
 }
 
@@ -81,6 +147,21 @@ export function materialTypesFor<T extends { code: string }>(profile: StockProfi
   return types.filter((item) => !CONSUMABLE_TYPE_CODES.includes(item.code))
 }
 
+export function catalogChildren(
+  parents: Array<{ code: string; children?: Array<{ id: string; code: string; name: string }> }> | undefined,
+  code: string,
+) {
+  return (parents?.find((row) => row.code === code)?.children ?? []).map((item) => ({
+    id: item.id,
+    code: item.code,
+    name: item.name,
+  }))
+}
+
+export function withFallback<T>(primary: T[] | undefined, fallback: T[]) {
+  return primary?.length ? primary : fallback
+}
+
 export type MetalKindCode = 'SILVER' | 'GOLD' | 'STONE' | 'ALLOY' | 'COPPER'
 
 export const METAL_KINDS: Array<{ code: MetalKindCode; name: string }> = [
@@ -89,6 +170,19 @@ export const METAL_KINDS: Array<{ code: MetalKindCode; name: string }> = [
   { code: 'STONE', name: 'Đá' },
   { code: 'ALLOY', name: 'Hội pha' },
   { code: 'COPPER', name: 'Đồng' },
+]
+
+export const OTHER_CATEGORY = { code: 'OTHER' as const, name: 'Phân loại khác' }
+
+export const CATEGORY_GROUPS: Array<{ code: MetalKindCode | 'OTHER'; name: string }> = [
+  ...METAL_KINDS,
+  OTHER_CATEGORY,
+]
+
+export const CONSUMABLE_CATEGORIES: Array<{ code: string; name: string }> = [
+  { code: 'ccdc', name: 'CCDC' },
+  { code: 'nvl-phu', name: 'NVL phụ' },
+  { code: 'nvl-chinh', name: 'NVL chính' },
 ]
 
 export type StockItem = {
