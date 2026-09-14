@@ -11,17 +11,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   loginApi,
   logoutApi,
-  meApi,
   refreshApi,
   type AuthUser,
   type SessionResponse,
 } from '../api/auth'
-import {
-  clearCachedSession,
-  hasCsrfCookie,
-  readCachedSession,
-  writeCachedSession,
-} from './session'
+import { clearCachedSession, hasCsrfCookie } from './session'
+import { sessionBoot } from './sessionBoot'
 
 type AuthContextValue = {
   user: AuthUser | null
@@ -32,23 +27,31 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-const cached =
-  typeof document === 'undefined' || !hasCsrfCookie() ? null : readCachedSession()
+const hasCookieAtBoot = typeof document !== 'undefined' && hasCsrfCookie()
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const [user, setUser] = useState<AuthUser | null>(cached?.user ?? null)
-  const [expiresAt, setExpiresAt] = useState<string | undefined>(cached?.expiresAt)
-  const [loading, setLoading] = useState(!cached?.user)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [expiresAt, setExpiresAt] = useState<string | undefined>()
+  const [loading, setLoading] = useState(hasCookieAtBoot)
 
   const applySession = useCallback(
     (session: SessionResponse) => {
       setUser(session.user)
       setExpiresAt(session.expiresAt)
-      writeCachedSession({ user: session.user, expiresAt: session.expiresAt })
       if (session.lookups) {
         queryClient.setQueryData(['inventory-lookups'], session.lookups)
+      } else {
+        void import('../api/inventory').then(({ getInventoryLookupsApi }) =>
+          queryClient.prefetchQuery({
+            queryKey: ['inventory-lookups'],
+            queryFn: getInventoryLookupsApi,
+            staleTime: 30 * 60_000,
+          }),
+        )
       }
+      void import('../pages/DashboardPage')
+      void import('../pages/WarehousesPage')
     },
     [queryClient],
   )
@@ -56,32 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
 
-    async function boot() {
-      if (!hasCsrfCookie()) {
-        clearCachedSession()
-        if (!cancelled) {
-          setUser(null)
-          setExpiresAt(undefined)
-          setLoading(false)
-        }
-        return
+    void sessionBoot.then((session) => {
+      if (cancelled) return
+      if (session?.user) applySession(session)
+      else {
+        setUser(null)
+        setExpiresAt(undefined)
       }
+      setLoading(false)
+    })
 
-      try {
-        const session = await meApi()
-        if (!cancelled) applySession(session)
-      } catch {
-        if (!cancelled) {
-          clearCachedSession()
-          setUser(null)
-          setExpiresAt(undefined)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    void boot()
     return () => {
       cancelled = true
     }

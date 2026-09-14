@@ -2,12 +2,14 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import '@fontsource/roboto/400.css'
-import '@fontsource/roboto/500.css'
-import '@fontsource/roboto/700.css'
+import './auth/sessionBoot'
 import { AuthProvider } from './auth/AuthContext'
 import { AppProviders } from './theme/AppProviders'
 import App from './App.tsx'
+
+void import('@fontsource/roboto/400.css')
+void import('@fontsource/roboto/500.css')
+void import('@fontsource/roboto/700.css')
 
 const queryClient = new QueryClient({
   defaultOptions: {

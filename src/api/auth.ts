@@ -145,7 +145,16 @@ export async function logoutApi() {
 }
 
 export async function meApi() {
-  return apiFetch<SessionResponse>('/auth/me')
+  return apiFetch<SessionResponse>('/auth/me', {}, false)
+}
+
+/** Restore the session in one or two hops: /me, then /refresh if the access cookie expired. */
+export async function restoreSessionApi() {
+  try {
+    return await meApi()
+  } catch {
+    return refreshApi()
+  }
 }
 
 export type UserRow = {
