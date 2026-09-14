@@ -161,7 +161,7 @@ export function CategorySelect({
                   <ListItemButton onClick={() => toggle(group.code)} sx={{ py: 0.75 }}>
                     <ListItemText
                       primary={group.name}
-                      primaryTypographyProps={{ fontWeight: 700, fontSize: 13 }}
+                      slotProps={{ primary: { sx: { fontWeight: 700, fontSize: 13 } } }}
                     />
                     <Box sx={{ fontSize: 11, color: 'text.secondary' }}>{expanded ? '▲' : '▼'}</Box>
                   </ListItemButton>
@@ -176,7 +176,7 @@ export function CategorySelect({
                         >
                           <ListItemText
                             primary={item.name}
-                            primaryTypographyProps={{ fontSize: 13 }}
+                            slotProps={{ primary: { sx: { fontSize: 13 } } }}
                           />
                         </ListItemButton>
                       ))
@@ -184,7 +184,9 @@ export function CategorySelect({
                       <ListItemText
                         sx={{ pl: 4, py: 0.75 }}
                         primary="Chưa có danh mục con"
-                        primaryTypographyProps={{ color: 'text.secondary', fontSize: 13 }}
+                        slotProps={{
+                          primary: { sx: { color: 'text.secondary', fontSize: 13 } },
+                        }}
                       />
                     )}
                   </Collapse>
@@ -195,7 +197,9 @@ export function CategorySelect({
               <ListItemText
                 sx={{ px: 2, py: 1.5 }}
                 primary="Không có danh mục khớp"
-                primaryTypographyProps={{ color: 'text.secondary', fontSize: 13 }}
+                slotProps={{
+                  primary: { sx: { color: 'text.secondary', fontSize: 13 } },
+                }}
               />
             ) : null}
           </List>

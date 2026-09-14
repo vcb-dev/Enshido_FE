@@ -22,14 +22,20 @@ export function createCatalogApi(payload: {
   parentId?: string | null
   sortOrder?: number
 }) {
-  return apiFetch<CatalogItem>('/catalogs', { method: 'POST', json: payload })
+  return apiFetch<CatalogItem>('/catalogs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function updateCatalogApi(
   id: string,
   payload: { name?: string; parentId?: string | null; sortOrder?: number },
 ) {
-  return apiFetch<CatalogItem>(`/catalogs/${id}`, { method: 'PATCH', json: payload })
+  return apiFetch<CatalogItem>(`/catalogs/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function deleteCatalogApi(id: string) {

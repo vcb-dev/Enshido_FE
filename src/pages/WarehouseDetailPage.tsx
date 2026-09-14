@@ -261,7 +261,9 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
 
   const statusFilterOptions = useMemo(
     () =>
-      STATUS_FILTERS.filter((option) => option.value !== 'ALL').map((option) => ({
+      STATUS_FILTERS.filter(
+        (option): option is { value: AvailabilityCode; label: string } => option.value !== 'ALL',
+      ).map((option) => ({
         id: option.value,
         name: `${option.label} (${statusCounts[option.value]})`,
       })),
