@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, Typography } from '@mui/material'
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -27,8 +27,17 @@ export function LoginPage() {
   const form = useForm<LoginFormValues>({ defaultValues: { username: '', password: '' } })
   const submitting = form.formState.isSubmitting
 
-  if (!loading && user) {
+  if (user) {
     return <Navigate to={resolvePostLoginPath(user, fromState)} replace />
+  }
+
+  if (loading) {
+    return (
+      <Stack spacing={1.5} sx={{ minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress size={28} />
+        <Typography color="text.secondary">Đang kiểm tra phiên đăng nhập…</Typography>
+      </Stack>
+    )
   }
 
   async function onSubmit(values: LoginFormValues) {

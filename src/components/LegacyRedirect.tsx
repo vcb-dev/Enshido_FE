@@ -20,7 +20,7 @@ export function legacyPathToCurrent(pathname: string): string {
     const mapped = segments.map((segment) => LEGACY_SECTION_CODES[segment] ?? segment)
     return ['/warehouses', code, ...mapped].join('/')
   }
-  if (root === 'cau-hinh') return '/settings/locations'
+  if (root === 'cau-hinh') return rest[0] === 'danh-muc' ? '/settings/catalogs' : '/settings/locations'
   if (root === 'cau-hinh-gia') return '/warehouses'
   return '/'
 }

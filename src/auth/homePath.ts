@@ -1,5 +1,8 @@
-export function homePathForUser(_user: { roleCode?: string }): string {
-  return '/'
+import { can, Permission } from './permissions'
+import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
+
+export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
+  return firstAllowedPath(user)
 }
 
 export function canAccessPath(
@@ -7,14 +10,24 @@ export function canAccessPath(
   path: string,
 ): boolean {
   const p = (path.split('?')[0] || '/').replace(/\/$/, '') || '/'
-  if (p === '/' || p === '') return true
-  if (p === '/warehouses' || p.startsWith('/warehouses/')) return true
-  if (p === '/settings' || p.startsWith('/settings/')) return true
+  if (p === '/' || p === '') {
+    return can(user, Permission.SCREEN_DASHBOARD) || firstAllowedPath(user) === '/'
+  }
+  if (p === '/warehouses') return hasAnyWarehouse(user)
+  if (p.startsWith('/warehouses/')) {
+    const code = p.split('/')[2] ?? ''
+    return canSeeWarehouse(user, code)
+  }
   if (p === '/orders' || p.startsWith('/orders/')) return true
   if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return true
-  if (p === '/users') {
-    return user.roleCode === 'ADMIN' || user.permissions?.includes('users.manage') === true
+  if (p === '/settings') {
+    return can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   }
+  if (p.startsWith('/settings/locations')) {
+    return can(user, Permission.SCREEN_LOCATIONS)
+  }
+  if (p.startsWith('/settings/catalogs')) return can(user, Permission.SCREEN_CATALOGS)
+  if (p === '/users') return can(user, Permission.USERS_MANAGE)
   return false
 }
 

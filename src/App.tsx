@@ -1,12 +1,8 @@
+import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/AppShell'
-import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
-import { UsersPage } from './pages/UsersPage'
-import { WarehousesPage } from './pages/WarehousesPage'
-import { WarehouseDetailPage } from './pages/WarehouseDetailPage'
-import { LocationsPage } from './pages/LocationsPage'
 import { ProductionOrdersPage } from './pages/ProductionOrdersPage'
 import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
 import { ProductionTicketPrintPage } from './pages/ProductionTicketPrintPage'
@@ -14,6 +10,23 @@ import { LegacyRedirect } from './components/LegacyRedirect'
 import { FinishedGoodsPage } from './pages/FinishedGoodsPage'
 import { ShipmentDetailPage } from './pages/ShipmentDetailPage'
 import { ShipmentPrintPage } from './pages/ShipmentPrintPage'
+
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+)
+const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })))
+const WarehousesPage = lazy(() =>
+  import('./pages/WarehousesPage').then((m) => ({ default: m.WarehousesPage })),
+)
+const WarehouseDetailPage = lazy(() =>
+  import('./pages/WarehouseDetailPage').then((m) => ({ default: m.WarehouseDetailPage })),
+)
+const LocationsPage = lazy(() =>
+  import('./pages/LocationsPage').then((m) => ({ default: m.LocationsPage })),
+)
+const CatalogsPage = lazy(() =>
+  import('./pages/CatalogsPage').then((m) => ({ default: m.CatalogsPage })),
+)
 
 export default function App() {
   return (
@@ -37,6 +50,7 @@ export default function App() {
           <Route path="/finished-goods/shipments/:code" element={<ShipmentDetailPage />} />
           <Route path="/settings" element={<Navigate to="/settings/locations" replace />} />
           <Route path="/settings/locations" element={<LocationsPage />} />
+          <Route path="/settings/catalogs" element={<CatalogsPage />} />
           <Route path="/warehouses/:code" element={<WarehouseDetailPage />} />
           <Route path="/warehouses/:code/:bin" element={<WarehouseDetailPage />} />
           <Route path="/warehouses/:code/:bin/:section" element={<WarehouseDetailPage />} />

@@ -52,11 +52,6 @@ const STATUS_FILTERS = [
   ['used', 'Đang dùng'],
 ] as const
 
-const LOCATION_QUERY_KEYS = [
-  ['warehouse-locations', WAREHOUSE_CODE],
-  ['warehouse-stock', WAREHOUSE_CODE],
-]
-
 function locationCodeOf(zone: string, aisle: number, level: string, position: number) {
   return `${zone}${aisle}${level}${position}`
 }
@@ -70,6 +65,7 @@ export function LocationsPage() {
   const locations = useQuery({
     queryKey: ['warehouse-locations', WAREHOUSE_CODE],
     queryFn: () => getLocationsApi(WAREHOUSE_CODE),
+    staleTime: 60_000,
   })
 
   const items = useMemo(() => locations.data?.items ?? [], [locations.data])
@@ -91,13 +87,11 @@ export function LocationsPage() {
 
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
-  const freeCount = items.filter((row) => !row.occupied).length
+  const freeCount = useMemo(() => items.filter((row) => !row.occupied).length, [items])
   const usedCount = items.length - freeCount
 
   async function refreshLocations() {
-    await Promise.all(
-      LOCATION_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    )
+    await queryClient.invalidateQueries({ queryKey: ['warehouse-locations', WAREHOUSE_CODE] })
   }
 
   const generate = useMutation({
@@ -122,6 +116,7 @@ export function LocationsPage() {
       toast.success(`Đã cập nhật vị trí ${row.code}`)
       dialog.close()
       await refreshLocations()
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', WAREHOUSE_CODE] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -129,7 +124,7 @@ export function LocationsPage() {
   const del = useDeleteRowDialog<LocationSlot>({
     mutationFn: (row) => deleteLocationApi(row.id),
     successMessage: 'Đã xóa vị trí',
-    invalidateKeys: LOCATION_QUERY_KEYS,
+    invalidateKeys: [['warehouse-locations', WAREHOUSE_CODE]],
   })
 
   const { openEdit, openView } = dialog
@@ -260,7 +255,7 @@ export function LocationsPage() {
         columns={columns}
         rows={paginate(visible, page, params.pageSize)}
         rowKey={(row) => row.id}
-        loading={locations.isFetching}
+        loading={locations.isLoading}
         errorText={locations.error instanceof Error ? locations.error.message : undefined}
         emptyText={<EmptyState hasItems={items.length > 0} onCreate={dialog.openCreate} />}
         rowsLabel="vị trí"

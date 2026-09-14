@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react'
 import { Chip, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useAuth } from '../auth/AuthContext'
+import { SCREEN_GROUPS } from '../auth/screens'
 import { PageHeader } from '../components/ui'
 
 export function DashboardPage() {
   const { user } = useAuth()
+  const screenLabels = SCREEN_GROUPS.flatMap((group) => group.items)
+    .filter((item) => user?.permissions?.includes(item.key))
+    .map((item) => item.label)
 
   return (
     <Stack spacing={2}>
@@ -19,10 +23,10 @@ export function DashboardPage() {
           <InfoRow label="Vai trò" value={user?.roleLabel ?? user?.roleCode} />
           <InfoRow label="Bộ phận" value={user?.department ?? '—'} />
           <InfoRow label="Quyền">
-            {user?.permissions?.length ? (
+            {screenLabels.length ? (
               <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                {user.permissions.map((p) => (
-                  <Chip key={p} size="small" label={p} variant="outlined" />
+                {screenLabels.map((label) => (
+                  <Chip key={label} size="small" label={label} variant="outlined" />
                 ))}
               </Stack>
             ) : (

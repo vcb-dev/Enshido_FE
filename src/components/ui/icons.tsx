@@ -55,3 +55,31 @@ export function TrashIcon() {
     </svg>
   )
 }
+
+export function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M8 11V8.2A4 4 0 0 1 16 8.2V11"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export function UnlockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M8 11V8.2A4 4 0 0 1 16.5 7.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}

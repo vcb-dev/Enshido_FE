@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Stack } from '@mui/material'
+import { Box, Button, Stack } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -19,18 +19,17 @@ import {
   FormRow,
   FormSearchSelect,
   FormTextField,
-  PanelSummaryCard,
-  PanelToolbar,
   RowActions,
   TextInput,
-  type Column,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
 import type { SearchSelectOption } from './SearchSelect'
+import { headerTotal, uniqueFilterOptions } from './stockFilters'
 
 export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   const operatorName = useOperatorName()
@@ -38,13 +37,16 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   const dialog = useCrudDialog<BtpWaitingRow>()
   // Tách sẵn các callback ổn định để useMemo cột không chạy lại mỗi render.
   const { openView, openEdit } = dialog
-  const table = useTableParams({ pageSize: 8 })
+  const table = useTableParams({
+    pageSize: 8,
+    filters: { craftsmanName: '', enteredBy: '', unit: '' },
+  })
   const { params } = table
 
   const list = useQuery({
     queryKey: ['btp-waiting', warehouseCode],
     queryFn: () => getBtpWaitingApi(warehouseCode),
-    staleTime: 20_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
@@ -57,22 +59,40 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   const users = useMemo(() => lookups.data?.users ?? [], [lookups.data?.users])
 
   const items = useMemo(() => list.data?.items ?? [], [list.data?.items])
-  const totals = list.data?.totals
+  const apiTotals = list.data?.totals
+  const craftsmanOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.craftsmanName)),
+    [items],
+  )
+  const enteredByOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.enteredBy)),
+    [items],
+  )
+  const unitOptions = useMemo(() => uniqueFilterOptions(items.map((row) => row.unit)), [items])
 
   const rows = useMemo(() => {
-    const keyword = params.search.trim().toLowerCase()
-    if (!keyword) return items
-    return items.filter((row) =>
-      [row.name, row.craftsmanName, row.note ?? ''].some((field) =>
-        field.toLowerCase().includes(keyword),
-      ),
-    )
-  }, [items, params.search])
+    const nameQuery = params.search.trim().toLocaleLowerCase('vi')
+    return items.filter((row) => {
+      if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
+      if (params.unit && row.unit !== params.unit) return false
+      if (params.craftsmanName && row.craftsmanName !== params.craftsmanName) return false
+      if (params.enteredBy && (row.enteredBy ?? '').trim() !== params.enteredBy) return false
+      return true
+    })
+  }, [items, params.craftsmanName, params.enteredBy, params.search, params.unit])
 
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
-  const filtering = table.hasFilters
+  const filtering = Boolean(
+    params.search.trim() || params.craftsmanName || params.enteredBy || params.unit,
+  )
+  const totals = filtering
+    ? {
+        qty: String(rows.reduce((acc, row) => acc + (Number(row.qty) || 0), 0)),
+        weight: String(rows.reduce((acc, row) => acc + (Number(row.weight) || 0), 0)),
+      }
+    : apiTotals
 
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: UpsertBtpWaitingPayload }) =>
@@ -96,36 +116,139 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   })
 
   const columns = useMemo(
-    () => btpColumns({ onView: openView, onEdit: openEdit, onDelete: del.request }),
-    [openView, openEdit, del.request],
+    () => [
+      {
+        key: 'receivedAt',
+        card: 'meta' as const,
+        header: 'Ngày nhập',
+        width: 108,
+        sortable: true,
+        render: (row: BtpWaitingRow) => formatStockedDate(row.receivedAt),
+      },
+      {
+        key: 'craftsmanName',
+        card: 'meta' as const,
+        header: 'Thợ nguội',
+        width: 140,
+        ellipsis: true,
+        sortable: true,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.craftsmanName}
+            options={craftsmanOptions}
+            onChange={(id) => table.setFilter({ craftsmanName: id })}
+          />
+        ),
+        render: (row: BtpWaitingRow) => row.craftsmanName || '—',
+      },
+      {
+        key: 'name',
+        card: 'title' as const,
+        header: 'Tên bán thành phẩm',
+        ellipsis: true,
+        sortable: true,
+        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+      },
+      {
+        key: 'unit',
+        header: 'Đơn vị tính',
+        width: 88,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.unit}
+            options={unitOptions}
+            onChange={(id) => table.setFilter({ unit: id })}
+          />
+        ),
+      },
+      {
+        key: 'qty',
+        header: headerTotal('Số lượng', totals?.qty, formatQty),
+        width: 120,
+        numeric: true,
+        sortable: true,
+        render: (row: BtpWaitingRow) => formatQty(row.qty),
+      },
+      {
+        key: 'weight',
+        header: headerTotal('Trọng lượng', totals?.weight, formatQty),
+        width: 130,
+        numeric: true,
+        sortable: true,
+        render: (row: BtpWaitingRow) => formatQty(row.weight),
+      },
+      {
+        key: 'note',
+        header: 'Ghi chú',
+        width: 180,
+        ellipsis: true,
+        render: (row: BtpWaitingRow) => row.note ?? '—',
+      },
+      {
+        key: 'enteredBy',
+        header: 'Người nhập',
+        width: 120,
+        ellipsis: true,
+        sortable: true,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.enteredBy}
+            options={enteredByOptions}
+            onChange={(id) => table.setFilter({ enteredBy: id })}
+          />
+        ),
+        render: (row: BtpWaitingRow) => row.enteredBy ?? '—',
+      },
+      {
+        key: 'actions',
+        card: 'actions' as const,
+        header: 'Hành động',
+        width: 120,
+        align: 'center' as const,
+        cellSx: { overflow: 'visible' },
+        render: (row: BtpWaitingRow) => (
+          <RowActions
+            onView={() => openView(row)}
+            onEdit={() => openEdit(row)}
+            onDelete={() => del.request(row)}
+          />
+        ),
+      },
+    ],
+    [
+      craftsmanOptions,
+      del.request,
+      enteredByOptions,
+      openEdit,
+      openView,
+      params.craftsmanName,
+      params.enteredBy,
+      params.search,
+      params.unit,
+      table.setFilter,
+      table.setSearch,
+      totals?.qty,
+      totals?.weight,
+      unitOptions,
+    ],
+  )
+
+  const pagedRows = useMemo(
+    () => paginate(sortRows(rows, params.sort, params.dir), page, params.pageSize),
+    [page, params.dir, params.pageSize, params.sort, rows],
   )
 
   return (
     <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
-      {totals && items.length > 0 ? (
-        <PanelSummaryCard
-          title="Tổng hợp BTP chờ vào đá"
-          stats={[
-            { label: 'Số lượng ( SL )', value: formatQty(totals.qty) },
-            { label: 'Trọng lượng', value: formatQty(totals.weight) },
-            {
-              label: filtering ? 'Số dòng (đang lọc)' : 'Số dòng',
-              value: String(filtering ? rows.length : items.length),
-            },
-          ]}
-        />
-      ) : null}
-
       <DataTable
         columns={columns}
-        rows={paginate(sortRows(rows, params.sort, params.dir), page, params.pageSize)}
+        rows={pagedRows}
         rowKey={(row) => row.id}
-        loading={list.isFetching}
+        loading={list.isLoading}
         errorText={list.error instanceof Error ? list.error.message : undefined}
         emptyText={filtering ? 'Không có dòng khớp bộ lọc.' : 'Chưa có dòng BTP chờ vào đá.'}
         variant="grid"
-        fixedLayout
-        minWidth={1240}
+        minWidth={1100}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -137,15 +260,17 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
         onPageSizeChange={table.setPageSize}
         sx={{ flex: { md: 1 } }}
         toolbar={
-          <PanelToolbar
-            search={params.search}
-            onSearchChange={table.setSearch}
-            searchPlaceholder="Tìm tên, thợ nguội, ghi chú..."
-            filterCount={table.filterCount}
-            onClearFilters={table.reset}
-            createLabel="Thêm dòng"
-            onCreate={dialog.openCreate}
-          />
+          <>
+            {filtering ? (
+              <Button size="small" onClick={table.reset}>
+                Xóa lọc
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button variant="contained" onClick={dialog.openCreate}>
+              Thêm dòng
+            </Button>
+          </>
         }
       />
 
@@ -174,84 +299,6 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       />
     </Stack>
   )
-}
-
-function btpColumns({
-  onView,
-  onEdit,
-  onDelete,
-}: {
-  onView: (row: BtpWaitingRow) => void
-  onEdit: (row: BtpWaitingRow) => void
-  onDelete: (row: BtpWaitingRow) => void
-}): Column<BtpWaitingRow>[] {
-  return [
-    {
-      key: 'receivedAt',
-      card: 'meta',
-      header: 'Ngày nhập',
-      width: 108,
-      sortable: true,
-      render: (row) => formatStockedDate(row.receivedAt),
-    },
-    {
-      key: 'craftsmanName',
-      card: 'meta',
-      header: 'Thợ nguội',
-      width: 140,
-      ellipsis: true,
-      sortable: true,
-      render: (row) => row.craftsmanName || '—',
-    },
-    { key: 'name', card: 'title', header: 'Tên bán thành phẩm', ellipsis: true, sortable: true },
-    { key: 'unit', header: 'Đơn vị tính', width: 88 },
-    {
-      key: 'qty',
-      header: 'Số lượng',
-      width: 104,
-      numeric: true,
-      sortable: true,
-      render: (row) => formatQty(row.qty),
-    },
-    {
-      key: 'weight',
-      header: 'Trọng lượng',
-      width: 108,
-      numeric: true,
-      sortable: true,
-      render: (row) => formatQty(row.weight),
-    },
-    {
-      key: 'note',
-      header: 'Ghi chú',
-      width: 180,
-      ellipsis: true,
-      render: (row) => row.note ?? '—',
-    },
-    {
-      key: 'enteredBy',
-      header: 'Người nhập',
-      width: 120,
-      ellipsis: true,
-      sortable: true,
-      render: (row) => row.enteredBy ?? '—',
-    },
-    {
-      key: 'actions',
-      card: 'actions',
-      header: 'Hành động',
-      width: 120,
-      align: 'center',
-      cellSx: { overflow: 'visible' },
-      render: (row) => (
-        <RowActions
-          onView={() => onView(row)}
-          onEdit={() => onEdit(row)}
-          onDelete={() => onDelete(row)}
-        />
-      ),
-    },
-  ]
 }
 
 type BtpFormValues = {

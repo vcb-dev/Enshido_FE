@@ -15,24 +15,36 @@ export function MaterialField({
   kind,
   readOnly,
   materials,
+  loading,
+  noun,
+  nameLabel,
+  createLabel,
+  allowCreate,
   onSelect,
 }: {
   control: Control<any>
   kind: 'create' | 'edit' | 'view'
   readOnly: boolean
   materials: StockMaterialOption[]
+  loading?: boolean
+  noun?: string
+  nameLabel?: string
+  createLabel?: string
+  allowCreate?: boolean
   onSelect: (material: StockMaterialOption | null) => void
 }) {
+  const fieldLabel = nameLabel ?? (noun ? `Tên ${noun}` : 'Tên NVL')
   const { field, fieldState } = useController({
     name: 'name',
     control,
     rules: {
-      required: 'Chọn tên hàng từ Tồn',
+      required: allowCreate ? `${fieldLabel} không được trống` : `Chọn ${fieldLabel} từ Tồn`,
       validate: (value, formValues: any) =>
+        allowCreate ||
         kind !== 'create' ||
         Boolean(formValues.materialId) ||
         String(value ?? '').trim().length === 0 ||
-        'Chọn tên hàng từ danh sách, không nhập tự do',
+        `Chọn ${fieldLabel} từ danh sách, không nhập tự do`,
     },
   })
 
@@ -42,6 +54,11 @@ export function MaterialField({
       materials={materials}
       readOnly={readOnly}
       keepMaterialOnType={kind === 'edit'}
+      loading={loading}
+      noun={noun}
+      nameLabel={fieldLabel}
+      createLabel={createLabel}
+      allowCreate={allowCreate}
       errorText={fieldState.error?.message}
       onBlur={field.onBlur}
       onChange={field.onChange}

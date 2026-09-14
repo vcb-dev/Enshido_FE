@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useState, type ReactNode } from 'react'
 import {
   AppBar,
   Avatar,
@@ -8,6 +8,7 @@ import {
   Divider,
   Drawer,
   IconButton,
+  LinearProgress,
   List,
   ListItemButton,
   ListItemIcon,
@@ -23,6 +24,7 @@ import TableRowsIcon from '@mui/icons-material/TableRows'
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
 import SettingsIcon from '@mui/icons-material/Settings'
 import PlaceIcon from '@mui/icons-material/Place'
+import CategoryIcon from '@mui/icons-material/Category'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
@@ -32,7 +34,8 @@ import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
-import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath } from '../warehouses/catalog'
+import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
+import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
 
@@ -51,6 +54,11 @@ export function AppShell() {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const canManageUsers = can(user, Permission.USERS_MANAGE)
+  const canSeeConfig =
+    can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
+  const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
+  const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
+  const showKho = hasAnyWarehouse(user)
 
   // Đóng drawer sau mỗi lần điều hướng — kể cả từ breadcrumb hay tab, không chỉ
   // từ menu bên trong drawer.
@@ -136,7 +144,13 @@ export function AppShell() {
             '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' },
           }}
         >
-          <DrawerNav canManageUsers={canManageUsers} />
+          <DrawerNav
+            canManageUsers={canManageUsers}
+            canSeeConfig={canSeeConfig}
+            showDashboard={showDashboard}
+            showKho={showKho}
+            warehouses={warehouses}
+          />
         </Drawer>
         <Drawer
           variant="permanent"
@@ -151,7 +165,13 @@ export function AppShell() {
             },
           }}
         >
-          <DrawerNav canManageUsers={canManageUsers} />
+          <DrawerNav
+            canManageUsers={canManageUsers}
+            canSeeConfig={canSeeConfig}
+            showDashboard={showDashboard}
+            showKho={showKho}
+            warehouses={warehouses}
+          />
         </Drawer>
       </Box>
 
@@ -170,7 +190,9 @@ export function AppShell() {
       >
         <Toolbar variant="dense" sx={{ flexShrink: 0 }} />
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          <Outlet />
+          <Suspense fallback={<LinearProgress />}>
+            <Outlet />
+          </Suspense>
         </Box>
       </Box>
     </Box>
@@ -209,7 +231,19 @@ function NavItem({
   )
 }
 
-function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
+function DrawerNav({
+  canManageUsers,
+  canSeeConfig,
+  showDashboard,
+  showKho,
+  warehouses,
+}: {
+  canManageUsers: boolean
+  canSeeConfig: boolean
+  showDashboard: boolean
+  showKho: boolean
+  warehouses: WarehouseDef[]
+}) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Toolbar sx={{ gap: 1, px: 2 }}>
@@ -225,31 +259,44 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
       </Toolbar>
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
-        <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
+        {showDashboard ? (
+          <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
+        ) : null}
         <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
-        <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
-        <List dense disablePadding sx={{ pl: 1.5 }}>
-          {WAREHOUSES.map((w) =>
-            w.sections ? (
-              <WarehouseSectionMenu key={w.code} warehouse={w} />
-            ) : (
+        {showKho ? (
+          <>
+            <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
+            <List dense disablePadding sx={{ pl: 1.5 }}>
+              {warehouses.map((w) =>
+                w.sections ? (
+                  <WarehouseSectionMenu key={w.code} warehouse={w} />
+                ) : (
+                  <NavItem
+                    key={w.code}
+                    to={warehousePath(w)}
+                    icon={<PalletIcon fontSize="small" />}
+                    label={w.shortName}
+                    end
+                  />
+                ),
+              )}
               <NavItem
-                key={w.code}
-                to={warehousePath(w)}
-                icon={<PalletIcon fontSize="small" />}
-                label={w.shortName}
-                end
+                to="/finished-goods"
+                icon={<Inventory2Icon fontSize="small" />}
+                label="Kho thành phẩm"
+                end={false}
               />
-            ),
-          )}
+            </List>
+          </>
+        ) : (
           <NavItem
             to="/finished-goods"
             icon={<Inventory2Icon fontSize="small" />}
             label="Kho thành phẩm"
             end={false}
           />
-        </List>
-        <ConfigMenu />
+        )}
+        {canSeeConfig ? <ConfigMenu /> : null}
         {canManageUsers ? (
           <NavItem to="/users" icon={<PeopleIcon fontSize="small" />} label="Nhân sự" />
         ) : null}
@@ -259,9 +306,12 @@ function DrawerNav({ canManageUsers }: { canManageUsers: boolean }) {
 }
 
 function ConfigMenu() {
+  const { user } = useAuth()
   const location = useLocation()
   const onThis = location.pathname.startsWith('/settings')
   const [open, setOpen] = useState(onThis)
+  const showLocations = can(user, Permission.SCREEN_LOCATIONS)
+  const showCatalogs = can(user, Permission.SCREEN_CATALOGS)
 
   useEffect(() => {
     if (onThis) setOpen(true)
@@ -282,18 +332,27 @@ function ConfigMenu() {
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          <NavItem
-            to="/settings/locations"
-            icon={<PlaceIcon fontSize="small" />}
-            label="Vị trí"
-          />
+          {showLocations ? (
+            <NavItem
+              to="/settings/locations"
+              icon={<PlaceIcon fontSize="small" />}
+              label="Vị trí"
+            />
+          ) : null}
+          {showCatalogs ? (
+            <NavItem
+              to="/settings/catalogs"
+              icon={<CategoryIcon fontSize="small" />}
+              label="Danh mục"
+            />
+          ) : null}
         </List>
       </Collapse>
     </Box>
   )
 }
 
-function WarehouseSectionMenu({ warehouse }: { warehouse: (typeof WAREHOUSES)[number] }) {
+function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
   const location = useLocation()
   const onThis = location.pathname.startsWith(`/warehouses/${warehouse.code}`)
   const [open, setOpen] = useState(onThis)

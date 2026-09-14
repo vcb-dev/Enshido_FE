@@ -2,17 +2,25 @@ export type RoleCode = 'ADMIN' | 'USER'
 
 export const Permission = {
   USERS_MANAGE: 'users.manage',
+  SCREEN_DASHBOARD: 'screen.dashboard',
+  SCREEN_WAREHOUSE_NVL_CHINH: 'screen.warehouse.nvl-chinh',
+  SCREEN_WAREHOUSE_BTP: 'screen.warehouse.btp-cho-vao-da',
+  SCREEN_WAREHOUSE_TIEU_HAO: 'screen.warehouse.nvl-tieu-hao',
+  SCREEN_LOCATIONS: 'screen.locations',
+  SCREEN_CATALOGS: 'screen.catalogs',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]
 
+export const ALL_PERMISSIONS: PermissionCode[] = Object.values(Permission)
+
 export const ROLE_LABELS: Record<RoleCode, string> = {
   ADMIN: 'Admin',
-  USER: 'User',
+  USER: 'Nhân viên',
 }
 
 const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
-  ADMIN: Object.values(Permission),
+  ADMIN: ALL_PERMISSIONS,
   USER: [],
 }
 
@@ -25,22 +33,25 @@ export function permissionsForRoles(
   )
 }
 
+export type PermissionUser = {
+  roleCode?: string
+  extraRoles?: RoleCode[]
+  permissions?: string[]
+}
+
 export function can(
-  roleOrUser:
-    | RoleCode
-    | { roleCode?: RoleCode; extraRoles?: RoleCode[]; permissions?: string[] }
-    | undefined
-    | null,
+  roleOrUser: RoleCode | PermissionUser | undefined | null,
   permission: PermissionCode,
 ) {
   if (!roleOrUser) return false
   if (typeof roleOrUser === 'object') {
-    if (roleOrUser.permissions?.length) {
+    if (roleOrUser.roleCode === 'ADMIN') return true
+    if (Array.isArray(roleOrUser.permissions)) {
       return roleOrUser.permissions.includes(permission)
     }
     if (roleOrUser.roleCode) {
       return permissionsForRoles(
-        roleOrUser.roleCode,
+        roleOrUser.roleCode as RoleCode,
         roleOrUser.extraRoles ?? [],
       ).includes(permission)
     }

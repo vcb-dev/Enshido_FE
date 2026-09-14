@@ -1,6 +1,10 @@
 import type { ReactNode, Ref } from 'react'
-import { Autocomplete, TextField } from '@mui/material'
-import type { SxProps, Theme } from '@mui/material'
+import { Autocomplete, TextField, createFilterOptions } from '@mui/material'
+import type { FilterOptionsState, SxProps, Theme } from '@mui/material'
+
+function capFilterOptions<T>(options: T[], state: FilterOptionsState<T>): T[] {
+  return createFilterOptions<T>({ limit: 50 })(options, state)
+}
 
 export type AutocompleteInputProps<T> = {
   options: T[]
@@ -46,7 +50,7 @@ export function AutocompleteInput<T>({
   sx,
 }: AutocompleteInputProps<T>) {
   return (
-    <Autocomplete
+    <Autocomplete<T>
       options={options}
       value={value}
       onChange={(_, next) => onChange(next)}
@@ -61,6 +65,7 @@ export function AutocompleteInput<T>({
       noOptionsText={noOptionsText ?? 'Không có dữ liệu'}
       autoHighlight
       openOnFocus
+      filterOptions={capFilterOptions}
       size="small"
       fullWidth
       sx={sx}
