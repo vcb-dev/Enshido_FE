@@ -38,7 +38,10 @@ export const theme = createTheme({
       styleOverrides: {
         html: { height: '100%', overflow: 'hidden' },
         body: { height: '100%', overflow: 'hidden', backgroundColor: '#eef1f4' },
-        '#root': { height: '100%' },
+        // dvh thay vì 100%: trên iOS Safari chiều cao 100% tính theo viewport lớn
+        // nên ~60px cuối bị cắt mà không cuộn tới được. Trang đã khoá cuộn nên
+        // thanh URL không bao giờ thu lại → dvh ổn định, không giật layout.
+        '#root': { height: '100dvh' },
       },
     },
     MuiButton: {

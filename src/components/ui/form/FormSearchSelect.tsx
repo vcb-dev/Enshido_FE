@@ -1,5 +1,6 @@
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
+import type { SxProps, Theme } from '@mui/material'
 import { SearchSelect } from '../../../warehouses/SearchSelect'
 import type { SearchSelectOption } from '../../../warehouses/SearchSelect'
 import { withRequiredRule } from './field'
@@ -17,7 +18,9 @@ export type FormSearchSelectProps<T extends FieldValues> = FormFieldBaseProps<T>
   allowClear?: boolean
   noOptionsText?: string
   size?: 'small' | 'medium'
-  sx?: object
+  /** Mặc định `false`: field form luôn nằm trong Dialog nên popper cần portal. */
+  disablePortal?: boolean
+  sx?: SxProps<Theme>
 }
 
 /**
@@ -33,6 +36,7 @@ export function FormSearchSelect<T extends FieldValues>({
   rules,
   required,
   size = 'small',
+  disablePortal = false,
   ...props
 }: FormSearchSelectProps<T>) {
   const { field, fieldState } = useController({
@@ -45,6 +49,7 @@ export function FormSearchSelect<T extends FieldValues>({
     <SearchSelect
       {...props}
       size={size}
+      disablePortal={disablePortal}
       required={required}
       valueId={String(field.value ?? '')}
       onChange={field.onChange}

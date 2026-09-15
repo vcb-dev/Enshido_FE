@@ -17,6 +17,7 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
+import LogoutIcon from '@mui/icons-material/Logout'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
@@ -27,6 +28,8 @@ import CategoryIcon from '@mui/icons-material/Category'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import Inventory2Icon from '@mui/icons-material/Inventory2'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -50,6 +53,7 @@ function initials(name?: string, username?: string) {
 export function AppShell() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const canManageUsers = can(user, Permission.USERS_MANAGE)
   const canSeeConfig =
@@ -57,6 +61,10 @@ export function AppShell() {
   const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
+
+  // Đóng drawer sau mỗi lần điều hướng — kể cả từ breadcrumb hay tab, không chỉ
+  // từ menu bên trong drawer.
+  useEffect(() => setMobileOpen(false), [location.pathname])
 
   async function onLogout() {
     await logout()
@@ -80,8 +88,13 @@ export function AppShell() {
           >
             <TableRowsIcon />
           </IconButton>
-          <Typography variant="subtitle1" sx={{ flex: 1 }}>
-            Hệ thống quản lý xưởng
+          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0 }}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              Hệ thống quản lý xưởng
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              Enshido
+            </Box>
           </Typography>
 
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
@@ -104,9 +117,20 @@ export function AppShell() {
                 {user?.roleLabel ?? user?.roleCode}
               </Typography>
             </Box>
-            <Button variant="outlined" onClick={() => void onLogout()}>
+            <Button
+              variant="outlined"
+              onClick={() => void onLogout()}
+              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+            >
               Đăng xuất
             </Button>
+            <IconButton
+              aria-label="Đăng xuất"
+              onClick={() => void onLogout()}
+              sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+            >
+              <LogoutIcon fontSize="small" />
+            </IconButton>
           </Stack>
         </Toolbar>
       </AppBar>
@@ -157,7 +181,7 @@ export function AppShell() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 2,
+          p: { xs: 1.5, md: 2 },
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
           minWidth: 0,
           height: '100%',
@@ -246,9 +270,10 @@ function DrawerNav({
         {showDashboard ? (
           <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         ) : null}
+        <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
         {showKho ? (
           <>
-            <NavItem to="/kho" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
+            <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
             <List dense disablePadding sx={{ pl: 1.5 }}>
               {warehouses.map((w) =>
                 w.sections ? (
@@ -263,9 +288,22 @@ function DrawerNav({
                   />
                 ),
               )}
+              <NavItem
+                to="/finished-goods"
+                icon={<Inventory2Icon fontSize="small" />}
+                label="Kho thành phẩm"
+                end={false}
+              />
             </List>
           </>
-        ) : null}
+        ) : (
+          <NavItem
+            to="/finished-goods"
+            icon={<Inventory2Icon fontSize="small" />}
+            label="Kho thành phẩm"
+            end={false}
+          />
+        )}
         {canSeeConfig ? <ConfigMenu /> : null}
         {canManageUsers ? (
           <NavItem to="/users" icon={<PeopleIcon fontSize="small" />} label="Nhân sự" />
@@ -278,7 +316,7 @@ function DrawerNav({
 function ConfigMenu() {
   const { user } = useAuth()
   const location = useLocation()
-  const onThis = location.pathname.startsWith('/cau-hinh')
+  const onThis = location.pathname.startsWith('/settings')
   const [open, setOpen] = useState(onThis)
   const showLocations = can(user, Permission.SCREEN_LOCATIONS)
   const showCatalogs = can(user, Permission.SCREEN_CATALOGS)
@@ -304,14 +342,14 @@ function ConfigMenu() {
         <List dense disablePadding sx={{ pl: 2 }}>
           {showLocations ? (
             <NavItem
-              to="/cau-hinh/vi-tri"
+              to="/settings/locations"
               icon={<PlaceIcon fontSize="small" />}
               label="Vị trí"
             />
           ) : null}
           {showCatalogs ? (
             <NavItem
-              to="/cau-hinh/danh-muc"
+              to="/settings/catalogs"
               icon={<CategoryIcon fontSize="small" />}
               label="Danh mục"
             />
@@ -324,7 +362,7 @@ function ConfigMenu() {
 
 function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
   const location = useLocation()
-  const onThis = location.pathname.startsWith(`/kho/${warehouse.code}`)
+  const onThis = location.pathname.startsWith(`/warehouses/${warehouse.code}`)
   const [open, setOpen] = useState(onThis)
 
   useEffect(() => {

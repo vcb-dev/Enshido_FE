@@ -49,7 +49,6 @@ export function MaterialNameField({
       <TextField
         label={fieldLabel}
         value={value || '—'}
-        required
         disabled
         sx={sx}
       />

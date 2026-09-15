@@ -1,6 +1,6 @@
 export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao'
 
-export type WarehouseSectionCode = 'ton' | 'nhap' | 'xuat'
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -11,10 +11,17 @@ export type WarehouseDef = {
 }
 
 export const WAREHOUSE_SECTIONS: Array<{ code: WarehouseSectionCode; name: string }> = [
-  { code: 'ton', name: 'Tồn' },
-  { code: 'nhap', name: 'Nhập' },
-  { code: 'xuat', name: 'Xuất' },
+  { code: 'stock', name: 'Tồn' },
+  { code: 'inbound', name: 'Nhập' },
+  { code: 'outbound', name: 'Xuất' },
 ]
+
+/** Mã mục kho trên URL cũ (/kho/nvl-chinh/ton) → mã hiện tại. */
+export const LEGACY_SECTION_CODES: Record<string, WarehouseSectionCode> = {
+  ton: 'stock',
+  nhap: 'inbound',
+  xuat: 'outbound',
+}
 
 export const WAREHOUSES: WarehouseDef[] = [
   {
@@ -51,6 +58,8 @@ export type StockProfile = {
   showBodyMetal: boolean
   showProductKind: boolean
   showBtpCategory: boolean
+  /// Màu xi, màu đá, size, ảnh — thông tin sản phẩm BTP lấy sang Đơn BTP.
+  showProductInfo: boolean
   showNvlCategory: boolean
   showStatus: boolean
   typeLabel: string
@@ -89,6 +98,7 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showBodyMetal: false,
   showProductKind: false,
   showBtpCategory: false,
+  showProductInfo: false,
   showNvlCategory: true,
   showStatus: true,
   typeLabel: 'Chất loại',
@@ -104,6 +114,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showBodyMetal: true,
     showProductKind: true,
     showBtpCategory: true,
+    showProductInfo: true,
     showNvlCategory: false,
     showStatus: false,
     typeLabel: 'Chất loại',
@@ -127,6 +138,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showBodyMetal: false,
     showProductKind: false,
     showBtpCategory: false,
+    showProductInfo: false,
     showNvlCategory: false,
     showStatus: true,
     typeLabel: 'Danh mục',
@@ -185,36 +197,6 @@ export const CONSUMABLE_CATEGORIES: Array<{ code: string; name: string }> = [
   { code: 'nvl-chinh', name: 'NVL chính' },
 ]
 
-export type StockItem = {
-  sku: string
-  name: string
-  unit: string
-  qty: number
-  note?: string
-}
-
-export type StockMove = {
-  docNo: string
-  date: string
-  sku: string
-  name: string
-  qty: number
-  unit: string
-  note?: string
-}
-
-export const MOCK_STOCK: Record<string, StockItem[]> = {
-  'nvl-tieu-hao': [
-    { sku: 'CS-GLUE', name: 'Keo gắn', unit: 'chai', qty: 0 },
-    { sku: 'CS-SAND', name: 'Giấy nhám', unit: 'tờ', qty: 0 },
-    { sku: 'CS-POL', name: 'Sáp đánh bóng', unit: 'thỏi', qty: 0 },
-  ],
-}
-
-export const MOCK_IN: Record<string, StockMove[]> = {}
-
-export const MOCK_OUT: Record<string, StockMove[]> = {}
-
 export function warehouseByCode(code: string) {
   return WAREHOUSES.find((w) => w.code === code)
 }
@@ -230,7 +212,7 @@ export function stockWarehouseCode(warehouse: WarehouseDef) {
 
 export function warehousePath(warehouse: WarehouseDef, section?: WarehouseSectionCode) {
   if (warehouse.sections) {
-    return `/kho/${warehouse.code}/${section ?? 'ton'}`
+    return `/warehouses/${warehouse.code}/${section ?? 'stock'}`
   }
-  return `/kho/${warehouse.code}`
+  return `/warehouses/${warehouse.code}`
 }

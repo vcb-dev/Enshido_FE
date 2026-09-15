@@ -13,18 +13,20 @@ export function canAccessPath(
   if (p === '/' || p === '') {
     return can(user, Permission.SCREEN_DASHBOARD) || firstAllowedPath(user) === '/'
   }
-  if (p === '/kho') return hasAnyWarehouse(user)
-  if (p.startsWith('/kho/')) {
+  if (p === '/warehouses') return hasAnyWarehouse(user)
+  if (p.startsWith('/warehouses/')) {
     const code = p.split('/')[2] ?? ''
     return canSeeWarehouse(user, code)
   }
-  if (p === '/cau-hinh') {
+  if (p === '/orders' || p.startsWith('/orders/')) return true
+  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return true
+  if (p === '/settings') {
     return can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   }
-  if (p.startsWith('/cau-hinh/vi-tri')) {
+  if (p.startsWith('/settings/locations')) {
     return can(user, Permission.SCREEN_LOCATIONS)
   }
-  if (p.startsWith('/cau-hinh/danh-muc')) return can(user, Permission.SCREEN_CATALOGS)
+  if (p.startsWith('/settings/catalogs')) return can(user, Permission.SCREEN_CATALOGS)
   if (p === '/users') return can(user, Permission.USERS_MANAGE)
   return false
 }
