@@ -20,6 +20,7 @@ import {
   type CreateOutboundPayload,
   type DirectoryUser,
   type LookupItem,
+  type OutboundResponse,
   type OutboundRow,
   type StockRow,
 } from '../api/inventory'
@@ -51,8 +52,10 @@ import {
   hasActiveCatalogFilters,
   headerTotal,
   matchesCatalogFilters,
+  removeMoveList,
   sumMoveTotals,
   uniqueFilterOptions,
+  upsertMoveList,
 } from './stockFilters'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 
@@ -216,32 +219,35 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     ) || hasActiveCatalogFilters(catalogFilterParams)
   const totals = filtering ? sumMoveTotals(rows) : apiTotals
 
-  const invalidateRelated = () =>
-    Promise.all(
-      [
-        ['warehouse-outbounds', warehouseCode],
-        ['warehouse-stock', warehouseCode],
-      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    )
-
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
       id
         ? updateWarehouseOutboundApi(warehouseCode, id, payload)
         : createWarehouseOutboundApi(warehouseCode, payload),
-    onSuccess: async (_row, input) => {
+    onSuccess: (row, input) => {
       toast.success(
         input.id ? `Đã cập nhật ${profile.noun} xuất kho` : `Đã ghi phiếu xuất`,
       )
       dialog.close()
+      queryClient.setQueryData(
+        ['warehouse-outbounds', warehouseCode],
+        (current: OutboundResponse | undefined) => upsertMoveList(current, row, Boolean(input.id)),
+      )
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      await invalidateRelated()
+      void queryClient.invalidateQueries({
+        queryKey: ['warehouse-stock', warehouseCode],
+        refetchType: 'none',
+      })
       const dest = input.payload.destWarehouseCode
       if (dest && dest !== warehouseCode) {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', dest] }),
-          queryClient.invalidateQueries({ queryKey: ['warehouse-stock', dest] }),
-        ])
+        void queryClient.invalidateQueries({
+          queryKey: ['warehouse-inbounds', dest],
+          refetchType: 'none',
+        })
+        void queryClient.invalidateQueries({
+          queryKey: ['warehouse-stock', dest],
+          refetchType: 'none',
+        })
       }
     },
     onError: (error: Error) => toast.error(error.message),
@@ -250,10 +256,16 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const del = useDeleteRowDialog({
     mutationFn: (row: OutboundRow) => deleteWarehouseOutboundApi(warehouseCode, row.id),
     successMessage: 'Đã xóa phiếu xuất',
-    invalidateKeys: [
-      ['warehouse-outbounds', warehouseCode],
-      ['warehouse-stock', warehouseCode],
-    ],
+    onRemoved: (row) => {
+      queryClient.setQueryData(
+        ['warehouse-outbounds', warehouseCode],
+        (current: OutboundResponse | undefined) => removeMoveList(current, row.id),
+      )
+      void queryClient.invalidateQueries({
+        queryKey: ['warehouse-stock', warehouseCode],
+        refetchType: 'none',
+      })
+    },
   })
 
   const columns = useMemo(() => {

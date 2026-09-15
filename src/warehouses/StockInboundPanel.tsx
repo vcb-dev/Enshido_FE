@@ -17,6 +17,7 @@ import {
   qtyFromApi,
   updateWarehouseInboundApi,
   type CreateInboundPayload,
+  type InboundResponse,
   type InboundRow,
   type LookupItem,
   type StockRow,
@@ -50,8 +51,10 @@ import {
   hasActiveCatalogFilters,
   headerTotal,
   matchesCatalogFilters,
+  removeMoveList,
   sumMoveTotals,
   uniqueFilterOptions,
+  upsertMoveList,
 } from './stockFilters'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 
@@ -218,28 +221,25 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     ) || hasActiveCatalogFilters(catalogFilterParams)
   const totals = filtering ? sumMoveTotals(rows) : apiTotals
 
-  const invalidateRelated = () =>
-    Promise.all(
-      [
-        ['warehouse-inbounds', warehouseCode],
-        ['warehouse-stock', warehouseCode],
-        ['warehouse-locations', warehouseCode],
-      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    )
-
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: CreateInboundPayload }) =>
       id
         ? updateWarehouseInboundApi(warehouseCode, id, payload)
         : createWarehouseInboundApi(warehouseCode, payload),
-    onSuccess: async (_row, input) => {
+    onSuccess: (row, input) => {
       toast.success(
         input.id ? `Đã cập nhật ${profile.noun} nhập kho` : `Đã thêm ${profile.noun}`,
       )
       dialog.close()
-      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
+      queryClient.setQueryData(
+        ['warehouse-inbounds', warehouseCode],
+        (current: InboundResponse | undefined) => upsertMoveList(current, row, Boolean(input.id)),
+      )
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      await invalidateRelated()
+      void queryClient.invalidateQueries({
+        queryKey: ['warehouse-stock', warehouseCode],
+        refetchType: 'none',
+      })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -247,11 +247,16 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   const del = useDeleteRowDialog({
     mutationFn: (row: InboundRow) => deleteWarehouseInboundApi(warehouseCode, row.id),
     successMessage: 'Đã xóa phiếu nhập',
-    invalidateKeys: [
-      ['warehouse-inbounds', warehouseCode],
-      ['warehouse-stock', warehouseCode],
-      ['warehouse-locations', warehouseCode],
-    ],
+    onRemoved: (row) => {
+      queryClient.setQueryData(
+        ['warehouse-inbounds', warehouseCode],
+        (current: InboundResponse | undefined) => removeMoveList(current, row.id),
+      )
+      void queryClient.invalidateQueries({
+        queryKey: ['warehouse-stock', warehouseCode],
+        refetchType: 'none',
+      })
+    },
   })
 
   const columns = useMemo(() => {

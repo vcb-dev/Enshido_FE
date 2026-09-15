@@ -118,3 +118,23 @@ export function sumMoveTotals(rows: Array<{ qty: string; amount: string }>) {
     amount: String(rows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0)),
   }
 }
+
+export function upsertMoveList<
+  T extends { id: string; qty: string; amount: string },
+  L extends { items: T[]; totals: { qty: string; amount: string } },
+>(current: L | undefined, row: T, replace: boolean): L | undefined {
+  if (!current) return current
+  const items = replace
+    ? current.items.map((item) => (item.id === row.id ? row : item))
+    : [...current.items, row]
+  return { ...current, items, totals: sumMoveTotals(items) }
+}
+
+export function removeMoveList<
+  T extends { id: string; qty: string; amount: string },
+  L extends { items: T[]; totals: { qty: string; amount: string } },
+>(current: L | undefined, id: string): L | undefined {
+  if (!current) return current
+  const items = current.items.filter((item) => item.id !== id)
+  return { ...current, items, totals: sumMoveTotals(items) }
+}

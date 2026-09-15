@@ -99,12 +99,11 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       id
         ? updateBtpWaitingApi(warehouseCode, id, payload)
         : createBtpWaitingApi(warehouseCode, payload),
-    onSuccess: async (_row, input) => {
+    onSuccess: (_row, input) => {
       toast.success(input.id ? 'Đã cập nhật dòng BTP' : 'Đã thêm dòng BTP')
       dialog.close()
-      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      await queryClient.invalidateQueries({ queryKey: ['btp-waiting', warehouseCode] })
+      void queryClient.invalidateQueries({ queryKey: ['btp-waiting', warehouseCode] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
