@@ -135,9 +135,13 @@ export function replaceMoveId<
   L extends { items: T[]; totals: { qty: string; amount: string } },
 >(current: L | undefined, fromId: string, row: T): L | undefined {
   if (!current) return current
-  const items = current.items.some((item) => item.id === fromId)
-    ? current.items.map((item) => (item.id === fromId ? row : item))
-    : [...current.items, row]
+  const targetId = current.items.some((item) => item.id === fromId)
+    ? fromId
+    : current.items.some((item) => item.id === row.id)
+      ? row.id
+      : null
+  if (!targetId) return current
+  const items = current.items.map((item) => (item.id === targetId ? row : item))
   return { ...current, items, totals: sumMoveTotals(items) }
 }
 
