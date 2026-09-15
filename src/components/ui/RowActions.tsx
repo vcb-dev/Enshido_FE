@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 import { IconButton, Stack, Tooltip } from '@mui/material'
-import { EyeIcon, PencilIcon, TrashIcon } from './icons'
+import { EyeIcon, LockIcon, PencilIcon, TrashIcon, UnlockIcon } from './icons'
 
 export type RowActionsProps = {
   onView?: () => void
   onEdit?: () => void
+  onLock?: () => void
+  locked?: boolean
   onDelete?: () => void
   /** Khoá nút xóa, vd: dòng đang được dùng ở nơi khác. */
   deleteDisabled?: boolean
@@ -26,10 +28,12 @@ function WithTooltip({
   return <Tooltip title={title}>{disabled ? <span>{children}</span> : <>{children}</>}</Tooltip>
 }
 
-/** Cụm nút Xem / Sửa / Xóa ở cột "Hành động"; nút nào không truyền handler thì ẩn. */
+/** Cụm nút Xem / Sửa / Khóa / Xóa ở cột "Hành động"; nút nào không truyền handler thì ẩn. */
 export function RowActions({
   onView,
   onEdit,
+  onLock,
+  locked,
   onDelete,
   deleteDisabled,
   titles,
@@ -49,6 +53,15 @@ export function RowActions({
             <PencilIcon />
           </IconButton>
         </WithTooltip>
+      ) : null}
+      {onLock ? (
+        <IconButton
+          size="small"
+          aria-label={locked ? 'Mở khóa' : 'Khóa tài khoản'}
+          onClick={onLock}
+        >
+          {locked ? <UnlockIcon /> : <LockIcon />}
+        </IconButton>
       ) : null}
       {onDelete ? (
         <WithTooltip title={titles?.delete} disabled={deleteDisabled}>

@@ -1,7 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
+  Button,
+  Collapse,
   Divider,
   LinearProgress,
   Paper,
@@ -20,6 +22,7 @@ import {
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material'
 import type { Breakpoint } from '@mui/material/styles'
+import TuneIcon from '@mui/icons-material/Tune'
 import { useIsCardMode, useIsCompact, useIsMobile } from '../../hooks/useBreakpoint'
 import type { SortDir } from '../../hooks/useTableParams'
 
@@ -58,6 +61,8 @@ export type Column<T> = {
   card?: CardRole
   /** Nhãn trong thẻ; bỏ trống thì ghép từ `group.label` + `header`. */
   cardLabel?: ReactNode
+  /** Ô lọc trên hàng filter, cùng cột với tiêu đề. */
+  filter?: ReactNode
 }
 
 /**
@@ -132,6 +137,18 @@ const GRID_TABLE_SX = {
     px: 1,
   },
   '& .MuiTableCell-head': { whiteSpace: 'nowrap' },
+  '& .col-filter-row .MuiTableCell-root': {
+    border: '0 !important',
+    borderTop: '0 !important',
+    bgcolor: '#fff !important',
+    backgroundColor: '#fff !important',
+    backgroundImage: 'none',
+    py: '4px !important',
+    px: '4px !important',
+    whiteSpace: 'normal',
+    overflow: 'visible',
+    boxShadow: 'none',
+  },
 } as const
 
 function defaultCell(value: unknown): ReactNode {
@@ -187,6 +204,7 @@ export function DataTable<T>({
   const rowCount = total ?? rows.length
   const showSkeleton = loading && rows.length === 0
   const colCount = columns.length + (showIndex ? 1 : 0)
+  const showFilterRow = columns.some((column) => column.filter != null)
 
   function cellContent(column: Column<T>, row: T, index: number): ReactNode {
     return column.render
@@ -262,7 +280,6 @@ export function DataTable<T>({
             gap: 1,
             alignItems: 'center',
             flexShrink: 0,
-            borderBottom: '1px solid #d5dbe0',
           }}
         >
           {toolbar}
@@ -274,6 +291,8 @@ export function DataTable<T>({
           {errorText}
         </Alert>
       ) : null}
+
+      {cardMode && showFilterRow ? <CardFilters columns={columns} /> : null}
 
       <Box
         sx={{
@@ -314,6 +333,14 @@ export function DataTable<T>({
             }}
           >
             <TableHead>
+              {showFilterRow ? (
+                <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
+                  {showIndex ? <TableCell /> : null}
+                  {columns.map((column) => (
+                    <TableCell key={column.key}>{column.filter}</TableCell>
+                  ))}
+                </TableRow>
+              ) : null}
               {grouped ? (
                 <>
                   <TableRow>
@@ -458,6 +485,43 @@ function cardLabelOf<T>(column: Column<T>): ReactNode {
  * không cột nào khai báo `title` thì cột đầu tiên được dùng làm tiêu đề, và cột
  * `actions` tự nhận vai trò nút hành động.
  */
+/** Chế độ thẻ không có hàng tiêu đề, nên ô lọc của từng cột gom vào một khối thu gọn. */
+function CardFilters<T>({ columns }: { columns: Column<T>[] }) {
+  const [open, setOpen] = useState(false)
+  const filterable = columns.filter((column) => column.filter != null)
+
+  return (
+    <Box sx={{ px: 1.5, pb: 1, flexShrink: 0 }}>
+      <Button
+        size="small"
+        startIcon={<TuneIcon fontSize="small" />}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? 'Ẩn bộ lọc' : 'Bộ lọc'}
+      </Button>
+      <Collapse in={open} unmountOnExit>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1,
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+            pt: 1,
+          }}
+        >
+          {filterable.map((column) => (
+            <Box key={column.key} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">
+                {column.cardLabel ?? column.header}
+              </Typography>
+              {column.filter}
+            </Box>
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  )
+}
+
 function CardList<T>({
   columns,
   rows,

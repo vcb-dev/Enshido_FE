@@ -5,6 +5,33 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Enshido | Quản lý xưởng sản xuất</title>
+    <script>
+      window.__ENSHIDO_SESSION__ = (function () {
+        if (document.cookie.indexOf('enshido_csrf=') === -1) {
+          return Promise.resolve(null)
+        }
+        return fetch('/api/auth/me', { credentials: 'include' }).then(function (res) {
+          if (res.ok) return res.json()
+          if (res.status !== 401) throw new Error('session')
+          var match = document.cookie.match(/(?:^|; )enshido_csrf=([^;]*)/)
+          var csrf = match ? decodeURIComponent(match[1]) : ''
+          return fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrf,
+            },
+            body: '{}',
+          }).then(function (refreshRes) {
+            if (!refreshRes.ok) throw new Error('session')
+            return refreshRes.json()
+          })
+        }).catch(function () {
+          return null
+        })
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
