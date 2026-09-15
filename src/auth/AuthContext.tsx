@@ -17,6 +17,8 @@ import {
 } from '../api/auth'
 import { clearCachedSession, hasCsrfCookie } from './session'
 import { sessionBoot } from './sessionBoot'
+import { visibleWarehouses } from './screens'
+import { prefetchWarehouseStock } from './prefetchWarehouse'
 
 type AuthContextValue = {
   user: AuthUser | null
@@ -52,6 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       void import('../pages/DashboardPage')
       void import('../pages/WarehousesPage')
+      prefetchWarehouseStock(
+        queryClient,
+        visibleWarehouses(session.user).map((warehouse) => warehouse.code),
+      )
     },
     [queryClient],
   )
