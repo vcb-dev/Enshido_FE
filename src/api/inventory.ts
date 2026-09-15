@@ -33,6 +33,7 @@ export type InventoryLookups = {
   bodyMetals?: LookupItem[]
   btpCategories?: LookupItem[]
   productKinds?: LookupItem[]
+  platingColors?: LookupItem[]
   users?: DirectoryUser[]
 }
 
@@ -79,12 +80,24 @@ export type StockRow = {
   bodyMetal: string | null
   productKindId: string | null
   productKind: string | null
+  /** Màu xi (kho BTP). Màu đá dùng `colorId`. */
+  platingColorId?: string | null
+  platingColor?: string | null
+  sizeLabel?: string | null
+  images?: MaterialImage[]
   classificationCode: ClassificationCode
   classification: string
   metalKind: MetalKindCode | null
   metalKindLabel: string | null
   availability: AvailabilityCode
   availabilityLabel: string
+}
+
+export type MaterialImage = {
+  url: string
+  publicId: string
+  width?: number | null
+  height?: number | null
 }
 
 export type StockTotals = {
@@ -266,6 +279,9 @@ export type UpdateStockPayload = {
   bodyMetalId?: string | null
   productKindId?: string | null
   btpCategoryId?: string | null
+  platingColorId?: string | null
+  sizeLabel?: string | null
+  images?: MaterialImage[]
   openingQty?: string
   openingAmount?: string
   stockUnitPrice?: string
@@ -402,6 +418,8 @@ export type OutboundRow = {
   materialId: string | null
   /** Mã đơn sản xuất dùng NVL này. */
   productionOrderCode: string | null
+  /** Phiếu do lên Đơn BTP tự tạo — chỉ sửa / xoá qua đơn. */
+  autoIssued?: boolean
   destWarehouseCode?: string | null
   destWarehouseName?: string | null
   priceBreakdown?: { qty: string; unitPrice: string; source: 'opening' | 'inbound' }[]

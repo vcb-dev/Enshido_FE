@@ -63,7 +63,8 @@ import {
   STAGES,
   STATUS_META,
 } from '../orders/catalog'
-import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
+import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
+import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import {
   CastingDialog,
@@ -104,6 +105,7 @@ export function ProductionOrderDetailPage() {
     (payload: UpsertProductionOrderPayload) => updateProductionOrderApi(code, payload),
     'Đã lưu đơn',
   )
+  const wasBtp = detail.data?.source === 'BTP'
   const casting = useOrderMutation(
     code,
     (payload: CastingPayload) => updateCastingApi(code, payload),
@@ -138,6 +140,7 @@ export function ProductionOrderDetailPage() {
     mutationFn: () => deleteProductionOrderApi(code),
     onSuccess: async () => {
       toast.success(`Đã xóa đơn ${code}`)
+      if (wasBtp) invalidateBtpStock(queryClient)
       await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
       navigate('/orders', { replace: true })
     },
@@ -172,7 +175,9 @@ export function ProductionOrderDetailPage() {
   const reworking = !isInStage(order.status)
   const startableStages =
     !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last.stage))
-  const castingReady = Boolean(order.castingSentDate && order.castingReturnedDate)
+  // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
+  const isBtp = order.source === 'BTP'
+  const castingReady = isBtp || Boolean(order.castingSentDate && order.castingReturnedDate)
   const canStart = order.status !== 'DELIVERED' && castingReady && !openEntry && startableStages.length > 0
   const startBlockedReason =
     order.status === 'DELIVERED'
@@ -182,7 +187,7 @@ export function ProductionOrderDetailPage() {
         : openEntry
           ? `Khâu ${STAGE_LABEL[openEntry.stage]} chưa được KCS nhận lại`
           : 'Đã qua khâu cuối'
-  const canPrint = Boolean(order.castingSentDate)
+  const canPrint = isBtp || Boolean(order.castingSentDate)
   const canDelete = isAdmin && order.status === 'NEW' && stages.length === 0 && !order.lastPrintedAt
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
@@ -208,6 +213,7 @@ export function ProductionOrderDetailPage() {
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
             <StatusChip status={order.status} size="medium" />
+            <SourceChip source={order.source} size="medium" />
             <RequestTypeChip type={order.requestType} size="medium" />
           </Stack>
         }
@@ -255,10 +261,12 @@ export function ProductionOrderDetailPage() {
         }
       />
 
-      {!order.castingSentDate ? (
+      {!canPrint ? (
         <Alert severity="info">Đơn chưa báo Đúc — báo Đúc thì mới in được phiếu và giao khâu cho thợ.</Alert>
       ) : order.lastPrintedAt == null ? (
-        <Alert severity="info">Đơn đã báo Đúc nhưng chưa in phiếu cho thợ.</Alert>
+        <Alert severity="info">
+          {isBtp ? 'Đơn BTP chưa in phiếu cho thợ.' : 'Đơn đã báo Đúc nhưng chưa in phiếu cho thợ.'}
+        </Alert>
       ) : ticketStale ? (
         <Alert severity="warning">
           Dữ liệu đã thay đổi sau lần in gần nhất ({formatDateTime(order.lastPrintedAt)}) — nên in lại phiếu để phiếu
@@ -288,24 +296,47 @@ export function ProductionOrderDetailPage() {
         </Stack>
 
         <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-          <Section
-            title="Đúc"
-            action={
-              <Button
-                size="small"
-                variant={order.castingSentDate ? 'outlined' : 'contained'}
-                disabled={order.status === 'DELIVERED'}
-                onClick={() => setCastingOpen(true)}
-              >
-                {order.castingSentDate ? 'Cập nhật' : 'Báo Đúc'}
-              </Button>
-            }
-          >
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-              <Field label="Ngày báo Đúc" value={formatStockedDate(order.castingSentDate)} />
-              <Field label="Ngày Đúc về" value={formatStockedDate(order.castingReturnedDate)} />
-            </Box>
-          </Section>
+          {isBtp ? (
+            <Section title="BTP">
+              <Stack spacing={1}>
+                <Field
+                  label="Mã BTP"
+                  value={
+                    order.btp ? (
+                      <Link component={RouterLink} to={`/warehouses/${BTP_WAREHOUSE_CODE}/stock`}>
+                        {order.btp.sku ?? '—'} · {order.btp.name}
+                      </Link>
+                    ) : (
+                      'BTP đã bị gỡ khỏi kho'
+                    )
+                  }
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP tự tạo khi lên đơn; đổi mã
+                  hoặc số lượng trên đơn thì kho tự cập nhật.
+                </Typography>
+              </Stack>
+            </Section>
+          ) : (
+            <Section
+              title="Đúc"
+              action={
+                <Button
+                  size="small"
+                  variant={order.castingSentDate ? 'outlined' : 'contained'}
+                  disabled={order.status === 'DELIVERED'}
+                  onClick={() => setCastingOpen(true)}
+                >
+                  {order.castingSentDate ? 'Cập nhật' : 'Báo Đúc'}
+                </Button>
+              }
+            >
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                <Field label="Ngày báo Đúc" value={formatStockedDate(order.castingSentDate)} />
+                <Field label="Ngày Đúc về" value={formatStockedDate(order.castingReturnedDate)} />
+              </Box>
+            </Section>
+          )}
 
           <Section title="Mã QR">
             <Stack spacing={1} sx={{ alignItems: 'center' }}>
@@ -404,7 +435,14 @@ export function ProductionOrderDetailPage() {
         lookups={lookups.data}
         saving={update.isPending}
         onClose={() => setEditing(false)}
-        onSave={(payload) => update.mutate(payload, { onSuccess: () => setEditing(false) })}
+        onSave={(payload) =>
+          update.mutate(payload, {
+            onSuccess: (saved) => {
+              setEditing(false)
+              if (wasBtp || saved.source === 'BTP') invalidateBtpStock(queryClient)
+            },
+          })
+        }
       />
 
       <CastingDialog
@@ -438,6 +476,7 @@ export function ProductionOrderDetailPage() {
       <StatusDialog
         open={statusDialog}
         current={order.status}
+        isBtp={isBtp}
         saving={status.isPending}
         onClose={() => setStatusDialog(false)}
         onSave={(payload) => status.mutate(payload, { onSuccess: () => setStatusDialog(false) })}
@@ -811,12 +850,14 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
 function StatusDialog({
   open,
   current,
+  isBtp,
   saving,
   onClose,
   onSave,
 }: {
   open: boolean
   current: ProductionStatus
+  isBtp: boolean
   saving: boolean
   onClose: () => void
   onSave: (payload: { status: ProductionStatus; note?: string }) => void
@@ -824,7 +865,9 @@ function StatusDialog({
   const [target, setTarget] = useState<ProductionStatus | ''>('')
   const [note, setNote] = useState('')
 
-  const options = MANUAL_STATUSES.filter((item) => item !== current).map((item) => ({
+  // Đơn BTP không qua 3D nên không có Sửa 3D.
+  const manual = MANUAL_STATUSES.filter((item) => item !== current && !(isBtp && item === 'REDO_3D'))
+  const options = manual.map((item) => ({
     value: item,
     label: STATUS_META[item].label,
     disabled: (item === 'NEW' || item === 'REDO_3D') && isInStage(current),

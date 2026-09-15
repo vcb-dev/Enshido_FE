@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom'
 import {
   Autocomplete,
@@ -36,6 +36,9 @@ import {
   type StockTotals,
   type UpdateStockPayload,
 } from '../api/inventory'
+import type { OrderImage } from '../api/productionOrders'
+import { cloudinaryThumb } from '../api/uploads'
+import { ImageUploadField } from '../orders/ImageUploadField'
 import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
 import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
@@ -562,6 +565,9 @@ function StockCard({
     profile.showType ? { label: profile.typeLabel, value: typeText(row, profile) } : null,
     profile.showBodyMetal ? { label: 'Chất liệu', value: row.bodyMetal ?? '—' } : null,
     profile.showProductKind ? { label: 'Phân loại sản phẩm', value: row.productKind ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Màu đá', value: row.color ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
   ].filter((item): item is { label: string; value: string } => item != null)
 
   return (
@@ -826,6 +832,29 @@ function stockColumns(
       render: (row) => row.productKind ?? '—',
     })
   }
+  if (profile.showProductInfo) {
+    columns.push(
+      { key: 'platingColor', header: 'Màu xi', render: (row) => row.platingColor ?? '—' },
+      { key: 'color', header: 'Màu đá', render: (row) => row.color ?? '—' },
+      { key: 'sizeLabel', header: 'Size', render: (row) => row.sizeLabel ?? '—' },
+      {
+        key: 'images',
+        header: 'Ảnh',
+        render: (row) =>
+          row.images?.length ? (
+            <Box
+              component="img"
+              src={cloudinaryThumb(row.images[0].url, 64)}
+              alt=""
+              loading="lazy"
+              sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
+            />
+          ) : (
+            '—'
+          ),
+      },
+    )
+  }
   if (profile.showStatus) {
     columns.push({
       key: 'availability',
@@ -892,6 +921,9 @@ type StockFormValues = {
   bodyMetalId: string
   productKindId: string
   btpCategoryId: string
+  platingColorId: string
+  sizeLabel: string
+  images: OrderImage[]
   openingQty: string
   stockUnitPrice: string
   inQty: string
@@ -912,6 +944,9 @@ const EMPTY_STOCK: StockFormValues = {
   bodyMetalId: '',
   productKindId: '',
   btpCategoryId: '',
+  platingColorId: '',
+  sizeLabel: '',
+  images: [],
   openingQty: '0',
   stockUnitPrice: '',
   inQty: '0',
@@ -942,6 +977,8 @@ function StockEditDialog({
   onSave: (payload: UpdateStockPayload) => void
 }) {
   const form = useForm<StockFormValues>({ defaultValues: EMPTY_STOCK })
+  const [uploading, setUploading] = useState(false)
+  const onUploadingChange = useCallback((busy: boolean) => setUploading(busy), [])
   const lookups = useQuery({
     queryKey: ['inventory-lookups'],
     queryFn: getInventoryLookupsApi,
@@ -984,6 +1021,9 @@ function StockEditDialog({
             bodyMetalId: row.bodyMetalId ?? '',
             productKindId: row.productKindId ?? '',
             btpCategoryId: row.otherClassId ?? '',
+            platingColorId: row.platingColorId ?? '',
+            sizeLabel: row.sizeLabel ?? '',
+            images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
             openingQty: qtyFromApi(row.openingQty),
             stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
             inQty: qtyFromApi(row.inQty),
@@ -1079,6 +1119,10 @@ function StockEditDialog({
         btpCategoryId: values.btpCategoryId || null,
         bodyMetalId: values.bodyMetalId || null,
         productKindId: values.productKindId || null,
+        platingColorId: values.platingColorId || null,
+        colorId: values.colorId || null,
+        sizeLabel: values.sizeLabel.trim(),
+        images: values.images.map(({ url, publicId, width, height }) => ({ url, publicId, width, height })),
         openingQty: values.openingQty,
         stockUnitPrice: values.stockUnitPrice || '0',
       })
@@ -1235,6 +1279,34 @@ function StockEditDialog({
               required
               placeholder="Tìm đơn vị…"
             />
+            {profile.showProductInfo ? (
+              <>
+                <FormSearchSelect<StockFormValues>
+                  name="platingColorId"
+                  label="Màu xi"
+                  options={withFallback(
+                    lookups.data?.platingColors,
+                    catalogChildren(btpCatalogs.data, 'mau-xi'),
+                  )}
+                  allowClear
+                  placeholder="Tìm màu xi…"
+                />
+                <Controller
+                  name="colorId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <ColorField
+                      label="Màu đá"
+                      colors={colors}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
+                />
+                <FormTextField<StockFormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
+              </>
+            ) : null}
             {profile.showShapeColor ? (
               <Controller
                 name="colorId"
@@ -1277,6 +1349,22 @@ function StockEditDialog({
             />
           </FormRow>
 
+          {profile.showProductInfo ? (
+            <Controller
+              control={form.control}
+              name="images"
+              render={({ field }) => (
+                <ImageUploadField
+                  label="Ảnh sản phẩm"
+                  kind="PRODUCT"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onUploadingChange={onUploadingChange}
+                />
+              )}
+            />
+          ) : null}
+
           <StockFigureGrid
             values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
             notes
@@ -1296,8 +1384,8 @@ function StockEditDialog({
           <Button onClick={onClose} disabled={saving}>
             Hủy
           </Button>
-          <Button type="submit" variant="contained" disabled={saving}>
-            {row ? 'Lưu' : profile.createLabel}
+          <Button type="submit" variant="contained" disabled={saving || uploading}>
+            {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
           </Button>
         </DialogActions>
       </Form>
@@ -1307,11 +1395,13 @@ function StockEditDialog({
 
 /** Ô chọn màu kèm chấm màu — cần renderOption riêng nên không dùng SearchSelect. */
 function ColorField({
+  label = 'Màu sắc',
   colors,
   value,
   onChange,
   onBlur,
 }: {
+  label?: string
   colors: LookupItem[]
   value: string
   onChange: (value: string) => void
@@ -1354,7 +1444,7 @@ function ColorField({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Màu sắc"
+          label={label}
           placeholder="Tìm màu…"
           slotProps={{
             ...params.slotProps,

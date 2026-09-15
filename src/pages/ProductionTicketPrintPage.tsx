@@ -32,7 +32,8 @@ export function ProductionTicketPrintPage() {
     queryFn: () => getProductionOrderApi(code),
     staleTime: 0,
   })
-  const canPrint = Boolean(detail.data?.castingSentDate)
+  // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
+  const canPrint = detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate)
 
   async function print() {
     window.print()
@@ -192,10 +193,21 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <td style={center}>
               {order.split.no} / {order.split.total}
             </td>
-            <Label>Ngày báo Đúc:</Label>
-            <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingSentDate)}</td>
-            <Label>Ngày Đúc về:</Label>
-            <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingReturnedDate)}</td>
+            {order.source === 'BTP' ? (
+              <>
+                <Label>Mã BTP:</Label>
+                <td colSpan={3} style={{ ...center, color: BLUE, fontWeight: 700 }}>
+                  {order.btp ? `${order.btp.sku ?? ''} · ${order.btp.name}` : order.btpSku}
+                </td>
+              </>
+            ) : (
+              <>
+                <Label>Ngày báo Đúc:</Label>
+                <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingSentDate)}</td>
+                <Label>Ngày Đúc về:</Label>
+                <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingReturnedDate)}</td>
+              </>
+            )}
           </tr>
           <tr>
             <td colSpan={2} rowSpan={6} style={{ padding: '1mm', verticalAlign: 'middle' }}>

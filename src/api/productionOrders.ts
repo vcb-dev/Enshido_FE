@@ -16,6 +16,9 @@ export type StageCode = 'FILING' | 'STONE_SETTING' | 'POLISH_PLATING' | 'ENGRAVI
 
 export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
 
+/** Đơn NVL: làm từ đầu (3D → Đúc → khâu). Đơn BTP: lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
+export type ProductionSource = 'NVL' | 'BTP'
+
 export type ProductionImageKind = 'DETAIL' | 'PRODUCT'
 
 export type OrderImage = {
@@ -31,6 +34,9 @@ export type ProductionOrderRow = {
   id: string
   code: string
   status: ProductionStatus
+  source: ProductionSource
+  /** Mã BTP của Đơn BTP. */
+  btpSku: string | null
   requestType: ProductionRequestType
   qty: number
   returnedQty: number
@@ -93,6 +99,7 @@ export type StatusLog = {
 }
 
 export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images'> & {
+  btp: { id: string; sku: string | null; name: string } | null
   askedUserId: string | null
   sizeLabel: string | null
   stoneCount: number | null
@@ -133,6 +140,7 @@ export type ProductionOrderLookups = {
 export type ProductionOrderListParams = {
   status?: ProductionStatus | ''
   requestType?: ProductionRequestType | ''
+  source?: ProductionSource | ''
   search?: string
   page: number
   pageSize: number
@@ -141,6 +149,8 @@ export type ProductionOrderListParams = {
 }
 
 export type UpsertProductionOrderPayload = {
+  source: ProductionSource
+  btpMaterialId?: string | null
   requestType: ProductionRequestType
   receivedDate: string
   closedBy: string
@@ -188,6 +198,22 @@ export type ReturnPayload = {
 export type CastingPayload = { sentDate: string; returnedDate?: string | null }
 
 export type OrderOption = { code: string; description: string; status: ProductionStatus }
+
+/** BTP còn tồn, kèm thông tin điền sẵn vào Đơn BTP. */
+export type BtpOption = {
+  id: string
+  sku: string | null
+  name: string
+  unit: string
+  qty: string
+  bodyMetal: string | null
+  productKind: string | null
+  category: string | null
+  platingColor: string | null
+  stoneColor: string | null
+  sizeLabel: string | null
+  images: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
+}
 
 export type OrderCosting = {
   qty: number
@@ -330,6 +356,11 @@ export function markTicketPrintedApi(code: string) {
 export function listOrderOptionsApi(search = '') {
   const query = search ? `?search=${encodeURIComponent(search)}` : ''
   return apiFetch<OrderOption[]>(`${BASE}/options${query}`)
+}
+
+export function listBtpOptionsApi(search = '') {
+  const query = search ? `?search=${encodeURIComponent(search)}` : ''
+  return apiFetch<BtpOption[]>(`${BASE}/btp-options${query}`)
 }
 
 export function getOrderCostingApi(code: string) {

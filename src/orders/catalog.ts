@@ -1,5 +1,6 @@
 import type {
   ProductionRequestType,
+  ProductionSource,
   ProductionStatus,
   StageCode,
 } from '../api/productionOrders'
@@ -51,6 +52,20 @@ const IN_STAGE_STATUSES: ProductionStatus[] = ['FILING', 'STONE_SETTING', 'POLIS
  * Đã giao đổi khi lập phiếu xuất hàng đủ số lượng.
  */
 export const MANUAL_STATUSES: ProductionStatus[] = ['NEW', 'REDO_3D', 'DEFECT']
+
+/** Đơn NVL làm từ đầu; Đơn BTP lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
+export const SOURCES: ProductionSource[] = ['NVL', 'BTP']
+
+export const SOURCE_META: Record<ProductionSource, ChipTone> = {
+  NVL: { label: 'Đơn NVL', bg: '#eef2f7', fg: '#34495e' },
+  BTP: { label: 'Đơn BTP', bg: '#fdebd0', fg: '#935116' },
+}
+
+/** Mô tả ngắn từng loại đơn — dùng trên menu "Lên đơn" và dưới ô Loại đơn. */
+export const SOURCE_HINT: Record<ProductionSource, string> = {
+  NVL: 'Làm từ NVL: 3D → Đúc → các khâu',
+  BTP: 'Lấy BTP có sẵn — tự xuất kho BTP, bỏ 3D và Đúc',
+}
 
 export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
   SAMPLE: { label: 'Dựng mẫu', bg: '#27ae60', fg: '#ffffff' },

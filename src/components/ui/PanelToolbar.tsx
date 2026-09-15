@@ -32,7 +32,10 @@ export type PanelToolbarProps = {
   filterCount?: number
   onClearFilters?: () => void
   createLabel: string
-  onCreate: () => void
+  /** Nhận chính nút bấm để trang có thể mở menu neo vào nút. */
+  onCreate: (anchor: HTMLElement) => void
+  /** Icon cuối nút thêm (vd mũi tên khi nút mở menu). */
+  createEndIcon?: ReactNode
 }
 
 /**
@@ -51,6 +54,7 @@ export function PanelToolbar({
   onClearFilters,
   createLabel,
   onCreate,
+  createEndIcon,
 }: PanelToolbarProps) {
   const isMobile = useIsMobile()
   const [filterOpen, setFilterOpen] = useState(false)
@@ -65,7 +69,12 @@ export function PanelToolbar({
             Xóa lọc
           </Button>
         ) : null}
-        <Button variant="contained" sx={{ ml: 'auto' }} onClick={onCreate}>
+        <Button
+          variant="contained"
+          sx={{ ml: 'auto' }}
+          endIcon={createEndIcon}
+          onClick={(event) => onCreate(event.currentTarget)}
+        >
           {createLabel}
         </Button>
       </>
@@ -91,7 +100,12 @@ export function PanelToolbar({
           </Badge>
         </IconButton>
       ) : null}
-      <Button variant="contained" fullWidth onClick={onCreate}>
+      <Button
+        variant="contained"
+        fullWidth
+        endIcon={createEndIcon}
+        onClick={(event) => onCreate(event.currentTarget)}
+      >
         {createLabel}
       </Button>
 

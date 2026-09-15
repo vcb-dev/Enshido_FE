@@ -466,11 +466,18 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         width: 120,
         align: 'center' as const,
         cellSx: { overflow: 'visible' },
+        // Phiếu do lên Đơn BTP tự tạo: sửa mã BTP / số lượng trên đơn để kho và đơn luôn khớp.
         render: (row: OutboundRow) => (
           <RowActions
             onView={() => openView(row)}
-            onEdit={() => openEdit(row)}
+            onEdit={row.autoIssued ? undefined : () => openEdit(row)}
             onDelete={() => del.request(row)}
+            deleteDisabled={row.autoIssued}
+            titles={
+              row.autoIssued
+                ? { delete: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn` }
+                : undefined
+            }
           />
         ),
       },

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Box, Link, Stack, Tab, Tabs, Tooltip } from '@mui/material'
+import { Box, Link, ListItemText, Menu, MenuItem, Stack, Tab, Tabs, Tooltip } from '@mui/material'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,6 +10,7 @@ import {
   listProductionOrdersApi,
   type ProductionOrderRow,
   type ProductionRequestType,
+  type ProductionSource,
   type ProductionStatus,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
@@ -24,17 +26,30 @@ import {
 } from '../components/ui'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTableParams } from '../hooks/useTableParams'
-import { formatDateTime, REQUEST_TYPES, REQUEST_TYPE_META, STATUS_META, STATUS_TABS } from '../orders/catalog'
-import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
+import {
+  formatDateTime,
+  REQUEST_TYPES,
+  REQUEST_TYPE_META,
+  SOURCE_HINT,
+  SOURCE_META,
+  SOURCES,
+  STATUS_META,
+  STATUS_TABS,
+} from '../orders/catalog'
+import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
+import { invalidateBtpStock } from '../orders/btpStock'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 
 export function ProductionOrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [creating, setCreating] = useState(false)
+  // Giữ loại đơn sau khi đóng để form không nhảy loại trong lúc dialog đang mờ dần.
+  const [createSource, setCreateSource] = useState<ProductionSource>('NVL')
+  const [createMenu, setCreateMenu] = useState<HTMLElement | null>(null)
   const table = useTableParams({
     pageSize: 25,
-    filters: { status: '', requestType: '' },
+    filters: { status: '', requestType: '', source: '' },
   })
   const { params } = table
   const search = useDebouncedValue(params.search, 300)
@@ -42,6 +57,7 @@ export function ProductionOrdersPage() {
   const listParams = {
     status: params.status as ProductionStatus | '',
     requestType: params.requestType as ProductionRequestType | '',
+    source: params.source as ProductionSource | '',
     search,
     page: params.page,
     pageSize: params.pageSize,
@@ -68,6 +84,7 @@ export function ProductionOrdersPage() {
       setCreating(false)
       await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
       await queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
+      if (order.source === 'BTP') invalidateBtpStock(queryClient)
       navigate(`/orders/${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -116,7 +133,7 @@ export function ProductionOrdersPage() {
         emptyText={table.hasFilters ? 'Không có đơn khớp bộ lọc.' : 'Chưa có đơn sản xuất.'}
         variant="grid"
         fixedLayout
-        minWidth={1500}
+        minWidth={1632}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         onRowClick={(row) => navigate(`/orders/${row.code}`)}
@@ -135,26 +152,59 @@ export function ProductionOrdersPage() {
             onSearchChange={table.setSearch}
             searchPlaceholder="Tìm mã SX, mã theo dõi, mã 3D, người chốt, mô tả…"
             filters={
-              <SelectInput
-                label="Yêu cầu làm hàng"
-                value={params.requestType}
-                onChange={(value) => table.setFilter({ requestType: value })}
-                options={REQUEST_TYPES.map((type) => ({ value: type, label: REQUEST_TYPE_META[type].label }))}
-                placeholder="Tất cả"
-                sx={FILTER_FIELD_SX}
-              />
+              <>
+                <SelectInput
+                  label="Loại đơn"
+                  value={params.source}
+                  onChange={(value) => table.setFilter({ source: value })}
+                  options={SOURCES.map((source) => ({ value: source, label: SOURCE_META[source].label }))}
+                  placeholder="Tất cả"
+                  sx={FILTER_FIELD_SX}
+                />
+                <SelectInput
+                  label="Yêu cầu làm hàng"
+                  value={params.requestType}
+                  onChange={(value) => table.setFilter({ requestType: value })}
+                  options={REQUEST_TYPES.map((type) => ({ value: type, label: REQUEST_TYPE_META[type].label }))}
+                  placeholder="Tất cả"
+                  sx={FILTER_FIELD_SX}
+                />
+              </>
             }
-            filterCount={params.requestType ? 1 : 0}
-            onClearFilters={() => table.setFilter({ requestType: '' })}
+            filterCount={(params.requestType ? 1 : 0) + (params.source ? 1 : 0)}
+            onClearFilters={() => table.setFilter({ requestType: '', source: '' })}
             createLabel="Lên đơn"
-            onCreate={() => setCreating(true)}
+            createEndIcon={<ArrowDropDownIcon />}
+            onCreate={setCreateMenu}
           />
         }
       />
 
+      <Menu
+        anchorEl={createMenu}
+        open={Boolean(createMenu)}
+        onClose={() => setCreateMenu(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        {CREATE_SOURCES.map((source) => (
+          <MenuItem
+            key={source}
+            onClick={() => {
+              setCreateMenu(null)
+              setCreateSource(source)
+              setCreating(true)
+            }}
+          >
+            <ListItemText primary={SOURCE_META[source].label} secondary={SOURCE_HINT[source]} />
+          </MenuItem>
+        ))}
+      </Menu>
+
       <ProductionOrderFormDialog
         open={creating}
         order={null}
+        initialSource={createSource}
         lookups={lookups.data}
         saving={create.isPending}
         onClose={() => setCreating(false)}
@@ -163,6 +213,8 @@ export function ProductionOrdersPage() {
     </Stack>
   )
 }
+
+const CREATE_SOURCES: ProductionSource[] = ['BTP', 'NVL']
 
 function tabLabel(label: string, count: number | undefined) {
   return count == null ? label : `${label} (${count})`
@@ -216,6 +268,21 @@ function orderColumns(): Column<ProductionOrderRow>[] {
       sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
+    },
+    {
+      key: 'source',
+      header: 'Loại đơn',
+      width: 132,
+      render: (row) => (
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <SourceChip source={row.source} />
+          {row.btpSku ? (
+            <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+              {row.btpSku}
+            </Box>
+          ) : null}
+        </Stack>
+      ),
     },
     {
       key: 'detailImages',

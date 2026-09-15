@@ -58,6 +58,8 @@ export type StockProfile = {
   showBodyMetal: boolean
   showProductKind: boolean
   showBtpCategory: boolean
+  /// Màu xi, màu đá, size, ảnh — thông tin sản phẩm BTP lấy sang Đơn BTP.
+  showProductInfo: boolean
   showNvlCategory: boolean
   showStatus: boolean
   typeLabel: string
@@ -96,6 +98,7 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showBodyMetal: false,
   showProductKind: false,
   showBtpCategory: false,
+  showProductInfo: false,
   showNvlCategory: true,
   showStatus: true,
   typeLabel: 'Chất loại',
@@ -111,6 +114,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showBodyMetal: true,
     showProductKind: true,
     showBtpCategory: true,
+    showProductInfo: true,
     showNvlCategory: false,
     showStatus: false,
     typeLabel: 'Chất loại',
@@ -134,6 +138,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showBodyMetal: false,
     showProductKind: false,
     showBtpCategory: false,
+    showProductInfo: false,
     showNvlCategory: false,
     showStatus: true,
     typeLabel: 'Danh mục',
