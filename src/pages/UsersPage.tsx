@@ -224,12 +224,12 @@ function CreateUserDialog({
         roleCode: values.roleCode,
         department: values.department.trim() || undefined,
       }),
-    onSuccess: (_data, values) => {
+    onMutate: (values) => {
       toast.success('Đã tạo nhân sự')
-      onCreated()
       if (values.keepOpen) form.reset({ ...EMPTY_USER, keepOpen: true })
       else onClose()
     },
+    onSuccess: () => onCreated(),
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -273,7 +273,7 @@ function CreateUserDialog({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>
-          <Button type="submit" variant="contained" disabled={mutation.isPending}>
+          <Button type="submit" variant="contained">
             Lưu
           </Button>
         </DialogActions>
@@ -326,11 +326,11 @@ function EditUserDialog({
         password: values.password.trim() || undefined,
         allowedScreens: isAdmin ? undefined : screens,
       }),
-    onSuccess: () => {
+    onMutate: () => {
       toast.success('Đã lưu nhân sự')
-      onSaved()
       onClose()
     },
+    onSuccess: () => onSaved(),
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -409,7 +409,7 @@ function EditUserDialog({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>
-          <Button type="submit" variant="contained" disabled={mutation.isPending}>
+          <Button type="submit" variant="contained">
             Lưu
           </Button>
         </DialogActions>
@@ -430,16 +430,16 @@ function LockUserDialog({
   const locking = Boolean(user?.isActive)
   const mutation = useMutation({
     mutationFn: () => updateUserApi(user!.id, { isActive: !user!.isActive }),
-    onSuccess: () => {
+    onMutate: () => {
       toast.success(locking ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản')
-      onSaved()
       onClose()
     },
+    onSuccess: () => onSaved(),
     onError: (error: Error) => toast.error(error.message),
   })
 
   return (
-    <Dialog open={Boolean(user)} onClose={mutation.isPending ? undefined : onClose} fullWidth maxWidth="xs">
+    <Dialog open={Boolean(user)} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>{locking ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}</DialogTitle>
       <DialogContent>
         <Typography variant="body2">
@@ -449,13 +449,12 @@ function LockUserDialog({
         </Typography>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={mutation.isPending}>
+        <Button onClick={onClose}>
           Hủy
         </Button>
         <Button
           color={locking ? 'error' : 'primary'}
           variant="contained"
-          disabled={mutation.isPending}
           onClick={() => mutation.mutate()}
         >
           {locking ? 'Khóa' : 'Mở khóa'}

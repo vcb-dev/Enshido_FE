@@ -175,10 +175,12 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
 
   const addParent = useMutation({
     mutationFn: (name: string) => createCatalogApi({ name, kind: copy.kind }),
-    onSuccess: async (row) => {
-      toast.success(copy.addedParent)
+    onMutate: () => {
       createParent.close()
-      await refresh()
+      toast.success(copy.addedParent)
+    },
+    onSuccess: (row) => {
+      void refresh()
       setEditId(row.id)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -187,7 +189,13 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
   const delParent = useDeleteRowDialog({
     mutationFn: (row: CatalogItem) => deleteCatalogApi(row.id),
     successMessage: copy.deletedParent,
+    queryKeys: [['catalogs', copy.kind]],
     invalidateKeys: [['catalogs', copy.kind], ['inventory-lookups']],
+    onRemoved: (row) => {
+      queryClient.setQueryData(['catalogs', copy.kind], (current: CatalogItem[] | undefined) =>
+        current?.filter((item) => item.id !== row.id),
+      )
+    },
   })
 
   return (
@@ -245,8 +253,11 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
         kind="create"
         titles={{ create: copy.addParent, edit: copy.title, view: copy.title }}
         form={parentForm}
-        saving={addParent.isPending}
-        onSubmit={(values) => addParent.mutate(values.name.trim())}
+        saving={false}
+        onSubmit={(values) => {
+          createParent.close()
+          addParent.mutate(values.name.trim())
+        }}
         onClose={createParent.close}
         onExited={createParent.clear}
         maxWidth="xs"
@@ -284,6 +295,7 @@ function ParentEditorDialog({
   onClose: () => void
   onRefresh: () => Promise<void>
 }) {
+  const queryClient = useQueryClient()
   const form = useForm<FormValues>({ defaultValues: EMPTY })
   const childDialog = useCrudDialog<CatalogItem>()
   const childForm = useForm<FormValues>({ defaultValues: EMPTY })
@@ -311,9 +323,9 @@ function ParentEditorDialog({
 
   const saveParent = useMutation({
     mutationFn: (name: string) => updateCatalogApi(parent!.id, { name }),
-    onSuccess: async () => {
-      toast.success(copy.savedParent)
-      await onRefresh()
+    onMutate: () => toast.success(copy.savedParent),
+    onSuccess: () => {
+      void onRefresh()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -323,10 +335,12 @@ function ParentEditorDialog({
       id
         ? updateCatalogApi(id, { name })
         : createCatalogApi({ name, kind: copy.kind, parentId: parent!.id }),
-    onSuccess: async (_row, input) => {
-      toast.success(input.id ? copy.savedChild : copy.addedChild)
+    onMutate: (input) => {
       childDialog.close()
-      await onRefresh()
+      toast.success(input.id ? copy.savedChild : copy.addedChild)
+    },
+    onSuccess: () => {
+      void onRefresh()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -334,7 +348,18 @@ function ParentEditorDialog({
   const delChild = useDeleteRowDialog({
     mutationFn: (row: CatalogItem) => deleteCatalogApi(row.id),
     successMessage: copy.deletedChild,
+    queryKeys: [['catalogs', copy.kind]],
     invalidateKeys: [['catalogs', copy.kind], ['inventory-lookups']],
+    onRemoved: (row) => {
+      const parentId = parent?.id
+      queryClient.setQueryData(['catalogs', copy.kind], (current: CatalogItem[] | undefined) =>
+        current?.map((item) =>
+          item.id === parentId
+            ? { ...item, children: (item.children ?? []).filter((child) => child.id !== row.id) }
+            : item,
+        ),
+      )
+    },
   })
 
   const columns: Column<CatalogItem>[] = [
@@ -381,7 +406,7 @@ function ParentEditorDialog({
                 autoFocus
                 sx={{ flex: 1 }}
               />
-              <Button type="submit" variant="contained" disabled={saveParent.isPending} sx={{ mt: { sm: 0.5 } }}>
+              <Button type="submit" variant="contained" sx={{ mt: { sm: 0.5 } }}>
                 Lưu tên
               </Button>
             </Stack>
@@ -426,8 +451,11 @@ function ParentEditorDialog({
         kind={childDialog.kind}
         titles={{ create: copy.addChild, edit: copy.childName, view: copy.childSection }}
         form={childForm}
-        saving={saveChild.isPending}
-        onSubmit={(values) => saveChild.mutate({ id: childDialog.row?.id, name: values.name.trim() })}
+        saving={false}
+        onSubmit={(values) => {
+          childDialog.close()
+          saveChild.mutate({ id: childDialog.row?.id, name: values.name.trim() })
+        }}
         onClose={childDialog.close}
         onExited={childDialog.clear}
         maxWidth="xs"

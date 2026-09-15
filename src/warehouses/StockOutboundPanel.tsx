@@ -56,6 +56,7 @@ import {
   headerTotal,
   matchesCatalogFilters,
   removeMoveList,
+  replaceMoveId,
   sumMoveTotals,
   uniqueFilterOptions,
   upsertMoveList,
@@ -251,55 +252,69 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     ) || hasActiveCatalogFilters(catalogFilterParams)
   const totals = filtering ? sumMoveTotals(rows) : apiTotals
 
+  const outboundKey = ['warehouse-outbounds', warehouseCode] as const
+
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
       id
         ? updateWarehouseOutboundApi(warehouseCode, id, payload)
         : createWarehouseOutboundApi(warehouseCode, payload),
-    onSuccess: (row, input) => {
+    onMutate: (input) => {
+      dialog.close()
       toast.success(
         input.id ? `Đã cập nhật ${profile.noun} xuất kho` : `Đã ghi phiếu xuất`,
       )
-      dialog.close()
-      queryClient.setQueryData(
-        ['warehouse-outbounds', warehouseCode],
-        (current: OutboundResponse | undefined) => upsertMoveList(current, row, Boolean(input.id)),
+      void queryClient.cancelQueries({ queryKey: outboundKey })
+      const previous = queryClient.getQueryData<OutboundResponse>(outboundKey)
+      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const optimistic = outboundOptimisticRow(input.payload, {
+        id: tempId,
+        stt: input.id
+          ? (previous?.items.find((item) => item.id === input.id)?.stt ?? 0)
+          : (previous?.items.length ?? 0) + 1,
+        issuedBy: operatorName,
+        unit:
+          input.payload.unitName ||
+          units.find((unit) => unit.id === input.payload.unitId)?.name ||
+          '',
+        receivedBy:
+          users.find((item) => item.id === input.payload.receivedByUserId)?.fullName ?? null,
+      })
+      queryClient.setQueryData(outboundKey, (current: OutboundResponse | undefined) =>
+        upsertMoveList(current, optimistic, Boolean(input.id)),
       )
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      void queryClient.invalidateQueries({
-        queryKey: ['warehouse-stock', warehouseCode],
-        refetchType: 'none',
-      })
+      return { previous, tempId }
+    },
+    onSuccess: (row, input, ctx) => {
+      queryClient.setQueryData(outboundKey, (current: OutboundResponse | undefined) =>
+        replaceMoveId(current, ctx?.tempId ?? row.id, row),
+      )
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       // NVL gắn đơn đổi thì chi phí đơn đổi theo.
       void queryClient.invalidateQueries({ queryKey: ['production-order-costing'] })
       const dest = input.payload.destWarehouseCode
       if (dest && dest !== warehouseCode) {
-        void queryClient.invalidateQueries({
-          queryKey: ['warehouse-inbounds', dest],
-          refetchType: 'none',
-        })
-        void queryClient.invalidateQueries({
-          queryKey: ['warehouse-stock', dest],
-          refetchType: 'none',
-        })
+        void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', dest] })
+        void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', dest] })
       }
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error, _input, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(outboundKey, ctx.previous)
+      toast.error(error.message)
+    },
   })
 
   const del = useDeleteRowDialog({
     mutationFn: (row: OutboundRow) => deleteWarehouseOutboundApi(warehouseCode, row.id),
     successMessage: 'Đã xóa phiếu xuất',
-    invalidateKeys: [['production-order-costing']],
+    queryKeys: [['warehouse-outbounds', warehouseCode]],
+    invalidateKeys: [['warehouse-stock', warehouseCode], ['production-order-costing']],
     onRemoved: (row) => {
       queryClient.setQueryData(
         ['warehouse-outbounds', warehouseCode],
         (current: OutboundResponse | undefined) => removeMoveList(current, row.id),
       )
-      void queryClient.invalidateQueries({
-        queryKey: ['warehouse-stock', warehouseCode],
-        refetchType: 'none',
-      })
     },
   })
 
@@ -573,7 +588,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         kind={dialog.kind}
         row={dialog.row}
         readOnly={dialog.readOnly}
-        saving={save.isPending}
+        saving={false}
         units={units}
         users={users}
         materials={materials}
@@ -583,9 +598,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) =>
-          save.mutate({ id: dialog.kind === 'edit' ? dialog.row?.id : undefined, payload })
-        }
+        onSave={(payload) => {
+          const id = dialog.kind === 'edit' ? dialog.row?.id : undefined
+          dialog.close()
+          save.mutate({ id, payload })
+        }}
       />
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
@@ -988,5 +1005,37 @@ function takeFifoLayers(
   return {
     amount: qty > 0 && need <= 0 ? String(Math.round(amount)) : '',
     label: parts.join('\n'),
+  }
+}
+
+function outboundOptimisticRow(
+  payload: CreateOutboundPayload,
+  extra: {
+    id: string
+    stt: number
+    issuedBy: string
+    unit: string
+    receivedBy: string | null
+  },
+): OutboundRow {
+  return {
+    id: extra.id,
+    stt: extra.stt,
+    issuedAt: payload.issuedAt,
+    name: payload.name,
+    sku: payload.sku ?? null,
+    unit: extra.unit,
+    unitId: payload.unitId ?? null,
+    qty: payload.qty,
+    stockUnitPrice: payload.stockUnitPrice ?? '0',
+    inboundUnitPrice: payload.inboundUnitPrice ?? '0',
+    amount: payload.amount ?? '0',
+    note: payload.note ?? null,
+    issuedBy: extra.issuedBy,
+    receivedBy: extra.receivedBy,
+    receivedByUserId: payload.receivedByUserId ?? null,
+    materialId: payload.materialId ?? null,
+    destWarehouseCode: payload.destWarehouseCode ?? null,
+    productionOrderCode: payload.productionOrderCode?.trim().toUpperCase() || null,
   }
 }

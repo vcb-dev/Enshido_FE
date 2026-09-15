@@ -20,6 +20,7 @@ import {
   generateLocationsApi,
   getLocationsApi,
   updateLocationApi,
+  type LocationListResponse,
   type LocationOccupant,
   type LocationSlot,
 } from '../api/locations'
@@ -94,12 +95,16 @@ export function LocationsPage() {
     await queryClient.invalidateQueries({ queryKey: ['warehouse-locations', WAREHOUSE_CODE] })
   }
 
+  const locKey = ['warehouse-locations', WAREHOUSE_CODE] as const
+
   const generate = useMutation({
     mutationFn: generateLocationsApi,
-    onSuccess: async (result) => {
-      toast.success(result.created ? `Đã tạo ${result.created} vị trí` : 'Các vị trí này đã có sẵn')
+    onMutate: () => {
       dialog.close()
-      await refreshLocations()
+    },
+    onSuccess: (result) => {
+      toast.success(result.created ? `Đã tạo ${result.created} vị trí` : 'Các vị trí này đã có sẵn')
+      void refreshLocations()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -112,10 +117,18 @@ export function LocationsPage() {
       id: string
       payload: { zone: string; aisle: number; level: string; position: number }
     }) => updateLocationApi(id, payload),
-    onSuccess: async (row) => {
-      toast.success(`Đã cập nhật vị trí ${row.code}`)
+    onMutate: () => {
       dialog.close()
-      await refreshLocations()
+    },
+    onSuccess: (row) => {
+      toast.success(`Đã cập nhật vị trí ${row.code}`)
+      queryClient.setQueryData(locKey, (current: LocationListResponse | undefined) => {
+        if (!current) return current
+        return {
+          ...current,
+          items: current.items.map((item) => (item.id === row.id ? { ...item, ...row } : item)),
+        }
+      })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', WAREHOUSE_CODE] })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -124,7 +137,13 @@ export function LocationsPage() {
   const del = useDeleteRowDialog<LocationSlot>({
     mutationFn: (row) => deleteLocationApi(row.id),
     successMessage: 'Đã xóa vị trí',
-    invalidateKeys: [['warehouse-locations', WAREHOUSE_CODE]],
+    queryKeys: [['warehouse-locations', WAREHOUSE_CODE]],
+    onRemoved: (row) => {
+      queryClient.setQueryData(locKey, (current: LocationListResponse | undefined) => {
+        if (!current) return current
+        return { ...current, items: current.items.filter((item) => item.id !== row.id) }
+      })
+    },
   })
 
   const { openEdit, openView } = dialog
@@ -274,18 +293,26 @@ export function LocationsPage() {
 
       <GenerateDialog
         open={dialog.open && dialog.kind === 'create'}
-        saving={generate.isPending}
+        saving={false}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => generate.mutate(payload)}
+        onSave={(payload) => {
+          dialog.close()
+          generate.mutate(payload)
+        }}
       />
       <EditLocationDialog
         open={dialog.open && dialog.kind === 'edit'}
         row={dialog.row}
-        saving={saveEdit.isPending}
+        saving={false}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => dialog.row && saveEdit.mutate({ id: dialog.row.id, payload })}
+        onSave={(payload) => {
+          if (!dialog.row) return
+          const id = dialog.row.id
+          dialog.close()
+          saveEdit.mutate({ id, payload })
+        }}
       />
       <OccupantsDialog
         open={dialog.open && dialog.kind === 'view'}

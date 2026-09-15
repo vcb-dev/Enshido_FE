@@ -369,11 +369,12 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       id
         ? updateWarehouseStockApi(warehouseCode, id, payload)
         : createWarehouseStockApi(warehouseCode, payload),
-    onSuccess: async (row, input) => {
-      toast.success(input.id ? `Đã cập nhật ${profile.noun}` : `Đã thêm ${profile.noun}`)
+    onMutate: (input) => {
       dialog.close()
-      // Dòng mới nằm cuối danh sách nên nhảy tới trang chứa nó.
+      toast.success(input.id ? `Đã cập nhật ${profile.noun}` : `Đã thêm ${profile.noun}`)
       if (!input.id) table.setPage(Math.ceil((visible.length + 1) / params.pageSize))
+    },
+    onSuccess: (row, input) => {
       queryClient.setQueryData(
         ['warehouse-stock', warehouseCode],
         (current: { items: StockRow[]; totals: StockTotals } | undefined) => {
@@ -520,10 +521,14 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         warehouseCode={warehouseCode}
         profile={profile}
         nameSuggestions={nameSuggestions}
-        saving={save.isPending}
+        saving={false}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => save.mutate({ id: dialog.row?.id, payload })}
+        onSave={(payload) => {
+          const id = dialog.row?.id
+          dialog.close()
+          save.mutate({ id, payload })
+        }}
       />
     </Stack>
   )
