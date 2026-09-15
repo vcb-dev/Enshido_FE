@@ -108,8 +108,9 @@ export function listWarehousesApi() {
   return apiFetch<WarehouseNode[]>('/warehouses')
 }
 
-export function getWarehouseStockApi(code: string) {
-  return apiFetch<StockResponse>(`/warehouses/${code}/stock`)
+export function getWarehouseStockApi(code: string, opts?: { layers?: boolean }) {
+  const query = opts?.layers ? '?layers=1' : ''
+  return apiFetch<StockResponse>(`/warehouses/${code}/stock${query}`)
 }
 
 export function formatQty(value: string) {

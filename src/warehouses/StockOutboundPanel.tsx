@@ -38,6 +38,7 @@ import {
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
+import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
@@ -129,8 +130,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     staleTime: 5 * 60_000,
   })
   const stock = useQuery({
-    queryKey: ['warehouse-stock', warehouseCode],
-    queryFn: () => getWarehouseStockApi(warehouseCode),
+    queryKey: ['warehouse-stock', warehouseCode, 'layers'],
+    queryFn: () => getWarehouseStockApi(warehouseCode, { layers: true }),
     staleTime: 60_000,
     placeholderData: keepPreviousData,
     enabled: dialog.open,
@@ -223,9 +224,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const outboundKey = ['warehouse-outbounds', warehouseCode] as const
 
   const save = useMutation({
-    mutationFn: ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
+    mutationFn: async ({ id, payload }: { id?: string; payload: CreateOutboundPayload }) =>
       id
-        ? updateWarehouseOutboundApi(warehouseCode, id, payload)
+        ? updateWarehouseOutboundApi(warehouseCode, await resolveRowId(id), payload)
         : createWarehouseOutboundApi(warehouseCode, payload),
     onMutate: (input) => {
       dialog.close()
@@ -234,7 +235,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       )
       void queryClient.cancelQueries({ queryKey: outboundKey })
       const previous = queryClient.getQueryData<OutboundResponse>(outboundKey)
-      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const tempId = input.id ?? newTempId()
+      if (!input.id) registerTempId(tempId)
       const optimistic = outboundOptimisticRow(input.payload, {
         id: tempId,
         stt: input.id
@@ -255,6 +257,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       return { previous, tempId }
     },
     onSuccess: (row, input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) resolveTempId(ctx.tempId, row.id)
       queryClient.setQueryData(outboundKey, (current: OutboundResponse | undefined) =>
         replaceMoveId(current, ctx?.tempId ?? row.id, row),
       )
@@ -266,13 +269,15 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       }
     },
     onError: (error: Error, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) rejectTempId(ctx.tempId, error)
       if (ctx?.previous) queryClient.setQueryData(outboundKey, ctx.previous)
       toast.error(error.message)
     },
   })
 
   const del = useDeleteRowDialog({
-    mutationFn: (row: OutboundRow) => deleteWarehouseOutboundApi(warehouseCode, row.id),
+    mutationFn: (row: OutboundRow) =>
+      deleteWhenReady(row.id, (id) => deleteWarehouseOutboundApi(warehouseCode, id)),
     successMessage: 'Đã xóa phiếu xuất',
     queryKeys: [['warehouse-outbounds', warehouseCode]],
     invalidateKeys: [['warehouse-stock', warehouseCode]],

@@ -37,6 +37,7 @@ import {
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
+import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
@@ -225,9 +226,9 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   const inboundKey = ['warehouse-inbounds', warehouseCode] as const
 
   const save = useMutation({
-    mutationFn: ({ id, payload }: { id?: string; payload: CreateInboundPayload }) =>
+    mutationFn: async ({ id, payload }: { id?: string; payload: CreateInboundPayload }) =>
       id
-        ? updateWarehouseInboundApi(warehouseCode, id, payload)
+        ? updateWarehouseInboundApi(warehouseCode, await resolveRowId(id), payload)
         : createWarehouseInboundApi(warehouseCode, payload),
     onMutate: (input) => {
       dialog.close()
@@ -236,7 +237,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       )
       void queryClient.cancelQueries({ queryKey: inboundKey })
       const previous = queryClient.getQueryData<InboundResponse>(inboundKey)
-      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const tempId = input.id ?? newTempId()
+      if (!input.id) registerTempId(tempId)
       const optimistic = inboundOptimisticRow(input.payload, {
         id: tempId,
         stt: input.id
@@ -257,19 +259,22 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       return { previous, tempId }
     },
     onSuccess: (row, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) resolveTempId(ctx.tempId, row.id)
       queryClient.setQueryData(inboundKey, (current: InboundResponse | undefined) =>
         replaceMoveId(current, ctx?.tempId ?? row.id, row),
       )
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
     },
     onError: (error: Error, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) rejectTempId(ctx.tempId, error)
       if (ctx?.previous) queryClient.setQueryData(inboundKey, ctx.previous)
       toast.error(error.message)
     },
   })
 
   const del = useDeleteRowDialog({
-    mutationFn: (row: InboundRow) => deleteWarehouseInboundApi(warehouseCode, row.id),
+    mutationFn: (row: InboundRow) =>
+      deleteWhenReady(row.id, (id) => deleteWarehouseInboundApi(warehouseCode, id)),
     successMessage: 'Đã xóa phiếu nhập',
     queryKeys: [['warehouse-inbounds', warehouseCode]],
     invalidateKeys: [['warehouse-stock', warehouseCode]],

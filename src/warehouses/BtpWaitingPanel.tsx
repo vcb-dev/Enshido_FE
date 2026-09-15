@@ -25,6 +25,7 @@ import {
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
+import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
@@ -96,16 +97,17 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
     : apiTotals
 
   const save = useMutation({
-    mutationFn: ({ id, payload }: { id?: string; payload: UpsertBtpWaitingPayload }) =>
+    mutationFn: async ({ id, payload }: { id?: string; payload: UpsertBtpWaitingPayload }) =>
       id
-        ? updateBtpWaitingApi(warehouseCode, id, payload)
+        ? updateBtpWaitingApi(warehouseCode, await resolveRowId(id), payload)
         : createBtpWaitingApi(warehouseCode, payload),
     onMutate: (input) => {
       dialog.close()
       toast.success(input.id ? 'Đã cập nhật dòng BTP' : 'Đã thêm dòng BTP')
       void queryClient.cancelQueries({ queryKey: ['btp-waiting', warehouseCode] })
       const previous = queryClient.getQueryData<BtpWaitingResponse>(['btp-waiting', warehouseCode])
-      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const tempId = input.id ?? newTempId()
+      if (!input.id) registerTempId(tempId)
       const optimistic: BtpWaitingRow = {
         id: tempId,
         stt: input.id
@@ -147,14 +149,14 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       return { previous, tempId }
     },
     onSuccess: (row, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) resolveTempId(ctx.tempId, row.id)
       queryClient.setQueryData(
         ['btp-waiting', warehouseCode],
         (current: BtpWaitingResponse | undefined) => {
           if (!current) return current
           const fromId = ctx?.tempId ?? row.id
-          const items = current.items.some((item) => item.id === fromId)
-            ? current.items.map((item) => (item.id === fromId ? row : item))
-            : [...current.items, row]
+          if (!current.items.some((item) => item.id === fromId)) return current
+          const items = current.items.map((item) => (item.id === fromId ? row : item))
           return {
             ...current,
             items,
@@ -167,13 +169,15 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       )
     },
     onError: (error: Error, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) rejectTempId(ctx.tempId, error)
       if (ctx?.previous) queryClient.setQueryData(['btp-waiting', warehouseCode], ctx.previous)
       toast.error(error.message)
     },
   })
 
   const del = useDeleteRowDialog({
-    mutationFn: (row: BtpWaitingRow) => deleteBtpWaitingApi(warehouseCode, row.id),
+    mutationFn: (row: BtpWaitingRow) =>
+      deleteWhenReady(row.id, (id) => deleteBtpWaitingApi(warehouseCode, id)),
     successMessage: 'Đã xóa dòng BTP',
     queryKeys: [['btp-waiting', warehouseCode]],
     onRemoved: (row) => {

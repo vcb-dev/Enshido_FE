@@ -220,18 +220,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     queryFn: getInventoryLookupsApi,
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
-  })
-  const btpCatalogs = useQuery({
-    queryKey: ['catalogs', 'OTHER'],
-    queryFn: () => listCatalogsApi('OTHER'),
-    enabled: profile.showBtpCategory || profile.showBodyMetal || profile.showProductKind,
-    staleTime: 5 * 60_000,
-  })
-  const locationSlots = useQuery({
-    queryKey: ['warehouse-locations', warehouseCode],
-    queryFn: () => getLocationsApi(warehouseCode),
-    staleTime: 60_000,
-    enabled: profile.showLocation,
+    enabled: stock.isSuccess,
   })
 
   const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
@@ -246,18 +235,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     return counts
   }, [items])
 
-  // Gộp ô kệ đã cấu hình với vị trí đang gán trên NVL, phòng khi có mã lạ.
-  const locationOptions = useMemo(() => {
-    const names = new Set<string>()
-    for (const slot of locationSlots.data?.items ?? []) names.add(slot.code)
-    for (const row of items) {
-      const loc = row.locationCode?.trim()
-      if (loc) names.add(loc)
-    }
-    return [...names]
-      .sort((a, b) => a.localeCompare(b, 'vi'))
-      .map((name) => ({ id: name, name }))
-  }, [items, locationSlots.data?.items])
+  const locationOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.locationCode)),
+    [items],
+  )
 
   const statusFilterOptions = useMemo(
     () =>
@@ -282,18 +263,40 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     return [...fromLookups, ...extra]
   }, [items, lookups.data?.colors])
   const typeFilterOptions = useMemo(() => {
-    if (profile.typeCodes) return lookups.data?.consumableCategories ?? []
-    return [...(lookups.data?.materialTypes ?? []), ...(lookups.data?.otherClasses ?? [])]
-  }, [lookups.data, profile.typeCodes])
+    if (profile.typeCodes) {
+      return lookups.data?.consumableCategories?.length
+        ? lookups.data.consumableCategories
+        : uniqueFilterOptions(items.map((row) => row.materialType ?? row.otherClass))
+    }
+    const fromLookups = [...(lookups.data?.materialTypes ?? []), ...(lookups.data?.otherClasses ?? [])]
+    if (fromLookups.length) return fromLookups
+    return uniqueFilterOptions(items.map((row) => row.materialType ?? row.otherClass))
+  }, [lookups.data, profile.typeCodes, items])
   const kindFilterOptions = useMemo(() => {
     if (profile.showBtpCategory) {
       return withFallback(
         lookups.data?.btpCategories,
-        catalogChildren(btpCatalogs.data, 'danh-muc-btp'),
+        uniqueFilterOptions(items.map((row) => row.otherClass)),
       )
     }
     return CATEGORY_GROUPS.map((item) => ({ id: item.code, name: item.name }))
-  }, [lookups.data?.btpCategories, btpCatalogs.data, profile.showBtpCategory])
+  }, [lookups.data?.btpCategories, items, profile.showBtpCategory])
+  const shapeOptions = useMemo(() => {
+    const fromLookups = (lookups.data?.shapes ?? []).map((item) => ({ id: item.id, name: item.name }))
+    const extra = uniqueFilterOptions(items.map((row) => row.shape)).filter(
+      (item) => !fromLookups.some((row) => row.id === item.id || row.name === item.name),
+    )
+    return [...fromLookups, ...extra]
+  }, [items, lookups.data?.shapes])
+  const bodyMetalOptions = useMemo(
+    () => withFallback(lookups.data?.bodyMetals, uniqueFilterOptions(items.map((row) => row.bodyMetal))),
+    [items, lookups.data?.bodyMetals],
+  )
+  const productKindOptions = useMemo(
+    () =>
+      withFallback(lookups.data?.productKinds, uniqueFilterOptions(items.map((row) => row.productKind))),
+    [items, lookups.data?.productKinds],
+  )
 
   const visible = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
@@ -397,7 +400,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
               profile.showShapeColor
                 ? {
                     valueId: params.shape,
-                    options: lookups.data?.shapes ?? [],
+                    options: shapeOptions,
                     onChange: (id) => table.setFilter({ shape: id }),
                   }
                 : undefined
@@ -430,10 +433,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
               profile.showBodyMetal
                 ? {
                     valueId: params.bodyMetal,
-                    options: withFallback(
-                      lookups.data?.bodyMetals,
-                      catalogChildren(btpCatalogs.data, 'chat-lieu'),
-                    ),
+                    options: bodyMetalOptions,
                     onChange: (id) => table.setFilter({ bodyMetal: id }),
                   }
                 : undefined
@@ -442,10 +442,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
               profile.showProductKind
                 ? {
                     valueId: params.productKind,
-                    options: withFallback(
-                      lookups.data?.productKinds,
-                      catalogChildren(btpCatalogs.data, 'phan-loai-san-pham'),
-                    ),
+                    options: productKindOptions,
                     onChange: (id) => table.setFilter({ productKind: id }),
                   }
                 : undefined
