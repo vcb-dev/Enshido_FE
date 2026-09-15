@@ -31,6 +31,7 @@ import {
   generateLocationsApi,
   getLocationsApi,
   updateLocationApi,
+  type LocationListResponse,
   type LocationSlot,
 } from '../api/locations'
 import { TrashIcon } from '../components/ui'
@@ -91,12 +92,16 @@ export function LocationsPage() {
     await queryClient.invalidateQueries({ queryKey: ['warehouse-locations', WAREHOUSE_CODE] })
   }
 
+  const locKey = ['warehouse-locations', WAREHOUSE_CODE] as const
+
   const generate = useMutation({
     mutationFn: generateLocationsApi,
-    onSuccess: async (result) => {
-      toast.success(result.created ? `Đã tạo ${result.created} vị trí` : 'Các vị trí này đã có sẵn')
+    onMutate: () => {
       setOpen(false)
-      await refreshLocations()
+    },
+    onSuccess: (result) => {
+      toast.success(result.created ? `Đã tạo ${result.created} vị trí` : 'Các vị trí này đã có sẵn')
+      void refreshLocations()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -109,10 +114,18 @@ export function LocationsPage() {
       id: string
       payload: { zone: string; aisle: number; level: string; position: number }
     }) => updateLocationApi(id, payload),
-    onSuccess: async (row) => {
-      toast.success(`Đã cập nhật vị trí ${row.code}`)
+    onMutate: () => {
       setEditing(null)
-      await refreshLocations()
+    },
+    onSuccess: (row) => {
+      toast.success(`Đã cập nhật vị trí ${row.code}`)
+      queryClient.setQueryData(locKey, (current: LocationListResponse | undefined) => {
+        if (!current) return current
+        return {
+          ...current,
+          items: current.items.map((item) => (item.id === row.id ? { ...item, ...row } : item)),
+        }
+      })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', WAREHOUSE_CODE] })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -120,12 +133,21 @@ export function LocationsPage() {
 
   const remove = useMutation({
     mutationFn: (row: LocationSlot) => deleteLocationApi(row.id),
-    onSuccess: async () => {
-      toast.success('Đã xóa vị trí')
+    onMutate: (row) => {
       setDeleting(null)
-      await refreshLocations()
+      toast.success('Đã xóa vị trí')
+      void queryClient.cancelQueries({ queryKey: locKey })
+      const previous = queryClient.getQueryData<LocationListResponse>(locKey)
+      queryClient.setQueryData(locKey, (current: LocationListResponse | undefined) => {
+        if (!current) return current
+        return { ...current, items: current.items.filter((item) => item.id !== row.id) }
+      })
+      return { previous }
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error, _row, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(locKey, ctx.previous)
+      toast.error(error.message)
+    },
   })
 
   return (
@@ -348,24 +370,37 @@ export function LocationsPage() {
 
       <GenerateDialog
         open={open}
-        saving={generate.isPending}
+        saving={false}
         onClose={() => setOpen(false)}
-        onSave={(payload) => generate.mutate(payload)}
+        onSave={(payload) => {
+          setOpen(false)
+          generate.mutate(payload)
+        }}
       />
       <EditLocationDialog
         row={editing}
-        saving={saveEdit.isPending}
+        saving={false}
         onClose={() => setEditing(null)}
-        onSave={(payload) => editing && saveEdit.mutate({ id: editing.id, payload })}
+        onSave={(payload) => {
+          if (!editing) return
+          const id = editing.id
+          setEditing(null)
+          saveEdit.mutate({ id, payload })
+        }}
       />
       <OccupantsDialog row={viewing} onClose={() => setViewing(null)} />
       <ConfirmDeleteDialog
         open={Boolean(deleting)}
         title="Xóa vị trí"
         description={deleting ? `Xóa vị trí ${deleting.code}?` : ''}
-        deleting={remove.isPending}
+        deleting={false}
         onClose={() => setDeleting(null)}
-        onConfirm={() => deleting && remove.mutate(deleting)}
+        onConfirm={() => {
+          if (!deleting) return
+          const row = deleting
+          setDeleting(null)
+          remove.mutate(row)
+        }}
       />
     </Stack>
   )

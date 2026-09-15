@@ -130,6 +130,17 @@ export function upsertMoveList<
   return { ...current, items, totals: sumMoveTotals(items) }
 }
 
+export function replaceMoveId<
+  T extends { id: string; qty: string; amount: string },
+  L extends { items: T[]; totals: { qty: string; amount: string } },
+>(current: L | undefined, fromId: string, row: T): L | undefined {
+  if (!current) return current
+  const items = current.items.some((item) => item.id === fromId)
+    ? current.items.map((item) => (item.id === fromId ? row : item))
+    : [...current.items, row]
+  return { ...current, items, totals: sumMoveTotals(items) }
+}
+
 export function removeMoveList<
   T extends { id: string; qty: string; amount: string },
   L extends { items: T[]; totals: { qty: string; amount: string } },

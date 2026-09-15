@@ -8,6 +8,7 @@ import {
   deleteBtpWaitingApi,
   getBtpWaitingApi,
   updateBtpWaitingApi,
+  type BtpWaitingResponse,
   type BtpWaitingRow,
   type UpsertBtpWaitingPayload,
 } from '../api/btp'
@@ -99,19 +100,99 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       id
         ? updateBtpWaitingApi(warehouseCode, id, payload)
         : createBtpWaitingApi(warehouseCode, payload),
-    onSuccess: (_row, input) => {
-      toast.success(input.id ? 'Đã cập nhật dòng BTP' : 'Đã thêm dòng BTP')
+    onMutate: (input) => {
       dialog.close()
+      toast.success(input.id ? 'Đã cập nhật dòng BTP' : 'Đã thêm dòng BTP')
+      void queryClient.cancelQueries({ queryKey: ['btp-waiting', warehouseCode] })
+      const previous = queryClient.getQueryData<BtpWaitingResponse>(['btp-waiting', warehouseCode])
+      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const optimistic: BtpWaitingRow = {
+        id: tempId,
+        stt: input.id
+          ? (previous?.items.find((item) => item.id === input.id)?.stt ?? 0)
+          : (previous?.items.length ?? 0) + 1,
+        receivedAt: input.payload.receivedAt,
+        craftsmanUserId: input.payload.craftsmanUserId,
+        craftsmanName:
+          users.find((item) => item.id === input.payload.craftsmanUserId)?.fullName ?? '',
+        name: input.payload.name,
+        unit:
+          input.payload.unitName ||
+          units.find((unit) => unit.id === input.payload.unitId)?.name ||
+          '',
+        unitId: input.payload.unitId ?? null,
+        qty: input.payload.qty,
+        weight: input.payload.weight,
+        note: input.payload.note ?? null,
+        enteredBy: operatorName,
+      }
+      queryClient.setQueryData(
+        ['btp-waiting', warehouseCode],
+        (current: BtpWaitingResponse | undefined) => {
+          if (!current) return current
+          const items = input.id
+            ? current.items.map((item) => (item.id === tempId ? optimistic : item))
+            : [...current.items, optimistic]
+          return {
+            ...current,
+            items,
+            totals: {
+              qty: String(items.reduce((acc, row) => acc + (Number(row.qty) || 0), 0)),
+              weight: String(items.reduce((acc, row) => acc + (Number(row.weight) || 0), 0)),
+            },
+          }
+        },
+      )
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      void queryClient.invalidateQueries({ queryKey: ['btp-waiting', warehouseCode] })
+      return { previous, tempId }
     },
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (row, _input, ctx) => {
+      queryClient.setQueryData(
+        ['btp-waiting', warehouseCode],
+        (current: BtpWaitingResponse | undefined) => {
+          if (!current) return current
+          const fromId = ctx?.tempId ?? row.id
+          const items = current.items.some((item) => item.id === fromId)
+            ? current.items.map((item) => (item.id === fromId ? row : item))
+            : [...current.items, row]
+          return {
+            ...current,
+            items,
+            totals: {
+              qty: String(items.reduce((acc, item) => acc + (Number(item.qty) || 0), 0)),
+              weight: String(items.reduce((acc, item) => acc + (Number(item.weight) || 0), 0)),
+            },
+          }
+        },
+      )
+    },
+    onError: (error: Error, _input, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(['btp-waiting', warehouseCode], ctx.previous)
+      toast.error(error.message)
+    },
   })
 
   const del = useDeleteRowDialog({
     mutationFn: (row: BtpWaitingRow) => deleteBtpWaitingApi(warehouseCode, row.id),
     successMessage: 'Đã xóa dòng BTP',
-    invalidateKeys: [['btp-waiting', warehouseCode]],
+    queryKeys: [['btp-waiting', warehouseCode]],
+    onRemoved: (row) => {
+      queryClient.setQueryData(
+        ['btp-waiting', warehouseCode],
+        (current: BtpWaitingResponse | undefined) => {
+          if (!current) return current
+          const items = current.items.filter((item) => item.id !== row.id)
+          return {
+            ...current,
+            items,
+            totals: {
+              qty: String(items.reduce((acc, item) => acc + (Number(item.qty) || 0), 0)),
+              weight: String(items.reduce((acc, item) => acc + (Number(item.weight) || 0), 0)),
+            },
+          }
+        },
+      )
+    },
   })
 
   const columns = useMemo(
@@ -274,15 +355,17 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
         kind={dialog.kind}
         row={dialog.row}
         readOnly={dialog.readOnly}
-        saving={save.isPending}
+        saving={false}
         units={units}
         users={users}
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) =>
-          save.mutate({ id: dialog.kind === 'edit' ? dialog.row?.id : undefined, payload })
-        }
+        onSave={(payload) => {
+          const id = dialog.kind === 'edit' ? dialog.row?.id : undefined
+          dialog.close()
+          save.mutate({ id, payload })
+        }}
       />
       <ConfirmDeleteDialog
         open={Boolean(del.row)}

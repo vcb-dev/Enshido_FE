@@ -52,6 +52,7 @@ import {
   headerTotal,
   matchesCatalogFilters,
   removeMoveList,
+  replaceMoveId,
   sumMoveTotals,
   uniqueFilterOptions,
   upsertMoveList,
@@ -221,41 +222,62 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     ) || hasActiveCatalogFilters(catalogFilterParams)
   const totals = filtering ? sumMoveTotals(rows) : apiTotals
 
+  const inboundKey = ['warehouse-inbounds', warehouseCode] as const
+
   const save = useMutation({
     mutationFn: ({ id, payload }: { id?: string; payload: CreateInboundPayload }) =>
       id
         ? updateWarehouseInboundApi(warehouseCode, id, payload)
         : createWarehouseInboundApi(warehouseCode, payload),
-    onSuccess: (row, input) => {
+    onMutate: (input) => {
+      dialog.close()
       toast.success(
         input.id ? `Đã cập nhật ${profile.noun} nhập kho` : `Đã thêm ${profile.noun}`,
       )
-      dialog.close()
-      queryClient.setQueryData(
-        ['warehouse-inbounds', warehouseCode],
-        (current: InboundResponse | undefined) => upsertMoveList(current, row, Boolean(input.id)),
+      void queryClient.cancelQueries({ queryKey: inboundKey })
+      const previous = queryClient.getQueryData<InboundResponse>(inboundKey)
+      const tempId = input.id ?? `tmp-${crypto.randomUUID()}`
+      const optimistic = inboundOptimisticRow(input.payload, {
+        id: tempId,
+        stt: input.id
+          ? (previous?.items.find((item) => item.id === input.id)?.stt ?? 0)
+          : (previous?.items.length ?? 0) + 1,
+        enteredBy: operatorName,
+        unit:
+          input.payload.unitName ||
+          units.find((unit) => unit.id === input.payload.unitId)?.name ||
+          '',
+        supplierName:
+          suppliers.find((item) => item.id === input.payload.supplierId)?.name ?? null,
+      })
+      queryClient.setQueryData(inboundKey, (current: InboundResponse | undefined) =>
+        upsertMoveList(current, optimistic, Boolean(input.id)),
       )
       if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
-      void queryClient.invalidateQueries({
-        queryKey: ['warehouse-stock', warehouseCode],
-        refetchType: 'none',
-      })
+      return { previous, tempId }
     },
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (row, _input, ctx) => {
+      queryClient.setQueryData(inboundKey, (current: InboundResponse | undefined) =>
+        replaceMoveId(current, ctx?.tempId ?? row.id, row),
+      )
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+    },
+    onError: (error: Error, _input, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(inboundKey, ctx.previous)
+      toast.error(error.message)
+    },
   })
 
   const del = useDeleteRowDialog({
     mutationFn: (row: InboundRow) => deleteWarehouseInboundApi(warehouseCode, row.id),
     successMessage: 'Đã xóa phiếu nhập',
+    queryKeys: [['warehouse-inbounds', warehouseCode]],
+    invalidateKeys: [['warehouse-stock', warehouseCode]],
     onRemoved: (row) => {
       queryClient.setQueryData(
         ['warehouse-inbounds', warehouseCode],
         (current: InboundResponse | undefined) => removeMoveList(current, row.id),
       )
-      void queryClient.invalidateQueries({
-        queryKey: ['warehouse-stock', warehouseCode],
-        refetchType: 'none',
-      })
     },
   })
 
@@ -487,7 +509,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         kind={dialog.kind}
         row={dialog.row}
         readOnly={dialog.readOnly}
-        saving={save.isPending}
+        saving={false}
         units={units}
         suppliers={suppliers}
         materials={materials}
@@ -496,9 +518,11 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) =>
-          save.mutate({ id: dialog.kind === 'edit' ? dialog.row?.id : undefined, payload })
-        }
+        onSave={(payload) => {
+          const id = dialog.kind === 'edit' ? dialog.row?.id : undefined
+          dialog.close()
+          save.mutate({ id, payload })
+        }}
       />
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
@@ -808,4 +832,35 @@ function InboundDialog({
       />
     </CrudDialogShell>
   )
+}
+
+function inboundOptimisticRow(
+  payload: CreateInboundPayload,
+  extra: {
+    id: string
+    stt: number
+    enteredBy: string
+    unit: string
+    supplierName: string | null
+  },
+): InboundRow {
+  return {
+    id: extra.id,
+    stt: extra.stt,
+    receivedAt: payload.receivedAt,
+    name: payload.name,
+    sku: payload.sku ?? null,
+    unit: extra.unit,
+    unitId: payload.unitId ?? null,
+    qty: payload.qty,
+    stockUnitPrice: payload.stockUnitPrice ?? '0',
+    unitPrice: payload.unitPrice ?? '0',
+    amount: payload.amount ?? '0',
+    note: payload.note ?? null,
+    enteredBy: extra.enteredBy,
+    supplierSku: payload.supplierSku ?? null,
+    supplierId: payload.supplierId ?? null,
+    supplierName: extra.supplierName,
+    materialId: payload.materialId ?? null,
+  }
 }
