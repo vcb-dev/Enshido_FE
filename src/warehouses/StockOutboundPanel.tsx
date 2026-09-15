@@ -1,8 +1,9 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Link, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
+import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   createWarehouseOutboundApi,
@@ -26,6 +27,8 @@ import {
 } from '../api/inventory'
 import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
+import { listOrderOptionsApi } from '../api/productionOrders'
+import { STATUS_META } from '../orders/catalog'
 import {
   CrudDialogShell,
   DataTable,
@@ -96,7 +99,14 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const { openView, openEdit } = dialog
   const table = useTableParams({
     pageSize: 8,
-    filters: { ...CATALOG_FILTER_DEFAULTS, issuedBy: '', receivedBy: '', unit: '', color: '' },
+    filters: {
+      ...CATALOG_FILTER_DEFAULTS,
+      issuedBy: '',
+      receivedBy: '',
+      unit: '',
+      color: '',
+      productionOrderCode: '',
+    },
   })
   const { params } = table
   const catalogFilterParams = useMemo(() => {
@@ -142,6 +152,20 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     staleTime: 60_000,
     enabled: profile.showLocation,
   })
+  const orderOptionsQuery = useQuery({
+    queryKey: ['production-order-options'],
+    queryFn: () => listOrderOptionsApi(),
+    staleTime: 60_000,
+  })
+  const orderOptions: SearchSelectOption[] = useMemo(
+    () =>
+      (orderOptionsQuery.data ?? []).map((order) => ({
+        id: order.code,
+        name: order.code,
+        secondary: `${STATUS_META[order.status].label} · ${order.description}`,
+      })),
+    [orderOptionsQuery.data],
+  )
 
   const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
   const users = useMemo(() => lookups.data?.users ?? [], [lookups.data?.users])
@@ -175,6 +199,10 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     [items],
   )
   const unitOptions = useMemo(() => uniqueFilterOptions(items.map((row) => row.unit)), [items])
+  const orderCodeOptions = useMemo(
+    () => uniqueFilterOptions(items.map((row) => row.productionOrderCode)),
+    [items],
+  )
   const locationOptions = useMemo(() => {
     const names = new Set<string>()
     for (const slot of locationSlots.data?.items ?? []) names.add(slot.code)
@@ -204,6 +232,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       if (!matchesCatalogFilters(catalog, catalogFilterParams, outboundProfile)) return false
       if (params.issuedBy && (row.issuedBy ?? '').trim() !== params.issuedBy) return false
       if (params.receivedBy && (row.receivedBy ?? '').trim() !== params.receivedBy) return false
+      if (params.productionOrderCode && row.productionOrderCode !== params.productionOrderCode) {
+        return false
+      }
       return true
     })
   }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById])
@@ -216,6 +247,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       params.search.trim() ||
         params.issuedBy ||
         params.receivedBy ||
+        params.productionOrderCode ||
         (showUnit && params.unit) ||
         (outboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
@@ -262,6 +294,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         replaceMoveId(current, ctx?.tempId ?? row.id, row),
       )
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+      // NVL gắn đơn đổi thì chi phí đơn đổi theo.
+      void queryClient.invalidateQueries({ queryKey: ['production-order-costing'] })
       const dest = input.payload.destWarehouseCode
       if (dest && dest !== warehouseCode) {
         void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', dest] })
@@ -280,7 +314,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       deleteWhenReady(row.id, (id) => deleteWarehouseOutboundApi(warehouseCode, id)),
     successMessage: 'Đã xóa phiếu xuất',
     queryKeys: [['warehouse-outbounds', warehouseCode]],
-    invalidateKeys: [['warehouse-stock', warehouseCode]],
+    invalidateKeys: [['warehouse-stock', warehouseCode], ['production-order-costing']],
     onRemoved: (row) => {
       queryClient.setQueryData(
         ['warehouse-outbounds', warehouseCode],
@@ -295,6 +329,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     return [
       {
         key: 'issuedAt',
+        card: 'meta' as const,
         header: 'Ngày xuất',
         width: 96,
         sortable: true,
@@ -313,12 +348,38 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       }),
       {
         key: 'name',
+        card: 'title' as const,
         header: profile.nameLabel,
         width: 220,
         sortable: true,
         className: 'name-cell',
         cellSx: { overflow: 'visible', textOverflow: 'clip' },
         filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+      },
+      {
+        key: 'productionOrderCode',
+        header: 'Mã đơn SX',
+        width: 100,
+        sortable: true,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.productionOrderCode}
+            options={orderCodeOptions}
+            onChange={(id) => table.setFilter({ productionOrderCode: id })}
+          />
+        ),
+        render: (row: OutboundRow) =>
+          row.productionOrderCode ? (
+            <Link
+              component={RouterLink}
+              to={`/orders/${row.productionOrderCode}`}
+              sx={{ fontWeight: 600 }}
+            >
+              {row.productionOrderCode}
+            </Link>
+          ) : (
+            '—'
+          ),
       },
       ...(showUnit
         ? [
@@ -402,6 +463,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       },
       {
         key: 'issuedBy',
+        card: 'meta' as const,
         header: 'Người Xuất',
         width: 96,
         ellipsis: true,
@@ -431,15 +493,23 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       },
       {
         key: 'actions',
+        card: 'actions' as const,
         header: 'Hành động',
         width: 120,
         align: 'center' as const,
         cellSx: { overflow: 'visible' },
+        // Phiếu do lên Đơn BTP tự tạo: sửa mã BTP / số lượng trên đơn để kho và đơn luôn khớp.
         render: (row: OutboundRow) => (
           <RowActions
             onView={() => openView(row)}
-            onEdit={() => openEdit(row)}
+            onEdit={row.autoIssued ? undefined : () => openEdit(row)}
             onDelete={() => del.request(row)}
+            deleteDisabled={row.autoIssued}
+            titles={
+              row.autoIssued
+                ? { delete: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn` }
+                : undefined
+            }
           />
         ),
       },
@@ -451,12 +521,14 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     locationOptions,
     openEdit,
     openView,
+    orderCodeOptions,
     params.bodyMetal,
     params.color,
     params.issuedBy,
     params.kind,
     params.location,
     params.productKind,
+    params.productionOrderCode,
     params.receivedBy,
     params.search,
     params.shape,
@@ -480,7 +552,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
         columns={columns}
         rows={pagedRows}
@@ -489,7 +561,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
         variant="grid"
-        minWidth={1480}
+        minWidth={1580}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -499,7 +571,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
           <>
@@ -526,6 +598,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         users={users}
         materials={materials}
         materialsLoading={stock.isFetching}
+        orderOptions={orderOptions}
         warehouseCode={warehouseCode}
         operatorName={operatorName}
         onClose={dialog.close}
@@ -562,6 +635,7 @@ type OutboundFormValues = {
   inboundUnitPrice: string
   note: string
   receivedByUserId: string
+  productionOrderCode: string
 }
 
 const EMPTY_OUTBOUND: OutboundFormValues = {
@@ -574,6 +648,7 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   inboundUnitPrice: '',
   note: '',
   receivedByUserId: '',
+  productionOrderCode: '',
 }
 
 function OutboundDialog({
@@ -586,6 +661,7 @@ function OutboundDialog({
   users,
   materials,
   materialsLoading,
+  orderOptions,
   warehouseCode,
   operatorName,
   onClose,
@@ -603,6 +679,7 @@ function OutboundDialog({
   warehouseCode: string
   materials: StockMaterialOption[]
   materialsLoading?: boolean
+  orderOptions: SearchSelectOption[]
   onClose: () => void
   onExited: () => void
   onSave: (payload: CreateOutboundPayload) => void
@@ -630,6 +707,7 @@ function OutboundDialog({
                 (item) => item.fullName === row.receivedBy || item.username === row.receivedBy,
               )?.id ??
               '',
+            productionOrderCode: row.productionOrderCode ?? '',
           }
         : {
             ...EMPTY_OUTBOUND,
@@ -686,6 +764,7 @@ function OutboundDialog({
       note: values.note.trim() || undefined,
       receivedByUserId: values.receivedByUserId || undefined,
       applyToStock: !row,
+      productionOrderCode: values.productionOrderCode || null,
     })
   }
 
@@ -719,12 +798,12 @@ function OutboundDialog({
       form={form}
       onSubmit={submit}
       saving={saving}
-      submitLabel={profile.outboundLabel}
+      submitLabel={kind === 'create' ? profile.outboundLabel : undefined}
       submitDisabled={kind === 'create' && available <= 0}
       onClose={onClose}
       onExited={onExited}
     >
-      <FormRow sx={{ mt: 1 }}>
+      <FormRow columns={3} sx={{ mt: 1 }}>
         <FormTextField<OutboundFormValues>
           name="issuedAt"
           label="Ngày xuất"
@@ -741,6 +820,16 @@ function OutboundDialog({
           readOnly={readOnly}
           displayValue={row?.unit}
           placeholder="Tìm đơn vị…"
+        />
+        <FormSearchSelect<OutboundFormValues>
+          name="productionOrderCode"
+          label="Mã đơn SX"
+          options={orderOptions}
+          allowClear
+          readOnly={readOnly}
+          displayValue={row?.productionOrderCode ?? undefined}
+          placeholder="Chọn đơn dùng NVL…"
+          noOptionsText="Không có đơn đang sản xuất"
         />
       </FormRow>
 
@@ -820,7 +909,6 @@ function OutboundDialog({
         <TextInput
           label="Người Xuất"
           value={row?.issuedBy || operatorName || '—'}
-          required
           readOnly
         />
         <FormSearchSelect<OutboundFormValues>
@@ -953,5 +1041,6 @@ function outboundOptimisticRow(
     receivedByUserId: payload.receivedByUserId ?? null,
     materialId: payload.materialId ?? null,
     destWarehouseCode: payload.destWarehouseCode ?? null,
+    productionOrderCode: payload.productionOrderCode?.trim().toUpperCase() || null,
   }
 }

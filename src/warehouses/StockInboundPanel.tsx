@@ -292,6 +292,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     return [
       {
         key: 'receivedAt',
+        card: 'meta' as const,
         header: 'Ngày nhập',
         width: 108,
         sortable: true,
@@ -310,6 +311,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       }),
       {
         key: 'name',
+        card: 'title' as const,
         header: profile.nameLabel,
         ellipsis: true,
         sortable: true,
@@ -411,6 +413,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       },
       {
         key: 'supplierName',
+        card: 'meta' as const,
         header: 'NCC',
         width: 92,
         ellipsis: true,
@@ -425,6 +428,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       },
       {
         key: 'actions',
+        card: 'actions' as const,
         header: 'Hành động',
         width: 120,
         align: 'center' as const,
@@ -474,7 +478,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
         columns={columns}
         rows={pagedRows}
@@ -493,7 +497,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         toolbar={
           <>
             {filtering ? (
@@ -715,7 +719,7 @@ function InboundDialog({
       form={form}
       onSubmit={submit}
       saving={saving}
-      submitLabel={profile.inboundLabel}
+      submitLabel={kind === 'create' ? profile.inboundLabel : undefined}
       onClose={onClose}
       onExited={onExited}
     >
@@ -740,7 +744,6 @@ function InboundDialog({
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
-          required
           readOnly
         />
       </FormRow>

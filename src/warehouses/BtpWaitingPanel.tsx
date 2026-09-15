@@ -203,6 +203,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
     () => [
       {
         key: 'receivedAt',
+        card: 'meta' as const,
         header: 'Ngày nhập',
         width: 108,
         sortable: true,
@@ -210,6 +211,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       },
       {
         key: 'craftsmanName',
+        card: 'meta' as const,
         header: 'Thợ nguội',
         width: 140,
         ellipsis: true,
@@ -225,6 +227,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       },
       {
         key: 'name',
+        card: 'title' as const,
         header: 'Tên bán thành phẩm',
         ellipsis: true,
         sortable: true,
@@ -282,6 +285,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
       },
       {
         key: 'actions',
+        card: 'actions' as const,
         header: 'Hành động',
         width: 120,
         align: 'center' as const,
@@ -319,7 +323,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
   )
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
         columns={columns}
         rows={pagedRows}
@@ -338,7 +342,7 @@ export function BtpWaitingPanel({ warehouseCode }: { warehouseCode: string }) {
         total={rows.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
+        sx={{ flex: { md: 1 } }}
         toolbar={
           <>
             {filtering ? (
@@ -517,7 +521,6 @@ function BtpDialog({
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
-          required
           readOnly
         />
       </FormRow>

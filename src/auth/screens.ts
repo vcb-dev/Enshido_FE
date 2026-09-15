@@ -56,8 +56,8 @@ export function firstAllowedPath(user: PermissionUser | undefined | null): strin
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
   const firstWarehouse = visibleWarehouses(user)[0]
   if (firstWarehouse) return warehousePath(firstWarehouse)
-  if (can(user, Permission.SCREEN_LOCATIONS)) return '/cau-hinh/vi-tri'
-  if (can(user, Permission.SCREEN_CATALOGS)) return '/cau-hinh/danh-muc'
+  if (can(user, Permission.SCREEN_LOCATIONS)) return '/settings/locations'
+  if (can(user, Permission.SCREEN_CATALOGS)) return '/settings/catalogs'
   if (can(user, Permission.USERS_MANAGE)) return '/users'
   return '/'
 }

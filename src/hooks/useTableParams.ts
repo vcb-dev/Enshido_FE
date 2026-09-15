@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useQueryParams } from './useQueryParams'
-import type { ParamDefaults } from './useQueryParams'
+import type { ParamDefaults, ParamValue } from './useQueryParams'
 
 export type SortDir = 'asc' | 'desc'
 
@@ -79,9 +79,24 @@ export function useTableParams<F extends ParamDefaults = Record<string, never>>(
     [params.sort, params.dir],
   )
 
+  // Số bộ lọc riêng đang khác mặc định — KHÔNG tính ô tìm kiếm, vì search luôn
+  // có ô hiển thị riêng còn `filterCount` dùng cho badge trên nút "Bộ lọc".
+  const filterCount = useMemo(() => {
+    if (!filters) return 0
+    return Object.keys(filters).reduce((count, key) => {
+      const current = (params as Record<string, ParamValue>)[key]
+      return current === (filters as ParamDefaults)[key] ? count : count + 1
+    }, 0)
+  }, [params, filters])
+
+  /** Có đang thu hẹp kết quả không (bộ lọc hoặc từ khoá). */
+  const hasFilters = filterCount > 0 || params.search.trim() !== ''
+
   return {
     params,
     sortState,
+    filterCount,
+    hasFilters,
     setPage,
     setPageSize,
     setSearch,

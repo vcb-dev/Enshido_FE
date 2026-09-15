@@ -1,5 +1,6 @@
 import type { Ref } from 'react'
 import { Autocomplete, TextField } from '@mui/material'
+import type { SxProps, Theme } from '@mui/material'
 
 export type SearchSelectOption = {
   id: string
@@ -19,6 +20,8 @@ export function SearchSelect({
   allowClear,
   noOptionsText = 'Không có kết quả',
   size = 'medium',
+  // Mặc định không portal cho danh sách nằm trên trang. Trong Dialog phải
+  // truyền `false`, nếu không popper bị cắt bởi DialogContent có cuộn.
   disablePortal = true,
   errorText,
   helperText,
@@ -43,7 +46,7 @@ export function SearchSelect({
   errorText?: string
   helperText?: string
   inputRef?: Ref<HTMLInputElement>
-  sx?: object
+  sx?: SxProps<Theme>
   onBlur?: () => void
   onChange: (id: string) => void
 }) {

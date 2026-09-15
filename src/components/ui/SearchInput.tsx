@@ -64,7 +64,7 @@ export function SearchInput({
       disabled={disabled}
       autoFocus={autoFocus}
       fullWidth={false}
-      sx={{ minWidth: 260, ...sx }}
+      sx={{ minWidth: { xs: 0, sm: 260 }, width: { xs: '100%', sm: 'auto' }, ...sx }}
       slotProps={{
         input: {
           startAdornment: (

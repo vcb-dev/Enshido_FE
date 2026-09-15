@@ -32,6 +32,7 @@ import {
   FormRow,
   FormSelect,
   FormTextField,
+  PageHeader,
   RowActions,
   SearchInput,
   type Column,
@@ -127,13 +128,11 @@ export function UsersPage() {
   }
 
   return (
-    <Stack spacing={2} sx={{ minHeight: 0, flex: 1 }}>
-      <Stack>
-        <Typography variant="h5">Nhân sự</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Khóa tài khoản hoặc chỉnh sửa thông tin và màn hình được xem.
-        </Typography>
-      </Stack>
+    <Stack spacing={2} sx={{ flex: { md: 1 }, minHeight: { md: 0 } }}>
+      <PageHeader
+        title="Nhân sự"
+        subtitle="Khóa tài khoản hoặc chỉnh sửa thông tin và màn hình được xem."
+      />
 
       <DataTable
         columns={columns}

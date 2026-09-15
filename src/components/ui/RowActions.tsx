@@ -1,4 +1,5 @@
-import { IconButton, Stack } from '@mui/material'
+import type { ReactNode } from 'react'
+import { IconButton, Stack, Tooltip } from '@mui/material'
 import { EyeIcon, LockIcon, PencilIcon, TrashIcon, UnlockIcon } from './icons'
 
 export type RowActionsProps = {
@@ -7,21 +8,51 @@ export type RowActionsProps = {
   onLock?: () => void
   locked?: boolean
   onDelete?: () => void
+  /** Khoá nút xóa, vd: dòng đang được dùng ở nơi khác. */
+  deleteDisabled?: boolean
+  /** Tooltip từng nút; bỏ trống thì không hiện tooltip. */
+  titles?: { view?: string; edit?: string; delete?: string }
+}
+
+/** Bọc tooltip khi có tiêu đề; nút bị khoá cần `<span>` thì Tooltip mới bắt được hover. */
+function WithTooltip({
+  title,
+  disabled,
+  children,
+}: {
+  title?: string
+  disabled?: boolean
+  children: ReactNode
+}) {
+  if (!title) return <>{children}</>
+  return <Tooltip title={title}>{disabled ? <span>{children}</span> : <>{children}</>}</Tooltip>
 }
 
 /** Cụm nút Xem / Sửa / Khóa / Xóa ở cột "Hành động"; nút nào không truyền handler thì ẩn. */
-export function RowActions({ onView, onEdit, onLock, locked, onDelete }: RowActionsProps) {
+export function RowActions({
+  onView,
+  onEdit,
+  onLock,
+  locked,
+  onDelete,
+  deleteDisabled,
+  titles,
+}: RowActionsProps) {
   return (
     <Stack direction="row" spacing={0} sx={{ justifyContent: 'center' }}>
       {onView ? (
-        <IconButton size="small" aria-label="Xem" onClick={onView}>
-          <EyeIcon />
-        </IconButton>
+        <WithTooltip title={titles?.view}>
+          <IconButton size="small" aria-label={titles?.view ?? 'Xem'} onClick={onView}>
+            <EyeIcon />
+          </IconButton>
+        </WithTooltip>
       ) : null}
       {onEdit ? (
-        <IconButton size="small" aria-label="Chỉnh sửa" onClick={onEdit}>
-          <PencilIcon />
-        </IconButton>
+        <WithTooltip title={titles?.edit}>
+          <IconButton size="small" aria-label={titles?.edit ?? 'Chỉnh sửa'} onClick={onEdit}>
+            <PencilIcon />
+          </IconButton>
+        </WithTooltip>
       ) : null}
       {onLock ? (
         <IconButton
@@ -33,9 +64,17 @@ export function RowActions({ onView, onEdit, onLock, locked, onDelete }: RowActi
         </IconButton>
       ) : null}
       {onDelete ? (
-        <IconButton size="small" aria-label="Xóa" color="error" onClick={onDelete}>
-          <TrashIcon />
-        </IconButton>
+        <WithTooltip title={titles?.delete} disabled={deleteDisabled}>
+          <IconButton
+            size="small"
+            aria-label={titles?.delete ?? 'Xóa'}
+            color="error"
+            disabled={deleteDisabled}
+            onClick={onDelete}
+          >
+            <TrashIcon />
+          </IconButton>
+        </WithTooltip>
       ) : null}
     </Stack>
   )

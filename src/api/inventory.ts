@@ -33,6 +33,7 @@ export type InventoryLookups = {
   bodyMetals?: LookupItem[]
   btpCategories?: LookupItem[]
   productKinds?: LookupItem[]
+  platingColors?: LookupItem[]
   users?: DirectoryUser[]
 }
 
@@ -79,12 +80,24 @@ export type StockRow = {
   bodyMetal: string | null
   productKindId: string | null
   productKind: string | null
+  /** Màu xi (kho BTP). Màu đá dùng `colorId`. */
+  platingColorId?: string | null
+  platingColor?: string | null
+  sizeLabel?: string | null
+  images?: MaterialImage[]
   classificationCode: ClassificationCode
   classification: string
   metalKind: MetalKindCode | null
   metalKindLabel: string | null
   availability: AvailabilityCode
   availabilityLabel: string
+}
+
+export type MaterialImage = {
+  url: string
+  publicId: string
+  width?: number | null
+  height?: number | null
 }
 
 export type StockTotals = {
@@ -139,6 +152,21 @@ export function parseQtyInput(value: string) {
   if (!intPart && decPart == null) return ''
   if (decPart != null) return `${intPart || '0'}.${decPart}`
   return intPart
+}
+
+/**
+ * Ô số lượng / trọng lượng hiển thị "." là phân cách nghìn và "," là thập phân (1.250,5).
+ * Người dùng hay gõ "12.5" nên ký tự "." hoặc "," vừa gõ đều coi là dấu thập phân —
+ * nếu để nguyên, "." bị bỏ và 12.5 thành 125. Đã có phần thập phân thì bỏ ký tự vừa gõ.
+ */
+export function typedDecimalAsComma(input: HTMLInputElement | HTMLTextAreaElement, typed: string | null) {
+  const raw = input.value
+  if (typed !== '.' && typed !== ',') return raw
+  const caret = input.selectionStart ?? raw.length
+  const before = raw.slice(0, Math.max(0, caret - 1))
+  const after = raw.slice(caret)
+  if (`${before}${after}`.includes(',')) return `${before}${after}`
+  return `${before},${after}`
 }
 
 export function formatQtyInput(raw: string) {
@@ -252,6 +280,9 @@ export type UpdateStockPayload = {
   bodyMetalId?: string | null
   productKindId?: string | null
   btpCategoryId?: string | null
+  platingColorId?: string | null
+  sizeLabel?: string | null
+  images?: MaterialImage[]
   openingQty?: string
   openingAmount?: string
   stockUnitPrice?: string
@@ -386,6 +417,10 @@ export type OutboundRow = {
   receivedBy: string | null
   receivedByUserId: string | null
   materialId: string | null
+  /** Mã đơn sản xuất dùng NVL này. */
+  productionOrderCode: string | null
+  /** Phiếu do lên Đơn BTP tự tạo — chỉ sửa / xoá qua đơn. */
+  autoIssued?: boolean
   destWarehouseCode?: string | null
   destWarehouseName?: string | null
   priceBreakdown?: { qty: string; unitPrice: string; source: 'opening' | 'inbound' }[]
@@ -418,6 +453,8 @@ export type CreateOutboundPayload = {
   receivedBy?: string
   receivedByUserId?: string | null
   applyToStock?: boolean
+  /** Rỗng = bỏ gắn đơn. */
+  productionOrderCode?: string | null
   destWarehouseCode?: string | null
 }
 

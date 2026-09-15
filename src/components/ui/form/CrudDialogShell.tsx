@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
 import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form'
+import { useIsMobile } from '../../../hooks/useBreakpoint'
 import type { CrudDialogKind } from '../../../hooks/useCrudDialog'
 import { Form } from './Form'
 
@@ -13,11 +14,11 @@ export type CrudDialogShellProps<T extends FieldValues> = {
   saving: boolean
   /** Điều kiện khoá thêm cho nút Lưu/Thêm ngoài `saving` (vd: hết hàng để xuất). Không ảnh hưởng nút Hủy. */
   submitDisabled?: boolean
-  /** Nhãn nút khi tạo mới. Mặc định `Thêm`. */
-  submitLabel?: string
   onClose: () => void
   onExited: () => void
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  /** Ghi đè nhãn nút submit (mặc định "Thêm" / "Lưu" theo `kind`). */
+  submitLabel?: string
   children: ReactNode
 }
 
@@ -34,17 +35,20 @@ export function CrudDialogShell<T extends FieldValues>({
   onSubmit,
   saving,
   submitDisabled,
-  submitLabel = 'Thêm',
   onClose,
   onExited,
   maxWidth = 'md',
+  submitLabel,
   children,
 }: CrudDialogShellProps<T>) {
+  const fullScreen = useIsMobile()
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
       fullWidth
+      fullScreen={fullScreen}
       maxWidth={maxWidth}
       slotProps={{ transition: { onExited } }}
     >
@@ -56,7 +60,9 @@ export function CrudDialogShell<T extends FieldValues>({
             flexDirection: 'column',
             gap: 1.5,
             pt: 1,
-            '& .MuiFormLabel-asterisk': { color: 'error.main' },
+            // Dấu * chỉ để báo ô phải điền — chế độ xem không điền gì nên ẩn đi.
+            '& .MuiFormLabel-asterisk':
+              kind === 'view' ? { display: 'none' } : { color: 'error.main' },
           }}
         >
           {children}
@@ -72,7 +78,7 @@ export function CrudDialogShell<T extends FieldValues>({
                 Hủy
               </Button>
               <Button type="submit" variant="contained" disabled={saving || submitDisabled}>
-                {kind === 'edit' ? 'Lưu' : submitLabel}
+                {submitLabel ?? (kind === 'edit' ? 'Lưu' : 'Thêm')}
               </Button>
             </>
           )}

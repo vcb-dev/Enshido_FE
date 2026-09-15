@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom'
 import {
   Autocomplete,
@@ -13,12 +13,8 @@ import {
   Link,
   Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
@@ -28,10 +24,8 @@ import { toast } from 'sonner'
 import {
   formatMoney,
   formatQty,
-  formatQtyInput,
   getInventoryLookupsApi,
   getWarehouseStockApi,
-  parseQtyInput,
   qtyFromApi,
   updateWarehouseStockApi,
   createWarehouseStockApi,
@@ -42,6 +36,9 @@ import {
   type StockTotals,
   type UpdateStockPayload,
 } from '../api/inventory'
+import type { OrderImage } from '../api/productionOrders'
+import { cloudinaryThumb } from '../api/uploads'
+import { ImageUploadField } from '../orders/ImageUploadField'
 import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
 import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
@@ -52,22 +49,24 @@ import {
   FormRow,
   FormSearchSelect,
   FormTextField,
+  PageHeader,
   RowActions,
   type Column,
+  type ColumnGroup,
 } from '../components/ui'
+import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 import { CategorySelect } from '../warehouses/CategorySelect'
 import { ColumnHeaderFilter, ColumnHeaderSearch } from '../warehouses/ColumnHeaderFilter'
-import { SearchSelect, type SearchSelectOption } from '../warehouses/SearchSelect'
+import type { SearchSelectOption } from '../warehouses/SearchSelect'
+import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import {
-  MOCK_IN,
-  MOCK_OUT,
-  MOCK_STOCK,
   CATEGORY_GROUPS,
   CONSUMABLE_CATEGORIES,
+  WAREHOUSE_SECTIONS,
   catalogChildren,
   materialTypesFor,
   stockProfile,
@@ -76,7 +75,6 @@ import {
   warehousePath,
   warehouseSectionByCode,
   withFallback,
-  type StockMove,
   type StockProfile,
   type WarehouseSectionCode,
 } from '../warehouses/catalog'
@@ -97,17 +95,17 @@ export function WarehouseDetailPage() {
   }>()
 
   if (code === 'ban-thanh-pham') {
-    return <Navigate to="/kho/btp-cho-vao-da/ton" replace />
+    return <Navigate to="/warehouses/btp-cho-vao-da/stock" replace />
   }
 
   if (code === 'nvl-chinh' && bin && LEGACY_BINS.has(bin)) {
-    const next = section === 'btp' || !section ? 'ton' : section
-    return <Navigate to={`/kho/nvl-chinh/${next}`} replace />
+    const next = section === 'btp' || !section ? 'stock' : section
+    return <Navigate to={`/warehouses/nvl-chinh/${next}`} replace />
   }
 
   const warehouse = warehouseByCode(code ?? '')
   if (!warehouse) {
-    return <Navigate to="/kho" replace />
+    return <Navigate to="/warehouses" replace />
   }
 
   const sectionCode = warehouse.sections
@@ -116,58 +114,82 @@ export function WarehouseDetailPage() {
   const activeSection = warehouseSectionByCode(sectionCode)
 
   if (section === 'gia' || bin === 'gia') {
-    return <Navigate to="/kho/nvl-chinh/ton" replace />
+    return <Navigate to="/warehouses/nvl-chinh/stock" replace />
   }
 
   if (warehouse.sections && !activeSection) {
-    return <Navigate to={warehousePath(warehouse, 'ton')} replace />
+    return <Navigate to={warehousePath(warehouse, 'stock')} replace />
   }
 
   const stockKey = stockWarehouseCode(warehouse)
-  const items = MOCK_STOCK[stockKey] ?? []
   const title = activeSection ? `${activeSection.name} — ${warehouse.shortName}` : warehouse.name
   const subtitle = warehouse.description
-  const useLiveMoves = Boolean(warehouse.sections)
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-      <Breadcrumbs sx={{ flexShrink: 0 }}>
-        <Link component={RouterLink} to="/kho" underline="hover" color="inherit">
-          Kho
-        </Link>
-        {activeSection ? (
-          <Typography color="text.secondary">{warehouse.shortName}</Typography>
-        ) : null}
-        <Typography color="text.primary">
-          {activeSection?.name ?? warehouse.shortName}
-        </Typography>
-      </Breadcrumbs>
+    <Stack
+      spacing={1.25}
+      sx={{
+        flex: { md: 1 },
+        minHeight: { md: 0 },
+        height: { md: '100%' },
+        overflow: { xs: 'visible', md: 'hidden' },
+      }}
+    >
+      <PageHeader
+        title={title}
+        subtitle={subtitle}
+        compactSubtitle
+        breadcrumbs={
+          <Breadcrumbs>
+            <Link component={RouterLink} to="/warehouses" underline="hover" color="inherit">
+              Kho
+            </Link>
+            {activeSection ? (
+              <Typography color="text.secondary">{warehouse.shortName}</Typography>
+            ) : null}
+            <Typography color="text.primary">
+              {activeSection?.name ?? warehouse.shortName}
+            </Typography>
+          </Breadcrumbs>
+        }
+      />
 
-      <Stack sx={{ flexShrink: 0 }}>
-        <Typography variant="h5">{title}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          {subtitle}
-        </Typography>
-      </Stack>
+      {warehouse.sections && activeSection ? (
+        <Tabs
+          value={activeSection.code}
+          variant="fullWidth"
+          sx={{
+            display: { md: 'none' },
+            flexShrink: 0,
+            minHeight: 40,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            '& .MuiTab-root': { minHeight: 40, py: 0 },
+          }}
+        >
+          {WAREHOUSE_SECTIONS.map((s) => (
+            <Tab
+              key={s.code}
+              value={s.code}
+              label={s.name}
+              component={RouterLink}
+              to={warehousePath(warehouse, s.code)}
+            />
+          ))}
+        </Tabs>
+      ) : null}
 
-      {activeSection?.code === 'nhap' ? (
-        useLiveMoves ? (
-          <StockInboundPanel warehouseCode={stockKey} />
-        ) : (
-          <MoveTable key={`${stockKey}-nhap`} kind="nhap" binCode={stockKey} items={items} />
-        )
-      ) : activeSection?.code === 'xuat' ? (
-        useLiveMoves ? (
-          <StockOutboundPanel warehouseCode={stockKey} />
-        ) : (
-          <MoveTable key={`${stockKey}-xuat`} kind="xuat" binCode={stockKey} items={items} />
-        )
+      {activeSection?.code === 'inbound' ? (
+        <StockInboundPanel warehouseCode={stockKey} />
+      ) : activeSection?.code === 'outbound' ? (
+        <StockOutboundPanel warehouseCode={stockKey} />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}
     </Stack>
   )
 }
+
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
 const split = { borderLeft: '2px solid #1b4f72' }
@@ -177,6 +199,14 @@ const groupHead = {
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
   stock: { ...split, bgcolor: '#d6e3ee', fontWeight: 700, color: 'primary.main' },
 }
+/** Bốn nhóm tiêu đề bậc 1 của bảng tồn: mỗi nhóm gộp một cặp SL / TT. */
+const STOCK_GROUPS = {
+  open: { key: 'open', label: 'Tồn đầu kỳ', headSx: groupHead.open },
+  in: { key: 'in', label: 'Nhập', headSx: groupHead.in },
+  out: { key: 'out', label: 'Xuất', headSx: groupHead.out },
+  stock: { key: 'stock', label: 'Tồn', headSx: groupHead.stock },
+} satisfies Record<string, ColumnGroup>
+
 const groupBody = {
   open: { ...split, ...numCell, bgcolor: '#f7f9fb' },
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
@@ -353,7 +383,73 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const columns = useMemo(() => stockColumns(profile, openEdit), [profile, openEdit])
+  const { setFilter, setSearch } = table
+  const columns = useMemo(
+    () =>
+      stockColumns(profile, openEdit, totals, {
+        name: <ColumnHeaderSearch value={params.search} onChange={setSearch} placeholder="Tìm tên…" />,
+        location: profile.showLocation
+          ? { valueId: params.location, options: locationOptions, onChange: (id) => setFilter({ location: id }) }
+          : undefined,
+        shape: profile.showShapeColor
+          ? { valueId: params.shape, options: shapeOptions, onChange: (id) => setFilter({ shape: id }) }
+          : undefined,
+        color: profile.showShapeColor
+          ? { valueId: params.color, options: colorOptions, onChange: (id) => setFilter({ color: id }) }
+          : undefined,
+        unit: { valueId: params.unit, options: unitOptions, onChange: (id) => setFilter({ unit: id }) },
+        kind:
+          profile.showNvlCategory || profile.showBtpCategory
+            ? { valueId: params.kind, options: kindFilterOptions, onChange: (id) => setFilter({ kind: id }) }
+            : undefined,
+        type: profile.showType
+          ? { valueId: params.stone, options: typeFilterOptions, onChange: (id) => setFilter({ stone: id }) }
+          : undefined,
+        bodyMetal: profile.showBodyMetal
+          ? { valueId: params.bodyMetal, options: bodyMetalOptions, onChange: (id) => setFilter({ bodyMetal: id }) }
+          : undefined,
+        productKind: profile.showProductKind
+          ? {
+              valueId: params.productKind,
+              options: productKindOptions,
+              onChange: (id) => setFilter({ productKind: id }),
+            }
+          : undefined,
+        status: profile.showStatus
+          ? {
+              valueId: params.status === 'ALL' ? '' : params.status,
+              options: statusFilterOptions,
+              onChange: (id) => setFilter({ status: id || 'ALL' }),
+            }
+          : undefined,
+      }),
+    [
+      bodyMetalOptions,
+      colorOptions,
+      kindFilterOptions,
+      locationOptions,
+      openEdit,
+      params.bodyMetal,
+      params.color,
+      params.kind,
+      params.location,
+      params.productKind,
+      params.search,
+      params.shape,
+      params.status,
+      params.stone,
+      params.unit,
+      productKindOptions,
+      profile,
+      setFilter,
+      setSearch,
+      shapeOptions,
+      statusFilterOptions,
+      totals,
+      typeFilterOptions,
+      unitOptions,
+    ],
+  )
 
   // Bảng hẹp lại khi kho không dùng vị trí / hình dạng / màu.
   const minWidth =
@@ -366,7 +462,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     (profile.showStatus ? 0 : 110)
 
   return (
-    <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
         columns={columns}
         rows={paginate(visible, page, params.pageSize)}
@@ -376,6 +472,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         emptyText={filtered ? profile.emptyFiltered : profile.emptyText}
         variant="grid"
         minWidth={minWidth}
+        cardBreakpoint="md"
         showIndex
         indexOffset={indexOffset}
         rowsLabel={profile.noun}
@@ -384,80 +481,15 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         total={visible.length}
         onPageChange={table.setPage}
         onPageSizeChange={table.setPageSize}
-        sx={{ flex: 1 }}
-        customHeader={
-          <StockTableHeader
+        sx={{ flex: { md: 1 } }}
+        renderCard={(row, index) => (
+          <StockCard
+            row={row}
+            index={indexOffset + index + 1}
             profile={profile}
-            totals={totals}
-            nameSearch={params.search}
-            onNameSearch={table.setSearch}
-            location={
-              profile.showLocation
-                ? { valueId: params.location, options: locationOptions, onChange: (id) => table.setFilter({ location: id }) }
-                : undefined
-            }
-            shape={
-              profile.showShapeColor
-                ? {
-                    valueId: params.shape,
-                    options: shapeOptions,
-                    onChange: (id) => table.setFilter({ shape: id }),
-                  }
-                : undefined
-            }
-            color={
-              profile.showShapeColor
-                ? { valueId: params.color, options: colorOptions, onChange: (id) => table.setFilter({ color: id }) }
-                : undefined
-            }
-            unit={{ valueId: params.unit, options: unitOptions, onChange: (id) => table.setFilter({ unit: id }) }}
-            kind={
-              profile.showNvlCategory || profile.showBtpCategory
-                ? {
-                    valueId: params.kind,
-                    options: kindFilterOptions,
-                    onChange: (id) => table.setFilter({ kind: id }),
-                  }
-                : undefined
-            }
-            type={
-              profile.showType
-                ? {
-                    valueId: params.stone,
-                    options: typeFilterOptions,
-                    onChange: (id) => table.setFilter({ stone: id }),
-                  }
-                : undefined
-            }
-            bodyMetal={
-              profile.showBodyMetal
-                ? {
-                    valueId: params.bodyMetal,
-                    options: bodyMetalOptions,
-                    onChange: (id) => table.setFilter({ bodyMetal: id }),
-                  }
-                : undefined
-            }
-            productKind={
-              profile.showProductKind
-                ? {
-                    valueId: params.productKind,
-                    options: productKindOptions,
-                    onChange: (id) => table.setFilter({ productKind: id }),
-                  }
-                : undefined
-            }
-            status={
-              profile.showStatus
-                ? {
-                    valueId: params.status === 'ALL' ? '' : params.status,
-                    options: statusFilterOptions,
-                    onChange: (id) => table.setFilter({ status: id || 'ALL' }),
-                  }
-                : undefined
-            }
+            onEdit={() => openEdit(row)}
           />
-        }
+        )}
         toolbar={
           <>
             {filtered ? (
@@ -498,36 +530,113 @@ type HeaderFilter = {
   onChange: (id: string) => void
 }
 
-const FILTER_CELL_SX = {
-  border: '0 !important',
-  bgcolor: '#fff !important',
-  backgroundColor: '#fff !important',
-  py: '4px !important',
-  px: '4px !important',
-  whiteSpace: 'normal',
-  overflow: 'visible',
-  boxShadow: 'none',
-} as const
-
-const StockTableHeader = memo(function StockTableHeader({
+/**
+ * Một dòng tồn kho ở dạng thẻ (dưới `md`). Phần số liệu dùng lại
+ * [StockFigureGrid](../warehouses/StockFigureGrid.tsx) như hộp thoại sửa NVL,
+ * nên 4 nhóm SL / TT giữ nguyên cấu trúc thay vì bị trải phẳng thành 8 dòng.
+ */
+function StockCard({
+  row,
+  index,
   profile,
-  totals,
-  nameSearch,
-  onNameSearch,
-  location,
-  shape,
-  color,
-  unit,
-  kind,
-  type,
-  bodyMetal,
-  productKind,
-  status,
+  onEdit,
 }: {
+  row: StockRow
+  index: number
   profile: StockProfile
-  totals?: StockTotals
-  nameSearch: string
-  onNameSearch: (value: string) => void
+  onEdit: () => void
+}) {
+  const meta = [
+    profile.showLocation ? row.locationCode : null,
+    profile.showSku ? row.sku : null,
+    profile.showShapeColor ? row.shape : null,
+    profile.showShapeColor ? row.color : null,
+  ].filter(Boolean) as string[]
+  const details = [
+    { label: 'Đơn vị', value: row.unit },
+    profile.showNvlCategory || profile.showBtpCategory
+      ? { label: categoryHeader(profile), value: categoryText(row, profile) }
+      : null,
+    profile.showType ? { label: profile.typeLabel, value: typeText(row, profile) } : null,
+    profile.showBodyMetal ? { label: 'Chất liệu', value: row.bodyMetal ?? '—' } : null,
+    profile.showProductKind ? { label: 'Phân loại sản phẩm', value: row.productKind ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Màu đá', value: row.color ?? '—' } : null,
+    profile.showProductInfo ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
+  ].filter((item): item is { label: string; value: string } => item != null)
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="caption" color="text.secondary">
+            #{index}
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
+            {row.name}
+          </Typography>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.25, alignItems: 'center' }}
+          >
+            {meta.map((value) => (
+              <Typography key={value} variant="caption" color="text.secondary">
+                {value}
+              </Typography>
+            ))}
+            {profile.showStatus ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                color={availabilityColor(row.availability)}
+                label={row.availabilityLabel}
+              />
+            ) : null}
+          </Stack>
+        </Box>
+        <Box sx={{ flexShrink: 0 }}>
+          <RowActions onEdit={onEdit} />
+        </Box>
+      </Stack>
+
+      <Box sx={{ mt: 1.25 }}>
+        <StockFigureGrid
+          values={{
+            openingQty: row.openingQty,
+            openingAmount: row.openingAmount,
+            inQty: row.inQty,
+            inAmount: row.inAmount,
+            outQty: row.outQty,
+            outAmount: row.outAmount,
+            qty: row.qty,
+            amount: row.amount,
+          }}
+          orientation="rows"
+        />
+      </Box>
+
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{ flexWrap: 'wrap', gap: 1, mt: 1.25, color: 'text.secondary' }}
+      >
+        {details.map((item) => (
+          <Typography key={item.label} variant="caption">
+            {item.label}: {item.value}
+          </Typography>
+        ))}
+      </Stack>
+    </Paper>
+  )
+}
+
+type StockColumnFilters = {
+  name: ReactNode
   location?: HeaderFilter
   shape?: HeaderFilter
   color?: HeaderFilter
@@ -537,154 +646,48 @@ const StockTableHeader = memo(function StockTableHeader({
   bodyMetal?: HeaderFilter
   productKind?: HeaderFilter
   status?: HeaderFilter
-}) {
-  const showKind = profile.showNvlCategory || profile.showBtpCategory
-  return (
-    <>
-      <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
-        <TableCell sx={FILTER_CELL_SX} />
-        {profile.showLocation ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            {location ? <ColumnHeaderFilter {...location} /> : null}
-          </TableCell>
-        ) : null}
-        {profile.showSku ? <TableCell sx={FILTER_CELL_SX} /> : null}
-        {profile.showShapeColor ? (
-          <>
-            <TableCell sx={FILTER_CELL_SX}>
-              {shape ? <ColumnHeaderFilter {...shape} /> : null}
-            </TableCell>
-            <TableCell sx={FILTER_CELL_SX}>
-              {color ? <ColumnHeaderFilter {...color} /> : null}
-            </TableCell>
-          </>
-        ) : null}
-        <TableCell sx={FILTER_CELL_SX}>
-          <ColumnHeaderSearch
-            value={nameSearch}
-            onChange={onNameSearch}
-            placeholder="Tìm tên…"
-          />
-        </TableCell>
-        <TableCell sx={FILTER_CELL_SX}>
-          <ColumnHeaderFilter {...unit} />
-        </TableCell>
-        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
-        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
-        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
-        <TableCell colSpan={2} sx={FILTER_CELL_SX} />
-        {kind ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            <ColumnHeaderFilter {...kind} />
-          </TableCell>
-        ) : null}
-        {type ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            <ColumnHeaderFilter {...type} />
-          </TableCell>
-        ) : null}
-        {bodyMetal ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            <ColumnHeaderFilter {...bodyMetal} />
-          </TableCell>
-        ) : null}
-        {productKind ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            <ColumnHeaderFilter {...productKind} />
-          </TableCell>
-        ) : null}
-        {status ? (
-          <TableCell sx={FILTER_CELL_SX}>
-            <ColumnHeaderFilter {...status} />
-          </TableCell>
-        ) : null}
-        <TableCell sx={FILTER_CELL_SX} />
-      </TableRow>
-      <TableRow>
-        <TableCell rowSpan={2} align="center">
-          STT
-        </TableCell>
-        {profile.showLocation ? <TableCell rowSpan={2}>Vị trí</TableCell> : null}
-        {profile.showSku ? <TableCell rowSpan={2}>{profile.skuLabel}</TableCell> : null}
-        {profile.showShapeColor ? (
-          <>
-            <TableCell rowSpan={2}>Hình dạng</TableCell>
-            <TableCell rowSpan={2}>Màu sắc</TableCell>
-          </>
-        ) : null}
-        <TableCell rowSpan={2}>{profile.nameLabel}</TableCell>
-        <TableCell rowSpan={2} align="center">
-          Đơn vị
-        </TableCell>
-        <TableCell align="center" colSpan={2} sx={groupHead.open}>
-          Tồn đầu kỳ
-        </TableCell>
-        <TableCell align="center" colSpan={2} sx={groupHead.in}>
-          Nhập
-        </TableCell>
-        <TableCell align="center" colSpan={2} sx={groupHead.out}>
-          Xuất
-        </TableCell>
-        <TableCell align="center" colSpan={2} sx={groupHead.stock}>
-          Tồn
-        </TableCell>
-        {showKind ? (
-          <TableCell rowSpan={2}>{profile.showBtpCategory ? 'Danh mục BTP' : 'Danh mục'}</TableCell>
-        ) : null}
-        {profile.showType ? <TableCell rowSpan={2}>{profile.typeLabel}</TableCell> : null}
-        {profile.showBodyMetal ? <TableCell rowSpan={2}>Chất liệu</TableCell> : null}
-        {profile.showProductKind ? <TableCell rowSpan={2}>Phân loại sản phẩm</TableCell> : null}
-        {profile.showStatus ? (
-          <TableCell rowSpan={2} align="center">
-            Trạng thái
-          </TableCell>
-        ) : null}
-        <TableCell rowSpan={2} align="center">
-          Hành động
-        </TableCell>
-      </TableRow>
-      <TableRow>
-        <TableCell align="right" sx={groupHead.open}>
-          {qtyLabel(totals?.openingQty)}
-        </TableCell>
-        <TableCell align="right" sx={{ bgcolor: groupHead.open.bgcolor }}>
-          {ttLabel(totals?.openingAmount)}
-        </TableCell>
-        <TableCell align="right" sx={groupHead.in}>
-          {qtyLabel(totals?.inQty)}
-        </TableCell>
-        <TableCell align="right" sx={{ bgcolor: groupHead.in.bgcolor }}>
-          {ttLabel(totals?.inAmount)}
-        </TableCell>
-        <TableCell align="right" sx={groupHead.out}>
-          {qtyLabel(totals?.outQty)}
-        </TableCell>
-        <TableCell align="right" sx={{ bgcolor: groupHead.out.bgcolor }}>
-          {ttLabel(totals?.outAmount)}
-        </TableCell>
-        <TableCell align="right" sx={groupHead.stock}>
-          {qtyLabel(totals?.qty)}
-        </TableCell>
-        <TableCell align="right" sx={{ bgcolor: groupHead.stock.bgcolor, color: 'primary.main' }}>
-          {ttLabel(totals?.amount)}
-        </TableCell>
-      </TableRow>
-    </>
-  )
-})
+}
+
+function headerFilter(filter?: HeaderFilter) {
+  return filter ? <ColumnHeaderFilter {...filter} /> : undefined
+}
+
+function categoryHeader(profile: StockProfile) {
+  return profile.showBtpCategory ? 'Danh mục BTP' : 'Danh mục'
+}
+
+function categoryText(row: StockRow, profile: StockProfile) {
+  return profile.showBtpCategory ? (row.otherClass ?? '—') : (row.metalKindLabel ?? '—')
+}
+
+function typeText(row: StockRow, profile: StockProfile) {
+  if (profile.typeCodes) {
+    return row.otherClass ?? row.otherClassParent ?? row.materialType ?? '—'
+  }
+  return row.materialType ?? '—'
+}
 
 function stockColumns(
   profile: StockProfile,
   onEdit: (row: StockRow) => void,
+  totals: StockTotals | undefined,
+  filters: StockColumnFilters,
 ): Column<StockRow>[] {
   const columns: Column<StockRow>[] = []
 
   if (profile.showLocation) {
-    columns.push({ key: 'locationCode', header: 'Vị trí', render: (row) => row.locationCode ?? '—' })
+    columns.push({
+      key: 'locationCode',
+      card: 'meta',
+      header: 'Vị trí',
+      filter: headerFilter(filters.location),
+      render: (row) => row.locationCode ?? '—',
+    })
   }
   if (profile.showSku) {
     columns.push({
       key: 'sku',
+      card: 'meta',
       header: profile.skuLabel,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
       render: (row) => row.sku ?? '—',
@@ -692,66 +695,100 @@ function stockColumns(
   }
   if (profile.showShapeColor) {
     columns.push(
-      { key: 'shape', header: 'Hình dạng', render: (row) => row.shape ?? '—' },
-      { key: 'color', header: 'Màu sắc', render: (row) => row.color ?? '—' },
+      {
+        key: 'shape',
+        card: 'meta',
+        header: 'Hình dạng',
+        filter: headerFilter(filters.shape),
+        render: (row) => row.shape ?? '—',
+      },
+      {
+        key: 'color',
+        card: 'meta',
+        header: 'Màu sắc',
+        filter: headerFilter(filters.color),
+        render: (row) => row.color ?? '—',
+      },
     )
   }
 
   columns.push(
-    { key: 'name', header: profile.nameLabel, cellSx: { minWidth: 220 } },
-    { key: 'unit', header: 'Đơn vị', align: 'center' },
+    {
+      key: 'name',
+      card: 'title',
+      header: profile.nameLabel,
+      cellSx: { minWidth: 220 },
+      filter: filters.name,
+    },
+    { key: 'unit', header: 'Đơn vị', align: 'center', filter: headerFilter(filters.unit) },
     {
       key: 'openingQty',
-      header: 'SL',
+      header: qtyLabel(totals?.openingQty),
+      group: STOCK_GROUPS.open,
+      headSx: groupHead.open,
       align: 'right',
       cellSx: groupBody.open,
       render: (row) => formatQty(row.openingQty),
     },
     {
       key: 'openingAmount',
-      header: 'TT',
+      header: ttLabel(totals?.openingAmount),
+      group: STOCK_GROUPS.open,
+      headSx: { bgcolor: groupHead.open.bgcolor },
       align: 'right',
       cellSx: { ...numCell, bgcolor: groupBody.open.bgcolor },
       render: (row) => formatMoney(row.openingAmount),
     },
     {
       key: 'inQty',
-      header: 'SL',
+      header: qtyLabel(totals?.inQty),
+      group: STOCK_GROUPS.in,
+      headSx: groupHead.in,
       align: 'right',
       cellSx: groupBody.in,
       render: (row) => formatQty(row.inQty),
     },
     {
       key: 'inAmount',
-      header: 'TT',
+      header: ttLabel(totals?.inAmount),
+      group: STOCK_GROUPS.in,
+      headSx: { bgcolor: groupHead.in.bgcolor },
       align: 'right',
       cellSx: { ...numCell, bgcolor: groupBody.in.bgcolor },
       render: (row) => formatMoney(row.inAmount),
     },
     {
       key: 'outQty',
-      header: 'SL',
+      header: qtyLabel(totals?.outQty),
+      group: STOCK_GROUPS.out,
+      headSx: groupHead.out,
       align: 'right',
       cellSx: groupBody.out,
       render: (row) => formatQty(row.outQty),
     },
     {
       key: 'outAmount',
-      header: 'TT',
+      header: ttLabel(totals?.outAmount),
+      group: STOCK_GROUPS.out,
+      headSx: { bgcolor: groupHead.out.bgcolor },
       align: 'right',
       cellSx: { ...numCell, bgcolor: groupBody.out.bgcolor },
       render: (row) => formatMoney(row.outAmount),
     },
     {
       key: 'qty',
-      header: 'SL',
+      header: qtyLabel(totals?.qty),
+      group: STOCK_GROUPS.stock,
+      headSx: groupHead.stock,
       align: 'right',
       cellSx: groupBody.stock,
       render: (row) => formatQty(row.qty),
     },
     {
       key: 'amount',
-      header: 'TT',
+      header: ttLabel(totals?.amount),
+      group: STOCK_GROUPS.stock,
+      headSx: { bgcolor: groupHead.stock.bgcolor, color: 'primary.main' },
       align: 'right',
       cellSx: { ...groupBody.stock, borderLeft: '1px solid #b7c2cc' },
       render: (row) => formatMoney(row.amount),
@@ -761,27 +798,24 @@ function stockColumns(
   if (profile.showNvlCategory || profile.showBtpCategory) {
     columns.push({
       key: 'metalKindLabel',
-      header: profile.showBtpCategory ? 'Danh mục BTP' : 'Danh mục',
-      render: (row) =>
-        profile.showBtpCategory ? (row.otherClass ?? '—') : (row.metalKindLabel ?? '—'),
+      header: categoryHeader(profile),
+      filter: headerFilter(filters.kind),
+      render: (row) => categoryText(row, profile),
     })
   }
   if (profile.showType) {
     columns.push({
       key: 'materialType',
       header: profile.typeLabel,
-      render: (row) => {
-        if (profile.typeCodes) {
-          return row.otherClass ?? row.otherClassParent ?? row.materialType ?? '—'
-        }
-        return row.materialType ?? '—'
-      },
+      filter: headerFilter(filters.type),
+      render: (row) => typeText(row, profile),
     })
   }
   if (profile.showBodyMetal) {
     columns.push({
       key: 'bodyMetal',
       header: 'Chất liệu',
+      filter: headerFilter(filters.bodyMetal),
       render: (row) => row.bodyMetal ?? '—',
     })
   }
@@ -789,13 +823,39 @@ function stockColumns(
     columns.push({
       key: 'productKind',
       header: 'Phân loại sản phẩm',
+      filter: headerFilter(filters.productKind),
       render: (row) => row.productKind ?? '—',
     })
+  }
+  if (profile.showProductInfo) {
+    columns.push(
+      { key: 'platingColor', header: 'Màu xi', render: (row) => row.platingColor ?? '—' },
+      { key: 'color', header: 'Màu đá', render: (row) => row.color ?? '—' },
+      { key: 'sizeLabel', header: 'Size', render: (row) => row.sizeLabel ?? '—' },
+      {
+        key: 'images',
+        header: 'Ảnh',
+        render: (row) =>
+          row.images?.length ? (
+            <Box
+              component="img"
+              src={cloudinaryThumb(row.images[0].url, 64)}
+              alt=""
+              loading="lazy"
+              sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
+            />
+          ) : (
+            '—'
+          ),
+      },
+    )
   }
   if (profile.showStatus) {
     columns.push({
       key: 'availability',
+      card: 'meta',
       header: 'Trạng thái',
+      filter: headerFilter(filters.status),
       align: 'center',
       render: (row) => (
         <Chip
@@ -810,6 +870,7 @@ function stockColumns(
   columns.push(
     {
       key: 'actions',
+      card: 'actions',
       header: 'Hành động',
       align: 'center',
       render: (row) => <RowActions onEdit={() => onEdit(row)} />,
@@ -818,6 +879,7 @@ function stockColumns(
 
   return columns
 }
+
 
 function qtyLabel(value?: string) {
   return value == null ? 'SL' : `SL (${formatQty(value)})`
@@ -842,164 +904,6 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
   }
 }
 
-function MoveTable({
-  kind,
-  binCode,
-  items,
-}: {
-  kind: 'nhap' | 'xuat'
-  binCode: string
-  items: typeof MOCK_STOCK[string]
-}) {
-  const seed = kind === 'nhap' ? MOCK_IN[binCode] ?? [] : MOCK_OUT[binCode] ?? []
-  const [rows, setRows] = useState<StockMove[]>(seed)
-  const [open, setOpen] = useState(false)
-
-  const label = kind === 'nhap' ? 'phiếu nhập' : 'phiếu xuất'
-
-  return (
-    <Stack spacing={2}>
-      <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-        <Button variant="contained" onClick={() => setOpen(true)}>
-          {kind === 'nhap' ? 'Nhập NVL' : 'Xuất NVL'}
-        </Button>
-      </Stack>
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Số phiếu</TableCell>
-              <TableCell>Ngày</TableCell>
-              <TableCell>Mã</TableCell>
-              <TableCell>Tên hàng</TableCell>
-              <TableCell align="right">Số lượng</TableCell>
-              <TableCell>Đơn vị</TableCell>
-              <TableCell>Ghi chú</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.docNo} hover>
-                <TableCell>{row.docNo}</TableCell>
-                <TableCell>{row.date}</TableCell>
-                <TableCell>{row.sku}</TableCell>
-                <TableCell>{row.name}</TableCell>
-                <TableCell align="right">{row.qty}</TableCell>
-                <TableCell>{row.unit}</TableCell>
-                <TableCell>{row.note ?? '—'}</TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7}>Chưa có {label}.</TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      <MoveDialog
-        open={open}
-        kind={kind}
-        items={items}
-        onClose={() => setOpen(false)}
-        onSave={(move) => {
-          setRows((prev) => [move, ...prev])
-          setOpen(false)
-          toast.success(`Đã tạo ${label}`)
-        }}
-      />
-    </Stack>
-  )
-}
-
-function MoveDialog({
-  open,
-  kind,
-  items,
-  onClose,
-  onSave,
-}: {
-  open: boolean
-  kind: 'nhap' | 'xuat'
-  items: typeof MOCK_STOCK[string]
-  onClose: () => void
-  onSave: (move: StockMove) => void
-}) {
-  const [sku, setSku] = useState(items[0]?.sku ?? '')
-  const [qty, setQty] = useState('0')
-  const [note, setNote] = useState('')
-
-  useEffect(() => {
-    if (!open) return
-    setSku(items[0]?.sku ?? '')
-    setQty('0')
-    setNote('')
-  }, [open, items])
-
-  const selected = useMemo(() => items.find((i) => i.sku === sku), [items, sku])
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault()
-    const amount = Number(qty)
-    if (!selected || !Number.isFinite(amount) || amount <= 0) {
-      toast.error('Số lượng không hợp lệ')
-      return
-    }
-    const prefix = kind === 'nhap' ? 'PN' : 'PX'
-    onSave({
-      docNo: `${prefix}-${Date.now().toString().slice(-6)}`,
-      date: new Date().toISOString().slice(0, 10),
-      sku: selected.sku,
-      name: selected.name,
-      qty: amount,
-      unit: selected.unit,
-      note: note.trim() || undefined,
-    })
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <form onSubmit={onSubmit}>
-        <DialogTitle>{kind === 'nhap' ? 'Nhập NVL' : 'Xuất NVL'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
-          <SearchSelect
-            label="Hàng"
-            valueId={sku}
-            options={items.map((item) => ({
-              id: item.sku,
-              name: `${item.sku} — ${item.name}`,
-            }))}
-            required
-            placeholder="Tìm hàng…"
-            sx={{ mt: 1 }}
-            onChange={setSku}
-          />
-          <TextField
-            label="Số lượng"
-            type="number"
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            required
-            slotProps={{ htmlInput: { min: 0.01, step: 'any' } }}
-          />
-          <TextField
-            label="Ghi chú"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Hủy</Button>
-          <Button type="submit" variant="contained">
-            Lưu
-          </Button>
-        </DialogActions>
-      </form>
-    </Dialog>
-  )
-}
-
 type StockFormValues = {
   locationCode: string
   sku: string
@@ -1012,6 +916,9 @@ type StockFormValues = {
   bodyMetalId: string
   productKindId: string
   btpCategoryId: string
+  platingColorId: string
+  sizeLabel: string
+  images: OrderImage[]
   openingQty: string
   stockUnitPrice: string
   inQty: string
@@ -1032,6 +939,9 @@ const EMPTY_STOCK: StockFormValues = {
   bodyMetalId: '',
   productKindId: '',
   btpCategoryId: '',
+  platingColorId: '',
+  sizeLabel: '',
+  images: [],
   openingQty: '0',
   stockUnitPrice: '',
   inQty: '0',
@@ -1062,6 +972,8 @@ function StockEditDialog({
   onSave: (payload: UpdateStockPayload) => void
 }) {
   const form = useForm<StockFormValues>({ defaultValues: EMPTY_STOCK })
+  const [uploading, setUploading] = useState(false)
+  const onUploadingChange = useCallback((busy: boolean) => setUploading(busy), [])
   const lookups = useQuery({
     queryKey: ['inventory-lookups'],
     queryFn: getInventoryLookupsApi,
@@ -1104,6 +1016,9 @@ function StockEditDialog({
             bodyMetalId: row.bodyMetalId ?? '',
             productKindId: row.productKindId ?? '',
             btpCategoryId: row.otherClassId ?? '',
+            platingColorId: row.platingColorId ?? '',
+            sizeLabel: row.sizeLabel ?? '',
+            images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
             openingQty: qtyFromApi(row.openingQty),
             stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
             inQty: qtyFromApi(row.inQty),
@@ -1199,6 +1114,10 @@ function StockEditDialog({
         btpCategoryId: values.btpCategoryId || null,
         bodyMetalId: values.bodyMetalId || null,
         productKindId: values.productKindId || null,
+        platingColorId: values.platingColorId || null,
+        colorId: values.colorId || null,
+        sizeLabel: values.sizeLabel.trim(),
+        images: values.images.map(({ url, publicId, width, height }) => ({ url, publicId, width, height })),
         openingQty: values.openingQty,
         stockUnitPrice: values.stockUnitPrice || '0',
       })
@@ -1240,11 +1159,14 @@ function StockEditDialog({
     })
   }
 
+  const fullScreen = useIsMobile()
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
       fullWidth
+      fullScreen={fullScreen}
       maxWidth="md"
       slotProps={{ transition: { onExited } }}
     >
@@ -1352,6 +1274,34 @@ function StockEditDialog({
               required
               placeholder="Tìm đơn vị…"
             />
+            {profile.showProductInfo ? (
+              <>
+                <FormSearchSelect<StockFormValues>
+                  name="platingColorId"
+                  label="Màu xi"
+                  options={withFallback(
+                    lookups.data?.platingColors,
+                    catalogChildren(btpCatalogs.data, 'mau-xi'),
+                  )}
+                  allowClear
+                  placeholder="Tìm màu xi…"
+                />
+                <Controller
+                  name="colorId"
+                  control={form.control}
+                  render={({ field }) => (
+                    <ColorField
+                      label="Màu đá"
+                      colors={colors}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
+                />
+                <FormTextField<StockFormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
+              </>
+            ) : null}
             {profile.showShapeColor ? (
               <Controller
                 name="colorId"
@@ -1394,16 +1344,29 @@ function StockEditDialog({
             />
           </FormRow>
 
-          <NxtGrid
-            openingQty={openingQty}
-            openingAmount={openingAmount}
-            inQty={inQty}
-            inAmount={inAmount}
-            outQty={outQty}
-            outAmount={outAmount}
-            qty={qty}
-            amount={amount}
-            onOpeningQty={(value) => form.setValue('openingQty', value)}
+          {profile.showProductInfo ? (
+            <Controller
+              control={form.control}
+              name="images"
+              render={({ field }) => (
+                <ImageUploadField
+                  label="Ảnh sản phẩm"
+                  kind="PRODUCT"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onUploadingChange={onUploadingChange}
+                />
+              )}
+            />
+          ) : null}
+
+          <StockFigureGrid
+            values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
+            notes
+            editableOpeningQty={{
+              value: openingQty,
+              onChange: (value) => form.setValue('openingQty', value),
+            }}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
             Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
@@ -1416,8 +1379,8 @@ function StockEditDialog({
           <Button onClick={onClose} disabled={saving}>
             Hủy
           </Button>
-          <Button type="submit" variant="contained" disabled={saving}>
-            {row ? 'Lưu' : profile.createLabel}
+          <Button type="submit" variant="contained" disabled={saving || uploading}>
+            {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
           </Button>
         </DialogActions>
       </Form>
@@ -1427,11 +1390,13 @@ function StockEditDialog({
 
 /** Ô chọn màu kèm chấm màu — cần renderOption riêng nên không dùng SearchSelect. */
 function ColorField({
+  label = 'Màu sắc',
   colors,
   value,
   onChange,
   onBlur,
 }: {
+  label?: string
   colors: LookupItem[]
   value: string
   onChange: (value: string) => void
@@ -1474,7 +1439,7 @@ function ColorField({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Màu sắc"
+          label={label}
           placeholder="Tìm màu…"
           slotProps={{
             ...params.slotProps,
@@ -1512,156 +1477,6 @@ function ColorSwatch({ code, name }: { code?: string | null; name?: string | nul
         display: 'inline-block',
       }}
     />
-  )
-}
-
-function NxtGrid({
-  openingQty,
-  openingAmount,
-  inQty,
-  inAmount,
-  outQty,
-  outAmount,
-  qty,
-  amount,
-  onOpeningQty,
-}: {
-  openingQty: string
-  openingAmount: string
-  inQty: string
-  inAmount: string
-  outQty: string
-  outAmount: string
-  qty: string
-  amount: string
-  onOpeningQty: (value: string) => void
-}) {
-  const cols = [
-    { key: 'open', label: 'Tồn đầu kỳ', bg: '#edf1f4', note: 'TT = SL × đơn giá tồn' },
-    { key: 'in', label: 'Nhập', bg: '#e4f0e8', note: 'Tổng phiếu nhập (Σ SL × đơn giá)' },
-    { key: 'out', label: 'Xuất', bg: '#f3ebe7', note: 'Tổng phiếu xuất theo ngày' },
-    { key: 'stock', label: 'Tồn', bg: '#d6e3ee', note: 'Công thức cố định' },
-  ] as const
-
-  return (
-    <Box>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: '72px repeat(4, minmax(0, 1fr))',
-          border: '1px solid #b7c2cc',
-          borderRadius: 1,
-          overflow: 'hidden',
-          '& > *': {
-            borderRight: '1px solid #b7c2cc',
-            borderBottom: '1px solid #b7c2cc',
-            px: 1,
-            py: 0.85,
-            minWidth: 0,
-          },
-          '& > *:nth-of-type(5n)': { borderRight: 'none' },
-          '& > *:nth-last-of-type(-n + 5)': { borderBottom: 'none' },
-        }}
-      >
-        <Box sx={{ bgcolor: '#f4f6f7', fontWeight: 700, fontSize: 12, color: 'text.secondary' }} />
-        {cols.map((col) => (
-          <Box
-            key={col.key}
-            sx={{
-              bgcolor: col.bg,
-              fontWeight: 700,
-              fontSize: 13,
-              textAlign: 'center',
-              color: col.key === 'stock' ? 'primary.main' : 'text.primary',
-              lineHeight: 1.25,
-            }}
-          >
-            {col.label}
-            {col.note ? (
-              <Box
-                component="span"
-                sx={{
-                  display: 'block',
-                  fontWeight: 500,
-                  fontSize: 11,
-                  color: 'text.secondary',
-                  fontStyle: 'italic',
-                  mt: 0.25,
-                }}
-              >
-                {col.note}
-              </Box>
-            ) : null}
-          </Box>
-        ))}
-
-        <Box sx={{ bgcolor: '#f4f6f7', fontSize: 12, fontWeight: 700, color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
-          SL
-        </Box>
-        <NxtCell value={formatQtyInput(openingQty)} editable onChange={(v) => onOpeningQty(parseQtyInput(v))} />
-        <NxtCell value={formatQty(inQty)} />
-        <NxtCell value={formatQty(outQty)} />
-        <NxtCell value={formatQty(qty)} />
-
-        <Box sx={{ bgcolor: '#f4f6f7', fontSize: 12, fontWeight: 700, color: 'text.secondary', display: 'flex', alignItems: 'center', borderBottom: 'none' }}>
-          TT
-        </Box>
-        <NxtCell
-          value={formatMoney(openingAmount || '0')}
-        />
-        <NxtCell value={formatMoney(inAmount)} />
-        <NxtCell value={formatMoney(outAmount)} />
-        <NxtCell value={formatMoney(amount || '0')} />
-      </Box>
-    </Box>
-  )
-}
-
-function NxtCell({
-  value,
-  editable,
-  onChange,
-}: {
-  value: string
-  editable?: boolean
-  onChange?: (value: string) => void
-}) {
-  if (!editable) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          fontVariantNumeric: 'tabular-nums',
-          color: 'text.secondary',
-          bgcolor: '#fbfcfd',
-        }}
-      >
-        {value}
-      </Box>
-    )
-  }
-  return (
-    <Box sx={{ p: '4px 6px !important', bgcolor: '#fff' }}>
-      <TextField
-        value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-        size="small"
-        fullWidth
-        hiddenLabel
-        slotProps={{
-          htmlInput: {
-            inputMode: 'decimal',
-            style: { textAlign: 'right', fontVariantNumeric: 'tabular-nums', padding: '6px 8px' },
-          },
-        }}
-        sx={{
-          '& .MuiOutlinedInput-root': { bgcolor: '#fff' },
-          '& fieldset': { borderColor: '#d5dbe0' },
-        }}
-      />
-    </Box>
   )
 }
 
