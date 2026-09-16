@@ -43,6 +43,8 @@ import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
 import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   DataTable,
   Form,
   FormMoneyField,
@@ -58,7 +60,6 @@ import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 import { CategorySelect } from '../warehouses/CategorySelect'
-import { ColumnHeaderFilter, ColumnHeaderSearch } from '../warehouses/ColumnHeaderFilter'
 import type { SearchSelectOption } from '../warehouses/SearchSelect'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'

@@ -6,13 +6,15 @@ export type ProductionStatus =
   | 'CASTING'
   | 'FILING'
   | 'STONE_SETTING'
-  | 'POLISH_PLATING'
+  | 'ENGRAVING'
+  | 'POLISHING'
+  | 'PLATING'
+  | 'DEFECT'
   | 'FINISHING'
   | 'DELIVERED'
-  | 'DEFECT'
 
-/** Cột "Quá trình sản xuất" trên phiếu thợ. Khắc + Ngoại Quan thuộc trạng thái Hoàn thiện. */
-export type StageCode = 'FILING' | 'STONE_SETTING' | 'POLISH_PLATING' | 'ENGRAVING' | 'APPEARANCE'
+/** Khâu giao thợ trên phiếu. Lỗi / Hoàn thiện là kết cục cuối phiếu, không phải khâu. */
+export type StageCode = 'FILING' | 'STONE_SETTING' | 'ENGRAVING' | 'POLISHING' | 'PLATING'
 
 export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
 
@@ -72,14 +74,16 @@ export type StageEntry = {
   attempt: number
   handedByName: string
   handedAt: string
-  handedTotalWeight: string | null
+  /** Số lượng sản phẩm giao cho thợ (đơn cũ chưa ghi thì null). */
+  handedQty: number | null
   handedSilverWeight: string | null
   craftsmanUserId: string | null
   craftsmanName: string
   /** Người KCS — nhân viên cân lại bạc khi thợ nộp lại. */
   returnedByName: string | null
   returnedAt: string | null
-  returnedTotalWeight: string | null
+  /** Số lượng KCS nhận lại — ít hơn số giao khi có hàng hỏng ở khâu. */
+  returnedQty: number | null
   returnedSilverWeight: string | null
   btpRecoveredWeight: string | null
   silverRecoveredWeight: string | null
@@ -180,15 +184,15 @@ export type UpsertProductionOrderPayload = {
 export type HandoverPayload = {
   craftsmanUserId: string
   handedAt: string
-  handedTotalWeight?: string | null
+  handedQty?: number | null
   handedSilverWeight: string
   note?: string
 }
 
 export type ReturnPayload = {
   returnedAt: string
+  returnedQty?: number | null
   laborCost?: string | null
-  returnedTotalWeight?: string | null
   returnedSilverWeight: string
   btpRecoveredWeight?: string | null
   silverRecoveredWeight?: string | null
@@ -345,6 +349,19 @@ export function undoReturnApi(code: string, stageId: string) {
   })
 }
 
+/** Chốt hàng đạt: đơn sang Hoàn thiện và vào kho thành phẩm. */
+export function finishOrderApi(code: string, payload: { finishedAt?: string; note?: string } = {}) {
+  return apiFetch<ProductionOrderDetail>(orderPath(code, '/finish'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Admin gỡ hoàn thiện: đơn ra khỏi kho thành phẩm, về lại khâu cuối. */
+export function undoFinishOrderApi(code: string) {
+  return apiFetch<ProductionOrderDetail>(orderPath(code, '/finish'), { method: 'DELETE' })
+}
+
 export function markTicketPrintedApi(code: string) {
   return apiFetch<{ lastPrintedAt: string | null }>(orderPath(code, '/printed'), {
     method: 'POST',
@@ -378,6 +395,14 @@ export function updateOrderCostApi(code: string, costId: string, payload: OrderC
   return apiFetch<{ success: boolean }>(orderPath(code, `/costs/${costId}`), {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  })
+}
+
+/** Sửa tiền công một khâu ngay ở phần chi phí (khâu đã được KCS nhận lại). */
+export function updateStageLaborApi(code: string, stageId: string, laborCost: string | null) {
+  return apiFetch<{ success: boolean }>(orderPath(code, `/stages/${stageId}/labor`), {
+    method: 'PATCH',
+    body: JSON.stringify({ laborCost }),
   })
 }
 

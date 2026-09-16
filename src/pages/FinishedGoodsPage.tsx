@@ -117,7 +117,7 @@ export function FinishedGoodsPage() {
     >
       <PageHeader
         title="Kho thành phẩm"
-        subtitle={`Đơn tự vào kho khi KCS nhận lại khâu Ngoại Quan. Đang tồn ${totalQty} sản phẩm · giá trị ${formatMoney(String(Math.round(totalValue)))} đ.`}
+        subtitle={`Đơn vào kho khi chốt Hoàn thiện trên phiếu thợ. Đang tồn ${totalQty} sản phẩm · giá trị ${formatMoney(String(Math.round(totalValue)))} đ.`}
         compactSubtitle
       />
 

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Box, Link, ListItemText, Menu, MenuItem, Stack, Tab, Tabs, Tooltip } from '@mui/material'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Box, Button, Link, ListItemText, Menu, MenuItem, Stack, Tab, Tabs, Tooltip } from '@mui/material'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -17,14 +17,13 @@ import {
 import { formatStockedDate } from '../api/inventory'
 import { cloudinaryThumb } from '../api/uploads'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   DataTable,
-  FILTER_FIELD_SX,
   PageHeader,
-  PanelToolbar,
-  SelectInput,
   type Column,
+  type ColumnFilterOption,
 } from '../components/ui'
-import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTableParams } from '../hooks/useTableParams'
 import {
   formatDateTime,
@@ -51,14 +50,13 @@ export function ProductionOrdersPage() {
     pageSize: 25,
     filters: { status: '', requestType: '', source: '' },
   })
-  const { params } = table
-  const search = useDebouncedValue(params.search, 300)
+  const { params, setFilter, setSearch } = table
 
   const listParams = {
     status: params.status as ProductionStatus | '',
     requestType: params.requestType as ProductionRequestType | '',
     source: params.source as ProductionSource | '',
-    search,
+    search: params.search,
     page: params.page,
     pageSize: params.pageSize,
     sort: params.sort || undefined,
@@ -90,9 +88,37 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const columns = useMemo(() => orderColumns(), [])
+  const columns = useMemo(
+    () =>
+      orderColumns({
+        search: (
+          <ColumnHeaderSearch
+            value={params.search}
+            onChange={setSearch}
+            placeholder="Tìm mã, mô tả…"
+          />
+        ),
+        source: (
+          <ColumnHeaderFilter
+            valueId={params.source}
+            options={SOURCE_OPTIONS}
+            onChange={(id) => setFilter({ source: id })}
+          />
+        ),
+        requestType: (
+          <ColumnHeaderFilter
+            valueId={params.requestType}
+            options={REQUEST_TYPE_OPTIONS}
+            onChange={(id) => setFilter({ requestType: id })}
+          />
+        ),
+      }),
+    [params.requestType, params.search, params.source, setFilter, setSearch],
+  )
   const counts = list.data?.statusCounts
   const items = list.data?.items ?? []
+  // Tab trạng thái không tính là bộ lọc cột — "Xóa lọc" giữ nguyên tab đang xem.
+  const columnFiltered = Boolean(params.source || params.requestType || params.search.trim())
 
   return (
     <Stack
@@ -133,7 +159,7 @@ export function ProductionOrdersPage() {
         emptyText={table.hasFilters ? 'Không có đơn khớp bộ lọc.' : 'Chưa có đơn sản xuất.'}
         variant="grid"
         fixedLayout
-        minWidth={1632}
+        minWidth={1722}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         onRowClick={(row) => navigate(`/orders/${row.code}`)}
@@ -147,36 +173,24 @@ export function ProductionOrdersPage() {
         rowsLabel="đơn"
         sx={{ flex: { md: 1 } }}
         toolbar={
-          <PanelToolbar
-            search={params.search}
-            onSearchChange={table.setSearch}
-            searchPlaceholder="Tìm mã SX, mã theo dõi, mã 3D, người chốt, mô tả…"
-            filters={
-              <>
-                <SelectInput
-                  label="Loại đơn"
-                  value={params.source}
-                  onChange={(value) => table.setFilter({ source: value })}
-                  options={SOURCES.map((source) => ({ value: source, label: SOURCE_META[source].label }))}
-                  placeholder="Tất cả"
-                  sx={FILTER_FIELD_SX}
-                />
-                <SelectInput
-                  label="Yêu cầu làm hàng"
-                  value={params.requestType}
-                  onChange={(value) => table.setFilter({ requestType: value })}
-                  options={REQUEST_TYPES.map((type) => ({ value: type, label: REQUEST_TYPE_META[type].label }))}
-                  placeholder="Tất cả"
-                  sx={FILTER_FIELD_SX}
-                />
-              </>
-            }
-            filterCount={(params.requestType ? 1 : 0) + (params.source ? 1 : 0)}
-            onClearFilters={() => table.setFilter({ requestType: '', source: '' })}
-            createLabel="Lên đơn"
-            createEndIcon={<ArrowDropDownIcon />}
-            onCreate={setCreateMenu}
-          />
+          <>
+            {columnFiltered ? (
+              <Button
+                size="small"
+                onClick={() => setFilter({ source: '', requestType: '', search: '' })}
+              >
+                Xóa lọc
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button
+              variant="contained"
+              endIcon={<ArrowDropDownIcon />}
+              onClick={(event) => setCreateMenu(event.currentTarget)}
+            >
+              Lên đơn
+            </Button>
+          </>
         }
       />
 
@@ -216,6 +230,16 @@ export function ProductionOrdersPage() {
 
 const CREATE_SOURCES: ProductionSource[] = ['BTP', 'NVL']
 
+const SOURCE_OPTIONS: ColumnFilterOption[] = SOURCES.map((source) => ({
+  id: source,
+  name: SOURCE_META[source].label,
+}))
+
+const REQUEST_TYPE_OPTIONS: ColumnFilterOption[] = REQUEST_TYPES.map((type) => ({
+  id: type,
+  name: REQUEST_TYPE_META[type].label,
+}))
+
 function tabLabel(label: string, count: number | undefined) {
   return count == null ? label : `${label} (${count})`
 }
@@ -243,7 +267,10 @@ function Thumbs({ images }: { images: ProductionOrderRow['images'] }) {
   )
 }
 
-function orderColumns(): Column<ProductionOrderRow>[] {
+/** Ô lọc đặt trên hàng filter, ngay dưới tên cột — giống các màn tồn kho. */
+type ColumnFilters = { search: ReactNode; source: ReactNode; requestType: ReactNode }
+
+function orderColumns(filters: ColumnFilters): Column<ProductionOrderRow>[] {
   return [
     {
       key: 'createdAt',
@@ -264,20 +291,36 @@ function orderColumns(): Column<ProductionOrderRow>[] {
     {
       key: 'code',
       header: 'Mã SX',
-      width: 76,
+      width: 132,
       sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
+      filter: filters.search,
     },
     {
       key: 'source',
       header: 'Loại đơn',
-      width: 132,
+      width: 150,
+      filter: filters.source,
+      // Chip giữ nguyên bề ngang, mã BTP dài thì cắt bớt — không cho tràn sang cột bên cạnh.
+      cellSx: { overflow: 'hidden' },
       render: (row) => (
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <SourceChip source={row.source} />
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
+          <Box sx={{ display: 'flex', flexShrink: 0 }}>
+            <SourceChip source={row.source} />
+          </Box>
           {row.btpSku ? (
-            <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+            <Box
+              component="span"
+              sx={{
+                fontSize: 12,
+                color: 'text.secondary',
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {row.btpSku}
             </Box>
           ) : null}
@@ -299,7 +342,8 @@ function orderColumns(): Column<ProductionOrderRow>[] {
     {
       key: 'requestType',
       header: 'Yêu cầu làm hàng',
-      width: 124,
+      width: 140,
+      filter: filters.requestType,
       render: (row) => <RequestTypeChip type={row.requestType} />,
     },
     { key: 'qty', header: 'Số lượng', width: 80, numeric: true, sortable: true },

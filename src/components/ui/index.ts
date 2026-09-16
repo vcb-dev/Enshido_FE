@@ -27,6 +27,9 @@ export type { AutocompleteInputProps } from './AutocompleteInput'
 export { SearchInput } from './SearchInput'
 export type { SearchInputProps } from './SearchInput'
 
+export { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
+export type { ColumnFilterOption } from './ColumnHeaderFilter'
+
 export { DataTable } from './DataTable'
 export type { Column, ColumnGroup, DataTableProps } from './DataTable'
 

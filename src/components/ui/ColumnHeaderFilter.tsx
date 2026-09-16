@@ -1,13 +1,13 @@
 import { Autocomplete, TextField } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 export type ColumnFilterOption = {
   id: string
   name: string
 }
 
-const FILTER_FIELD_SX = {
+const COLUMN_FILTER_SX = {
   width: '100%',
   minWidth: 0,
   '& .MuiInputBase-root': {
@@ -54,7 +54,7 @@ export function ColumnHeaderFilter({
       renderInput={(params) => (
         <TextField {...params} hiddenLabel placeholder={placeholder} />
       )}
-      sx={{ ...FILTER_FIELD_SX, display: 'block' }}
+      sx={{ ...COLUMN_FILTER_SX, display: 'block' }}
     />
   )
 }
@@ -87,7 +87,7 @@ export function ColumnHeaderSearch({
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       placeholder={placeholder}
-      sx={FILTER_FIELD_SX}
+      sx={COLUMN_FILTER_SX}
     />
   )
 }

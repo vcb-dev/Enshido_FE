@@ -8,8 +8,23 @@ import { useAuth } from '../auth/AuthContext'
 import { getProductionOrderApi, markTicketPrintedApi, type ProductionOrderDetail } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { cloudinaryFit } from '../api/uploads'
-import { formatDateTime, orderTicketUrl, STAGE_LABEL, STAGES, STATUS_META } from '../orders/catalog'
-import { latestByStage, TICKET_HEADER_BG, TICKET_ROWS, TICKET_TONE_BG } from '../orders/ticketRows'
+import {
+  formatDateTime,
+  orderTicketUrl,
+  SILVER_LOSS_TONE,
+  STAGE_LABEL,
+  STAGES,
+  STATUS_META,
+} from '../orders/catalog'
+import {
+  latestByStage,
+  outcomeLines,
+  TICKET_HEADER_BG,
+  TICKET_OUTCOME_LABEL,
+  TICKET_OUTCOMES,
+  TICKET_ROWS,
+  TICKET_TONE_BG,
+} from '../orders/ticketRows'
 
 type Paper = 'A5' | 'A4'
 
@@ -18,6 +33,19 @@ const PAPER_WIDTH: Record<Paper, string> = { A5: '210mm', A4: '297mm' }
 
 const BLUE = '#2f5da8'
 const TITLE_RED = '#e0403a'
+
+/**
+ * Bảng phiếu = 1 cột nhãn + mỗi khâu một cột + 2 cột kết cục (Lỗi / Hoàn thiện). Khối thông tin
+ * đầu phiếu chỉ xếp theo 6 ô nên ô cuối mỗi hàng nuốt số cột dư — đổi số khâu là phiếu tự khớp
+ * lại, không lệch ô.
+ */
+const TICKET_COLS = STAGES.length + TICKET_OUTCOMES.length + 1
+const SPAN_1 = TICKET_COLS - 5
+const SPAN_2 = SPAN_1 + 1
+const SPAN_3 = SPAN_1 + 2
+/** Cột kết cục rộng hơn cột khâu vì chứa lý do lỗi / thông tin vào kho. */
+const OUTCOME_COL_WIDTH = 13
+const STAGE_COL_WIDTH = `${((81 - OUTCOME_COL_WIDTH * TICKET_OUTCOMES.length) / STAGES.length).toFixed(2)}%`
 
 export function ProductionTicketPrintPage() {
   const { code = '' } = useParams()
@@ -176,7 +204,10 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
         <colgroup>
           <col style={{ width: '19%' }} />
           {STAGES.map((stage) => (
-            <col key={stage} style={{ width: '16.2%' }} />
+            <col key={stage} style={{ width: STAGE_COL_WIDTH }} />
+          ))}
+          {TICKET_OUTCOMES.map((outcome) => (
+            <col key={outcome} style={{ width: `${OUTCOME_COL_WIDTH}%` }} />
           ))}
         </colgroup>
         <tbody>
@@ -186,7 +217,9 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <Head>Ngày đặt đơn:</Head>
             <Head style={{ color: BLUE }}>{ticketDay(order.receivedDate)}</Head>
             <Head>Ngày cần trả:</Head>
-            <Head style={{ color: BLUE }}>{ticketDay(order.dueDate)}</Head>
+            <Head colSpan={SPAN_1} style={{ color: BLUE }}>
+              {ticketDay(order.dueDate)}
+            </Head>
           </tr>
           <tr>
             <td style={center}>Phân đơn</td>
@@ -196,7 +229,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             {order.source === 'BTP' ? (
               <>
                 <Label>Mã BTP:</Label>
-                <td colSpan={3} style={{ ...center, color: BLUE, fontWeight: 700 }}>
+                <td colSpan={SPAN_3} style={{ ...center, color: BLUE, fontWeight: 700 }}>
                   {order.btp ? `${order.btp.sku ?? ''} · ${order.btp.name}` : order.btpSku}
                 </td>
               </>
@@ -205,7 +238,9 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
                 <Label>Ngày báo Đúc:</Label>
                 <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingSentDate)}</td>
                 <Label>Ngày Đúc về:</Label>
-                <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingReturnedDate)}</td>
+                <td colSpan={SPAN_1} style={{ ...center, color: BLUE, fontWeight: 700 }}>
+                  {ticketDay(order.castingReturnedDate)}
+                </td>
               </>
             )}
           </tr>
@@ -226,7 +261,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <Label>Size</Label>
             <Value>{order.sizeLabel}</Value>
             <Label>Loại đá</Label>
-            <Value>{order.stoneTypes.join(', ')}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneTypes.join(', ')}</Value>
           </tr>
           <tr>
             <Label>Kích thước</Label>
@@ -234,31 +269,31 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <Label>
               Số lượng đá <i>(viên)</i>:
             </Label>
-            <Value>{order.stoneCount}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneCount}</Value>
           </tr>
           <tr>
             <Label>Số lượng:</Label>
             <Value>{order.qty}</Value>
             <Label>Trọng lượng đá:</Label>
-            <Value>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
           </tr>
           <tr>
             <Label>Chất liệu</Label>
             <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{order.mainMaterial ?? ''}</td>
-            <td colSpan={2} style={{ ...center, fontWeight: 700 }}>
+            <td colSpan={SPAN_2} style={{ ...center, fontWeight: 700 }}>
               Nội dung khắc Laser:
             </td>
           </tr>
           <tr>
             <Label>Màu sắc:</Label>
             <Value>{order.platingColor}</Value>
-            <td colSpan={2} style={{ ...center, whiteSpace: 'pre-wrap' }}>
+            <td colSpan={SPAN_2} style={{ ...center, whiteSpace: 'pre-wrap' }}>
               {order.laserEngraving ?? ''}
             </td>
           </tr>
           <tr>
             <td style={{ ...center, fontStyle: 'italic', fontWeight: 700 }}>Yêu cầu khác</td>
-            <td colSpan={3} style={{ whiteSpace: 'pre-wrap' }}>
+            <td colSpan={SPAN_3} style={{ whiteSpace: 'pre-wrap' }}>
               {order.otherRequirements ?? ''}
             </td>
           </tr>
@@ -271,23 +306,50 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
                 {latest[stage] && latest[stage].attempt > 1 ? ` (lần ${latest[stage].attempt})` : ''}
               </Head>
             ))}
+            {TICKET_OUTCOMES.map((outcome) => (
+              <Head key={outcome}>{TICKET_OUTCOME_LABEL[outcome]}</Head>
+            ))}
           </tr>
-          {TICKET_ROWS.map((row) => (
+          {TICKET_ROWS.map((row, index) => (
             <tr key={row.key} style={row.tone ? { background: TICKET_TONE_BG[row.tone] } : undefined}>
-              {row.label != null ? (
-                <td rowSpan={row.labelRowSpan} style={{ fontWeight: row.tone ? 700 : 400 }}>
-                  {row.label}
-                  {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
-                </td>
-              ) : null}
+              <td style={{ fontWeight: row.tone ? 700 : 400 }}>
+                {row.label}
+                {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
+              </td>
               {STAGES.map((stage) => {
                 const entry = latest[stage]
+                const level = entry && row.warnLevel ? row.warnLevel(entry) : null
                 return (
-                  <td key={stage} style={{ textAlign: row.numeric ? 'right' : 'left', height: '4.2mm' }}>
+                  <td
+                    key={stage}
+                    style={{
+                      textAlign: row.numeric ? 'right' : 'left',
+                      height: '4.2mm',
+                      // In đen trắng vẫn đọc được mức cảnh báo nhờ chữ đậm.
+                      ...(level
+                        ? {
+                            background: SILVER_LOSS_TONE[level].bg,
+                            color: SILVER_LOSS_TONE[level].fg,
+                            fontWeight: 700,
+                          }
+                        : null),
+                    }}
+                  >
                     {entry ? row.value(entry) : ''}
                   </td>
                 )
               })}
+              {index === 0
+                ? TICKET_OUTCOMES.map((outcome) => (
+                    <td
+                      key={outcome}
+                      rowSpan={TICKET_ROWS.length}
+                      style={{ verticalAlign: 'top', whiteSpace: 'pre-line' }}
+                    >
+                      {outcomeLines(order, outcome).join('\n')}
+                    </td>
+                  ))
+                : null}
             </tr>
           ))}
         </tbody>
@@ -309,9 +371,11 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
 const center: CSSProperties = { textAlign: 'center' }
 
 /** Ô tiêu đề nền vàng như mẫu. */
-function Head({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+function Head({ children, colSpan, style }: { children: ReactNode; colSpan?: number; style?: CSSProperties }) {
   return (
-    <td style={{ background: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center', ...style }}>{children}</td>
+    <td colSpan={colSpan} style={{ background: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center', ...style }}>
+      {children}
+    </td>
   )
 }
 
@@ -319,8 +383,12 @@ function Label({ children }: { children: ReactNode }) {
   return <td style={{ fontWeight: 700 }}>{children}</td>
 }
 
-function Value({ children }: { children: ReactNode }) {
-  return <td style={{ textAlign: 'center' }}>{children ?? ''}</td>
+function Value({ children, colSpan }: { children: ReactNode; colSpan?: number }) {
+  return (
+    <td colSpan={colSpan} style={{ textAlign: 'center' }}>
+      {children ?? ''}
+    </td>
+  )
 }
 
 /** Ngày trên phiếu: 2026/05/08 như mẫu Excel. */

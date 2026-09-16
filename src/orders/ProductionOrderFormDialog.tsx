@@ -131,6 +131,8 @@ export function ProductionOrderFormDialog({
   const isBtp = source === 'BTP'
   // Đã giao khâu thì phiếu xuất BTP đã theo hàng đi — không đổi loại đơn / mã BTP nữa.
   const sourceLocked = Boolean(order && order.stages.length > 0)
+  // Lên đơn NVL mới thì hàng đầu không còn ô nào — bỏ luôn hàng cho form đỡ hở.
+  const showSourceRow = Boolean(order) || isBtp
 
   const btpOptions = useQuery({
     queryKey: ['btp-options'],
@@ -255,7 +257,7 @@ export function ProductionOrderFormDialog({
     <CrudDialogShell<FormValues>
       open={open}
       kind={order ? 'edit' : 'create'}
-      titles={{ ...TITLES, create: `Lên ${SOURCE_META[source].label.toLowerCase()}` }}
+      titles={{ ...TITLES, create: `Lên đơn ${source}` }}
       form={form}
       onSubmit={submit}
       saving={saving}
@@ -265,15 +267,19 @@ export function ProductionOrderFormDialog({
       onClose={onClose}
       onExited={onExited ?? (() => undefined)}
     >
-      <FormRow columns={2} sx={{ mt: 1 }}>
-        <FormSelect<FormValues>
-          name="source"
-          label="Loại đơn"
-          required
-          disabled={sourceLocked || Boolean(order?.castingSentDate && order.source === 'NVL')}
-          options={SOURCES.map((item) => ({ value: item, label: SOURCE_META[item].label }))}
-          helperText={sourceLocked ? 'Đơn đã giao khâu, không đổi loại đơn được' : SOURCE_HINT[source]}
-        />
+      {/* Lên đơn mới không hỏi lại loại đơn — đã chọn ở menu "Lên đơn" và ghi trên tiêu đề. */}
+      {showSourceRow ? (
+        <FormRow columns={2} sx={{ mt: 1 }}>
+          {order ? (
+            <FormSelect<FormValues>
+              name="source"
+              label="Loại đơn"
+              required
+              disabled={sourceLocked || Boolean(order.castingSentDate && order.source === 'NVL')}
+              options={SOURCES.map((item) => ({ value: item, label: SOURCE_META[item].label }))}
+              helperText={sourceLocked ? 'Đơn đã giao khâu, không đổi loại đơn được' : SOURCE_HINT[source]}
+            />
+        ) : null}
         {isBtp ? (
           <Controller
             control={form.control}
@@ -302,8 +308,9 @@ export function ProductionOrderFormDialog({
           />
         ) : null}
       </FormRow>
+      ) : null}
 
-      <FormRow columns={4}>
+      <FormRow columns={4} sx={showSourceRow ? undefined : { mt: 1 }}>
         <FormSelect<FormValues>
           name="requestType"
           label="Yêu cầu làm hàng"
