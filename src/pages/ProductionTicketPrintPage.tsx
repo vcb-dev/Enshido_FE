@@ -5,7 +5,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { getProductionOrderApi, markTicketPrintedApi, type ProductionOrderDetail } from '../api/productionOrders'
+import {
+  getProductionOrderApi,
+  markSubTicketPrintedApi,
+  markTicketPrintedApi,
+  type ProductionOrderDetail,
+  type SubTicket,
+} from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { cloudinaryFit } from '../api/uploads'
 import {
@@ -15,10 +21,11 @@ import {
   STAGE_LABEL,
   STAGES,
   STATUS_META,
+  subTicketUrl,
 } from '../orders/catalog'
 import {
-  latestByStage,
   outcomeLines,
+  stageColumns,
   TICKET_HEADER_BG,
   TICKET_OUTCOME_LABEL,
   TICKET_OUTCOMES,
@@ -47,8 +54,9 @@ const SPAN_3 = SPAN_1 + 2
 const OUTCOME_COL_WIDTH = 13
 const STAGE_COL_WIDTH = `${((81 - OUTCOME_COL_WIDTH * TICKET_OUTCOMES.length) / STAGES.length).toFixed(2)}%`
 
+/** In phiếu mẹ (`/orders/:code/print`) hoặc phiếu con cho thợ (`/orders/:code/tickets/:no/print`). */
 export function ProductionTicketPrintPage() {
-  const { code = '' } = useParams()
+  const { code = '', no } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -60,12 +68,29 @@ export function ProductionTicketPrintPage() {
     queryFn: () => getProductionOrderApi(code),
     staleTime: 0,
   })
+  const ticketNo = no != null ? Number(no) : null
+  const subTicket = ticketNo != null ? detail.data?.subTickets.find((ticket) => ticket.no === ticketNo) : undefined
+  const missingTicket = ticketNo != null && detail.data != null && !subTicket
   // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
-  const canPrint = detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate)
+  const canPrint = !missingTicket && (detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate))
 
   async function print() {
     window.print()
     try {
+      if (ticketNo != null) {
+        const { lastPrintedAt } = await markSubTicketPrintedApi(code, ticketNo)
+        queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
+          prev
+            ? {
+                ...prev,
+                subTickets: prev.subTickets.map((ticket) =>
+                  ticket.no === ticketNo ? { ...ticket, lastPrintedAt } : ticket,
+                ),
+              }
+            : prev,
+        )
+        return
+      }
       const { lastPrintedAt } = await markTicketPrintedApi(code)
       queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
         prev ? { ...prev, lastPrintedAt } : prev,
@@ -111,11 +136,15 @@ export function ProductionTicketPrintPage() {
       </Stack>
     )
   }
-  if (!detail.data) {
+  if (!detail.data || missingTicket) {
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="error">
-          {detail.error instanceof Error ? detail.error.message : 'Không tải được đơn sản xuất'}
+          {missingTicket
+            ? `Không tìm thấy phiếu con ${code}-${no}`
+            : detail.error instanceof Error
+              ? detail.error.message
+              : 'Không tải được đơn sản xuất'}
         </Alert>
       </Box>
     )
@@ -180,23 +209,49 @@ export function ProductionTicketPrintPage() {
           '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
         }}
       >
-        <Ticket order={order} printedBy={user?.fullName || user?.username || ''} />
+        <Ticket order={order} subTicket={subTicket} printedBy={user?.fullName || user?.username || ''} />
       </Box>
     </Box>
   )
 }
 
-function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy: string }) {
-  const latest = latestByStage(order.stages)
+function Ticket({
+  order,
+  subTicket,
+  printedBy,
+}: {
+  order: ProductionOrderDetail
+  subTicket?: SubTicket
+  printedBy: string
+}) {
+  const columns = stageColumns(order.stages, subTicket?.id)
+  const ticketIndex = subTicket ? order.subTickets.findIndex((ticket) => ticket.id === subTicket.id) : -1
+  const silverWeight = subTicket ? subTicket.silverWeight : order.silverWeight
+  const splitNote = subTicket
+    ? `Phiếu con của đơn ${order.code} (${order.qty} sp${
+        order.silverWeight != null ? ` · ${formatQty(order.silverWeight)} g bạc` : ''
+      })`
+    : order.subTickets.length
+      ? `Phiếu con: ${order.subTickets
+          .map((ticket) => `${ticket.code} (${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g)`)
+          .join(', ')}`
+      : ''
   const productImages = order.images.filter((image) => image.kind === 'PRODUCT')
   const images = (productImages.length ? productImages : order.images).slice(0, 2)
 
   return (
     <>
       <Box sx={{ position: 'relative', textAlign: 'center', minHeight: '11mm' }}>
-        <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>Phiếu sản xuất</Box>
+        <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>
+          {subTicket ? 'Phiếu sản xuất — phiếu con' : 'Phiếu sản xuất'}
+        </Box>
         <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
-          <QRCodeSVG value={orderTicketUrl(order.code)} size={96} marginSize={0} style={{ width: '11mm', height: '11mm' }} />
+          <QRCodeSVG
+            value={subTicket ? subTicketUrl(subTicket.code) : orderTicketUrl(order.code)}
+            size={96}
+            marginSize={0}
+            style={{ width: '11mm', height: '11mm' }}
+          />
         </Box>
       </Box>
 
@@ -213,7 +268,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
         <tbody>
           <tr>
             <Head>Mã Sản xuất:</Head>
-            <Head style={{ fontSize: '1.1em' }}>{order.code}</Head>
+            <Head style={{ fontSize: '1.1em' }}>{subTicket ? subTicket.code : order.code}</Head>
             <Head>Ngày đặt đơn:</Head>
             <Head style={{ color: BLUE }}>{ticketDay(order.receivedDate)}</Head>
             <Head>Ngày cần trả:</Head>
@@ -222,10 +277,21 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             </Head>
           </tr>
           <tr>
-            <td style={center}>Phân đơn</td>
-            <td style={center}>
-              {order.split.no} / {order.split.total}
-            </td>
+            {subTicket ? (
+              <>
+                <td style={center}>Phiếu con</td>
+                <td style={center}>
+                  {ticketIndex + 1} / {order.subTickets.length}
+                </td>
+              </>
+            ) : (
+              <>
+                <td style={center}>Phân đơn</td>
+                <td style={center}>
+                  {order.split.no} / {order.split.total}
+                </td>
+              </>
+            )}
             {order.source === 'BTP' ? (
               <>
                 <Label>Mã BTP:</Label>
@@ -245,7 +311,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             )}
           </tr>
           <tr>
-            <td colSpan={2} rowSpan={6} style={{ padding: '1mm', verticalAlign: 'middle' }}>
+            <td colSpan={2} rowSpan={7} style={{ padding: '1mm', verticalAlign: 'middle' }}>
               <Box sx={{ display: 'flex', gap: '1.5mm', justifyContent: 'center', alignItems: 'center', height: '26mm' }}>
                 {images.map((image) => (
                   <Box
@@ -273,9 +339,18 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
           </tr>
           <tr>
             <Label>Số lượng:</Label>
-            <Value>{order.qty}</Value>
+            <Value>{subTicket ? subTicket.qty : order.qty}</Value>
             <Label>Trọng lượng đá:</Label>
             <Value colSpan={SPAN_1}>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
+          </tr>
+          <tr>
+            <Label>TL bạc (g):</Label>
+            <td style={{ ...center, color: BLUE, fontWeight: 700 }}>
+              {silverWeight != null ? formatQty(silverWeight) : ''}
+            </td>
+            <td colSpan={SPAN_2} style={{ fontSize: '0.9em' }}>
+              {splitNote}
+            </td>
           </tr>
           <tr>
             <Label>Chất liệu</Label>
@@ -300,12 +375,15 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
 
           <tr>
             <Head style={{ color: BLUE }}>Quá trình sản xuất</Head>
-            {STAGES.map((stage) => (
-              <Head key={stage}>
-                {STAGE_LABEL[stage]}
-                {latest[stage] && latest[stage].attempt > 1 ? ` (lần ${latest[stage].attempt})` : ''}
-              </Head>
-            ))}
+            {STAGES.map((stage) => {
+              const entry = columns[stage].entry
+              return (
+                <Head key={stage}>
+                  {STAGE_LABEL[stage]}
+                  {entry && entry.attempt > 1 ? ` (lần ${entry.attempt})` : ''}
+                </Head>
+              )
+            })}
             {TICKET_OUTCOMES.map((outcome) => (
               <Head key={outcome}>{TICKET_OUTCOME_LABEL[outcome]}</Head>
             ))}
@@ -317,7 +395,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
                 {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
               </td>
               {STAGES.map((stage) => {
-                const entry = latest[stage]
+                const entry = columns[stage].entry
                 const level = entry && row.warnLevel ? row.warnLevel(entry) : null
                 return (
                   <td
@@ -346,7 +424,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
                       rowSpan={TICKET_ROWS.length}
                       style={{ verticalAlign: 'top', whiteSpace: 'pre-line' }}
                     >
-                      {outcomeLines(order, outcome).join('\n')}
+                      {outcomeLines(order, outcome, subTicket).join('\n')}
                     </td>
                   ))
                 : null}

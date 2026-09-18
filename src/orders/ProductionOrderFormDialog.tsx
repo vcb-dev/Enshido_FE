@@ -44,6 +44,7 @@ type FormValues = {
   sizeLabel: string
   stoneCount: string
   stoneWeight: string
+  silverWeight: string
   laserEngraving: string
   otherRequirements: string
   mainMaterial: string
@@ -74,6 +75,7 @@ const EMPTY: FormValues = {
   sizeLabel: '',
   stoneCount: '',
   stoneWeight: '',
+  silverWeight: '',
   laserEngraving: '',
   otherRequirements: '',
   mainMaterial: '',
@@ -170,6 +172,7 @@ export function ProductionOrderFormDialog({
             sizeLabel: order.sizeLabel ?? '',
             stoneCount: order.stoneCount != null ? String(order.stoneCount) : '',
             stoneWeight: order.stoneWeight ?? '',
+            silverWeight: order.silverWeight ?? '',
             laserEngraving: order.laserEngraving ?? '',
             otherRequirements: order.otherRequirements ?? '',
             mainMaterial: order.mainMaterial ?? '',
@@ -238,6 +241,7 @@ export function ProductionOrderFormDialog({
       sizeLabel: values.sizeLabel.trim(),
       stoneCount: values.stoneCount ? Number(values.stoneCount) : null,
       stoneWeight: values.stoneWeight || null,
+      silverWeight: values.silverWeight || null,
       laserEngraving: values.laserEngraving.trim(),
       otherRequirements: values.otherRequirements.trim(),
       mainMaterial: values.mainMaterial.trim(),
@@ -359,7 +363,7 @@ export function ProductionOrderFormDialog({
         <FormTextField<FormValues> name="trackingCode" label="Mã theo dõi đơn" placeholder="V-9147" />
       </FormRow>
 
-      <FormRow columns={3}>
+      <FormRow columns={4}>
         <FormTextField<FormValues>
           name="qty"
           label="Số lượng"
@@ -372,7 +376,23 @@ export function ProductionOrderFormDialog({
               if (values.source === 'BTP' && btpMaxQty != null && Number(value) > btpMaxQty) {
                 return `Kho BTP chỉ còn ${formatQty(String(btpMaxQty))}`
               }
+              if (order && Number(value) < order.subTicketTotals.qty) {
+                return `Đã chia ${order.subTicketTotals.qty} sp cho phiếu con`
+              }
               return true
+            },
+          }}
+        />
+        <FormQtyField<FormValues>
+          name="silverWeight"
+          label="Tổng TL bạc (g)"
+          helperText="Mốc chia gram cho phiếu con"
+          rules={{
+            validate: (value) => {
+              if (!order?.subTickets.length) return true
+              if (!value) return 'Đơn đã chia phiếu con, không bỏ trống được'
+              const split = Number(order.subTicketTotals.silverWeight)
+              return Number(value) >= split || `Đã chia ${formatQty(order.subTicketTotals.silverWeight)} g cho phiếu con`
             },
           }}
         />

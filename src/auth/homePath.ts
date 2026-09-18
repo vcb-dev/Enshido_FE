@@ -1,4 +1,4 @@
-import { can, Permission } from './permissions'
+import { can, isWorkerOnly, Permission } from './permissions'
 import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
 
 export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
@@ -18,8 +18,14 @@ export function canAccessPath(
     const code = p.split('/')[2] ?? ''
     return canSeeWarehouse(user, code)
   }
-  if (p === '/orders' || p.startsWith('/orders/')) return true
-  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return true
+  // Thợ không vào màn quản lý đơn và trang in phiếu; riêng /orders/:code rơi vào bản
+  // chỉ-đọc "Thông tin đơn (tham khảo)" để QR trên phiếu giấy đã in vẫn dùng được.
+  if (p === '/orders' || p.endsWith('/print')) return !isWorkerOnly(user)
+  if (p.startsWith('/orders/')) return true
+  // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.
+  if (p.startsWith('/tickets/')) return true
+  if (p === '/my-tickets') return can(user, Permission.PRODUCTION_WORKER)
+  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return !isWorkerOnly(user)
   if (p === '/settings') {
     return can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   }

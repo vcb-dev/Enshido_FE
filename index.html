@@ -3,33 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover để nội dung chạm mép trên iPhone có tai thỏ; theme.ts bù safe-area. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Phiếu sản xuất và phiếu con cho thợ xưởng Enshido" />
+    <meta name="theme-color" content="#1b4f72" />
+    <!-- Cài lên màn hình chính iOS: chạy toàn màn hình, không thanh địa chỉ Safari. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Enshido" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Enshido | Quản lý xưởng sản xuất</title>
     <script>
       window.__ENSHIDO_SESSION__ = (function () {
         if (document.cookie.indexOf('enshido_csrf=') === -1) {
           return Promise.resolve(null)
         }
-        return fetch('/api/auth/me', { credentials: 'include' }).then(function (res) {
-          if (res.ok) return res.json()
-          if (res.status !== 401) throw new Error('session')
-          var match = document.cookie.match(/(?:^|; )enshido_csrf=([^;]*)/)
-          var csrf = match ? decodeURIComponent(match[1]) : ''
-          return fetch('/api/auth/refresh', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': csrf,
-            },
-            body: '{}',
-          }).then(function (refreshRes) {
-            if (!refreshRes.ok) throw new Error('session')
-            return refreshRes.json()
+        // Mất mạng KHÁC hết phiên: ngoài xưởng sóng chập chờn, không được đăng xuất thợ.
+        // null = hết phiên thật (401) · { offline: true } = chưa xác minh được.
+        var OFFLINE = { offline: true }
+        function ask(url, init) {
+          return fetch(url, init).then(
+            function (res) { return res },
+            function () { return null },
+          )
+        }
+        return ask('/api/auth/me', { credentials: 'include' })
+          .then(function (res) {
+            if (!res) return OFFLINE
+            if (res.ok) return res.json()
+            if (res.status !== 401) return OFFLINE
+            var match = document.cookie.match(/(?:^|; )enshido_csrf=([^;]*)/)
+            var csrf = match ? decodeURIComponent(match[1]) : ''
+            return ask('/api/auth/refresh', {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrf,
+              },
+              body: '{}',
+            }).then(function (refreshRes) {
+              if (!refreshRes) return OFFLINE
+              if (!refreshRes.ok) return null
+              return refreshRes.json()
+            })
           })
-        }).catch(function () {
-          return null
-        })
+          .catch(function () {
+            return OFFLINE
+          })
       })()
     </script>
   </head>

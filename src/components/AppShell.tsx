@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState, type ReactNode } from 'react'
 import {
+  Alert,
   AppBar,
   Avatar,
   Box,
@@ -19,6 +20,7 @@ import {
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/Logout'
 import TableChartIcon from '@mui/icons-material/TableChart'
+import CloudOffIcon from '@mui/icons-material/CloudOff'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
@@ -29,13 +31,14 @@ import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import Inventory2Icon from '@mui/icons-material/Inventory2'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, Permission } from '../auth/permissions'
+import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
@@ -51,7 +54,7 @@ function initials(name?: string, username?: string) {
 }
 
 export function AppShell() {
-  const { user, logout } = useAuth()
+  const { user, logout, offline } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -59,6 +62,9 @@ export function AppShell() {
   const canSeeConfig =
     can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
+  const isWorker = can(user, Permission.PRODUCTION_WORKER)
+  // Tài khoản chỉ làm thợ: giấu hẳn các màn quản lý, không chỉ chặn ở route.
+  const workerOnly = isWorkerOnly(user)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
 
@@ -150,6 +156,8 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
+            isWorker={isWorker}
+            workerOnly={workerOnly}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -171,6 +179,8 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
+            isWorker={isWorker}
+            workerOnly={workerOnly}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -191,6 +201,11 @@ export function AppShell() {
         }}
       >
         <Toolbar variant="dense" sx={{ flexShrink: 0 }} />
+        {offline ? (
+          <Alert severity="warning" icon={<CloudOffIcon fontSize="small" />} sx={{ mb: 1.5, flexShrink: 0 }}>
+            Đang ngoại tuyến — chỉ xem được dữ liệu đã tải. Có mạng lại là tự cập nhật.
+          </Alert>
+        ) : null}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           <Suspense fallback={<LinearProgress />}>
             <Outlet />
@@ -243,12 +258,18 @@ function DrawerNav({
   canManageUsers,
   canSeeConfig,
   showDashboard,
+  isWorker,
+  workerOnly,
   showKho,
   warehouses,
 }: {
   canManageUsers: boolean
   canSeeConfig: boolean
   showDashboard: boolean
+  /** Tài khoản có quyền Thợ sản xuất — thấy màn Phiếu của tôi. */
+  isWorker: boolean
+  /** Tài khoản chỉ làm thợ — ẩn các màn quản lý đơn và kho. */
+  workerOnly: boolean
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
@@ -270,7 +291,12 @@ function DrawerNav({
         {showDashboard ? (
           <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         ) : null}
-        <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
+        {workerOnly ? null : (
+          <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
+        )}
+        {isWorker ? (
+          <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
+        ) : null}
         {showKho ? (
           <>
             <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
@@ -296,7 +322,7 @@ function DrawerNav({
               />
             </List>
           </>
-        ) : (
+        ) : workerOnly ? null : (
           <NavItem
             to="/finished-goods"
             icon={<Inventory2Icon fontSize="small" />}

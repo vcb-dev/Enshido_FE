@@ -1,0 +1,375 @@
+import type { ReactNode } from 'react'
+import {
+  Alert,
+  Box,
+  Breadcrumbs,
+  Button,
+  CircularProgress,
+  Divider,
+  Link,
+  Paper,
+  Stack,
+  Typography,
+} from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
+import { Link as RouterLink, useParams } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import {
+  claimSubTicketApi,
+  getSubTicketOrderApi,
+  parseSubTicketCode,
+  submitSubTicketApi,
+  unclaimSubTicketApi,
+  unsubmitSubTicketApi,
+  type ProductionOrderDetail,
+  type StageEntry,
+  type SubTicket,
+} from '../api/productionOrders'
+import { formatQty, formatStockedDate } from '../api/inventory'
+import { cloudinaryThumb } from '../api/uploads'
+import { PageHeader } from '../components/ui'
+import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
+import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
+import { useOrderMutation } from '../orders/useOrderMutation'
+
+/** Trang phiếu con mở từ QR: thợ xem phần việc của mình và bấm nhận khâu đang mở. */
+export function SubTicketPage() {
+  const { ticketCode = '' } = useParams()
+  const parsed = parseSubTicketCode(ticketCode)
+  const orderCode = parsed?.orderCode ?? ''
+
+  // Đi qua đường phiếu con: tài khoản thợ bị chặn khỏi endpoint đơn mẹ. Vẫn dùng chung
+  // queryKey với các mutation phiếu con để cache không bị lệch.
+  const detail = useQuery({
+    queryKey: ['production-order', orderCode],
+    queryFn: () => getSubTicketOrderApi(ticketCode),
+    enabled: parsed != null,
+    staleTime: 10_000,
+  })
+
+  if (!parsed) {
+    return <Alert severity="error">Mã phiếu con không hợp lệ: {ticketCode}</Alert>
+  }
+  if (detail.isLoading) {
+    return (
+      <Stack sx={{ py: 6, alignItems: 'center' }}>
+        <CircularProgress size={28} />
+      </Stack>
+    )
+  }
+  const order = detail.data
+  const ticket = order?.subTickets.find((item) => item.no === parsed.no)
+  if (!order || !ticket) {
+    return (
+      <Alert severity="error">
+        {detail.error instanceof Error ? detail.error.message : `Không tìm thấy phiếu con ${ticketCode}`}
+      </Alert>
+    )
+  }
+  return <TicketView order={order} ticket={ticket} />
+}
+
+function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: SubTicket }) {
+  const { user } = useAuth()
+  const isWorker = can(user, Permission.PRODUCTION_WORKER)
+  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
+  // Thợ không có đơn mẹ: giấu mã đơn, trạng thái đơn và mọi lối mở màn quản lý đơn.
+  const workerOnly = isWorkerOnly(user)
+  const claim = useOrderMutation(
+    order.code,
+    () => claimSubTicketApi(order.code, ticket.no),
+    `Đã nhận phiếu ${ticket.code} — chờ người giao cân bạc và xác nhận`,
+  )
+  const unclaim = useOrderMutation(
+    order.code,
+    () => unclaimSubTicketApi(order.code, ticket.no),
+    `Đã huỷ nhận phiếu ${ticket.code}`,
+  )
+  const submit = useOrderMutation(
+    order.code,
+    () => submitSubTicketApi(order.code, ticket.no),
+    `Đã báo xong phiếu ${ticket.code} — mang hàng tới KCS cân lại`,
+  )
+  const unsubmit = useOrderMutation(
+    order.code,
+    () => unsubmitSubTicketApi(order.code, ticket.no),
+    `Đã bỏ báo xong phiếu ${ticket.code}`,
+  )
+
+  const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
+  const openEntry = entries.find((entry) => !entry.returnedAt)
+  const last = entries.at(-1)
+  const images = order.images.filter((image) => image.kind === 'PRODUCT')
+  const shown = (images.length ? images : order.images).slice(0, 3)
+  const mine = ticket.claimedByUserId != null && ticket.claimedByUserId === user?.id
+  // Khâu đang mở là của chính mình — chỉ người đó mới báo xong được (khớp luật ở BE).
+  const workingIsMine = openEntry?.craftsmanUserId != null && openEntry.craftsmanUserId === user?.id
+  const closed = order.status === 'DELIVERED' || order.finishedGoods != null
+
+  return (
+    <Stack spacing={1.5} sx={{ pb: 3 }}>
+      <PageHeader
+        title={`Phiếu con ${ticket.code}`}
+        titleAdornment={
+          <Stack direction="row" spacing={0.75}>
+            <SubTicketStateChip state={ticket.state} />
+            {workerOnly ? null : <StatusChip status={order.status} />}
+          </Stack>
+        }
+        subtitle={
+          workerOnly
+            ? `Chia ${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g bạc`
+            : `Đơn ${order.code} · chia ${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g bạc`
+        }
+        breadcrumbs={
+          <Breadcrumbs>
+            {isWorker ? (
+              <Link component={RouterLink} to="/my-tickets" underline="hover" color="inherit">
+                Phiếu của tôi
+              </Link>
+            ) : null}
+            {workerOnly ? null : (
+              <Link
+                component={RouterLink}
+                to={`/orders/${order.code}?tab=production`}
+                underline="hover"
+                color="inherit"
+              >
+                Đơn {order.code}
+              </Link>
+            )}
+            <Typography color="text.primary">{ticket.code}</Typography>
+          </Breadcrumbs>
+        }
+        actions={
+          workerOnly ? undefined : (
+            <Button variant="outlined" component={RouterLink} to={`/orders/${order.code}?tab=production`}>
+              Mở đơn {order.code}
+            </Button>
+          )
+        }
+      />
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Khâu hiện tại
+        </Typography>
+        {ticket.outcome ? (
+          <Typography variant="body2">
+            Phiếu đã chốt <b>{ticket.outcome === 'DEFECT' ? 'Lỗi' : 'Hoàn thiện'}</b>
+            {ticket.outcomeAt ? ` lúc ${formatDateShort(ticket.outcomeAt)}` : ''}
+            {ticket.outcomeByName ? ` bởi ${ticket.outcomeByName}` : ''} — không còn khâu nào để nhận.
+          </Typography>
+        ) : closed ? (
+          <Typography variant="body2">Đơn đã hoàn thiện / đã giao — phiếu không còn khâu nào để nhận.</Typography>
+        ) : ticket.state === 'WAITING' && ticket.pendingStage ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp ·{' '}
+              {formatQty(ticket.availableSilver)} g bạc. Chưa có thợ nhận.
+            </Typography>
+            {isWorker ? (
+              <Button
+                variant="contained"
+                size="large"
+                disabled={claim.isPending}
+                onClick={() => claim.mutate(undefined)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Nhận phiếu — khâu {STAGE_LABEL[ticket.pendingStage]}
+              </Button>
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                Chỉ tài khoản có quyền Thợ sản xuất mới nhận phiếu được.
+              </Typography>
+            )}
+          </Stack>
+        ) : ticket.state === 'CLAIMED' && ticket.pendingStage ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              {mine ? 'Bạn' : `Thợ ${ticket.claimedByName ?? ''}`} đã nhận khâu{' '}
+              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người giao cân
+              bạc và xác nhận giao ({ticket.availableQty} sp · {formatQty(ticket.availableSilver)} g).
+            </Typography>
+            {mine ? (
+              <Button
+                color="inherit"
+                variant="outlined"
+                disabled={unclaim.isPending}
+                onClick={() => unclaim.mutate(undefined)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Huỷ nhận
+              </Button>
+            ) : null}
+          </Stack>
+        ) : (ticket.state === 'WORKING' || ticket.state === 'SUBMITTED') && openEntry ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              Thợ <b>{openEntry.craftsmanName}</b> đang làm khâu <b>{STAGE_LABEL[openEntry.stage]}</b> từ{' '}
+              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp ·{' '}
+              {openEntry.handedSilverWeight ? formatQty(openEntry.handedSilverWeight) : '—'} g bạc (người giao{' '}
+              {openEntry.handedByName}).
+              {ticket.state === 'SUBMITTED'
+                ? ` Đã báo xong lúc ${formatDateShort(openEntry.submittedAt)} — chờ KCS cân lại.`
+                : ' Làm xong thì bấm "Đã làm xong" rồi mang hàng tới KCS cân lại.'}
+            </Typography>
+            {workingIsMine && ticket.state === 'WORKING' ? (
+              <Button
+                variant="contained"
+                size="large"
+                disabled={submit.isPending}
+                onClick={() => submit.mutate(undefined)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Đã làm xong — nộp cho KCS
+              </Button>
+            ) : null}
+            {workingIsMine && ticket.state === 'SUBMITTED' ? (
+              <Button
+                color="inherit"
+                variant="outlined"
+                disabled={unsubmit.isPending}
+                onClick={() => unsubmit.mutate(undefined)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Bỏ báo xong
+              </Button>
+            ) : null}
+          </Stack>
+        ) : (
+          <Typography variant="body2">
+            {last
+              ? `Đã xong khâu ${STAGE_LABEL[last.stage]} — chờ mở khâu tiếp theo.`
+              : 'Chưa mở khâu nào cho phiếu này.'}
+          </Typography>
+        )}
+      </Paper>
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Sản phẩm
+        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {shown.length ? (
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              {shown.map((image) => (
+                <Box
+                  key={image.id}
+                  component="a"
+                  href={image.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  sx={{ display: 'block', width: 96, height: 96 }}
+                >
+                  <Box
+                    component="img"
+                    src={cloudinaryThumb(image.url, 192)}
+                    alt=""
+                    sx={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid #d5dbe0' }}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          ) : null}
+          <Stack spacing={1} sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+              {order.description}
+            </Typography>
+            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+              <Info label="Phiếu con" value={`${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g`} />
+              <Info label="Hiện có" value={`${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g`} />
+              <Info label="Ngày cần trả" value={order.dueDate ? formatStockedDate(order.dueDate) : null} />
+              <Info label="Size" value={order.sizeLabel} />
+              <Info label="Chất liệu" value={order.mainMaterial} />
+              <Info label="Màu xi" value={order.platingColor} />
+              <Info label="Loại đá" value={order.stoneTypes.join(', ')} />
+              <Info label="Số lượng đá" value={order.stoneCount} />
+            </Box>
+            <Info label="Nội dung khắc laser" value={order.laserEngraving} />
+            <Info label="Yêu cầu khác" value={order.otherRequirements} />
+            {ticket.note ? <Info label="Ghi chú phiếu" value={ticket.note} /> : null}
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Quá trình sản xuất của phiếu
+        </Typography>
+        <SubTicketMatrixCard order={order} ticket={ticket} isAdmin={isAdmin} showHeader={false} />
+      </Box>
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Các khâu của phiếu
+        </Typography>
+        {entries.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Chưa giao khâu nào.
+          </Typography>
+        ) : (
+          <Stack divider={<Divider flexItem />} spacing={1}>
+            {entries.map((entry) => (
+              <EntryRow key={entry.id} entry={entry} />
+            ))}
+          </Stack>
+        )}
+      </Paper>
+    </Stack>
+  )
+}
+
+function EntryRow({ entry }: { entry: StageEntry }) {
+  const level = entry.returnedAt ? silverLossLevel(entry.silverLossPercent) : null
+  return (
+    <Box>
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        {STAGE_LABEL[entry.stage]}
+        {entry.attempt > 1 ? ` (lần ${entry.attempt})` : ''} · thợ {entry.craftsmanName}
+      </Typography>
+      <Typography variant="body2">
+        Giao {formatDateShort(entry.handedAt)} · {entry.handedQty ?? '—'} sp ·{' '}
+        {entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'} g · người giao {entry.handedByName}
+      </Typography>
+      {entry.returnedAt ? (
+        <Typography variant="body2">
+          KCS {entry.returnedByName ?? '—'} nhận lại {formatDateShort(entry.returnedAt)} · {entry.returnedQty ?? '—'} sp ·{' '}
+          {entry.returnedSilverWeight ? formatQty(entry.returnedSilverWeight) : '—'} g
+          {entry.silverLoss != null ? (
+            <Box
+              component="span"
+              sx={
+                level
+                  ? { ml: 0.5, px: 0.5, borderRadius: 0.5, bgcolor: SILVER_LOSS_TONE[level].bg, color: SILVER_LOSS_TONE[level].fg }
+                  : { ml: 0.5 }
+              }
+            >
+              hao hụt {formatQty(entry.silverLoss)} g
+              {entry.silverLossPercent != null ? ` (${formatQty(entry.silverLossPercent)}%)` : ''}
+            </Box>
+          ) : null}
+        </Typography>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          Chưa được KCS nhận lại
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+function Info({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body2" component="div" sx={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+        {value == null || value === '' ? '—' : value}
+      </Typography>
+    </Box>
+  )
+}

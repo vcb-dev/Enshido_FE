@@ -197,6 +197,7 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
                           <TableCell>
                             {item.stageLabel}
                             {item.attempt > 1 ? ` (lần ${item.attempt})` : ''}
+                            {item.ticketCode ? ` · ${item.ticketCode}` : ''}
                           </TableCell>
                           <TableCell>{item.craftsmanName}</TableCell>
                           <TableCell sx={NUM}>{formatMoney(item.amount)}</TableCell>

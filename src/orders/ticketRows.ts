@@ -1,6 +1,13 @@
-import type { ProductionOrderDetail, StageCode, StageEntry } from '../api/productionOrders'
+import type { ProductionOrderDetail, StageCode, StageEntry, SubTicket } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { formatDateShort, silverLossLevel, STAGES, STATUS_META, type SilverLossLevel } from './catalog'
+import {
+  formatDateShort,
+  silverLossLevel,
+  STAGE_LABEL,
+  STAGES,
+  STATUS_META,
+  type SilverLossLevel,
+} from './catalog'
 
 /** Màu nền dòng giống mẫu Excel "Phiếu sản xuất". */
 export type TicketRowTone = 'handover' | 'craftsman' | 'kcs'
@@ -79,17 +86,128 @@ export const TICKET_ROWS: TicketRow[] = [
   },
 ]
 
-/** Lần làm gần nhất của từng khâu — đúng cột đang hiện trên phiếu. Các lần trước là lịch sử làm lại. */
-export function latestByStage(stages: StageEntry[]): Record<StageCode, StageEntry | undefined> {
-  const result = Object.fromEntries(STAGES.map((stage) => [stage, undefined])) as Record<
-    StageCode,
-    StageEntry | undefined
-  >
-  for (const entry of stages) {
-    const current = result[entry.stage]
-    if (!current || entry.attempt > current.attempt) result[entry.stage] = entry
+export type StageColumn = {
+  /** Thứ bảng khâu vẽ: lần gần nhất, hoặc số cộng của các phiếu con. */
+  entry: StageEntry | undefined
+  /** Các lần giao đang hiện trong cột — phần còn lại là lịch sử làm lại. */
+  entries: StageEntry[]
+  /** Cột cộng từ phiếu con: bao nhiêu phiếu đã được KCS nhận lại. */
+  tickets: { done: number; total: number } | null
+}
+
+/**
+ * Cột khâu trên phiếu. Có `subTicketId` thì chỉ lấy khâu của phiếu con đó. Không có thì là phiếu
+ * mẹ: khâu đã giao theo phiếu con được cộng lại thành một cột; khâu giao cho cả đơn (trước khi
+ * chia phiếu) giữ nguyên.
+ */
+export function stageColumns(stages: StageEntry[], subTicketId?: string): Record<StageCode, StageColumn> {
+  const scoped = subTicketId ? stages.filter((entry) => entry.subTicketId === subTicketId) : stages
+  const result = {} as Record<StageCode, StageColumn>
+  for (const stage of STAGES) {
+    const own = scoped.filter((entry) => entry.stage === stage)
+    const orderLevel = latest(own.filter((entry) => !entry.subTicketId))
+    const perTicket = new Map<string, StageEntry>()
+    for (const entry of own) {
+      if (!entry.subTicketId) continue
+      const current = perTicket.get(entry.subTicketId)
+      if (!current || entry.attempt > current.attempt) perTicket.set(entry.subTicketId, entry)
+    }
+    const ticketEntries = Array.from(perTicket.values()).sort(
+      (a, b) => (a.subTicketNo ?? 0) - (b.subTicketNo ?? 0),
+    )
+    const newest = ticketEntries.reduce<string>((max, entry) => (entry.handedAt > max ? entry.handedAt : max), '')
+    if (ticketEntries.length === 0 || (orderLevel && orderLevel.handedAt > newest)) {
+      result[stage] = { entry: orderLevel, entries: orderLevel ? [orderLevel] : [], tickets: null }
+    } else if (subTicketId) {
+      result[stage] = { entry: ticketEntries[0], entries: ticketEntries, tickets: null }
+    } else {
+      result[stage] = {
+        entry: aggregateEntries(stage, ticketEntries),
+        entries: ticketEntries,
+        tickets: {
+          done: ticketEntries.filter((entry) => entry.returnedAt).length,
+          total: ticketEntries.length,
+        },
+      }
+    }
   }
   return result
+}
+
+function latest(entries: StageEntry[]) {
+  return entries.reduce<StageEntry | undefined>(
+    (best, entry) => (!best || entry.attempt > best.attempt ? entry : best),
+    undefined,
+  )
+}
+
+/**
+ * Cộng các phiếu con của một khâu thành một cột cho phiếu mẹ. Số nhận lại / thu hồi / hao hụt
+ * chỉ hiện khi mọi phiếu con đã được KCS nhận lại, tránh đọc nhầm số dở dang là số cả đơn.
+ */
+function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
+  const done = entries.every((entry) => entry.returnedAt)
+  const names = (pick: (entry: StageEntry) => string | null) =>
+    Array.from(new Set(entries.map(pick).filter((name): name is string => Boolean(name)))).join(', ')
+  const handedSilver = sumWeights(entries.map((entry) => entry.handedSilverWeight))
+  const returnedSilver = sumWeights(entries.map((entry) => entry.returnedSilverWeight))
+  const btp = sumWeights(entries.map((entry) => entry.btpRecoveredWeight))
+  const silverRecovered = sumWeights(entries.map((entry) => entry.silverRecoveredWeight))
+  const handedQty = sumCounts(entries.map((entry) => entry.handedQty))
+  const loss =
+    done && handedSilver != null && returnedSilver != null
+      ? round4(Number(handedSilver) - Number(returnedSilver) - Number(btp ?? 0) - Number(silverRecovered ?? 0))
+      : null
+  const lossPercent =
+    loss != null && handedSilver != null && Number(handedSilver) > 0
+      ? ((loss / Number(handedSilver)) * 100).toFixed(2)
+      : null
+  const handedAt = entries.reduce((min, entry) => (entry.handedAt < min ? entry.handedAt : min), entries[0].handedAt)
+  const returnedAt = done
+    ? entries.reduce((max, entry) => ((entry.returnedAt ?? '') > max ? (entry.returnedAt ?? '') : max), '')
+    : null
+
+  return {
+    id: `sum-${stage}`,
+    subTicketId: null,
+    subTicketNo: null,
+    stage,
+    attempt: Math.max(...entries.map((entry) => entry.attempt)),
+    handedByName: names((entry) => entry.handedByName),
+    handedAt,
+    handedQty,
+    handedSilverWeight: handedSilver,
+    craftsmanUserId: null,
+    craftsmanName: names((entry) => entry.craftsmanName),
+    // Cột cộng không phải một lần nộp thật của ai — để trống thay vì gộp mốc thời gian.
+    submittedAt: null,
+    submittedByName: null,
+    returnedByName: names((entry) => entry.returnedByName) || null,
+    returnedAt,
+    returnedQty: done ? sumCounts(entries.map((entry) => entry.returnedQty)) : null,
+    returnedSilverWeight: done ? returnedSilver : null,
+    btpRecoveredWeight: done ? btp : null,
+    silverRecoveredWeight: done ? silverRecovered : null,
+    silverLoss: loss != null ? String(loss) : null,
+    silverLossPercent: lossPercent,
+    laborCost: sumWeights(entries.map((entry) => entry.laborCost)),
+    note: null,
+  }
+}
+
+function round4(value: number) {
+  return Math.round(value * 10000) / 10000
+}
+
+function sumWeights(values: Array<string | null>) {
+  const present = values.filter((value): value is string => value != null)
+  if (present.length === 0) return null
+  return String(round4(present.reduce((total, value) => total + Number(value), 0)))
+}
+
+function sumCounts(values: Array<number | null>) {
+  const present = values.filter((value): value is number => value != null)
+  return present.length ? present.reduce((total, value) => total + value, 0) : null
 }
 
 /**
@@ -105,8 +223,26 @@ export const TICKET_OUTCOME_LABEL: Record<TicketOutcome, string> = {
   FINISH: 'Hoàn thiện',
 }
 
-/** Nội dung ô kết cục, mỗi phần tử một dòng. Rỗng = chưa xảy ra. */
-export function outcomeLines(order: ProductionOrderDetail, outcome: TicketOutcome): string[] {
+/**
+ * Nội dung ô kết cục, mỗi phần tử một dòng. Rỗng = chưa xảy ra.
+ * Có `ticket` thì đọc kết cục của riêng phiếu con đó; không thì đọc kết cục cả đơn.
+ */
+export function outcomeLines(
+  order: ProductionOrderDetail,
+  outcome: TicketOutcome,
+  ticket?: SubTicket,
+): string[] {
+  if (ticket) {
+    if (ticket.outcome !== outcome) return []
+    return [
+      outcome === 'DEFECT' && ticket.outcomeStage ? `Khâu ${STAGE_LABEL[ticket.outcomeStage]}` : '',
+      formatDateShort(ticket.outcomeAt, ''),
+      ticket.outcomeByName ?? '',
+      outcome === 'FINISH' && ticket.outcomeQty != null ? `Vào kho: ${ticket.outcomeQty}` : '',
+      ticket.outcomeNote ? `Lý do: ${ticket.outcomeNote}` : '',
+    ].filter(Boolean)
+  }
+
   if (outcome === 'FINISH') {
     const goods = order.finishedGoods
     if (!goods) return []

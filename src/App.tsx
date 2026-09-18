@@ -5,7 +5,12 @@ import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/LoginPage'
 import { ProductionOrdersPage } from './pages/ProductionOrdersPage'
 import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
+import { OrderReferencePage } from './pages/OrderReferencePage'
+import { useAuth } from './auth/AuthContext'
+import { isWorkerOnly } from './auth/permissions'
 import { ProductionTicketPrintPage } from './pages/ProductionTicketPrintPage'
+import { MyTicketsPage } from './pages/MyTicketsPage'
+import { SubTicketPage } from './pages/SubTicketPage'
 import { LegacyRedirect } from './components/LegacyRedirect'
 import { FinishedGoodsPage } from './pages/FinishedGoodsPage'
 import { ShipmentDetailPage } from './pages/ShipmentDetailPage'
@@ -40,10 +45,14 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         {/* Phiếu in không nằm trong khung app để trang in chỉ còn nội dung phiếu. */}
         <Route path="/orders/:code/print" element={<ProductionTicketPrintPage />} />
+        <Route path="/orders/:code/tickets/:no/print" element={<ProductionTicketPrintPage />} />
         <Route path="/finished-goods/shipments/:code/print" element={<ShipmentPrintPage />} />
         <Route element={<AppShell />}>
           <Route path="/orders" element={<ProductionOrdersPage />} />
-          <Route path="/orders/:code" element={<ProductionOrderDetailPage />} />
+          {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}
+          <Route path="/orders/:code" element={<OrderDetailRoute />} />
+          <Route path="/my-tickets" element={<MyTicketsPage />} />
+          <Route path="/tickets/:ticketCode" element={<SubTicketPage />} />
           <Route path="/" element={<DashboardPage />} />
           <Route path="/warehouses" element={<WarehousesPage />} />
           <Route path="/finished-goods" element={<FinishedGoodsPage />} />
@@ -60,4 +69,10 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
+}
+
+/** Thợ chỉ được xem thông tin tham khảo; người quản lý mở màn đơn đầy đủ. */
+function OrderDetailRoute() {
+  const { user } = useAuth()
+  return isWorkerOnly(user) ? <OrderReferencePage /> : <ProductionOrderDetailPage />
 }

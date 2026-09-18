@@ -22,7 +22,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Tabs,
@@ -41,12 +40,10 @@ import { useAuth } from '../auth/AuthContext'
 import {
   changeProductionStatusApi,
   deleteProductionOrderApi,
-  finishOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
+  handoverSubTicketApi,
   returnStageApi,
-  startStageApi,
-  undoFinishOrderApi,
   undoReturnApi,
   updateCastingApi,
   updateHandoverApi,
@@ -58,6 +55,7 @@ import {
   type ReturnPayload,
   type StageCode,
   type StageEntry,
+  type SubTicket,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
@@ -72,7 +70,6 @@ import {
   MANUAL_STATUSES,
   orderTicketUrl,
   SILVER_LOSS_LIMITS,
-  SILVER_LOSS_TONE,
   STAGE_LABEL,
   STAGES,
   STATUS_META,
@@ -87,15 +84,11 @@ import {
   KcsReturnDialog,
   type HandoverDialogState,
 } from '../orders/StageDialogs'
-import {
-  latestByStage,
-  outcomeLines,
-  TICKET_HEADER_BG,
-  TICKET_OUTCOME_LABEL,
-  TICKET_OUTCOMES,
-  TICKET_ROWS,
-  TICKET_TONE_BG,
-} from '../orders/ticketRows'
+import { SubTicketsPanel } from '../orders/SubTicketsPanel'
+import { useOrderMutation } from '../orders/useOrderMutation'
+import { stageColumns } from '../orders/ticketRows'
+import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
+import { TicketMatrix } from '../orders/TicketMatrix'
 
 export function ProductionOrderDetailPage() {
   const { code = '' } = useParams()
@@ -111,8 +104,6 @@ export function ProductionOrderDetailPage() {
   const [castingOpen, setCastingOpen] = useState(false)
   const [statusDialog, setStatusDialog] = useState(false)
   const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
-  const [defectOpen, setDefectOpen] = useState(false)
-  const [finishOpen, setFinishOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   // Tab lưu trên URL để gửi link / quét QR là mở đúng khung cần xem.
@@ -152,14 +143,24 @@ export function ProductionOrderDetailPage() {
     (payload: CastingPayload) => updateCastingApi(code, payload),
     'Đã lưu thông tin Đúc',
   )
+  // Giao khâu đi theo phiếu con: thợ tự nhận, người giao xác nhận. Ở đây chỉ còn xác nhận giao
+  // và sửa lại thông tin giao.
   const saveHandover = useOrderMutation(
     code,
     (payload: HandoverPayload & { stage?: StageCode }) => {
-      if (handover?.mode === 'edit') return updateHandoverApi(code, handover.entry.id, payload)
-      if (!payload.stage) throw new Error('Chọn khâu')
-      return startStageApi(code, { ...payload, stage: payload.stage })
+      if (handover?.mode === 'confirm') {
+        // Thợ là người đã tự nhận phiếu, khâu là khâu đang mở — server tự lấy.
+        return handoverSubTicketApi(code, handover.ticket.no, {
+          handedAt: payload.handedAt,
+          handedQty: payload.handedQty,
+          handedSilverWeight: payload.handedSilverWeight,
+          note: payload.note,
+        })
+      }
+      if (handover?.mode !== 'edit') throw new Error('Không có khâu nào để lưu')
+      return updateHandoverApi(code, handover.entry.id, payload)
     },
-    'Đã lưu thông tin giao',
+    handover?.mode === 'confirm' ? 'Đã xác nhận giao cho thợ' : 'Đã lưu thông tin giao',
   )
   const saveReturn = useOrderMutation(
     code,
@@ -177,12 +178,6 @@ export function ProductionOrderDetailPage() {
     (payload: { status: ProductionStatus; note?: string }) => changeProductionStatusApi(code, payload),
     'Đã đổi trạng thái',
   )
-  const finish = useOrderMutation(
-    code,
-    (payload: { note?: string }) => finishOrderApi(code, payload),
-    'Đơn đã hoàn thiện và vào kho thành phẩm',
-  )
-  const undoFinish = useOrderMutation(code, () => undoFinishOrderApi(code), 'Đã gỡ hoàn thiện')
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
     onSuccess: async () => {
@@ -216,48 +211,18 @@ export function ProductionOrderDetailPage() {
 
   const order = detail.data
   const stages = order.stages
-  const last = stages[stages.length - 1]
   const openEntry = stages.find((entry) => !entry.returnedAt)
-  // Đơn không nằm ở khâu nào (Mới / Sửa 3D / Đúc / Sản xuất lỗi) thì được giao lại bất kỳ khâu.
-  const reworking = !isInStage(order.status)
-  const startableStages =
-    !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
-  const castingReady = isBtp || Boolean(order.castingSentDate && order.castingReturnedDate)
-  const canStart = order.status !== 'DELIVERED' && castingReady && !openEntry && startableStages.length > 0
-  const startBlockedReason =
-    order.status === 'DELIVERED'
-      ? 'Đơn đã giao'
-      : !castingReady
-        ? 'Ghi ngày báo Đúc và ngày Đúc về trước khi giao thợ'
-        : openEntry
-          ? `Khâu ${STAGE_LABEL[openEntry.stage]} chưa được KCS nhận lại`
-          : 'Đã qua khâu cuối'
   const canPrint = isBtp || Boolean(order.castingSentDate)
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
-  // Hai nhánh kết phiếu: ghi lỗi (kèm lý do) hoặc chốt hàng đạt để vào kho thành phẩm.
-  const canDefect = !locked && order.status !== 'DEFECT'
-  const canFinish =
-    !locked &&
-    !order.finishedGoods &&
-    !openEntry &&
-    order.status !== 'NEW' &&
-    order.status !== 'REDO_3D'
+  // Người lên đơn và admin được chia phiếu con.
+  const canManageTickets = isAdmin || (user != null && order.createdByUserId === user.id)
   const canDelete = isAdmin && order.status === 'NEW' && stages.length === 0 && !order.lastPrintedAt
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
-  function openStart(stage?: StageCode) {
-    const ordered = stage ? [stage, ...startableStages.filter((item) => item !== stage)] : startableStages
-    setHandover({
-      mode: 'start',
-      stages: ordered,
-      defaults: {
-        // Khâu sau nhận đúng số lượng / trọng lượng khâu trước trả về; chưa có khâu nào thì cả đơn.
-        qty: last?.returnedQty ?? order.qty,
-        silver: last?.returnedSilverWeight ?? null,
-      },
-    })
+  function openConfirmHandover(ticket: SubTicket) {
+    setHandover({ mode: 'confirm', ticket })
     setHandoverOpen(true)
   }
 
@@ -411,48 +376,46 @@ export function ProductionOrderDetailPage() {
           ) : null}
 
           {tab === 'production' ? (
-            <Section
-              title="Quá trình sản xuất (theo phiếu thợ)"
-              action={
-                <Tooltip title={canStart ? '' : startBlockedReason}>
-                  <span>
-                    <Button variant="contained" onClick={() => openStart()} disabled={!canStart}>
-                      Giao khâu cho thợ
-                    </Button>
-                  </span>
-                </Tooltip>
-              }
-            >
-              {openEntry ? (
+            <Section title="Quá trình sản xuất (theo phiếu thợ)">
+              <SubTicketsPanel
+                order={order}
+                canManage={canManageTickets}
+                isAdmin={isAdmin}
+                locked={locked}
+                canPrint={canPrint}
+                busy={undoReturn.isPending}
+                onConfirm={openConfirmHandover}
+                onReturn={setReturning}
+                onEditHandover={openEditHandover}
+                onUndoReturn={(entry) => undoReturn.mutate(entry)}
+              />
+              {openEntry && !openEntry.subTicketId ? (
                 <Alert severity="info" sx={{ mb: 1 }}>
                   Thợ {openEntry.craftsmanName} đang làm khâu {STAGE_LABEL[openEntry.stage]} — KCS cân lại bạc khi thợ
                   nộp lại rồi mới giao khâu sau.
                 </Alert>
               ) : null}
-              <ProcessMatrix
-                order={order}
-                stages={stages}
-                lastId={last?.id}
-                isAdmin={isAdmin}
-                // Đã có phiếu xuất hàng thì không gỡ nhận lại được (đơn đã ra khỏi sản xuất).
-                locked={locked}
-                startable={canStart ? startableStages : []}
-                busy={undoReturn.isPending || undoFinish.isPending}
-                canDefect={canDefect}
-                canFinish={canFinish}
-                onStart={openStart}
-                onEdit={openEditHandover}
-                onReturn={setReturning}
-                onUndoReturn={(entry) => undoReturn.mutate(entry)}
-                onDefect={() => setDefectOpen(true)}
-                onFinish={() => setFinishOpen(true)}
-                onUndoFinish={() => undoFinish.mutate(undefined)}
-              />
+              {/* Phiếu mẹ chỉ để xem: cột khâu là số cộng của các phiếu con. */}
+              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                Cả đơn (số cộng của các phiếu con)
+              </Typography>
+              <TicketMatrix order={order} />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
                 Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
                 {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
               </Typography>
               <ReworkHistory stages={stages} />
+
+              {order.subTickets.length ? (
+                <Typography variant="body2" sx={{ fontWeight: 700, mt: 2 }}>
+                  Từng phiếu con — chốt Lỗi / Hoàn thiện ở đây
+                </Typography>
+              ) : null}
+              {order.subTickets.map((ticket) => (
+                <Box key={ticket.id} sx={{ mt: 1 }}>
+                  <SubTicketMatrixCard order={order} ticket={ticket} isAdmin={isAdmin} linkToTicket />
+                </Box>
+              ))}
             </Section>
           ) : null}
 
@@ -548,6 +511,7 @@ export function ProductionOrderDetailPage() {
         open={castingOpen}
         sentDate={order.castingSentDate}
         returnedDate={order.castingReturnedDate}
+        silverWeight={order.silverWeight}
         saving={casting.isPending}
         onClose={() => setCastingOpen(false)}
         onSave={(payload) => casting.mutate(payload, { onSuccess: () => setCastingOpen(false) })}
@@ -581,23 +545,6 @@ export function ProductionOrderDetailPage() {
         onSave={(payload) => status.mutate(payload, { onSuccess: () => setStatusDialog(false) })}
       />
 
-      <DefectDialog
-        open={defectOpen}
-        saving={status.isPending}
-        onClose={() => setDefectOpen(false)}
-        onSave={(note) =>
-          status.mutate({ status: 'DEFECT', note }, { onSuccess: () => setDefectOpen(false) })
-        }
-      />
-
-      <FinishDialog
-        open={finishOpen}
-        qty={order.qty}
-        saving={finish.isPending}
-        onClose={() => setFinishOpen(false)}
-        onSave={(note) => finish.mutate({ note }, { onSuccess: () => setFinishOpen(false) })}
-      />
-
       <ConfirmDeleteDialog
         open={deleting}
         title="Xóa đơn sản xuất"
@@ -608,26 +555,6 @@ export function ProductionOrderDetailPage() {
       />
     </Stack>
   )
-}
-
-/** Mọi thao tác trả về chi tiết đơn mới — ghi thẳng vào cache rồi làm mới danh sách. */
-function useOrderMutation<V>(
-  code: string,
-  fn: (vars: V) => Promise<ProductionOrderDetail>,
-  success: string,
-) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: fn,
-    onSuccess: async (order) => {
-      queryClient.setQueryData(['production-order', code], order)
-      // Tiền công, bạc thu hồi thay đổi theo từng lần nhận lại khâu.
-      void queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
-      toast.success(success)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
@@ -774,6 +701,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Màu đá', order.stoneColor],
     ['Số lượng đá (viên)', order.stoneCount],
     ['Trọng lượng đá (g)', order.stoneWeight != null ? formatQty(order.stoneWeight) : null],
+    ['Tổng TL bạc (g)', order.silverWeight != null ? formatQty(order.silverWeight) : null],
   ]
 
   // Đơn không tách thì Phân đơn luôn là 1/1 — giấu cả nhóm cho đỡ rối.
@@ -904,188 +832,11 @@ const TABS: Array<{ value: TabKey; label: string }> = [
   { value: 'goods', label: 'Kho thành phẩm' },
 ]
 
-const CELL_BORDER = '1px solid #b7c2cc'
-
-/** Nền hai cột kết cục: lỗi đỏ nhạt, hoàn thiện xanh nhạt — nhìn phát biết phiếu kết ở nhánh nào. */
-const TICKET_OUTCOME_BG: Record<(typeof TICKET_OUTCOMES)[number], string> = {
-  DEFECT: '#fdecea',
-  FINISH: '#e9f7ef',
-}
-
-/** Bảng "Quá trình sản xuất" giống hệt phiếu in, thêm hàng nút thao tác cho từng khâu. */
-function ProcessMatrix({
-  order,
-  stages,
-  lastId,
-  isAdmin,
-  locked,
-  startable,
-  busy,
-  canDefect,
-  canFinish,
-  onStart,
-  onEdit,
-  onReturn,
-  onUndoReturn,
-  onDefect,
-  onFinish,
-  onUndoFinish,
-}: {
-  order: ProductionOrderDetail
-  stages: StageEntry[]
-  lastId: string | undefined
-  isAdmin: boolean
-  locked: boolean
-  startable: StageCode[]
-  busy: boolean
-  canDefect: boolean
-  canFinish: boolean
-  onStart: (stage: StageCode) => void
-  onEdit: (entry: StageEntry) => void
-  onReturn: (entry: StageEntry) => void
-  onUndoReturn: (entry: StageEntry) => void
-  onDefect: () => void
-  onFinish: () => void
-  onUndoFinish: () => void
-}) {
-  const latest = latestByStage(stages)
-
-  return (
-    <TableContainer sx={{ overflowX: 'auto' }}>
-      <Table
-        size="small"
-        sx={{
-          minWidth: 1280,
-          tableLayout: 'fixed',
-          borderCollapse: 'collapse',
-          '& td, & th': { border: CELL_BORDER, px: 1, py: 0.6, fontSize: '0.84rem' },
-        }}
-      >
-        <TableHead>
-          <TableRow sx={{ '& th': { bgcolor: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center' } }}>
-            <TableCell sx={{ width: 220, color: '#1b4f9c' }}>Quá trình sản xuất</TableCell>
-            {STAGES.map((stage) => (
-              <TableCell key={stage}>
-                {STAGE_LABEL[stage]}
-                {latest[stage] && latest[stage].attempt > 1 ? ` (lần ${latest[stage].attempt})` : ''}
-              </TableCell>
-            ))}
-            {TICKET_OUTCOMES.map((outcome) => (
-              <TableCell key={outcome}>{TICKET_OUTCOME_LABEL[outcome]}</TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {TICKET_ROWS.map((row, index) => (
-            <TableRow key={row.key} sx={row.tone ? { bgcolor: TICKET_TONE_BG[row.tone] } : undefined}>
-              <TableCell sx={{ fontWeight: row.tone ? 700 : 400, verticalAlign: 'top' }}>
-                {row.label}
-                {row.hint ? (
-                  <Typography component="span" variant="caption" sx={{ fontStyle: 'italic', display: 'block' }}>
-                    {row.hint}
-                  </Typography>
-                ) : null}
-              </TableCell>
-              {STAGES.map((stage) => {
-                const entry = latest[stage]
-                const level = entry && row.warnLevel ? row.warnLevel(entry) : null
-                return (
-                  <TableCell
-                    key={stage}
-                    sx={{
-                      textAlign: row.numeric ? 'right' : 'left',
-                      ...(level
-                        ? {
-                            bgcolor: SILVER_LOSS_TONE[level].bg,
-                            color: SILVER_LOSS_TONE[level].fg,
-                            fontWeight: 700,
-                          }
-                        : null),
-                    }}
-                  >
-                    {entry ? row.value(entry) : ''}
-                  </TableCell>
-                )
-              })}
-              {index === 0
-                ? TICKET_OUTCOMES.map((outcome) => (
-                    <TableCell
-                      key={outcome}
-                      rowSpan={TICKET_ROWS.length}
-                      sx={{
-                        verticalAlign: 'top',
-                        bgcolor: TICKET_OUTCOME_BG[outcome],
-                        whiteSpace: 'pre-line',
-                      }}
-                    >
-                      {outcomeLines(order, outcome).join('\n')}
-                    </TableCell>
-                  ))
-                : null}
-            </TableRow>
-          ))}
-          <TableRow sx={{ '& td': { bgcolor: '#f4f6f7', textAlign: 'center' } }}>
-            <TableCell sx={{ textAlign: 'left !important', color: 'text.secondary' }}>Thao tác</TableCell>
-            {STAGES.map((stage) => {
-              const entry = latest[stage]
-              return (
-                <TableCell key={stage}>
-                  <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
-                    {startable.includes(stage) && (!entry || entry.returnedAt) ? (
-                      <Button size="small" variant="outlined" onClick={() => onStart(stage)}>
-                        Giao thợ
-                      </Button>
-                    ) : null}
-                    {entry && !entry.returnedAt ? (
-                      <>
-                        <Button size="small" variant="contained" onClick={() => onReturn(entry)}>
-                          KCS nhận lại
-                        </Button>
-                        <Button size="small" onClick={() => onEdit(entry)}>
-                          Sửa giao
-                        </Button>
-                      </>
-                    ) : null}
-                    {entry?.returnedAt && isAdmin && entry.id === lastId && !locked ? (
-                      <Button size="small" color="inherit" disabled={busy} onClick={() => onUndoReturn(entry)}>
-                        Gỡ nhận lại
-                      </Button>
-                    ) : null}
-                  </Stack>
-                </TableCell>
-              )
-            })}
-            <TableCell>
-              {canDefect ? (
-                <Button size="small" variant="outlined" color="error" onClick={onDefect}>
-                  Ghi lỗi
-                </Button>
-              ) : null}
-            </TableCell>
-            <TableCell>
-              {order.finishedGoods ? (
-                isAdmin && !locked ? (
-                  <Button size="small" color="inherit" disabled={busy} onClick={onUndoFinish}>
-                    Gỡ hoàn thiện
-                  </Button>
-                ) : null
-              ) : canFinish ? (
-                <Button size="small" variant="contained" color="success" onClick={onFinish}>
-                  Xác nhận hoàn thiện
-                </Button>
-              ) : null}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </TableContainer>
-  )
-}
-
 /** Các lần làm trước của khâu đã làm lại — phiếu chỉ in lần gần nhất nên liệt kê riêng. */
 function ReworkHistory({ stages }: { stages: StageEntry[] }) {
-  const latest = latestByStage(stages)
-  const older = stages.filter((entry) => latest[entry.stage]?.id !== entry.id)
+  const columns = stageColumns(stages)
+  const shown = new Set(STAGES.flatMap((stage) => columns[stage].entries.map((entry) => entry.id)))
+  const older = stages.filter((entry) => !shown.has(entry.id))
   if (older.length === 0) return null
 
   return (
@@ -1096,7 +847,8 @@ function ReworkHistory({ stages }: { stages: StageEntry[] }) {
       <Stack spacing={0.5}>
         {older.map((entry) => (
           <Typography key={entry.id} variant="body2" color="text.secondary">
-            {STAGE_LABEL[entry.stage]} lần {entry.attempt}: thợ {entry.craftsmanName}, giao{' '}
+            {STAGE_LABEL[entry.stage]} lần {entry.attempt}
+            {entry.subTicketNo ? ` (phiếu con ${entry.subTicketNo})` : ''}: thợ {entry.craftsmanName}, giao{' '}
             {formatDateShort(entry.handedAt)} ({entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'} g
             bạc) → KCS {entry.returnedByName ?? '—'} nhận lại {formatDateShort(entry.returnedAt)} (
             {entry.returnedSilverWeight ? formatQty(entry.returnedSilverWeight) : '—'} g bạc), hao hụt{' '}
@@ -1154,110 +906,6 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
         </Stack>
       )}
     </Section>
-  )
-}
-
-/** Ghi lỗi từ cột "Lỗi" trên phiếu — lý do bắt buộc, đơn chuyển sang Sản xuất lỗi. */
-function DefectDialog({
-  open,
-  saving,
-  onClose,
-  onSave,
-}: {
-  open: boolean
-  saving: boolean
-  onClose: () => void
-  onSave: (note: string) => void
-}) {
-  const [note, setNote] = useState('')
-
-  return (
-    <Dialog
-      open={open}
-      onClose={saving ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
-      slotProps={{ transition: { onExited: () => setNote('') } }}
-    >
-      <DialogTitle>Ghi lỗi sản xuất</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          Đơn chuyển sang Sản xuất lỗi; lý do hiện ở cột Lỗi cuối phiếu. Sau đó giao lại được từ khâu bất kỳ.
-        </Typography>
-        <TextInput
-          label="Lý do lỗi"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          required
-          multiline
-          minRows={3}
-          autoFocus
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          color="error"
-          disabled={saving || !note.trim()}
-          onClick={() => onSave(note.trim())}
-        >
-          Ghi lỗi
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-/** Chốt hàng đạt từ cột "Hoàn thiện": đơn sang Hoàn thiện và vào kho thành phẩm. */
-function FinishDialog({
-  open,
-  qty,
-  saving,
-  onClose,
-  onSave,
-}: {
-  open: boolean
-  qty: number
-  saving: boolean
-  onClose: () => void
-  onSave: (note: string | undefined) => void
-}) {
-  const [note, setNote] = useState('')
-
-  return (
-    <Dialog
-      open={open}
-      onClose={saving ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
-      slotProps={{ transition: { onExited: () => setNote('') } }}
-    >
-      <DialogTitle>Xác nhận hoàn thiện</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          Hàng đạt, kết thúc sản xuất: đơn sang Hoàn thiện và vào kho thành phẩm {qty} sản phẩm. Người xác
-          nhận lấy từ tài khoản đang đăng nhập.
-        </Typography>
-        <TextInput
-          label="Ghi chú"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          multiline
-          minRows={2}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button variant="contained" disabled={saving} onClick={() => onSave(note.trim() || undefined)}>
-          Hoàn thiện
-        </Button>
-      </DialogActions>
-    </Dialog>
   )
 }
 

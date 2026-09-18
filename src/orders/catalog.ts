@@ -3,6 +3,7 @@ import type {
   ProductionSource,
   ProductionStatus,
   StageCode,
+  SubTicketState,
 } from '../api/productionOrders'
 
 type ChipTone = { label: string; bg: string; fg: string }
@@ -157,4 +158,20 @@ export function fromDateTimeInput(value: string) {
 /** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / KCS cập nhật khâu ngay. */
 export function orderTicketUrl(code: string) {
   return `${window.location.origin}/orders/${code}?tab=production`
+}
+
+/** Link QR trên phiếu con: thợ quét để mở phiếu và bấm nhận. */
+export function subTicketUrl(ticketCode: string) {
+  return `${window.location.origin}/tickets/${ticketCode}`
+}
+
+/** Trạng thái phiếu con trong khâu hiện tại. */
+export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
+  IDLE: { label: 'Chờ mở khâu', bg: '#e8eaed', fg: '#34495e' },
+  WAITING: { label: 'Chờ thợ nhận', bg: '#fff4d6', fg: '#8a6100' },
+  CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
+  WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },
+  SUBMITTED: { label: 'Chờ KCS cân lại', bg: '#fff4d6', fg: '#8a6100' },
+  DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
+  FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }
