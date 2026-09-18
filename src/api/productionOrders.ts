@@ -125,6 +125,18 @@ export type SubTicketState =
 /** Hai nhánh kết thúc một phiếu con — cùng bộ với hai cột cuối phiếu thợ. */
 export type SubTicketOutcome = 'DEFECT' | 'FINISH'
 
+/** Một lần cấp thêm SL / bạc cho phiếu con khi thợ làm giữa chừng phát hiện thiếu. */
+export type SubTicketTopUp = {
+  id: string
+  qty: number
+  silverWeight: string
+  reason: string | null
+  createdByName: string
+  createdAt: string
+  /** Đã vào một khâu rồi hay còn chờ giao khâu sau. */
+  applied: boolean
+}
+
 export type SubTicket = {
   id: string
   no: number
@@ -148,6 +160,8 @@ export type SubTicket = {
   /** Số lượng / gram đang có để giao khâu sau (theo lần KCS nhận lại gần nhất). */
   availableQty: number
   availableSilver: string
+  /** Lịch sử cấp thêm, cũ trước mới sau. */
+  topUps: SubTicketTopUp[]
   /** Kết cục riêng của phiếu con; null là phiếu vẫn đang chạy. */
   outcome: SubTicketOutcome | null
   outcomeAt: string | null
@@ -645,6 +659,18 @@ export function submitSubTicketApi(code: string, no: number) {
 
 export function unsubmitSubTicketApi(code: string, no: number) {
   return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/submit'), { method: 'DELETE' })
+}
+
+/** Cấp thêm SL / bạc cho phiếu con. Bỏ trống một trong hai thì hiểu là 0. */
+export function topUpSubTicketApi(
+  code: string,
+  no: number,
+  payload: { qty?: number | null; silverWeight?: string | null; reason?: string },
+) {
+  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/top-up'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function markSubTicketPrintedApi(code: string, no: number) {

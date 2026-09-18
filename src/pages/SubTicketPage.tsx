@@ -295,6 +295,28 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
         </Stack>
       </Paper>
 
+      {ticket.topUps.length ? (
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+            Đã cấp thêm
+          </Typography>
+          <Stack spacing={0.75}>
+            {ticket.topUps.map((item) => (
+              <Typography key={item.id} variant="body2">
+                <b>
+                  {item.qty ? `+${item.qty} sp` : ''}
+                  {item.qty && Number(item.silverWeight) ? ' · ' : ''}
+                  {Number(item.silverWeight) ? `+${formatQty(item.silverWeight)} g bạc` : ''}
+                </b>{' '}
+                · {formatDateShort(item.createdAt)} · {item.createdByName}
+                {item.applied ? '' : ' · chờ giao khâu sau'}
+                {item.reason ? ` — ${item.reason}` : ''}
+              </Typography>
+            ))}
+          </Stack>
+        </Paper>
+      ) : null}
+
       <Box>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Quá trình sản xuất của phiếu

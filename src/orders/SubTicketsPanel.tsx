@@ -22,6 +22,7 @@ import {
   createSubTicketApi,
   deleteSubTicketApi,
   openSubTicketStageApi,
+  topUpSubTicketApi,
   unclaimSubTicketApi,
   updateSubTicketApi,
   type ProductionOrderDetail,
@@ -36,6 +37,7 @@ import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { formatDateShort, STAGE_LABEL } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
 import { OpenStageDialog, openableStages, remainingSplit, SubTicketFormDialog } from './SubTicketDialogs'
+import { TopUpDialog } from './TopUpDialog'
 import { useOrderMutation } from './useOrderMutation'
 
 /**
@@ -71,6 +73,7 @@ export function SubTicketsPanel({
   const [editing, setEditing] = useState<SubTicket | null>(null)
   const [deleting, setDeleting] = useState<SubTicket | null>(null)
   const [openStage, setOpenStage] = useState(false)
+  const [toppingUp, setToppingUp] = useState<SubTicket | null>(null)
 
   const save = useOrderMutation(
     code,
@@ -79,6 +82,12 @@ export function SubTicketsPanel({
     editing ? 'Đã lưu phiếu con' : 'Đã tạo phiếu con',
   )
   const remove = useOrderMutation(code, (ticket: SubTicket) => deleteSubTicketApi(code, ticket.no), 'Đã xoá phiếu con')
+  const topUp = useOrderMutation(
+    code,
+    (payload: { qty?: number | null; silverWeight?: string | null; reason?: string }) =>
+      topUpSubTicketApi(code, toppingUp?.no ?? 0, payload),
+    `Đã cấp thêm cho phiếu ${toppingUp?.code ?? ''}`,
+  )
   const open = useOrderMutation(
     code,
     (payload: { stage: StageCode; nos: number[] }) => openSubTicketStageApi(code, payload),
@@ -299,6 +308,11 @@ export function SubTicketsPanel({
                             Gỡ nhận lại
                           </Button>
                         ) : null}
+                        {canManage && active && !ticket.outcome ? (
+                          <Button size="small" onClick={() => setToppingUp(ticket)}>
+                            Cấp thêm
+                          </Button>
+                        ) : null}
                         {canManage && active && ticket.entryCount === 0 ? (
                           <Button
                             size="small"
@@ -347,6 +361,14 @@ export function SubTicketsPanel({
         onClose={() => setFormOpen(false)}
         onExited={() => setEditing(null)}
         onSave={(payload) => save.mutate(payload, { onSuccess: () => setFormOpen(false) })}
+      />
+
+      <TopUpDialog
+        ticket={toppingUp}
+        saving={topUp.isPending}
+        onClose={() => setToppingUp(null)}
+        onExited={() => setToppingUp(null)}
+        onSave={(payload) => topUp.mutate(payload, { onSuccess: () => setToppingUp(null) })}
       />
 
       <OpenStageDialog
