@@ -209,7 +209,7 @@ export function SubTicketsPanel({
                 const worker =
                   ticket.state === 'CLAIMED'
                     ? ticket.claimedByName
-                    : ticket.state === 'WORKING'
+                    : ticket.state === 'WORKING' || ticket.state === 'SUBMITTED'
                       ? openEntry?.craftsmanName
                       : last?.craftsmanName
                 return (
@@ -242,6 +242,11 @@ export function SubTicketsPanel({
                     </TableCell>
                     <TableCell>
                       {stage ? STAGE_LABEL[stage] : '—'}
+                      {ticket.state === 'SUBMITTED' ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          thợ đã báo xong — chờ KCS cân lại
+                        </Typography>
+                      ) : null}
                       {ticket.state === 'IDLE' && last ? (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                           đã nhận lại {formatDateShort(last.returnedAt)}
