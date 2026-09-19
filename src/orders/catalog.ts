@@ -159,7 +159,11 @@ export function normalizePlatingColor(value: string | null | undefined) {
 }
 
 export function platingColorOptions(current?: string) {
-  const options = PLATING_COLORS.map((value) => ({ value, label: value }))
+  // Màu cũ trên kho không nằm trong 5 màu chuẩn vẫn phải hiện được nên nới kiểu về string.
+  const options: Array<{ value: string; label: string }> = PLATING_COLORS.map((value) => ({
+    value,
+    label: value,
+  }))
   const extra = current?.trim()
   if (extra && !options.some((option) => option.value === extra)) {
     options.push({ value: extra, label: extra })

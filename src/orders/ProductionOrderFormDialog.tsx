@@ -138,9 +138,11 @@ const SECTION_SX = {
 
 const digitsOnly = (value: string) => value.replace(/\D/g, '')
 
-function qtyOverStock(value: string, max: number | null) {
-  const qty = Number(value)
-  if (!value || qty < 1) return 'Số lượng phải từ 1'
+// `rules.validate` của react-hook-form đưa xuống giá trị kiểu hợp của cả form nên nhận unknown.
+function qtyOverStock(value: unknown, max: number | null) {
+  const raw = value == null ? '' : String(value)
+  const qty = Number(raw)
+  if (!raw || qty < 1) return 'Số lượng phải từ 1'
   if (max != null && qty > max) return 'Vượt quá số lượng tồn'
   return true
 }
