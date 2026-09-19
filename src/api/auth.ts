@@ -1,6 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
-export type RoleCode = 'ADMIN' | 'USER'
+export type RoleCode = 'ADMIN' | 'USER' | 'WORKER'
 
 export type AuthUser = {
   id: string

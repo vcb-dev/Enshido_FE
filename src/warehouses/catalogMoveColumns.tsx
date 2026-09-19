@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import type { StockRow } from '../api/inventory'
-import type { Column } from '../components/ui'
-import { ColumnHeaderFilter } from './ColumnHeaderFilter'
+import { ColumnHeaderFilter, type Column } from '../components/ui'
 import type { StockProfile } from './catalog'
 
 export type ColFilter = {

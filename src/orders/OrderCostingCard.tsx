@@ -24,6 +24,7 @@ import {
   deleteOrderCostApi,
   getOrderCostingApi,
   updateOrderCostApi,
+  updateStageLaborApi,
   type OrderCosting,
   type OrderCostPayload,
 } from '../api/productionOrders'
@@ -37,6 +38,7 @@ import {
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
 type OtherCost = OrderCosting['others'][number]
+type LaborRow = OrderCosting['labor'][number]
 
 const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const
 
@@ -48,6 +50,7 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<OtherCost | 'new' | null>(null)
   const [deleting, setDeleting] = useState<OtherCost | null>(null)
+  const [editingLabor, setEditingLabor] = useState<LaborRow | null>(null)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -73,6 +76,16 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
       toast.success('Đã lưu chi phí')
       setEditing(null)
       await refresh()
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const saveLabor = useMutation({
+    mutationFn: ({ row, amount }: { row: LaborRow; amount: string | null }) =>
+      updateStageLaborApi(code, row.stageEntryId, amount),
+    onSuccess: async () => {
+      toast.success('Đã lưu tiền công')
+      setEditingLabor(null)
+      await Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['production-order', code] })])
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -168,22 +181,67 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
             </Stack>
           </Block>
 
-          <Block title="Tiền công từng khâu">
+          <Block title="Tiền công cho thợ">
             {data.labor.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 Chưa có tiền công — nhập khi KCS nhận lại từng khâu.
               </Typography>
             ) : (
-              <SimpleTable
-                head={['Khâu', 'Thợ', 'Tiền công']}
-                numericFrom={2}
-                rows={data.labor.map((item) => [
-                  `${item.stageLabel}${item.attempt > 1 ? ` (lần ${item.attempt})` : ''}`,
-                  item.craftsmanName,
-                  formatMoney(item.amount),
-                ])}
-                footer={['Cộng tiền công', formatMoney(data.laborTotal)]}
-              />
+              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 280px' } }}>
+                <TableContainer>
+                  <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Khâu</TableCell>
+                        <TableCell>Thợ</TableCell>
+                        <TableCell sx={NUM}>Tiền công</TableCell>
+                        {editable ? <TableCell sx={{ width: 56 }} /> : null}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {data.labor.map((item) => (
+                        <TableRow key={item.stageEntryId}>
+                          <TableCell>
+                            {item.stageLabel}
+                            {item.attempt > 1 ? ` (lần ${item.attempt})` : ''}
+                            {item.ticketCode ? ` · ${item.ticketCode}` : ''}
+                          </TableCell>
+                          <TableCell>{item.craftsmanName}</TableCell>
+                          <TableCell sx={NUM}>{formatMoney(item.amount)}</TableCell>
+                          {editable ? (
+                            <TableCell>
+                              <RowActions onEdit={() => setEditingLabor(item)} />
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))}
+                      <TableRow>
+                        <TableCell colSpan={2} sx={{ fontWeight: 700 }}>
+                          Cộng tiền công
+                        </TableCell>
+                        <TableCell sx={{ ...NUM, fontWeight: 700 }}>{formatMoney(data.laborTotal)}</TableCell>
+                        {editable ? <TableCell /> : null}
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Cộng theo thợ
+                  </Typography>
+                  <SimpleTable
+                    head={['Thợ', 'Số khâu', 'Tiền công']}
+                    numericFrom={1}
+                    rows={byCraftsman(data.labor).map((item) => [
+                      item.name,
+                      String(item.stages),
+                      formatMoney(item.amount),
+                    ])}
+                    footer={['Cộng', formatMoney(data.laborTotal)]}
+                  />
+                </Box>
+              </Box>
             )}
           </Block>
 
@@ -238,6 +296,13 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
           </Box>
         </Stack>
       )}
+
+      <LaborCostDialog
+        row={editingLabor}
+        saving={saveLabor.isPending}
+        onClose={() => setEditingLabor(null)}
+        onSave={(amount) => editingLabor && saveLabor.mutate({ row: editingLabor, amount })}
+      />
 
       <OtherCostDialog
         cost={editing}
@@ -327,6 +392,72 @@ function SimpleTable({
         </TableBody>
       </Table>
     </TableContainer>
+  )
+}
+
+/** Gộp tiền công theo tên thợ — một thợ có thể làm nhiều khâu trên cùng đơn. */
+function byCraftsman(labor: LaborRow[]) {
+  const map = new Map<string, { name: string; stages: number; amount: number }>()
+  for (const item of labor) {
+    const current = map.get(item.craftsmanName)
+    if (current) {
+      current.stages += 1
+      current.amount += Number(item.amount) || 0
+    } else {
+      map.set(item.craftsmanName, {
+        name: item.craftsmanName,
+        stages: 1,
+        amount: Number(item.amount) || 0,
+      })
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.amount - a.amount)
+    .map((item) => ({ ...item, amount: String(item.amount) }))
+}
+
+type LaborValues = { amount: string }
+
+/** Sửa tiền công một khâu sau khi KCS đã nhận lại. Để trống = bỏ tiền công khâu đó. */
+function LaborCostDialog({
+  row,
+  saving,
+  onClose,
+  onSave,
+}: {
+  row: LaborRow | null
+  saving: boolean
+  onClose: () => void
+  onSave: (amount: string | null) => void
+}) {
+  const form = useForm<LaborValues>({ defaultValues: { amount: '' } })
+
+  useEffect(() => {
+    if (!row) return
+    form.reset({ amount: moneyDigitsFromApi(row.amount) })
+  }, [row, form])
+
+  return (
+    <CrudDialogShell<LaborValues>
+      open={row != null}
+      kind="edit"
+      titles={{
+        create: 'Tiền công',
+        edit: row ? `Tiền công — ${row.stageLabel} (${row.craftsmanName})` : 'Tiền công',
+        view: 'Tiền công',
+      }}
+      form={form}
+      onSubmit={(values) => onSave(values.amount || null)}
+      saving={saving}
+      maxWidth="xs"
+      onClose={onClose}
+      onExited={() => undefined}
+    >
+      <FormMoneyField<LaborValues> name="amount" label="Tiền công khâu (đ)" sx={{ mt: 1 }} />
+      <Typography variant="caption" color="text.secondary">
+        Để trống nếu khâu này chưa chốt tiền công.
+      </Typography>
+    </CrudDialogShell>
   )
 }
 

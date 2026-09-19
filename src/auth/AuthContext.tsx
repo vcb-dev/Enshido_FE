@@ -15,8 +15,8 @@ import {
   type AuthUser,
   type SessionResponse,
 } from '../api/auth'
-import { clearCachedSession, hasCsrfCookie } from './session'
-import { sessionBoot } from './sessionBoot'
+import { clearCachedSession, hasCsrfCookie, readCachedUser, saveCachedUser } from './session'
+import { isOffline, sessionBoot } from './sessionBoot'
 import { visibleWarehouses } from './screens'
 import { prefetchStaff, prefetchWarehouseStock } from './prefetchWarehouse'
 import { can, Permission } from './permissions'
@@ -24,6 +24,8 @@ import { can, Permission } from './permissions'
 type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
+  /** Máy đang mất mạng: giao diện dựng từ dữ liệu đã tải, mọi thao tác ghi sẽ lỗi. */
+  offline: boolean
   login: (username: string, password: string) => Promise<AuthUser>
   logout: () => Promise<void>
 }
@@ -37,11 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [expiresAt, setExpiresAt] = useState<string | undefined>()
   const [loading, setLoading] = useState(hasCookieAtBoot)
+  const [offline, setOffline] = useState(
+    typeof navigator !== 'undefined' && !navigator.onLine,
+  )
 
   const applySession = useCallback(
     (session: SessionResponse) => {
       setUser(session.user)
       setExpiresAt(session.expiresAt)
+      // Giữ lại hồ sơ để lần mở app không có mạng vẫn dựng được giao diện.
+      saveCachedUser(session.user)
       if (session.lookups) {
         queryClient.setQueryData(['inventory-lookups'], session.lookups)
       } else {
@@ -69,10 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void sessionBoot.then((session) => {
       if (cancelled) return
-      if (session?.user) applySession(session)
-      else {
+      if (isOffline(session)) {
+        // Chưa xác minh được phiên vì mất mạng — dùng hồ sơ đã lưu, KHÔNG đăng xuất.
+        setOffline(true)
+        setUser(readCachedUser())
+      } else if (session?.user) {
+        applySession(session)
+      } else {
         setUser(null)
         setExpiresAt(undefined)
+        clearCachedSession()
       }
       setLoading(false)
     })
@@ -81,6 +94,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [applySession])
+
+  useEffect(() => {
+    const goOnline = () => setOffline(false)
+    const goOffline = () => setOffline(true)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
 
   useEffect(() => {
     if (!user || !expiresAt || !hasCsrfCookie()) return
@@ -109,11 +133,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setExpiresAt(undefined)
     queryClient.clear()
+    // Dọn cả bản lưu ngoại tuyến: không để dữ liệu đơn nằm lại trên máy thợ.
+    const { clearPersistedQueries } = await import('./offlineCache')
+    clearPersistedQueries()
   }, [queryClient])
 
   const value = useMemo(
-    () => ({ user, loading, login, logout }),
-    [user, loading, login, logout],
+    () => ({ user, loading, offline, login, logout }),
+    [user, loading, offline, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -30,6 +30,8 @@ import {
   type StockTotals,
 } from '../api/inventory'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   DataTable,
   PageHeader,
   RowActions,
@@ -42,7 +44,6 @@ import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
 import { ReceiveFormDialog } from '../finishedGoods/ReceiveFormDialog'
 import { FinishedGoodsStockDialog } from '../finishedGoods/StockFormDialog'
-import { ColumnHeaderFilter, ColumnHeaderSearch } from '../warehouses/ColumnHeaderFilter'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { THANH_PHAM_WAREHOUSE, stockProfile, warehouseByCode, type WarehouseSectionCode } from '../warehouses/catalog'

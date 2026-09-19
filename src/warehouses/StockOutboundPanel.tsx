@@ -30,6 +30,8 @@ import { getLocationsApi } from '../api/locations'
 import { listOrderOptionsApi } from '../api/productionOrders'
 import { STATUS_META } from '../orders/catalog'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   CrudDialogShell,
   DataTable,
   FormQtyField,
@@ -49,7 +51,6 @@ import { MaterialField } from './MaterialField'
 import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
-import { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
 import { stockProfile } from './catalog'
 import {
   CATALOG_FILTER_DEFAULTS,
