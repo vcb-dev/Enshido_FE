@@ -19,7 +19,9 @@ export function canAccessPath(
     return canSeeWarehouse(user, code)
   }
   if (p === '/orders' || p.startsWith('/orders/')) return true
-  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return true
+  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) {
+    return canSeeWarehouse(user, 'thanh-pham') || user?.roleCode === 'ADMIN'
+  }
   if (p === '/settings') {
     return can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   }

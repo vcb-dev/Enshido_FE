@@ -83,7 +83,7 @@ export function ShipmentDetailPage() {
     onSuccess: async () => {
       toast.success(`Đã xóa phiếu ${code}`)
       await refreshRelated()
-      navigate('/finished-goods?tab=shipments', { replace: true })
+      navigate('/warehouses/thanh-pham/outbound', { replace: true })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -114,7 +114,7 @@ export function ShipmentDetailPage() {
         subtitle={`Lập bởi ${shipment.createdByName} · ${formatDateTime(shipment.createdAt)}`}
         breadcrumbs={
           <Breadcrumbs>
-            <Link component={RouterLink} to="/finished-goods?tab=shipments" underline="hover" color="inherit">
+            <Link component={RouterLink} to="/warehouses/thanh-pham/outbound" underline="hover" color="inherit">
               Kho thành phẩm
             </Link>
             <Typography color="text.primary">{shipment.code}</Typography>

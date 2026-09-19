@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
+import { useEffect, useRef, useState } from 'react'
+import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
 import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form'
 import { useIsMobile } from '../../../hooks/useBreakpoint'
 import type { CrudDialogKind } from '../../../hooks/useCrudDialog'
@@ -42,17 +43,44 @@ export function CrudDialogShell<T extends FieldValues>({
   children,
 }: CrudDialogShellProps<T>) {
   const fullScreen = useIsMobile()
+  const [busy, setBusy] = useState(false)
+  const submitted = useRef(false)
+  const pending = saving || busy
+
+  useEffect(() => {
+    if (!open) {
+      setBusy(false)
+      submitted.current = false
+    }
+  }, [open])
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={pending ? undefined : onClose}
       fullWidth
       fullScreen={fullScreen}
       maxWidth={maxWidth}
       slotProps={{ transition: { onExited } }}
     >
-      <Form form={form} onSubmit={onSubmit}>
+      <Form
+        form={form}
+        onSubmit={async (values) => {
+          if (submitted.current) return
+          submitted.current = true
+          setBusy(true)
+          try {
+            await onSubmit(values)
+          } catch {
+            submitted.current = false
+            setBusy(false)
+          }
+        }}
+        onSubmitInvalid={() => {
+          submitted.current = false
+          setBusy(false)
+        }}
+      >
         <DialogTitle>{titles[kind]}</DialogTitle>
         <DialogContent
           sx={{
@@ -74,11 +102,24 @@ export function CrudDialogShell<T extends FieldValues>({
             </Button>
           ) : (
             <>
-              <Button onClick={onClose} disabled={saving}>
+              <Button onClick={onClose} disabled={pending}>
                 Hủy
               </Button>
-              <Button type="submit" variant="contained" disabled={saving || submitDisabled}>
-                {submitLabel ?? (kind === 'edit' ? 'Lưu' : 'Thêm')}
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={saving || submitDisabled}
+                onPointerDown={() => {
+                  if (saving || submitDisabled || submitted.current) return
+                  setBusy(true)
+                }}
+                startIcon={pending ? <CircularProgress color="inherit" size={16} /> : undefined}
+              >
+                {pending
+                  ? kind === 'edit'
+                    ? 'Đang lưu…'
+                    : 'Đang lên đơn…'
+                  : (submitLabel ?? (kind === 'edit' ? 'Lưu' : 'Thêm'))}
               </Button>
             </>
           )}

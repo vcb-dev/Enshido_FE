@@ -17,6 +17,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
       { key: Permission.SCREEN_WAREHOUSE_NVL_CHINH, label: 'Kho NVL chính' },
       { key: Permission.SCREEN_WAREHOUSE_BTP, label: 'Kho BTP' },
       { key: Permission.SCREEN_WAREHOUSE_TIEU_HAO, label: 'Kho NVL tiêu hao' },
+      { key: Permission.SCREEN_WAREHOUSE_THANH_PHAM, label: 'Kho thành phẩm' },
     ],
   },
   {
@@ -36,6 +37,7 @@ const WAREHOUSE_SCREEN: Record<WarehouseCode, PermissionCode> = {
   'nvl-chinh': Permission.SCREEN_WAREHOUSE_NVL_CHINH,
   'btp-cho-vao-da': Permission.SCREEN_WAREHOUSE_BTP,
   'nvl-tieu-hao': Permission.SCREEN_WAREHOUSE_TIEU_HAO,
+  'thanh-pham': Permission.SCREEN_WAREHOUSE_THANH_PHAM,
 }
 
 export function canSeeWarehouse(user: PermissionUser | undefined | null, code: string) {

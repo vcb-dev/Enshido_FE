@@ -31,9 +31,9 @@ export type PanelToolbarProps = {
   /** Số bộ lọc đang khác mặc định — hiện trên badge nút lọc. Lấy từ `useTableParams`. */
   filterCount?: number
   onClearFilters?: () => void
-  createLabel: string
+  createLabel?: string
   /** Nhận chính nút bấm để trang có thể mở menu neo vào nút. */
-  onCreate: (anchor: HTMLElement) => void
+  onCreate?: (anchor: HTMLElement) => void
   /** Icon cuối nút thêm (vd mũi tên khi nút mở menu). */
   createEndIcon?: ReactNode
 }
@@ -69,14 +69,16 @@ export function PanelToolbar({
             Xóa lọc
           </Button>
         ) : null}
-        <Button
-          variant="contained"
-          sx={{ ml: 'auto' }}
-          endIcon={createEndIcon}
-          onClick={(event) => onCreate(event.currentTarget)}
-        >
-          {createLabel}
-        </Button>
+        {createLabel && onCreate ? (
+          <Button
+            variant="contained"
+            sx={{ ml: 'auto' }}
+            endIcon={createEndIcon}
+            onClick={(event) => onCreate(event.currentTarget)}
+          >
+            {createLabel}
+          </Button>
+        ) : null}
       </>
     )
   }
@@ -100,14 +102,16 @@ export function PanelToolbar({
           </Badge>
         </IconButton>
       ) : null}
-      <Button
-        variant="contained"
-        fullWidth
-        endIcon={createEndIcon}
-        onClick={(event) => onCreate(event.currentTarget)}
-      >
-        {createLabel}
-      </Button>
+      {createLabel && onCreate ? (
+        <Button
+          variant="contained"
+          fullWidth
+          endIcon={createEndIcon}
+          onClick={(event) => onCreate(event.currentTarget)}
+        >
+          {createLabel}
+        </Button>
+      ) : null}
 
       <Drawer anchor="bottom" open={filterOpen} onClose={() => setFilterOpen(false)}>
         <Box sx={{ p: 2 }}>

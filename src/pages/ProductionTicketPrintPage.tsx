@@ -42,7 +42,7 @@ export function ProductionTicketPrintPage() {
       queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
         prev ? { ...prev, lastPrintedAt } : prev,
       )
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
     } catch {
       /* in giấy vẫn xong; lần in chỉ không được ghi nhận */
     }
@@ -238,7 +238,10 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
           </tr>
           <tr>
             <Label>Số lượng:</Label>
-            <Value>{order.qty}</Value>
+            <Value>
+              {order.qty}
+              {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
+            </Value>
             <Label>Trọng lượng đá:</Label>
             <Value>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
           </tr>

@@ -7,6 +7,8 @@ import type { SxProps, Theme } from '@mui/material'
 export type FormProps<T extends FieldValues> = Omit<ComponentProps<'form'>, 'onSubmit'> & {
   form: UseFormReturn<T>
   onSubmit: SubmitHandler<T>
+  /** Validation fail — dùng để gỡ trạng thái "đang lưu" trên nút. */
+  onSubmitInvalid?: () => void
   children: ReactNode
 }
 
@@ -24,12 +26,13 @@ export type FormProps<T extends FieldValues> = Omit<ComponentProps<'form'>, 'onS
 export function Form<T extends FieldValues>({
   form,
   onSubmit,
+  onSubmitInvalid,
   children,
   ...props
 }: FormProps<T>) {
   return (
     <FormProvider {...form}>
-      <form noValidate onSubmit={form.handleSubmit(onSubmit)} {...props}>
+      <form noValidate onSubmit={form.handleSubmit(onSubmit, onSubmitInvalid)} {...props}>
         {children}
       </form>
     </FormProvider>

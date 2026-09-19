@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { MenuItem, TextField } from '@mui/material'
+import { InputAdornment, MenuItem, TextField } from '@mui/material'
 import type { TextFieldProps } from '@mui/material'
-import { READ_ONLY_FIELD_SX } from './TextInput'
+import { ClearFieldButton, READ_ONLY_FIELD_SX } from './TextInput'
 
 export type SelectOptionValue = string | number
 
@@ -20,10 +20,12 @@ export type SelectInputProps<V extends SelectOptionValue = string> = Omit<
   onChange: (value: V | '') => void
   errorText?: string
   helperText?: ReactNode
-  /** Dòng trống đầu danh sách, cho phép bỏ chọn. */
+  /** Gợi ý trong ô khi chưa chọn — không phải một dòng trong dropdown. */
   placeholder?: string
-  /** Hiện dòng trống ngay cả khi không có `placeholder`. */
+  /** Hiện nút X để bỏ chọn. */
   clearable?: boolean
+  /** Cho phép Select hiện giá trị rỗng (ô bắt buộc chưa chọn). */
+  displayEmpty?: boolean
   /** Chế độ xem: hiện nhãn của lựa chọn dưới dạng text tĩnh. */
   readOnly?: boolean
 }
@@ -40,12 +42,15 @@ export function SelectInput<V extends SelectOptionValue = string>({
   helperText,
   placeholder,
   clearable,
+  displayEmpty,
   readOnly,
   disabled,
   sx,
+  slotProps,
   ...props
 }: SelectInputProps<V>) {
-  const showEmpty = clearable || placeholder != null
+  const allowEmpty = placeholder != null || Boolean(displayEmpty)
+  const emptyHint = placeholder ?? ''
 
   // Ở chế độ xem, `select` bị tắt và ô hiển thị thẳng nhãn đã chọn — bật select
   // kèm disabled sẽ ra ô trống vì MUI không tìm thấy MenuItem tương ứng.
@@ -73,12 +78,37 @@ export function SelectInput<V extends SelectOptionValue = string>({
       onChange={(event) => onChange(event.target.value as V | '')}
       error={Boolean(errorText)}
       helperText={errorText ?? helperText}
+      slotProps={{
+        ...slotProps,
+        select: {
+          displayEmpty: allowEmpty,
+          renderValue: (selected) => {
+            if (selected === '' || selected == null) {
+              return <span style={{ color: '#5d6d7e' }}>{emptyHint}</span>
+            }
+            const option = options.find((item) => item.value === selected)
+            return option?.label ?? String(selected)
+          },
+          ...(typeof slotProps?.select === 'object' ? slotProps.select : null),
+        },
+        // Select trống + displayEmpty: label không tự nâng → đè lên placeholder.
+        inputLabel: {
+          ...(typeof slotProps?.inputLabel === 'object' ? slotProps.inputLabel : null),
+          ...(allowEmpty ? { shrink: true } : null),
+        },
+        input: {
+          ...(allowEmpty ? { notched: true } : null),
+          ...(typeof slotProps?.input === 'object' ? slotProps.input : null),
+          endAdornment:
+            clearable && value !== '' && value != null ? (
+              <InputAdornment position="end" sx={{ mr: 2 }}>
+                <ClearFieldButton onClear={() => onChange('')} />
+              </InputAdornment>
+            ) : undefined,
+        },
+      }}
     >
-      {showEmpty ? (
-        <MenuItem value="">
-          <em>{placeholder ?? 'Tất cả'}</em>
-        </MenuItem>
-      ) : null}
+      {allowEmpty ? <MenuItem value="" sx={{ display: 'none' }} /> : null}
       {options.map((option) => (
         <MenuItem key={String(option.value)} value={option.value} disabled={option.disabled}>
           {option.label}

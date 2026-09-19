@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react'
+import type { ReactElement } from 'react'
 import { IconButton, Stack, Tooltip } from '@mui/material'
 import { EyeIcon, LockIcon, PencilIcon, TrashIcon, UnlockIcon } from './icons'
 
 export type RowActionsProps = {
   onView?: () => void
   onEdit?: () => void
+  /** Hiện nút Sửa nhưng không bấm được, vd: phiếu chuyển kho. */
+  editDisabled?: boolean
   onLock?: () => void
   locked?: boolean
   onDelete?: () => void
@@ -22,16 +24,19 @@ function WithTooltip({
 }: {
   title?: string
   disabled?: boolean
-  children: ReactNode
+  children: ReactElement
 }) {
-  if (!title) return <>{children}</>
-  return <Tooltip title={title}>{disabled ? <span>{children}</span> : <>{children}</>}</Tooltip>
+  if (!title) return children
+  return (
+    <Tooltip title={title}>{disabled ? <span>{children}</span> : children}</Tooltip>
+  )
 }
 
 /** Cụm nút Xem / Sửa / Khóa / Xóa ở cột "Hành động"; nút nào không truyền handler thì ẩn. */
 export function RowActions({
   onView,
   onEdit,
+  editDisabled,
   onLock,
   locked,
   onDelete,
@@ -48,8 +53,13 @@ export function RowActions({
         </WithTooltip>
       ) : null}
       {onEdit ? (
-        <WithTooltip title={titles?.edit}>
-          <IconButton size="small" aria-label={titles?.edit ?? 'Chỉnh sửa'} onClick={onEdit}>
+        <WithTooltip title={titles?.edit} disabled={editDisabled}>
+          <IconButton
+            size="small"
+            aria-label={titles?.edit ?? 'Chỉnh sửa'}
+            disabled={editDisabled}
+            onClick={onEdit}
+          >
             <PencilIcon />
           </IconButton>
         </WithTooltip>

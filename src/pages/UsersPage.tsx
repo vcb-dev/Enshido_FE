@@ -12,7 +12,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
@@ -58,6 +58,7 @@ export function UsersPage() {
     queryKey: ['users'],
     queryFn: listUsersApi,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   })
 
   const rows = useMemo(() => {

@@ -436,8 +436,18 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         render: (row: InboundRow) => (
           <RowActions
             onView={() => openView(row)}
-            onEdit={row.sourceWarehouseCode ? undefined : () => openEdit(row)}
-            onDelete={row.sourceWarehouseCode ? undefined : () => del.request(row)}
+            onEdit={() => openEdit(row)}
+            onDelete={() => del.request(row)}
+            editDisabled={Boolean(row.sourceWarehouseCode)}
+            deleteDisabled={Boolean(row.sourceWarehouseCode)}
+            titles={
+              row.sourceWarehouseCode
+                ? {
+                    edit: 'Phiếu chuyển kho — không sửa tại đây',
+                    delete: 'Phiếu chuyển kho — không xóa tại đây',
+                  }
+                : undefined
+            }
           />
         ),
       },

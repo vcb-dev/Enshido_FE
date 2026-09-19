@@ -1,7 +1,7 @@
 import { Autocomplete, Chip, TextField } from '@mui/material'
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
-import { withRequiredRule, type FormFieldBaseProps } from '../components/ui'
+import { READ_ONLY_FIELD_SX, withRequiredRule, type FormFieldBaseProps } from '../components/ui'
 
 type FreeSoloProps<T extends FieldValues> = FormFieldBaseProps<T> & {
   label: string
@@ -38,8 +38,10 @@ export function FormFreeSoloField<T extends FieldValues>({
       onChange={(_, next) => field.onChange(next ?? '')}
       onBlur={field.onBlur}
       disabled={readOnly}
+      disableClearable={!value}
       size="small"
       fullWidth
+      sx={readOnly ? READ_ONLY_FIELD_SX : undefined}
       renderInput={(params) => (
         <TextField
           {...params}
@@ -80,10 +82,19 @@ export function FormMultiFreeSoloField<T extends FieldValues>({
       disabled={readOnly}
       size="small"
       fullWidth
+      sx={readOnly ? READ_ONLY_FIELD_SX : undefined}
       renderValue={(selected, getItemProps) =>
         selected.map((option, index) => {
-          const { key, ...itemProps } = getItemProps({ index })
-          return <Chip key={key} size="small" label={option} {...itemProps} />
+          const { key, onDelete, ...itemProps } = getItemProps({ index })
+          return (
+            <Chip
+              key={key}
+              size="small"
+              label={option}
+              {...itemProps}
+              onDelete={readOnly ? undefined : onDelete}
+            />
+          )
         })
       }
       renderInput={(params) => (

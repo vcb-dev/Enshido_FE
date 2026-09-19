@@ -48,11 +48,18 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<OtherCost | 'new' | null>(null)
   const [deleting, setDeleting] = useState<OtherCost | null>(null)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setReady(true), 0)
+    return () => window.clearTimeout(id)
+  }, [code])
 
   const costing = useQuery({
     queryKey: ['production-order-costing', code],
     queryFn: () => getOrderCostingApi(code),
-    staleTime: 10_000,
+    staleTime: 15_000,
+    enabled: ready,
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })

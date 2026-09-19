@@ -84,7 +84,6 @@ export function BtpPicker({
         return q ? rows.filter((item) => item.haystack.includes(q)) : rows
       }}
       disabled={disabled}
-      disableClearable={Boolean(selected)}
       loading={loading}
       loadingText="Đang tải kho BTP…"
       noOptionsText="Kho BTP không còn mã nào có tồn"

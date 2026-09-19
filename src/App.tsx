@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/LoginPage'
@@ -7,7 +7,6 @@ import { ProductionOrdersPage } from './pages/ProductionOrdersPage'
 import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
 import { ProductionTicketPrintPage } from './pages/ProductionTicketPrintPage'
 import { LegacyRedirect } from './components/LegacyRedirect'
-import { FinishedGoodsPage } from './pages/FinishedGoodsPage'
 import { ShipmentDetailPage } from './pages/ShipmentDetailPage'
 import { ShipmentPrintPage } from './pages/ShipmentPrintPage'
 
@@ -46,7 +45,7 @@ export default function App() {
           <Route path="/orders/:code" element={<ProductionOrderDetailPage />} />
           <Route path="/" element={<DashboardPage />} />
           <Route path="/warehouses" element={<WarehousesPage />} />
-          <Route path="/finished-goods" element={<FinishedGoodsPage />} />
+          <Route path="/finished-goods" element={<FinishedGoodsRedirect />} />
           <Route path="/finished-goods/shipments/:code" element={<ShipmentDetailPage />} />
           <Route path="/settings" element={<Navigate to="/settings/locations" replace />} />
           <Route path="/settings/locations" element={<LocationsPage />} />
@@ -60,4 +59,18 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
+}
+
+function FinishedGoodsRedirect() {
+  const [params] = useSearchParams()
+  const create = params.get('create')
+  const tab = params.get('tab')
+  if (create || tab === 'shipments') {
+    const query = new URLSearchParams()
+    if (create) query.set('create', create)
+    const suffix = query.toString()
+    return <Navigate to={`/warehouses/thanh-pham/outbound${suffix ? `?${suffix}` : ''}`} replace />
+  }
+  if (tab === 'inbound') return <Navigate to="/warehouses/thanh-pham/inbound" replace />
+  return <Navigate to="/warehouses/thanh-pham/stock" replace />
 }

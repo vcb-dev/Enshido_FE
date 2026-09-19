@@ -502,12 +502,16 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         render: (row: OutboundRow) => (
           <RowActions
             onView={() => openView(row)}
-            onEdit={row.autoIssued ? undefined : () => openEdit(row)}
+            onEdit={() => openEdit(row)}
             onDelete={() => del.request(row)}
+            editDisabled={row.autoIssued}
             deleteDisabled={row.autoIssued}
             titles={
               row.autoIssued
-                ? { delete: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn` }
+                ? {
+                    edit: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn`,
+                    delete: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn`,
+                  }
                 : undefined
             }
           />

@@ -23,7 +23,7 @@ import {
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -64,6 +64,8 @@ import {
   STATUS_META,
 } from '../orders/catalog'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlStock } from '../orders/nvlStock'
+import { afterProductionOrderSaved } from '../orders/orderCache'
 import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import {
@@ -92,7 +94,8 @@ export function ProductionOrderDetailPage() {
   const detail = useQuery({
     queryKey: ['production-order', code],
     queryFn: () => getProductionOrderApi(code),
-    staleTime: 10_000,
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -106,6 +109,7 @@ export function ProductionOrderDetailPage() {
     'Đã lưu đơn',
   )
   const wasBtp = detail.data?.source === 'BTP'
+  const wasNvl = detail.data?.source === 'NVL'
   const casting = useOrderMutation(
     code,
     (payload: CastingPayload) => updateCastingApi(code, payload),
@@ -138,10 +142,14 @@ export function ProductionOrderDetailPage() {
   )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success(`Đã xóa đơn ${code}`)
-      if (wasBtp) invalidateBtpStock(queryClient)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      if (wasBtp) {
+        invalidateBtpStock(queryClient)
+        invalidateNvlStock(queryClient)
+      }
+      if (wasNvl) invalidateNvlStock(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
       navigate('/orders', { replace: true })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -188,7 +196,11 @@ export function ProductionOrderDetailPage() {
           ? `Khâu ${STAGE_LABEL[openEntry.stage]} chưa được KCS nhận lại`
           : 'Đã qua khâu cuối'
   const canPrint = isBtp || Boolean(order.castingSentDate)
-  const canDelete = isAdmin && order.status === 'NEW' && stages.length === 0 && !order.lastPrintedAt
+  const canDelete =
+    isAdmin &&
+    stages.length === 0 &&
+    !order.lastPrintedAt &&
+    (order.status === 'NEW' || (isBtp && order.status === 'FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
   function openStart(stage?: StageCode) {
@@ -312,8 +324,8 @@ export function ProductionOrderDetailPage() {
                   }
                 />
                 <Typography variant="caption" color="text.secondary">
-                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP tự tạo khi lên đơn; đổi mã
-                  hoặc số lượng trên đơn thì kho tự cập nhật.
+                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP và NVL tự tạo khi lên
+                  đơn; đổi mã hoặc số lượng trên đơn thì kho tự cập nhật.
                 </Typography>
               </Stack>
             </Section>
@@ -435,14 +447,11 @@ export function ProductionOrderDetailPage() {
         lookups={lookups.data}
         saving={update.isPending}
         onClose={() => setEditing(false)}
-        onSave={(payload) =>
-          update.mutate(payload, {
-            onSuccess: (saved) => {
-              setEditing(false)
-              if (wasBtp || saved.source === 'BTP') invalidateBtpStock(queryClient)
-            },
-          })
-        }
+        onSave={async (payload) => {
+          const saved = await update.mutateAsync(payload)
+          setEditing(false)
+          afterProductionOrderSaved(queryClient, saved, order)
+        }}
       />
 
       <CastingDialog
@@ -503,12 +512,12 @@ function useOrderMutation<V>(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: async (order) => {
+    onSuccess: (order) => {
       queryClient.setQueryData(['production-order', code], order)
       // Tiền công, bạc thu hồi thay đổi theo từng lần nhận lại khâu.
       void queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
       toast.success(success)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -550,7 +559,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Người chốt', order.closedBy],
     ['Người được hỏi', order.askedUserName],
     ['Mã theo dõi đơn', order.trackingCode],
-    ['Số lượng', `${order.qty} · đã trả ${order.returnedQty}`],
+    ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Size', order.sizeLabel],
     ['Kích thước', order.size],
     ['Chất liệu', order.mainMaterial],
@@ -835,7 +844,7 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
               variant="outlined"
               size="small"
               component={RouterLink}
-              to={`/finished-goods?create=${order.code}`}
+              to={`/warehouses/thanh-pham/outbound?create=${order.code}`}
               sx={{ alignSelf: 'flex-start' }}
             >
               Lập phiếu xuất hàng

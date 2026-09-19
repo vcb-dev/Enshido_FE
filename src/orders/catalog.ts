@@ -20,10 +20,8 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
   DEFECT: { label: 'Sản xuất lỗi', bg: '#2d3436', fg: '#ffffff' },
 }
 
-/** Thứ tự tab trên danh sách đơn. */
+/** Thứ tự tab trên danh sách đơn. Bỏ Mới / Sửa 3D — Đơn BTP không qua 3D. */
 export const STATUS_TABS: ProductionStatus[] = [
-  'NEW',
-  'REDO_3D',
   'CASTING',
   'FILING',
   'STONE_SETTING',
@@ -64,7 +62,7 @@ export const SOURCE_META: Record<ProductionSource, ChipTone> = {
 /** Mô tả ngắn từng loại đơn — dùng trên menu "Lên đơn" và dưới ô Loại đơn. */
 export const SOURCE_HINT: Record<ProductionSource, string> = {
   NVL: 'Làm từ NVL: 3D → Đúc → các khâu',
-  BTP: 'Lấy BTP có sẵn — tự xuất kho BTP, bỏ 3D và Đúc',
+  BTP: 'Lấy BTP có sẵn — tự xuất kho BTP và NVL, bỏ 3D và Đúc',
 }
 
 export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
@@ -74,6 +72,64 @@ export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
 }
 
 export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK']
+
+/** Màu xi trên đơn sản xuất — chọn một, không gõ tự do. */
+export const PLATING_COLORS = [
+  'Xi vàng trắng',
+  'Xi vàng vàng',
+  'Xi vàng hồng',
+  'Xi bạc',
+  'Xi đen',
+] as const
+
+export type PlatingColor = (typeof PLATING_COLORS)[number]
+
+const PLATING_COLOR_ALIASES: Record<string, PlatingColor> = {
+  trắng: 'Xi vàng trắng',
+  trang: 'Xi vàng trắng',
+  'vàng trắng': 'Xi vàng trắng',
+  'vang trắng': 'Xi vàng trắng',
+  'vang trang': 'Xi vàng trắng',
+  'xi trắng': 'Xi vàng trắng',
+  'xi trang': 'Xi vàng trắng',
+  vàng: 'Xi vàng vàng',
+  vang: 'Xi vàng vàng',
+  'vàng vàng': 'Xi vàng vàng',
+  'vang vang': 'Xi vàng vàng',
+  'xi vàng': 'Xi vàng vàng',
+  'xi vang': 'Xi vàng vàng',
+  'vàng hồng': 'Xi vàng hồng',
+  'vang hong': 'Xi vàng hồng',
+  'vang hồng': 'Xi vàng hồng',
+  'xi vàng hồng': 'Xi vàng hồng',
+  bạc: 'Xi bạc',
+  bac: 'Xi bạc',
+  'xi bạc': 'Xi bạc',
+  'xi bac': 'Xi bạc',
+  đen: 'Xi đen',
+  den: 'Xi đen',
+  'xi đen': 'Xi đen',
+  'xi den': 'Xi đen',
+}
+
+/** Đưa tên cũ trên kho (Trắng, Vàng…) về đúng 5 màu trên form. */
+export function normalizePlatingColor(value: string | null | undefined) {
+  const raw = value?.trim() ?? ''
+  if (!raw) return ''
+  const folded = raw.toLocaleLowerCase('vi').replace(/\s+/g, ' ')
+  const exact = PLATING_COLORS.find((color) => color.toLocaleLowerCase('vi') === folded)
+  if (exact) return exact
+  return PLATING_COLOR_ALIASES[folded] ?? raw
+}
+
+export function platingColorOptions(current?: string) {
+  const options = PLATING_COLORS.map((value) => ({ value, label: value }))
+  const extra = current?.trim()
+  if (extra && !options.some((option) => option.value === extra)) {
+    options.push({ value: extra, label: extra })
+  }
+  return options
+}
 
 export function isInStage(status: ProductionStatus) {
   return IN_STAGE_STATUSES.includes(status)

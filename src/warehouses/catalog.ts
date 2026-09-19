@@ -1,4 +1,6 @@
-export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao'
+export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 'thanh-pham'
+
+export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
 export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound'
 
@@ -45,6 +47,13 @@ export const WAREHOUSES: WarehouseDef[] = [
     description: 'Nhập, xuất và tồn vật tư tiêu hao phục vụ sản xuất.',
     sections: true,
   },
+  {
+    code: 'thanh-pham',
+    name: 'Kho thành phẩm',
+    shortName: 'Kho thành phẩm',
+    description: 'Nhập khi KCS nhận lại khâu Ngoại Quan. Xuất hàng cho khách.',
+    sections: true,
+  },
 ]
 
 const CONSUMABLE_TYPE_CODES = ['ccdc', 'nvl-phu']
@@ -62,6 +71,8 @@ export type StockProfile = {
   showProductInfo: boolean
   showNvlCategory: boolean
   showStatus: boolean
+  /// Size trên bảng Tồn / form nhập NVL (BTP dùng `showProductInfo`).
+  showSize: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -101,6 +112,7 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showProductInfo: false,
   showNvlCategory: true,
   showStatus: true,
+  showSize: true,
   typeLabel: 'Chất loại',
   ...NVL_COPY,
 }
@@ -117,6 +129,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showProductInfo: true,
     showNvlCategory: false,
     showStatus: false,
+    showSize: false,
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',
@@ -141,9 +154,34 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showProductInfo: false,
     showNvlCategory: false,
     showStatus: true,
+    showSize: false,
     typeLabel: 'Danh mục',
     typeCodes: CONSUMABLE_TYPE_CODES,
     ...NVL_COPY,
+  },
+  'thanh-pham': {
+    showSku: true,
+    showLocation: false,
+    showShapeColor: false,
+    showType: false,
+    showBodyMetal: false,
+    showProductKind: false,
+    showBtpCategory: false,
+    showProductInfo: true,
+    showNvlCategory: false,
+    showStatus: true,
+    showSize: false,
+    typeLabel: 'Chất loại',
+    noun: 'TP',
+    nameLabel: 'Tên thành phẩm',
+    skuLabel: 'Mã thành phẩm',
+    categoryLabel: 'Danh mục',
+    createLabel: 'Nhập thành phẩm',
+    inboundLabel: 'Nhập thành phẩm',
+    outboundLabel: 'Xuất thành phẩm',
+    searchPlaceholder: 'Tìm mã thành phẩm hoặc tên…',
+    emptyText: 'Chưa có hàng tồn. Bấm Nhập thành phẩm để đưa đơn vào kho.',
+    emptyFiltered: 'Không có thành phẩm khớp bộ lọc.',
   },
 }
 
