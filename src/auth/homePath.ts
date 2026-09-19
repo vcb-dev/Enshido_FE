@@ -25,7 +25,10 @@ export function canAccessPath(
   // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.
   if (p.startsWith('/tickets/')) return true
   if (p === '/my-tickets') return can(user, Permission.PRODUCTION_WORKER)
-  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) return !isWorkerOnly(user)
+  if (p === '/finished-goods' || p.startsWith('/finished-goods/')) {
+    if (isWorkerOnly(user)) return false
+    return canSeeWarehouse(user, 'thanh-pham') || user?.roleCode === 'ADMIN'
+  }
   if (p === '/settings') {
     return can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   }

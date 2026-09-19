@@ -11,6 +11,10 @@ const staff: PermissionUser = {
   roleCode: 'USER',
   permissions: [Permission.SCREEN_DASHBOARD, Permission.SCREEN_WAREHOUSE_NVL_CHINH],
 }
+const stockKeeper: PermissionUser = {
+  roleCode: 'USER',
+  permissions: [Permission.SCREEN_WAREHOUSE_THANH_PHAM],
+}
 
 describe('isWorkerOnly — khớp với bản ở backend', () => {
   it('đúng với tài khoản chỉ làm thợ', () => {
@@ -46,9 +50,12 @@ describe('canAccessPath — thợ không có màn quản lý đơn', () => {
     expect(canAccessPath(admin, '/orders/A012/print')).toBe(true)
   })
 
+  // Kho thành phẩm giờ là một kho — mở theo quyền kho, thợ vẫn bị chặn.
   it('chặn kho thành phẩm', () => {
     expect(canAccessPath(worker, '/finished-goods')).toBe(false)
-    expect(canAccessPath(staff, '/finished-goods')).toBe(true)
+    expect(canAccessPath(staff, '/finished-goods')).toBe(false)
+    expect(canAccessPath(stockKeeper, '/finished-goods')).toBe(true)
+    expect(canAccessPath(admin, '/finished-goods')).toBe(true)
   })
 
   it('cho mở phiếu con và màn Phiếu của tôi', () => {

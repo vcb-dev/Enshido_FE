@@ -32,12 +32,11 @@ import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
-import Inventory2Icon from '@mui/icons-material/Inventory2'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
-import { prefetchWarehouseStock } from '../auth/prefetchWarehouse'
+import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
@@ -228,7 +227,7 @@ function NavItem({
   end?: boolean
 }) {
   const queryClient = useQueryClient()
-  const warehouseCode = to.match(/^\/kho\/([^/]+)/)?.[1]
+  const warehouseCode = to.match(/^\/warehouses\/([^/]+)/)?.[1]
 
   return (
     <ListItemButton
@@ -237,6 +236,7 @@ function NavItem({
       end={end ?? to === '/'}
       onMouseEnter={() => {
         if (warehouseCode) prefetchWarehouseStock(queryClient, [warehouseCode])
+        if (to === '/users') prefetchStaff(queryClient)
       }}
       sx={{
         borderRadius: 1,
@@ -314,22 +314,9 @@ function DrawerNav({
                   />
                 ),
               )}
-              <NavItem
-                to="/finished-goods"
-                icon={<Inventory2Icon fontSize="small" />}
-                label="Kho thành phẩm"
-                end={false}
-              />
             </List>
           </>
-        ) : workerOnly ? null : (
-          <NavItem
-            to="/finished-goods"
-            icon={<Inventory2Icon fontSize="small" />}
-            label="Kho thành phẩm"
-            end={false}
-          />
-        )}
+        ) : null}
         {canSeeConfig ? <ConfigMenu /> : null}
         {canManageUsers ? (
           <NavItem to="/users" icon={<PeopleIcon fontSize="small" />} label="Nhân sự" />

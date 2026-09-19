@@ -11,14 +11,14 @@ export function useOrderMutation<V>(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: async (order) => {
+    onSuccess: (order) => {
       queryClient.setQueryData(['production-order', code], order)
       // Tiền công, bạc thu hồi thay đổi theo từng lần nhận lại khâu.
       void queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
       // Phiếu con đổi trạng thái thì màn "Phiếu của tôi" của thợ cũng đổi.
       void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
       toast.success(success)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })

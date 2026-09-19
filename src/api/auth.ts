@@ -89,32 +89,39 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json')
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    method,
-    headers,
-    credentials: 'include',
-  })
-
-  if (
-    res.status === 401 &&
-    retry &&
-    path !== '/auth/login' &&
-    path !== '/auth/refresh'
-  ) {
-    refreshPromise ??= tryRefresh().finally(() => {
-      refreshPromise = null
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      method,
+      headers,
+      credentials: 'include',
     })
-    const ok = await refreshPromise
-    if (ok) return apiFetch<T>(path, options, false)
-  }
 
-  if (!res.ok) {
-    throw new Error(await parseError(res))
-  }
+    if (
+      res.status === 401 &&
+      retry &&
+      path !== '/auth/login' &&
+      path !== '/auth/refresh'
+    ) {
+      refreshPromise ??= tryRefresh().finally(() => {
+        refreshPromise = null
+      })
+      const ok = await refreshPromise
+      if (ok) return apiFetch<T>(path, options, false)
+    }
 
-  if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+    if (!res.ok) {
+      throw new Error(await parseError(res))
+    }
+
+    if (res.status === 204) return undefined as T
+    return (await res.json()) as T
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+      throw new Error('Máy chủ không phản hồi, thử lại')
+    }
+    throw error
+  }
 }
 
 export async function loginApi(username: string, password: string) {

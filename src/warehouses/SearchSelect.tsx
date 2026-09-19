@@ -1,6 +1,7 @@
 import type { Ref } from 'react'
 import { Autocomplete, TextField } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material'
+import { TextInput } from '../components/ui/TextInput'
 
 export type SearchSelectOption = {
   id: string
@@ -52,14 +53,20 @@ export function SearchSelect({
 }) {
   if (readOnly) {
     return (
-      <TextField
+      <TextInput
         label={label}
-        value={displayValue || options.find((item) => item.id === valueId)?.name || '—'}
+        value={
+          displayValue ||
+          options.find((item) => item.id === valueId)?.name ||
+          valueId ||
+          ''
+        }
         required={required}
-        disabled
+        readOnly
+        size={size}
         sx={sx}
-        error={Boolean(errorText)}
-        helperText={errorText ?? helperText}
+        errorText={errorText}
+        helperText={helperText}
       />
     )
   }

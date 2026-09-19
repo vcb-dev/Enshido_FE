@@ -41,6 +41,9 @@ export type ProductionOrderRow = {
   btpSku: string | null
   requestType: ProductionRequestType
   qty: number
+  /** Đơn vị số lượng cần làm: chiếc | đôi. */
+  qtyUnit: string | null
+  finishedProductQty: number | null
   returnedQty: number
   model3dCode: string | null
   model3dUrl: string | null
@@ -51,8 +54,11 @@ export type ProductionOrderRow = {
   stoneColor: string | null
   stoneTypes: string[]
   size: string | null
+  sizeLabel: string | null
   mainMaterial: string | null
   platingColor: string | null
+  btpCategory: string | null
+  productKind: string | null
   askedUserName: string | null
   receivedDate: string
   dueDate: string | null
@@ -178,6 +184,8 @@ export type SubTicket = {
 
 export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images'> & {
   btp: { id: string; sku: string | null; name: string } | null
+  nvl: { id: string; sku: string | null; name: string } | null
+  sourceOrderCode: string | null
   askedUserId: string | null
   sizeLabel: string | null
   stoneCount: number | null
@@ -237,18 +245,22 @@ export type ProductionOrderListParams = {
 export type UpsertProductionOrderPayload = {
   source: ProductionSource
   btpMaterialId?: string | null
+  nvlMaterialId?: string | null
+  finishedProductCode?: string | null
   requestType: ProductionRequestType
   receivedDate: string
   closedBy: string
   description: string
   qty: number
+  qtyUnit?: string | null
+  finishedProductQty?: number | null
   model3dCode?: string
   model3dUrl?: string | null
-  leadTime?: string
-  trackingCode?: string
+  leadTime: string
+  trackingCode: string
   stoneColor?: string
   stoneTypes?: string[]
-  dueDate?: string | null
+  dueDate: string
   size?: string
   sizeLabel?: string
   stoneCount?: number | null
@@ -258,6 +270,8 @@ export type UpsertProductionOrderPayload = {
   otherRequirements?: string
   mainMaterial?: string
   platingColor?: string
+  btpCategory?: string
+  productKind?: string
   askedUserId?: string | null
   debtStatus?: string
   parentCode?: string
@@ -456,6 +470,7 @@ export function createProductionOrderApi(payload: UpsertProductionOrderPayload) 
   return apiFetch<ProductionOrderDetail>(BASE, {
     method: 'POST',
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(25_000),
   })
 }
 
@@ -545,6 +560,57 @@ export function listOrderOptionsApi(search = '') {
 export function listBtpOptionsApi(search = '') {
   const query = search ? `?search=${encodeURIComponent(search)}` : ''
   return apiFetch<BtpOption[]>(`${BASE}/btp-options${query}`)
+}
+
+export type FinishedProductOption = {
+  code: string
+  description: string
+  requestType: ProductionRequestType
+  qty: number
+  size: string | null
+  sizeLabel: string | null
+  mainMaterial: string | null
+  platingColor: string | null
+  stoneColor: string | null
+  stoneTypes: string[]
+  stoneCount: number | null
+  stoneWeight: string | null
+  laserEngraving: string | null
+  otherRequirements: string | null
+  remainingQty: number
+  images: Array<{
+    kind: ProductionImageKind
+    url: string
+    publicId: string
+    width: number | null
+    height: number | null
+  }>
+}
+
+export type NvlOption = {
+  id: string
+  sku: string | null
+  name: string
+  unit: string
+  qty: string
+  shape: string | null
+  color: string | null
+  materialType: string | null
+  bodyMetal: string | null
+  metalKind: string | null
+  sizeLabel: string | null
+  note: string | null
+  images: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
+}
+
+export function listFinishedProductOptionsApi(search = '') {
+  const query = search ? `?search=${encodeURIComponent(search)}` : ''
+  return apiFetch<FinishedProductOption[]>(`${BASE}/finished-product-options${query}`)
+}
+
+export function listNvlOptionsApi(search = '') {
+  const query = search ? `?search=${encodeURIComponent(search)}` : ''
+  return apiFetch<NvlOption[]>(`${BASE}/nvl-options${query}`)
 }
 
 export function getOrderCostingApi(code: string) {

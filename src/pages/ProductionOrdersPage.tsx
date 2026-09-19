@@ -1,13 +1,18 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Link, ListItemText, Menu, MenuItem, Stack, Tab, Tabs, Tooltip } from '@mui/material'
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import { useMemo, useState } from 'react'
+import { Box, Stack, Tab, Tabs } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useAuth } from '../auth/AuthContext'
 import {
   createProductionOrderApi,
+  deleteProductionOrderApi,
+  getProductionOrderApi,
   getProductionOrderLookupsApi,
   listProductionOrdersApi,
+  updateProductionOrderApi,
+  type ProductionOrderDetail,
+  type ProductionOrderListResponse,
   type ProductionOrderRow,
   type ProductionRequestType,
   type ProductionSource,
@@ -15,48 +20,55 @@ import {
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
 import { formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
 import {
-  ColumnHeaderFilter,
-  ColumnHeaderSearch,
   DataTable,
+  FILTER_FIELD_SX,
   PageHeader,
+  PanelToolbar,
+  RowActions,
+  SelectInput,
   type Column,
-  type ColumnFilterOption,
 } from '../components/ui'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import {
   formatDateTime,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
-  SOURCE_HINT,
-  SOURCE_META,
-  SOURCES,
   STATUS_META,
   STATUS_TABS,
 } from '../orders/catalog'
-import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
+import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
 import { invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlStock } from '../orders/nvlStock'
+import { afterProductionOrderSaved } from '../orders/orderCache'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
+import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
 export function ProductionOrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [creating, setCreating] = useState(false)
-  // Giữ loại đơn sau khi đóng để form không nhảy loại trong lúc dialog đang mờ dần.
-  const [createSource, setCreateSource] = useState<ProductionSource>('NVL')
-  const [createMenu, setCreateMenu] = useState<HTMLElement | null>(null)
+  const { user } = useAuth()
+  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<ProductionOrderDetail | null>(null)
   const table = useTableParams({
     pageSize: 25,
-    filters: { status: '', requestType: '', source: '' },
+    filters: { status: '', requestType: '', source: 'NVL' as ProductionSource },
   })
-  const { params, setFilter, setSearch } = table
+  const { params } = table
+  const listSource: ProductionSource = params.source === 'BTP' ? 'BTP' : 'NVL'
+  const statusTab = STATUS_TABS.includes(params.status as ProductionStatus)
+    ? (params.status as ProductionStatus | '')
+    : ''
+  const search = useDebouncedValue(params.search, 300)
 
   const listParams = {
-    status: params.status as ProductionStatus | '',
+    status: statusTab,
     requestType: params.requestType as ProductionRequestType | '',
-    source: params.source as ProductionSource | '',
-    search: params.search,
+    source: listSource,
+    search,
     page: params.page,
     pageSize: params.pageSize,
     sort: params.sort || undefined,
@@ -77,48 +89,72 @@ export function ProductionOrdersPage() {
 
   const create = useMutation({
     mutationFn: (payload: UpsertProductionOrderPayload) => createProductionOrderApi(payload),
-    onSuccess: async (order) => {
+    onSuccess: (order) => {
+      afterProductionOrderSaved(queryClient, order)
+      setFormOpen(false)
       toast.success(`Đã lên đơn ${order.code}`)
-      setCreating(false)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-      await queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
-      if (order.source === 'BTP') invalidateBtpStock(queryClient)
       navigate(`/orders/${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const update = useMutation({
+    mutationFn: (payload: UpsertProductionOrderPayload) => {
+      if (!editing) throw new Error('Không tìm thấy đơn để sửa')
+      return updateProductionOrderApi(editing.code, payload)
+    },
+    onSuccess: (order) => {
+      afterProductionOrderSaved(queryClient, order, editing)
+      toast.success(`Đã lưu đơn ${order.code}`)
+      setFormOpen(false)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const loadEdit = useMutation({
+    mutationFn: (row: ProductionOrderRow) => getProductionOrderApi(row.code),
+    onSuccess: (order) => {
+      setEditing(order)
+      setFormOpen(true)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const del = useDeleteRowDialog<ProductionOrderRow>({
+    mutationFn: (row) => deleteProductionOrderApi(row.code),
+    successMessage: 'Đã xóa đơn',
+    queryKeys: [['production-orders']],
+    invalidateKeys: [['production-orders'], ['production-order-lookups']],
+    onRemoved: (row) => {
+      queryClient.setQueriesData(
+        { queryKey: ['production-orders'] },
+        (current: ProductionOrderListResponse | undefined) => {
+          if (!current?.items) return current
+          return {
+            ...current,
+            items: current.items.filter((item) => item.id !== row.id),
+            total: Math.max(0, current.total - 1),
+          }
+        },
+      )
+      if (row.source === 'BTP') {
+        invalidateBtpStock(queryClient)
+        invalidateNvlStock(queryClient)
+      }
+      if (row.source === 'NVL') invalidateNvlStock(queryClient)
+    },
+  })
 
   const columns = useMemo(
     () =>
-      orderColumns({
-        search: (
-          <ColumnHeaderSearch
-            value={params.search}
-            onChange={setSearch}
-            placeholder="Tìm mã, mô tả…"
-          />
-        ),
-        source: (
-          <ColumnHeaderFilter
-            valueId={params.source}
-            options={SOURCE_OPTIONS}
-            onChange={(id) => setFilter({ source: id })}
-          />
-        ),
-        requestType: (
-          <ColumnHeaderFilter
-            valueId={params.requestType}
-            options={REQUEST_TYPE_OPTIONS}
-            onChange={(id) => setFilter({ requestType: id })}
-          />
-        ),
+      orderColumns(listSource, {
+        onView: (row) => navigate(`/orders/${row.code}`),
+        onEdit: (row) => loadEdit.mutate(row),
+        onDelete: (row) => del.request(row),
+        isAdmin,
       }),
-    [params.requestType, params.search, params.source, setFilter, setSearch],
+    [del.request, isAdmin, listSource, loadEdit.mutate, navigate],
   )
   const counts = list.data?.statusCounts
   const items = list.data?.items ?? []
-  // Tab trạng thái không tính là bộ lọc cột — "Xóa lọc" giữ nguyên tab đang xem.
-  const columnFiltered = Boolean(params.source || params.requestType || params.search.trim())
+  const narrowed = Boolean(statusTab || params.requestType || params.search.trim())
 
   return (
     <Stack
@@ -132,7 +168,22 @@ export function ProductionOrdersPage() {
       />
 
       <Tabs
-        value={params.status}
+        value={listSource}
+        onChange={(_, value: ProductionSource) => table.setFilter({ source: value })}
+        sx={{
+          flexShrink: 0,
+          minHeight: 44,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          '& .MuiTab-root': { minHeight: 44, py: 0, fontWeight: 600 },
+        }}
+      >
+        <Tab value="NVL" label="Đơn mới" />
+        <Tab value="BTP" label="Đơn BTP" />
+      </Tabs>
+
+      <Tabs
+        value={statusTab}
         onChange={(_, value: string) => table.setFilter({ status: value })}
         variant="scrollable"
         scrollButtons="auto"
@@ -156,13 +207,18 @@ export function ProductionOrdersPage() {
         rowKey={(row) => row.id}
         loading={list.isFetching}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText={table.hasFilters ? 'Không có đơn khớp bộ lọc.' : 'Chưa có đơn sản xuất.'}
+        emptyText={
+          narrowed
+            ? 'Không có đơn khớp bộ lọc.'
+            : listSource === 'BTP'
+              ? 'Chưa có đơn BTP.'
+              : 'Chưa có đơn mới.'
+        }
         variant="grid"
         fixedLayout
-        minWidth={1722}
+        minWidth={listSource === 'BTP' ? 1328 : 1208}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
-        onRowClick={(row) => navigate(`/orders/${row.code}`)}
         sort={table.sortState}
         onSortChange={table.toggleSort}
         page={params.page}
@@ -173,104 +229,88 @@ export function ProductionOrdersPage() {
         rowsLabel="đơn"
         sx={{ flex: { md: 1 } }}
         toolbar={
-          <>
-            {columnFiltered ? (
-              <Button
-                size="small"
-                onClick={() => setFilter({ source: '', requestType: '', search: '' })}
-              >
-                Xóa lọc
-              </Button>
-            ) : null}
-            <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button
-              variant="contained"
-              endIcon={<ArrowDropDownIcon />}
-              onClick={(event) => setCreateMenu(event.currentTarget)}
-            >
-              Lên đơn
-            </Button>
-          </>
+          <PanelToolbar
+            search={params.search}
+            onSearchChange={table.setSearch}
+            searchPlaceholder="Tìm mã SX, mã theo dõi, người chốt, mô tả…"
+            filters={
+              <SelectInput
+                label="Yêu cầu làm hàng"
+                value={params.requestType}
+                onChange={(value) => table.setFilter({ requestType: value })}
+                options={REQUEST_TYPES.map((type) => ({ value: type, label: REQUEST_TYPE_META[type].label }))}
+                placeholder="Tất cả"
+                sx={FILTER_FIELD_SX}
+              />
+            }
+            filterCount={params.requestType ? 1 : 0}
+            onClearFilters={() => table.setFilter({ requestType: '' })}
+            createLabel={listSource === 'BTP' ? 'Lên đơn BTP' : 'Lên đơn mới'}
+            onCreate={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+          />
         }
       />
 
-      <Menu
-        anchorEl={createMenu}
-        open={Boolean(createMenu)}
-        onClose={() => setCreateMenu(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        {CREATE_SOURCES.map((source) => (
-          <MenuItem
-            key={source}
-            onClick={() => {
-              setCreateMenu(null)
-              setCreateSource(source)
-              setCreating(true)
-            }}
-          >
-            <ListItemText primary={SOURCE_META[source].label} secondary={SOURCE_HINT[source]} />
-          </MenuItem>
-        ))}
-      </Menu>
-
       <ProductionOrderFormDialog
-        open={creating}
-        order={null}
-        initialSource={createSource}
+        open={formOpen}
+        order={editing}
+        initialSource={listSource}
         lookups={lookups.data}
-        saving={create.isPending}
-        onClose={() => setCreating(false)}
-        onSave={(payload) => create.mutate(payload)}
+        saving={editing ? update.isPending : create.isPending}
+        onClose={() => setFormOpen(false)}
+        onExited={() => setEditing(null)}
+        onSave={(payload) => (editing ? update.mutateAsync(payload) : create.mutateAsync(payload))}
+      />
+      <ConfirmDeleteDialog
+        open={Boolean(del.row)}
+        title="Xóa đơn sản xuất"
+        description={
+          del.row
+            ? `Xóa đơn ${del.row.code}? Ảnh của đơn cũng bị xóa khỏi kho ảnh.`
+            : ''
+        }
+        deleting={del.deleting}
+        onClose={del.cancel}
+        onConfirm={del.confirm}
       />
     </Stack>
   )
 }
-
-const CREATE_SOURCES: ProductionSource[] = ['BTP', 'NVL']
-
-const SOURCE_OPTIONS: ColumnFilterOption[] = SOURCES.map((source) => ({
-  id: source,
-  name: SOURCE_META[source].label,
-}))
-
-const REQUEST_TYPE_OPTIONS: ColumnFilterOption[] = REQUEST_TYPES.map((type) => ({
-  id: type,
-  name: REQUEST_TYPE_META[type].label,
-}))
 
 function tabLabel(label: string, count: number | undefined) {
   return count == null ? label : `${label} (${count})`
 }
 
-function Thumbs({ images }: { images: ProductionOrderRow['images'] }) {
-  if (images.length === 0) return <>—</>
-  return (
-    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-      {images.slice(0, 2).map((image) => (
-        <Box
-          key={image.id}
-          component="img"
-          src={cloudinaryThumb(image.url, 64)}
-          alt=""
-          loading="lazy"
-          sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
-        />
-      ))}
-      {images.length > 2 ? (
-        <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
-          +{images.length - 2}
-        </Box>
-      ) : null}
-    </Stack>
-  )
+function deleteHint(row: ProductionOrderRow, isAdmin: boolean) {
+  if (!isAdmin) return 'Chỉ admin được xóa đơn'
+  if (row.status === 'NEW') return 'Xóa'
+  if (row.source === 'BTP' && row.status === 'FILING') return 'Xóa'
+  return 'Chỉ xóa được đơn mới tạo, chưa giao khâu'
 }
 
-/** Ô lọc đặt trên hàng filter, ngay dưới tên cột — giống các màn tồn kho. */
-type ColumnFilters = { search: ReactNode; source: ReactNode; requestType: ReactNode }
+function orderColumns(
+  source: ProductionSource,
+  actions: {
+    onView: (row: ProductionOrderRow) => void
+    onEdit: (row: ProductionOrderRow) => void
+    onDelete: (row: ProductionOrderRow) => void
+    isAdmin: boolean
+  },
+): Column<ProductionOrderRow>[] {
+  const btpSku: Column<ProductionOrderRow> | null =
+    source === 'BTP'
+      ? {
+          key: 'btpSku',
+          header: 'Mã BTP',
+          width: 120,
+          ellipsis: true,
+          render: (row) => row.btpSku ?? '—',
+        }
+      : null
 
-function orderColumns(filters: ColumnFilters): Column<ProductionOrderRow>[] {
   return [
     {
       key: 'createdAt',
@@ -291,90 +331,38 @@ function orderColumns(filters: ColumnFilters): Column<ProductionOrderRow>[] {
     {
       key: 'code',
       header: 'Mã SX',
-      width: 132,
+      width: 76,
       sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
-      filter: filters.search,
     },
-    {
-      key: 'source',
-      header: 'Loại đơn',
-      width: 150,
-      filter: filters.source,
-      // Chip giữ nguyên bề ngang, mã BTP dài thì cắt bớt — không cho tràn sang cột bên cạnh.
-      cellSx: { overflow: 'hidden' },
-      render: (row) => (
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
-          <Box sx={{ display: 'flex', flexShrink: 0 }}>
-            <SourceChip source={row.source} />
-          </Box>
-          {row.btpSku ? (
-            <Box
-              component="span"
-              sx={{
-                fontSize: 12,
-                color: 'text.secondary',
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {row.btpSku}
-            </Box>
-          ) : null}
-        </Stack>
-      ),
-    },
-    {
-      key: 'detailImages',
-      header: 'Ảnh chi tiết đơn',
-      width: 104,
-      render: (row) => <Thumbs images={row.images.filter((image) => image.kind === 'DETAIL')} />,
-    },
-    {
-      key: 'productImages',
-      header: 'Ảnh sản phẩm',
-      width: 104,
-      render: (row) => <Thumbs images={row.images.filter((image) => image.kind === 'PRODUCT')} />,
-    },
+    ...(btpSku ? [btpSku] : []),
     {
       key: 'requestType',
       header: 'Yêu cầu làm hàng',
-      width: 140,
-      filter: filters.requestType,
+      width: 124,
       render: (row) => <RequestTypeChip type={row.requestType} />,
     },
-    { key: 'qty', header: 'Số lượng', width: 80, numeric: true, sortable: true },
+    ...(source === 'NVL'
+      ? [
+          {
+            key: 'sizeLabel',
+            header: 'Size',
+            width: 80,
+            ellipsis: true,
+            render: (row: ProductionOrderRow) => row.sizeLabel ?? '—',
+          } satisfies Column<ProductionOrderRow>,
+        ]
+      : []),
+    {
+      key: 'qty',
+      header: 'SL cần làm',
+      width: 128,
+      numeric: true,
+      sortable: true,
+      render: (row) => `${row.qty}${row.qtyUnit ? ` ${row.qtyUnit}` : ''}`,
+    },
     { key: 'returnedQty', header: 'Đã trả', width: 68, numeric: true },
-    {
-      key: 'model3dCode',
-      header: 'Mã 3D',
-      width: 116,
-      ellipsis: true,
-      render: (row) => row.model3dCode ?? '—',
-    },
-    {
-      key: 'model3dUrl',
-      header: 'Link 3D',
-      width: 90,
-      render: (row) =>
-        row.model3dUrl ? (
-          <Tooltip title={row.model3dUrl}>
-            <Link
-              href={row.model3dUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => event.stopPropagation()}
-            >
-              Mở link
-            </Link>
-          </Tooltip>
-        ) : (
-          '—'
-        ),
-    },
     {
       key: 'leadTime',
       header: 'Thời gian cần',
@@ -410,6 +398,29 @@ function orderColumns(filters: ColumnFilters): Column<ProductionOrderRow>[] {
       header: 'Ngày cần trả',
       width: 108,
       render: (row) => formatStockedDate(row.dueDate),
+    },
+    {
+      key: 'actions',
+      header: 'Hành động',
+      width: 120,
+      align: 'center',
+      card: 'actions',
+      cellSx: { overflow: 'visible' },
+      render: (row) => (
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActions
+            onView={() => actions.onView(row)}
+            onEdit={() => actions.onEdit(row)}
+            onDelete={() => actions.onDelete(row)}
+            deleteDisabled={!actions.isAdmin || !(row.status === 'NEW' || (row.source === 'BTP' && row.status === 'FILING'))}
+            titles={{
+              view: 'Xem chi tiết',
+              edit: 'Chỉnh sửa',
+              delete: deleteHint(row, actions.isAdmin),
+            }}
+          />
+        </Box>
+      ),
     },
   ]
 }

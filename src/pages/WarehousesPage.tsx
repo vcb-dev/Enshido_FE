@@ -58,7 +58,7 @@ export function WarehousesPage() {
     <Stack spacing={2}>
       <PageHeader
         title="Kho"
-        subtitle="Kho NVL chính (tồn / nhập / xuất), Kho BTP, và Kho NVL tiêu hao."
+        subtitle="Kho NVL chính, Kho BTP, Kho NVL tiêu hao và Kho thành phẩm (tồn / nhập / xuất)."
       />
 
       <DataTable

@@ -27,11 +27,14 @@ import {
   getInventoryLookupsApi,
   getWarehouseStockApi,
   qtyFromApi,
+  stockStatusFromQty,
   updateWarehouseStockApi,
   createWarehouseStockApi,
   type AvailabilityCode,
+  type InventoryLookups,
   type LookupItem,
   type MetalKindCode,
+  type StockResponse,
   type StockRow,
   type StockTotals,
   type UpdateStockPayload,
@@ -57,16 +60,20 @@ import {
   type ColumnGroup,
 } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
-import { useCrudDialog } from '../hooks/useCrudDialog'
+import { useCrudDialog, type CrudDialogKind } from '../hooks/useCrudDialog'
+import { isTempId, newTempId, registerTempId, resolveTempId, rejectTempId } from '../hooks/pendingRowId'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 import { CategorySelect } from '../warehouses/CategorySelect'
 import type { SearchSelectOption } from '../warehouses/SearchSelect'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
+import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
   CONSUMABLE_CATEGORIES,
+  METAL_KINDS,
+  THANH_PHAM_WAREHOUSE,
   WAREHOUSE_SECTIONS,
   catalogChildren,
   materialTypesFor,
@@ -180,7 +187,9 @@ export function WarehouseDetailPage() {
         </Tabs>
       ) : null}
 
-      {activeSection?.code === 'inbound' ? (
+      {warehouse.code === THANH_PHAM_WAREHOUSE && activeSection ? (
+        <FinishedGoodsPage section={activeSection.code} hideHeader />
+      ) : activeSection?.code === 'inbound' ? (
         <StockInboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'outbound' ? (
         <StockOutboundPanel warehouseCode={stockKey} />
@@ -233,7 +242,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   const queryClient = useQueryClient()
   const dialog = useCrudDialog<StockRow>()
   // Tách sẵn callback ổn định để useMemo cột không chạy lại mỗi render.
-  const { openEdit } = dialog
+  const { openEdit, openView } = dialog
   const table = useTableParams({
     pageSize: 8,
     filters: { ...CATALOG_FILTER_DEFAULTS, unit: '', color: '', status: 'ALL' },
@@ -356,38 +365,59 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
 
+  const stockKey = ['warehouse-stock', warehouseCode] as const
   const save = useMutation({
-    mutationFn: ({ id, payload }: { id?: string; payload: UpdateStockPayload }) =>
+    mutationFn: async ({ id, payload }: { id?: string; payload: UpdateStockPayload }) =>
       id
         ? updateWarehouseStockApi(warehouseCode, id, payload)
         : createWarehouseStockApi(warehouseCode, payload),
     onMutate: (input) => {
       dialog.close()
       toast.success(input.id ? `Đã cập nhật ${profile.noun}` : `Đã thêm ${profile.noun}`)
+      void queryClient.cancelQueries({ queryKey: stockKey })
+      const previous = queryClient.getQueryData<StockResponse>(stockKey)
+      const tempId = input.id ?? newTempId()
+      if (!input.id) registerTempId(tempId)
+      queryClient.setQueryData(stockKey, (current: StockResponse | undefined) => {
+        if (!current) return current
+        const next = input.id
+          ? current.items.map((item) =>
+              item.id === input.id ? patchStockRow(item, input.payload, lookups.data) : item,
+            )
+          : [
+              ...current.items,
+              blankStockRow(tempId, current.items.length + 1, input.payload, lookups.data),
+            ]
+        return { ...current, items: next, totals: sumStockTotals(next) }
+      })
       if (!input.id) table.setPage(Math.ceil((visible.length + 1) / params.pageSize))
+      return { previous, tempId }
     },
-    onSuccess: (row, input) => {
-      queryClient.setQueryData(
-        ['warehouse-stock', warehouseCode],
-        (current: { items: StockRow[]; totals: StockTotals } | undefined) => {
-          if (!current) return current
-          const next = input.id
-            ? current.items.map((item) =>
-                item.id === row.id ? { ...item, ...row, priceLayers: row.priceLayers ?? item.priceLayers } : item,
-              )
-            : [...current.items, row]
-          return { ...current, items: next, totals: sumStockTotals(next) }
-        },
-      )
+    onSuccess: (row, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) resolveTempId(ctx.tempId, row.id)
+      queryClient.setQueryData(stockKey, (current: StockResponse | undefined) => {
+        if (!current) return current
+        const next = current.items.map((item) =>
+          item.id === row.id || item.id === ctx?.tempId
+            ? { ...item, ...row, priceLayers: row.priceLayers ?? item.priceLayers }
+            : item,
+        )
+        if (!next.some((item) => item.id === row.id)) next.push(row)
+        return { ...current, items: next, totals: sumStockTotals(next) }
+      })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error, _input, ctx) => {
+      if (ctx?.tempId && isTempId(ctx.tempId)) rejectTempId(ctx.tempId, error)
+      if (ctx?.previous) queryClient.setQueryData(stockKey, ctx.previous)
+      toast.error(error.message)
+    },
   })
 
   const { setFilter, setSearch } = table
   const columns = useMemo(
     () =>
-      stockColumns(profile, openEdit, totals, {
+      stockColumns(profile, { onView: openView, onEdit: openEdit }, totals, {
         name: <ColumnHeaderSearch value={params.search} onChange={setSearch} placeholder="Tìm tên…" />,
         location: profile.showLocation
           ? { valueId: params.location, options: locationOptions, onChange: (id) => setFilter({ location: id }) }
@@ -430,6 +460,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       kindFilterOptions,
       locationOptions,
       openEdit,
+      openView,
       params.bodyMetal,
       params.color,
       params.kind,
@@ -458,6 +489,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     (profile.showLocation ? 0 : 110) -
     (profile.showSku ? 0 : 130) -
     (profile.showShapeColor ? 0 : 250) +
+    (profile.showSize ? 90 : 0) +
     (profile.showBodyMetal ? 140 : 0) +
     (profile.showProductKind ? 160 : 0) -
     (profile.showStatus ? 0 : 110)
@@ -488,6 +520,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
             row={row}
             index={indexOffset + index + 1}
             profile={profile}
+            onView={() => openView(row)}
             onEdit={() => openEdit(row)}
           />
         )}
@@ -508,6 +541,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
 
       <StockEditDialog
         open={dialog.open}
+        kind={dialog.kind}
         row={dialog.row}
         warehouseCode={warehouseCode}
         profile={profile}
@@ -540,11 +574,13 @@ function StockCard({
   row,
   index,
   profile,
+  onView,
   onEdit,
 }: {
   row: StockRow
   index: number
   profile: StockProfile
+  onView: () => void
   onEdit: () => void
 }) {
   const meta = [
@@ -559,6 +595,7 @@ function StockCard({
       ? { label: categoryHeader(profile), value: categoryText(row, profile) }
       : null,
     profile.showType ? { label: profile.typeLabel, value: typeText(row, profile) } : null,
+    profile.showSize ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
     profile.showBodyMetal ? { label: 'Chất liệu', value: row.bodyMetal ?? '—' } : null,
     profile.showProductKind ? { label: 'Phân loại sản phẩm', value: row.productKind ?? '—' } : null,
     profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
@@ -601,7 +638,7 @@ function StockCard({
           </Stack>
         </Box>
         <Box sx={{ flexShrink: 0 }}>
-          <RowActions onEdit={onEdit} />
+          <RowActions onView={onView} onEdit={onEdit} />
         </Box>
       </Stack>
 
@@ -670,7 +707,7 @@ function typeText(row: StockRow, profile: StockProfile) {
 
 function stockColumns(
   profile: StockProfile,
-  onEdit: (row: StockRow) => void,
+  actions: { onView: (row: StockRow) => void; onEdit: (row: StockRow) => void },
   totals: StockTotals | undefined,
   filters: StockColumnFilters,
 ): Column<StockRow>[] {
@@ -722,6 +759,16 @@ function stockColumns(
       filter: filters.name,
     },
     { key: 'unit', header: 'Đơn vị', align: 'center', filter: headerFilter(filters.unit) },
+  )
+  if (profile.showSize) {
+    columns.push({
+      key: 'sizeLabel',
+      header: 'Size',
+      align: 'center',
+      render: (row) => row.sizeLabel ?? '—',
+    })
+  }
+  columns.push(
     {
       key: 'openingQty',
       header: qtyLabel(totals?.openingQty),
@@ -874,7 +921,7 @@ function stockColumns(
       card: 'actions',
       header: 'Hành động',
       align: 'center',
-      render: (row) => <RowActions onEdit={() => onEdit(row)} />,
+      render: (row) => <RowActions onView={() => actions.onView(row)} onEdit={() => actions.onEdit(row)} />,
     },
   )
 
@@ -903,6 +950,135 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
     qty: sum((r) => r.qty),
     amount: sum((r) => r.amount),
   }
+}
+
+function lookupName(items: Array<{ id: string; name: string }> | undefined, id: string | null | undefined) {
+  if (!id) return null
+  return items?.find((item) => item.id === id)?.name ?? null
+}
+
+function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: InventoryLookups | undefined): StockRow {
+  const openingQty = payload.openingQty ?? row.openingQty
+  const stockUnitPrice = payload.stockUnitPrice ?? row.stockUnitPrice
+  const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
+  const qty = String((Number(openingQty) || 0) + (Number(row.inQty) || 0) - (Number(row.outQty) || 0))
+  const amount = String(
+    Math.round((Number(openingAmount) || 0) + (Number(row.inAmount) || 0) - (Number(row.outAmount) || 0)),
+  )
+  const av = stockStatusFromQty(qty)
+  const unitId = payload.unitId ?? row.unitId
+  const shapeId = payload.shapeId !== undefined ? payload.shapeId : row.shapeId
+  const colorId = payload.colorId !== undefined ? payload.colorId : row.colorId
+  const materialTypeId = payload.materialTypeId !== undefined ? payload.materialTypeId : row.materialTypeId
+  const otherClassId = payload.otherClassId !== undefined ? payload.otherClassId : row.otherClassId
+  const bodyMetalId = payload.bodyMetalId !== undefined ? payload.bodyMetalId : row.bodyMetalId
+  const productKindId = payload.productKindId !== undefined ? payload.productKindId : row.productKindId
+  const platingColorId = payload.platingColorId !== undefined ? payload.platingColorId : row.platingColorId
+  const metalKind = payload.metalKind !== undefined ? payload.metalKind : row.metalKind
+  const btpCategoryId = payload.btpCategoryId
+  return {
+    ...row,
+    name: payload.name ?? row.name,
+    locationCode: payload.locationCode !== undefined ? payload.locationCode || null : row.locationCode,
+    unitId,
+    unit: lookupName(lookups?.units, unitId) ?? row.unit,
+    shapeId: shapeId ?? null,
+    shape: shapeId ? lookupName(lookups?.shapes, shapeId) ?? row.shape : null,
+    colorId: colorId ?? null,
+    color: colorId ? lookupName(lookups?.colors, colorId) ?? row.color : null,
+    materialTypeId: materialTypeId ?? null,
+    materialType:
+      payload.otherClassName ||
+      lookupName(lookups?.materialTypes, materialTypeId) ||
+      lookupName(lookups?.otherClasses, otherClassId) ||
+      row.materialType,
+    otherClassId:
+      payload.otherClassId !== undefined
+        ? payload.otherClassId
+        : payload.btpCategoryId !== undefined
+          ? payload.btpCategoryId || null
+          : row.otherClassId,
+    otherClass:
+      payload.otherClassName ||
+      lookupName(lookups?.btpCategories, btpCategoryId) ||
+      lookupName(lookups?.otherClasses, otherClassId) ||
+      row.otherClass,
+    bodyMetalId: bodyMetalId ?? null,
+    bodyMetal: bodyMetalId ? lookupName(lookups?.bodyMetals, bodyMetalId) ?? row.bodyMetal : null,
+    productKindId: productKindId ?? null,
+    productKind: productKindId ? lookupName(lookups?.productKinds, productKindId) ?? row.productKind : null,
+    platingColorId: platingColorId ?? null,
+    platingColor: platingColorId ? lookupName(lookups?.platingColors, platingColorId) ?? row.platingColor : null,
+    sizeLabel: payload.sizeLabel !== undefined ? payload.sizeLabel || null : row.sizeLabel,
+    images: payload.images ?? row.images,
+    metalKind: metalKind ?? null,
+    metalKindLabel: metalKind
+      ? (METAL_KINDS.find((item) => item.code === metalKind)?.name ?? row.metalKindLabel)
+      : payload.otherClassName
+        ? 'Phân loại khác'
+        : row.metalKindLabel,
+    openingQty,
+    openingAmount,
+    stockUnitPrice,
+    qty,
+    amount,
+    availability: av.code,
+    availabilityLabel: av.label,
+  }
+}
+
+function blankStockRow(
+  id: string,
+  stt: number,
+  payload: UpdateStockPayload,
+  lookups: InventoryLookups | undefined,
+): StockRow {
+  return patchStockRow(
+    {
+      id,
+      stt,
+      locationCode: null,
+      sku: null,
+      shapeId: null,
+      shape: null,
+      colorId: null,
+      color: null,
+      name: '',
+      unitId: payload.unitId ?? '',
+      unit: '',
+      openingQty: '0',
+      openingAmount: '0',
+      stockUnitPrice: '0',
+      inQty: '0',
+      inAmount: '0',
+      outQty: '0',
+      outAmount: '0',
+      qty: '0',
+      amount: '0',
+      materialTypeId: null,
+      materialType: null,
+      otherClassId: null,
+      otherClass: null,
+      otherClassParentId: null,
+      otherClassParent: null,
+      bodyMetalId: null,
+      bodyMetal: null,
+      productKindId: null,
+      productKind: null,
+      platingColorId: null,
+      platingColor: null,
+      sizeLabel: null,
+      images: [],
+      classificationCode: 'RAW_MATERIAL',
+      classification: 'NVL',
+      metalKind: null,
+      metalKindLabel: null,
+      availability: 'OUT_OF_STOCK',
+      availabilityLabel: 'Hết hàng',
+    },
+    payload,
+    lookups,
+  )
 }
 
 type StockFormValues = {
@@ -953,6 +1129,7 @@ const EMPTY_STOCK: StockFormValues = {
 
 function StockEditDialog({
   open,
+  kind,
   row,
   warehouseCode,
   profile,
@@ -963,6 +1140,7 @@ function StockEditDialog({
   onSave,
 }: {
   open: boolean
+  kind: CrudDialogKind
   row: StockRow | null
   warehouseCode: string
   profile: StockProfile
@@ -1104,7 +1282,10 @@ function StockEditDialog({
   const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
   const flatTypeOptions: SearchSelectOption[] = typeOptions
 
+  const readOnly = kind === 'view'
+
   function submit(values: StockFormValues) {
+    if (readOnly) return
     if (profile.showBtpCategory) {
       onSave({
         name: values.name.trim(),
@@ -1155,6 +1336,7 @@ function StockEditDialog({
             ? (values.metalKind as MetalKindCode)
             : null,
       otherClassName: isOther ? picked?.name ?? null : null,
+      sizeLabel: values.sizeLabel.trim(),
       openingQty: values.openingQty,
       stockUnitPrice: values.stockUnitPrice || '0',
     })
@@ -1173,7 +1355,11 @@ function StockEditDialog({
     >
       <Form form={form} onSubmit={submit}>
         <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
-          {row ? `Chỉnh sửa ${row.name || profile.noun}` : profile.createLabel}
+          {kind === 'view'
+            ? `Chi tiết ${row?.name || profile.noun}`
+            : row
+              ? `Chỉnh sửa ${row.name || profile.noun}`
+              : profile.createLabel}
         </DialogTitle>
         <DialogContent
           sx={{
@@ -1182,7 +1368,9 @@ function StockEditDialog({
             gap: 2,
             pt: 1,
             overflowX: 'hidden',
-            '& .MuiFormLabel-asterisk': { color: 'error.main' },
+            pointerEvents: readOnly ? 'none' : undefined,
+            '& .MuiFormLabel-asterisk':
+              kind === 'view' ? { display: 'none' } : { color: 'error.main' },
           }}
         >
           <FormTextField<StockFormValues>
@@ -1326,6 +1514,9 @@ function StockEditDialog({
                 placeholder="Tìm hình dạng…"
               />
             ) : null}
+            {profile.showSize ? (
+              <FormTextField<StockFormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 0.8mm…" />
+            ) : null}
             {profile.showLocation ? (
               <FormSearchSelect<StockFormValues>
                 name="locationCode"
@@ -1377,12 +1568,20 @@ function StockEditDialog({
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose} disabled={saving}>
-            Hủy
-          </Button>
-          <Button type="submit" variant="contained" disabled={saving || uploading}>
-            {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
-          </Button>
+          {kind === 'view' ? (
+            <Button onClick={onClose} variant="contained">
+              Đóng
+            </Button>
+          ) : (
+            <>
+              <Button onClick={onClose} disabled={saving}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="contained" disabled={saving || uploading}>
+                {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Form>
     </Dialog>

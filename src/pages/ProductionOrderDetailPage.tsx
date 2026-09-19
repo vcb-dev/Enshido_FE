@@ -32,7 +32,7 @@ import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -76,6 +76,8 @@ import {
   STATUS_TABS,
 } from '../orders/catalog'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlStock } from '../orders/nvlStock'
+import { afterProductionOrderSaved } from '../orders/orderCache'
 import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import {
@@ -124,7 +126,8 @@ export function ProductionOrderDetailPage() {
   const detail = useQuery({
     queryKey: ['production-order', code],
     queryFn: () => getProductionOrderApi(code),
-    staleTime: 10_000,
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -138,6 +141,7 @@ export function ProductionOrderDetailPage() {
     'Đã lưu đơn',
   )
   const wasBtp = detail.data?.source === 'BTP'
+  const wasNvl = detail.data?.source === 'NVL'
   const casting = useOrderMutation(
     code,
     (payload: CastingPayload) => updateCastingApi(code, payload),
@@ -180,10 +184,14 @@ export function ProductionOrderDetailPage() {
   )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success(`Đã xóa đơn ${code}`)
-      if (wasBtp) invalidateBtpStock(queryClient)
-      await queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      if (wasBtp) {
+        invalidateBtpStock(queryClient)
+        invalidateNvlStock(queryClient)
+      }
+      if (wasNvl) invalidateNvlStock(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
       navigate('/orders', { replace: true })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -218,7 +226,11 @@ export function ProductionOrderDetailPage() {
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
   // Người lên đơn và admin được chia phiếu con.
   const canManageTickets = isAdmin || (user != null && order.createdByUserId === user.id)
-  const canDelete = isAdmin && order.status === 'NEW' && stages.length === 0 && !order.lastPrintedAt
+  const canDelete =
+    isAdmin &&
+    stages.length === 0 &&
+    !order.lastPrintedAt &&
+    (order.status === 'NEW' || (isBtp && order.status === 'FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
   function openConfirmHandover(ticket: SubTicket) {
@@ -462,8 +474,8 @@ export function ProductionOrderDetailPage() {
                   }
                 />
                 <Typography variant="caption" color="text.secondary">
-                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP tự tạo khi lên đơn; đổi mã
-                  hoặc số lượng trên đơn thì kho tự cập nhật.
+                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP và NVL tự tạo khi lên
+                  đơn; đổi mã hoặc số lượng trên đơn thì kho tự cập nhật.
                 </Typography>
               </Stack>
             </Section>
@@ -497,14 +509,11 @@ export function ProductionOrderDetailPage() {
         lookups={lookups.data}
         saving={update.isPending}
         onClose={() => setEditing(false)}
-        onSave={(payload) =>
-          update.mutate(payload, {
-            onSuccess: (saved) => {
-              setEditing(false)
-              if (wasBtp || saved.source === 'BTP') invalidateBtpStock(queryClient)
-            },
-          })
-        }
+        onSave={async (payload) => {
+          const saved = await update.mutateAsync(payload)
+          setEditing(false)
+          afterProductionOrderSaved(queryClient, saved, order)
+        }}
       />
 
       <CastingDialog
@@ -685,7 +694,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
     ['Thời gian cần', order.leadTime],
-    ['Số lượng', `${order.qty} · đã trả ${order.returnedQty}`],
+    ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Người chốt', order.closedBy],
     ['Người được hỏi', order.askedUserName],
     ['Mã theo dõi đơn', order.trackingCode],
@@ -897,7 +906,7 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
               variant="outlined"
               size="small"
               component={RouterLink}
-              to={`/finished-goods?create=${order.code}`}
+              to={`/warehouses/thanh-pham/outbound?create=${order.code}`}
               sx={{ alignSelf: 'flex-start' }}
             >
               Lập phiếu xuất hàng
