@@ -1,30 +1,24 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Alert, Box, Button, Chip, CircularProgress, Link, Paper, Stack, Typography } from '@mui/material'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link as RouterLink } from 'react-router-dom'
 import {
-  claimSubTicketApi,
   getMyTicketsApi,
-  submitSubTicketApi,
-  unclaimSubTicketApi,
-  unsubmitSubTicketApi,
+  getSubTicketOrderApi,
   type MyTicketItem,
-  type ProductionOrderDetail,
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { cloudinaryThumb } from '../api/uploads'
-import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner'
 import { PageHeader } from '../components/ui'
-import { QrScannerDialog } from '../components/QrScannerDialog'
+import { ScanQrButton } from '../components/ScanQrButton'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
+import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
+import { queuedLabel, type QueuedSubTicketAction } from '../orders/subTicketQueue'
 
 /** Màn của thợ: nhận phiếu con ở khâu đang mở, theo dõi phiếu đang giữ và phiếu vừa nộp. */
 export function MyTicketsPage() {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const [scanOpen, setScanOpen] = useState(false)
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
@@ -32,47 +26,37 @@ export function MyTicketsPage() {
     refetchInterval: 30_000,
   })
 
-  const onDone = (order: ProductionOrderDetail) => {
-    queryClient.setQueryData(['production-order', order.code], order)
-    return queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
-  }
-  const submit = useMutation({
-    mutationFn: (item: MyTicketItem) => submitSubTicketApi(item.orderCode, item.no),
-    onSuccess: async (order, item) => {
-      toast.success(`Đã báo xong phiếu ${item.ticketCode} — mang hàng tới KCS cân lại`)
-      await onDone(order)
-    },
-    onError: (error: Error) => toast.error(error.message),
+  // Kéo sẵn chi tiết những đơn đang liên quan tới thợ. Lúc còn sóng thì tốn vài request,
+  // đổi lại ra xưởng mất mạng mà quét QR phiếu giấy vẫn mở được trang phiếu con và bấm
+  // nhận — bản lưu ngoại tuyến giữ đúng các key này (xem auth/offlineCache.ts).
+  useEffect(() => {
+    if (!tickets.data) return
+    const done = new Set<string>()
+    for (const item of [...tickets.data.available, ...tickets.data.mine]) {
+      if (done.has(item.orderCode)) continue
+      done.add(item.orderCode)
+      void queryClient.prefetchQuery({
+        queryKey: ['production-order', item.orderCode],
+        queryFn: () => getSubTicketOrderApi(item.ticketCode),
+        staleTime: 60_000,
+      })
+    }
+  }, [tickets.data, queryClient])
+
+  // Cache, thông báo và hàng chờ khi mất mạng nằm hết trong orders/subTicketActions.ts.
+  const claim = useSubTicketAction('claim')
+  const unclaim = useSubTicketAction('unclaim')
+  const submit = useSubTicketAction('submit')
+  const unsubmit = useSubTicketAction('unsubmit')
+  // Khoá theo từng phiếu, không khoá cả màn: mất mạng thì thao tác nằm chờ rất lâu, thợ
+  // vẫn phải bấm được phiếu khác. Bảng này còn nguyên sau khi tắt mở lại app.
+  const queued = useQueuedSubTickets()
+
+  const vars = (item: MyTicketItem) => ({
+    orderCode: item.orderCode,
+    no: item.no,
+    ticketCode: item.ticketCode,
   })
-  const unsubmit = useMutation({
-    mutationFn: (item: MyTicketItem) => unsubmitSubTicketApi(item.orderCode, item.no),
-    onSuccess: async (order, item) => {
-      toast.success(`Đã bỏ báo xong phiếu ${item.ticketCode}`)
-      await onDone(order)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const claim = useMutation({
-    mutationFn: (item: MyTicketItem) => claimSubTicketApi(item.orderCode, item.no),
-    onSuccess: async (order, item) => {
-      toast.success(`Đã nhận phiếu ${item.ticketCode} — chờ người giao cân bạc và xác nhận`)
-      await onDone(order)
-    },
-    onError: (error: Error) => {
-      toast.error(error.message)
-      void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
-    },
-  })
-  const unclaim = useMutation({
-    mutationFn: (item: MyTicketItem) => unclaimSubTicketApi(item.orderCode, item.no),
-    onSuccess: async (order, item) => {
-      toast.success(`Đã huỷ nhận phiếu ${item.ticketCode}`)
-      await onDone(order)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const busy =
-    claim.isPending || unclaim.isPending || submit.isPending || unsubmit.isPending
 
   return (
     <Stack spacing={2} sx={{ pb: 3 }}>
@@ -81,27 +65,12 @@ export function MyTicketsPage() {
         subtitle="Nhận phiếu con ở khâu đang mở, rồi mang hàng tới người giao cân bạc và xác nhận."
         actions={
           <Stack direction="row" spacing={1}>
-            <Button
-              variant="contained"
-              startIcon={<QrCodeScannerIcon fontSize="small" />}
-              onClick={() => setScanOpen(true)}
-            >
-              Quét mã
-            </Button>
+            <ScanQrButton />
             <Button variant="outlined" onClick={() => void tickets.refetch()} disabled={tickets.isFetching}>
               Làm mới
             </Button>
           </Stack>
         }
-      />
-
-      <QrScannerDialog
-        open={scanOpen}
-        onClose={() => setScanOpen(false)}
-        onResult={(path) => {
-          setScanOpen(false)
-          navigate(path)
-        }}
       />
 
       {tickets.isLoading ? (
@@ -119,6 +88,7 @@ export function MyTicketsPage() {
               <TicketCard
                 key={`${item.ticketCode}-${item.state}`}
                 item={item}
+                queued={queued.get(item.ticketCode)}
                 status={
                   item.state === 'CLAIMED'
                     ? `Đã nhận lúc ${formatDateShort(item.claimedAt)} — chờ người giao cân bạc và xác nhận`
@@ -128,15 +98,30 @@ export function MyTicketsPage() {
                 }
                 action={
                   item.state === 'CLAIMED' ? (
-                    <Button size="small" color="inherit" disabled={busy} onClick={() => unclaim.mutate(item)}>
+                    <Button
+                      size="small"
+                      color="inherit"
+                      disabled={queued.has(item.ticketCode)}
+                      onClick={() => unclaim.mutate(vars(item))}
+                    >
                       Huỷ nhận
                     </Button>
                   ) : item.state === 'WORKING' ? (
-                    <Button size="small" variant="contained" disabled={busy} onClick={() => submit.mutate(item)}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={queued.has(item.ticketCode)}
+                      onClick={() => submit.mutate(vars(item))}
+                    >
                       Đã làm xong
                     </Button>
                   ) : item.state === 'SUBMITTED' ? (
-                    <Button size="small" color="inherit" disabled={busy} onClick={() => unsubmit.mutate(item)}>
+                    <Button
+                      size="small"
+                      color="inherit"
+                      disabled={queued.has(item.ticketCode)}
+                      onClick={() => unsubmit.mutate(vars(item))}
+                    >
                       Bỏ báo xong
                     </Button>
                   ) : null
@@ -154,9 +139,14 @@ export function MyTicketsPage() {
               <TicketCard
                 key={item.ticketCode}
                 item={item}
+                queued={queued.get(item.ticketCode)}
                 status={`Mở khâu lúc ${formatDateShort(item.pendingAt)}`}
                 action={
-                  <Button variant="contained" disabled={busy} onClick={() => claim.mutate(item)}>
+                  <Button
+                    variant="contained"
+                    disabled={queued.has(item.ticketCode)}
+                    onClick={() => claim.mutate(vars(item))}
+                  >
                     Nhận phiếu
                   </Button>
                 }
@@ -216,7 +206,18 @@ function Group({
   )
 }
 
-function TicketCard({ item, status, action }: { item: MyTicketItem; status: string; action?: ReactNode }) {
+function TicketCard({
+  item,
+  status,
+  action,
+  queued,
+}: {
+  item: MyTicketItem
+  status: string
+  action?: ReactNode
+  /** Thao tác thợ đã bấm nhưng chưa chốt được với máy chủ. */
+  queued?: QueuedSubTicketAction
+}) {
   return (
     <Paper sx={{ p: 1.5, display: 'flex', gap: 1.5, minWidth: 0 }}>
       <Box
@@ -247,6 +248,11 @@ function TicketCard({ item, status, action }: { item: MyTicketItem; status: stri
           </Link>
           {item.stage ? <Chip size="small" label={STAGE_LABEL[item.stage]} sx={{ borderRadius: 1 }} /> : null}
           {item.state ? <SubTicketStateChip state={item.state} /> : null}
+          {/* Trạng thái bên trên vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
+              của thợ chưa lên tới nơi, không được hiểu là đã nhận / đã xong. */}
+          {queued ? (
+            <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} />
+          ) : null}
         </Stack>
         <Typography
           variant="body2"

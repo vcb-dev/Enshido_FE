@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:https": "VITE_HTTPS=1 vite --host",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
+    "preview:https": "VITE_HTTPS=1 vite preview --host",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -31,6 +33,7 @@
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^6.0.3",
     "typescript": "~5.9.2",
     "vite": "^8.1.1",

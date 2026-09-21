@@ -36,6 +36,8 @@ import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
+import { useWaitingCount } from '../orders/subTicketActions'
+import { ScanQrButton } from './ScanQrButton'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -57,6 +59,7 @@ export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const waiting = useWaitingCount()
   const canManageUsers = can(user, Permission.USERS_MANAGE)
   const canSeeConfig =
     can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
@@ -103,6 +106,8 @@ export function AppShell() {
           </Typography>
 
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+            {/* Ở thanh trên cùng nên quét được phiếu giấy từ bất kỳ màn nào. */}
+            <ScanQrButton compact />
             <Avatar
               sx={{
                 width: 32,
@@ -202,7 +207,8 @@ export function AppShell() {
         <Toolbar variant="dense" sx={{ flexShrink: 0 }} />
         {offline ? (
           <Alert severity="warning" icon={<CloudOffIcon fontSize="small" />} sx={{ mb: 1.5, flexShrink: 0 }}>
-            Đang ngoại tuyến — chỉ xem được dữ liệu đã tải. Có mạng lại là tự cập nhật.
+            Đang ngoại tuyến — chỉ xem được dữ liệu đã tải. Có mạng lại là tự cập nhật
+            {waiting > 0 ? ` và gửi ${waiting} thao tác đang chờ` : ''}.
           </Alert>
         ) : null}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>

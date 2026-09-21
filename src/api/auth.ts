@@ -1,3 +1,5 @@
+import { reportNetworkFailure } from '../auth/connectivity'
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export type RoleCode = 'ADMIN' | 'USER' | 'WORKER'
@@ -41,6 +43,21 @@ type ApiErrorBody = {
 
 const CSRF_COOKIE = 'enshido_csrf'
 const CSRF_HEADER = 'X-CSRF-Token'
+
+/**
+ * Request không tới được máy chủ (mất sóng, DNS hỏng, wifi không ra internet). Khác hẳn
+ * lỗi do máy chủ trả về: chỉ loại này mới đáng thử lại và mới được xếp vào hàng chờ.
+ */
+export class NetworkError extends Error {
+  constructor() {
+    super('Mất kết nối tới máy chủ')
+    this.name = 'NetworkError'
+  }
+}
+
+export function isNetworkError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'NetworkError'
+}
 
 function readCookie(name: string): string | null {
   const match = document.cookie.match(
@@ -119,6 +136,12 @@ export async function apiFetch<T>(
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
       throw new Error('Máy chủ không phản hồi, thử lại')
+    }
+    // fetch chỉ từ chối bằng TypeError khi request không đi tới nơi. Hạ cờ ngoại tuyến để
+    // thanh báo hiện đúng và để react-query treo thao tác lại thay vì cho chết.
+    if (error instanceof TypeError) {
+      reportNetworkFailure()
+      throw new NetworkError()
     }
     throw error
   }

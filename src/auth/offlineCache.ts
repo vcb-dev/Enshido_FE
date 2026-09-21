@@ -1,6 +1,6 @@
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import type { PersistQueryClientOptions } from '@tanstack/react-query-persist-client'
-import type { Query } from '@tanstack/react-query'
+import type { Mutation, Query } from '@tanstack/react-query'
 
 const CACHE_KEY = 'enshido.queries.v1'
 const MAX_AGE = 24 * 60 * 60_000
@@ -25,6 +25,9 @@ export const persistOptions: Omit<PersistQueryClientOptions, 'queryClient'> = {
       const root = query.queryKey[0]
       return typeof root === 'string' && OFFLINE_KEYS.includes(root)
     },
+    // Thao tác thợ bấm lúc mất sóng: giữ lại để đóng app rồi mở lại vẫn gửi lên được.
+    // Chỉ những cái đang treo — cái đã gửi đi thì kết quả nằm ở máy chủ rồi.
+    shouldDehydrateMutation: (mutation: Mutation) => mutation.state.isPaused,
   },
 }
 

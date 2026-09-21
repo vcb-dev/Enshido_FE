@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { onlineManager, useQueryClient } from '@tanstack/react-query'
 import {
   loginApi,
   logoutApi,
@@ -16,6 +16,7 @@ import {
   type SessionResponse,
 } from '../api/auth'
 import { clearCachedSession, hasCsrfCookie, readCachedUser, saveCachedUser } from './session'
+import { reportNetworkFailure } from './connectivity'
 import { isOffline, sessionBoot } from './sessionBoot'
 import { visibleWarehouses } from './screens'
 import { prefetchStaff, prefetchWarehouseStock } from './prefetchWarehouse'
@@ -24,7 +25,10 @@ import { can, Permission } from './permissions'
 type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
-  /** Máy đang mất mạng: giao diện dựng từ dữ liệu đã tải, mọi thao tác ghi sẽ lỗi. */
+  /**
+   * Máy chủ đang không với tới được: giao diện dựng từ dữ liệu đã tải, thao tác của thợ
+   * trên phiếu con thì nằm trong hàng chờ (xem orders/subTicketActions.ts).
+   */
   offline: boolean
   login: (username: string, password: string) => Promise<AuthUser>
   logout: () => Promise<void>
@@ -39,9 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [expiresAt, setExpiresAt] = useState<string | undefined>()
   const [loading, setLoading] = useState(hasCookieAtBoot)
-  const [offline, setOffline] = useState(
-    typeof navigator !== 'undefined' && !navigator.onLine,
-  )
+  // Bám theo onlineManager chứ không riêng navigator.onLine: nối được wifi mà không ra
+  // được máy chủ thì vẫn phải tính là ngoại tuyến (xem connectivity.ts).
+  const [offline, setOffline] = useState(!onlineManager.isOnline())
 
   const applySession = useCallback(
     (session: SessionResponse) => {
@@ -78,6 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return
       if (isOffline(session)) {
         // Chưa xác minh được phiên vì mất mạng — dùng hồ sơ đã lưu, KHÔNG đăng xuất.
+        // Báo cho onlineManager luôn: nó vừa hỏng ngay ở lời gọi đầu tiên của app.
+        reportNetworkFailure()
         setOffline(true)
         setUser(readCachedUser())
       } else if (session?.user) {
@@ -95,16 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applySession])
 
-  useEffect(() => {
-    const goOnline = () => setOffline(false)
-    const goOffline = () => setOffline(true)
-    window.addEventListener('online', goOnline)
-    window.addEventListener('offline', goOffline)
-    return () => {
-      window.removeEventListener('online', goOnline)
-      window.removeEventListener('offline', goOffline)
-    }
-  }, [])
+  useEffect(() => onlineManager.subscribe((isOnline) => setOffline(!isOnline)), [])
 
   useEffect(() => {
     if (!user || !expiresAt || !hasCsrfCookie()) return

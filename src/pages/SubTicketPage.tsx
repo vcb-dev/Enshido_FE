@@ -4,6 +4,7 @@ import {
   Box,
   Breadcrumbs,
   Button,
+  Chip,
   CircularProgress,
   Divider,
   Link,
@@ -16,12 +17,8 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import {
-  claimSubTicketApi,
   getSubTicketOrderApi,
   parseSubTicketCode,
-  submitSubTicketApi,
-  unclaimSubTicketApi,
-  unsubmitSubTicketApi,
   type ProductionOrderDetail,
   type StageEntry,
   type SubTicket,
@@ -32,7 +29,8 @@ import { PageHeader } from '../components/ui'
 import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
-import { useOrderMutation } from '../orders/useOrderMutation'
+import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
+import { queuedLabel } from '../orders/subTicketQueue'
 
 /** Trang phiếu con mở từ QR: thợ xem phần việc của mình và bấm nhận khâu đang mở. */
 export function SubTicketPage() {
@@ -62,6 +60,15 @@ export function SubTicketPage() {
   const order = detail.data
   const ticket = order?.subTickets.find((item) => item.no === parsed.no)
   if (!order || !ticket) {
+    // Mất mạng mà phiếu này chưa từng được tải về: nói đúng lý do, đừng để thợ tưởng là
+    // quét nhầm mã. Phiếu thuộc phần việc của mình thì màn "Phiếu của tôi" đã kéo sẵn.
+    if (detail.isPaused) {
+      return (
+        <Alert severity="warning">
+          Đang ngoại tuyến và máy chưa tải phiếu {ticketCode} lần nào — mở lại khi có mạng.
+        </Alert>
+      )
+    }
     return (
       <Alert severity="error">
         {detail.error instanceof Error ? detail.error.message : `Không tìm thấy phiếu con ${ticketCode}`}
@@ -77,26 +84,14 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
   // Thợ không có đơn mẹ: giấu mã đơn, trạng thái đơn và mọi lối mở màn quản lý đơn.
   const workerOnly = isWorkerOnly(user)
-  const claim = useOrderMutation(
-    order.code,
-    () => claimSubTicketApi(order.code, ticket.no),
-    `Đã nhận phiếu ${ticket.code} — chờ người giao cân bạc và xác nhận`,
-  )
-  const unclaim = useOrderMutation(
-    order.code,
-    () => unclaimSubTicketApi(order.code, ticket.no),
-    `Đã huỷ nhận phiếu ${ticket.code}`,
-  )
-  const submit = useOrderMutation(
-    order.code,
-    () => submitSubTicketApi(order.code, ticket.no),
-    `Đã báo xong phiếu ${ticket.code} — mang hàng tới KCS cân lại`,
-  )
-  const unsubmit = useOrderMutation(
-    order.code,
-    () => unsubmitSubTicketApi(order.code, ticket.no),
-    `Đã bỏ báo xong phiếu ${ticket.code}`,
-  )
+  // Mất mạng thì 4 thao tác này nằm trong hàng chờ và tự gửi khi có sóng — thợ quét QR
+  // ngoài xưởng không phải đứng đợi vạch sóng. Xem orders/subTicketActions.ts.
+  const claim = useSubTicketAction('claim')
+  const unclaim = useSubTicketAction('unclaim')
+  const submit = useSubTicketAction('submit')
+  const unsubmit = useSubTicketAction('unsubmit')
+  const queued = useQueuedSubTickets().get(ticket.code)
+  const vars = { orderCode: order.code, no: ticket.no, ticketCode: ticket.code }
 
   const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
   const openEntry = entries.find((entry) => !entry.returnedAt)
@@ -113,9 +108,14 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
       <PageHeader
         title={`Phiếu con ${ticket.code}`}
         titleAdornment={
-          <Stack direction="row" spacing={0.75}>
+          <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
             <SubTicketStateChip state={ticket.state} />
             {workerOnly ? null : <StatusChip status={order.status} />}
+            {/* Trạng thái bên cạnh vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
+                của thợ chưa lên tới nơi, không phải là đã nhận / đã xong. */}
+            {queued ? (
+              <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} />
+            ) : null}
           </Stack>
         }
         subtitle={
@@ -174,8 +174,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
               <Button
                 variant="contained"
                 size="large"
-                disabled={claim.isPending}
-                onClick={() => claim.mutate(undefined)}
+                disabled={queued != null}
+                onClick={() => claim.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
                 Nhận phiếu — khâu {STAGE_LABEL[ticket.pendingStage]}
@@ -197,8 +197,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
               <Button
                 color="inherit"
                 variant="outlined"
-                disabled={unclaim.isPending}
-                onClick={() => unclaim.mutate(undefined)}
+                disabled={queued != null}
+                onClick={() => unclaim.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
                 Huỷ nhận
@@ -220,8 +220,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
               <Button
                 variant="contained"
                 size="large"
-                disabled={submit.isPending}
-                onClick={() => submit.mutate(undefined)}
+                disabled={queued != null}
+                onClick={() => submit.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
                 Đã làm xong — nộp cho KCS
@@ -231,8 +231,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
               <Button
                 color="inherit"
                 variant="outlined"
-                disabled={unsubmit.isPending}
-                onClick={() => unsubmit.mutate(undefined)}
+                disabled={queued != null}
+                onClick={() => unsubmit.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
                 Bỏ báo xong
