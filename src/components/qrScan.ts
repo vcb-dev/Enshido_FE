@@ -18,3 +18,22 @@ export function pathFromScan(text: string): string | null {
   if (order) return `/orders/${order[1]}`
   return null
 }
+
+/**
+ * Html5Qrcode báo lỗi bằng chuỗi ("Error getting userMedia, error = NotAllowedError: …"),
+ * không phải Error — dò tên lỗi trong chuỗi để nói cho thợ biết phải làm gì.
+ */
+export function cameraErrorMessage(err: unknown): string {
+  const text = String(err)
+  if (/NotAllowedError|Permission/i.test(text)) {
+    return 'Chưa được phép dùng camera. Bật quyền camera cho trang này rồi thử lại.'
+  }
+  // Không có navigator.mediaDevices: trình duyệt nhúng trong Zalo/Messenger, hoặc trang http.
+  if (/not supported/i.test(text)) {
+    return 'Trình duyệt này không mở được camera. Mở trang bằng Chrome hoặc Safari rồi thử lại.'
+  }
+  if (/NotReadableError|TrackStartError/i.test(text)) {
+    return 'Camera đang bị ứng dụng khác dùng. Tắt ứng dụng đó rồi thử lại.'
+  }
+  return 'Không mở được camera trên thiết bị này.'
+}
