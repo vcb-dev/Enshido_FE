@@ -23,7 +23,6 @@ import TableChartIcon from '@mui/icons-material/TableChart'
 import CloudOffIcon from '@mui/icons-material/CloudOff'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
 import SettingsIcon from '@mui/icons-material/Settings'
 import PlaceIcon from '@mui/icons-material/Place'
 import CategoryIcon from '@mui/icons-material/Category'
@@ -38,6 +37,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { useWaitingCount } from '../orders/subTicketActions'
 import { ScanQrButton } from './ScanQrButton'
+import logo from '../assets/logo.png'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -281,17 +281,9 @@ function DrawerNav({
 }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Toolbar sx={{ gap: 1, px: 2 }}>
-        <PrecisionManufacturingIcon color="primary" fontSize="small" />
-        <Box>
-          <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
-            Enshido
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Xưởng sản xuất
-          </Typography>
-        </Box>
-      </Toolbar>
+      <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, py: 1.5 }}>
+        <Box component="img" src={logo} alt="Enshido" sx={{ width: 150, height: 'auto' }} />
+      </Box>
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
         {showDashboard ? (
