@@ -432,12 +432,43 @@ function orderPath(code: string, suffix = '') {
   return `${BASE}/${encodeURIComponent(code)}${suffix}`
 }
 
-export function listProductionOrdersApi(params: ProductionOrderListParams) {
+/**
+ * Máy chủ cũ hơn bản FE đang chạy — ảnh docker chưa deploy lại — thì đơn về thiếu hẳn
+ * `subTickets`. Các màn đọc thẳng `.length` / `.map` nên thiếu một mảng là trắng cả trang
+ * chứ không chỉ hỏng một ô, vì lỗi ném ra từ lúc render. Bù mặc định ngay ở tầng API để
+ * component không phải phòng thủ từng chỗ.
+ */
+type Sparse<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
+
+type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets'>
+type SparseOrderDetail = Sparse<ProductionOrderDetail, 'subTickets' | 'subTicketTotals'>
+
+function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
+  return { ...row, subTickets: row.subTickets ?? [] }
+}
+
+function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
+  return {
+    ...order,
+    subTickets: order.subTickets ?? [],
+    // Máy chủ chưa biết phiếu con thì cũng chưa chia được gì.
+    subTicketTotals: order.subTicketTotals ?? { qty: 0, silverWeight: '0' },
+  }
+}
+
+async function orderFetch(path: string, options?: RequestInit): Promise<ProductionOrderDetail> {
+  return fillOrderDetail(await apiFetch<SparseOrderDetail>(path, options))
+}
+
+export async function listProductionOrdersApi(params: ProductionOrderListParams) {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') query.set(key, String(value))
   }
-  return apiFetch<ProductionOrderListResponse>(`${BASE}?${query.toString()}`)
+  const res = await apiFetch<Omit<ProductionOrderListResponse, 'items'> & { items: SparseOrderRow[] }>(
+    `${BASE}?${query.toString()}`,
+  )
+  return { ...res, items: res.items.map(fillOrderRow) }
 }
 
 export function getProductionOrderLookupsApi() {
@@ -471,8 +502,9 @@ export type OrderReference = {
   }>
 }
 
-export function getOrderReferenceApi(code: string) {
-  return apiFetch<OrderReference>(orderPath(code, '/reference'))
+export async function getOrderReferenceApi(code: string) {
+  const order = await apiFetch<Sparse<OrderReference, 'subTickets'>>(orderPath(code, '/reference'))
+  return { ...order, subTickets: order.subTickets ?? [] }
 }
 
 /**
@@ -480,15 +512,15 @@ export function getOrderReferenceApi(code: string) {
  * nhờ vậy màn quản lý đơn chặn được tài khoản thợ.
  */
 export function getSubTicketOrderApi(ticketCode: string) {
-  return apiFetch<ProductionOrderDetail>(`${BASE}/tickets/${encodeURIComponent(ticketCode)}`)
+  return orderFetch(`${BASE}/tickets/${encodeURIComponent(ticketCode)}`)
 }
 
 export function getProductionOrderApi(code: string) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code))
+  return orderFetch(orderPath(code))
 }
 
 export function createProductionOrderApi(payload: UpsertProductionOrderPayload) {
-  return apiFetch<ProductionOrderDetail>(BASE, {
+  return orderFetch(BASE, {
     method: 'POST',
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(25_000),
@@ -496,7 +528,7 @@ export function createProductionOrderApi(payload: UpsertProductionOrderPayload) 
 }
 
 export function updateProductionOrderApi(code: string, payload: UpsertProductionOrderPayload) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code), {
+  return orderFetch(orderPath(code), {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
@@ -510,14 +542,14 @@ export function changeProductionStatusApi(
   code: string,
   payload: { status: ProductionStatus; note?: string },
 ) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/status'), {
+  return orderFetch(orderPath(code, '/status'), {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }
 
 export function updateCastingApi(code: string, payload: CastingPayload) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/casting'), {
+  return orderFetch(orderPath(code, '/casting'), {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
@@ -525,14 +557,14 @@ export function updateCastingApi(code: string, payload: CastingPayload) {
 
 /** Giao khâu cho thợ — người giao là tài khoản đăng nhập. */
 export function startStageApi(code: string, payload: HandoverPayload & { stage: StageCode }) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/stages'), {
+  return orderFetch(orderPath(code, '/stages'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function updateHandoverApi(code: string, stageId: string, payload: HandoverPayload) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, `/stages/${stageId}`), {
+  return orderFetch(orderPath(code, `/stages/${stageId}`), {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
@@ -540,21 +572,21 @@ export function updateHandoverApi(code: string, stageId: string, payload: Handov
 
 /** KCS nhận lại và cân bạc — người KCS là tài khoản đăng nhập. */
 export function returnStageApi(code: string, stageId: string, payload: ReturnPayload) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, `/stages/${stageId}/return`), {
+  return orderFetch(orderPath(code, `/stages/${stageId}/return`), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function undoReturnApi(code: string, stageId: string) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, `/stages/${stageId}/return`), {
+  return orderFetch(orderPath(code, `/stages/${stageId}/return`), {
     method: 'DELETE',
   })
 }
 
 /** Chốt hàng đạt: đơn sang Hoàn thiện và vào kho thành phẩm. */
 export function finishOrderApi(code: string, payload: { finishedAt?: string; note?: string } = {}) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/finish'), {
+  return orderFetch(orderPath(code, '/finish'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -562,7 +594,7 @@ export function finishOrderApi(code: string, payload: { finishedAt?: string; not
 
 /** Admin gỡ hoàn thiện: đơn ra khỏi kho thành phẩm, về lại khâu cuối. */
 export function undoFinishOrderApi(code: string) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/finish'), { method: 'DELETE' })
+  return orderFetch(orderPath(code, '/finish'), { method: 'DELETE' })
 }
 
 export function markTicketPrintedApi(code: string) {
@@ -669,50 +701,50 @@ function ticketPath(code: string, no: number, suffix = '') {
 }
 
 export function createSubTicketApi(code: string, payload: SubTicketPayload) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/sub-tickets'), {
+  return orderFetch(orderPath(code, '/sub-tickets'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function updateSubTicketApi(code: string, no: number, payload: SubTicketPayload) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no), {
+  return orderFetch(ticketPath(code, no), {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }
 
 export function deleteSubTicketApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no), { method: 'DELETE' })
+  return orderFetch(ticketPath(code, no), { method: 'DELETE' })
 }
 
 /** Mở một khâu cho thợ tự nhận. Bỏ trống `nos` = mọi phiếu con đang rảnh. */
 export function openSubTicketStageApi(code: string, payload: { stage: StageCode; nos?: number[] }) {
-  return apiFetch<ProductionOrderDetail>(orderPath(code, '/sub-tickets/open-stage'), {
+  return orderFetch(orderPath(code, '/sub-tickets/open-stage'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function cancelSubTicketPendingApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/pending'), { method: 'DELETE' })
+  return orderFetch(ticketPath(code, no, '/pending'), { method: 'DELETE' })
 }
 
 /** Thợ tự nhận khâu đang mở của phiếu con. */
 export function claimSubTicketApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/claim'), {
+  return orderFetch(ticketPath(code, no, '/claim'), {
     method: 'POST',
     body: '{}',
   })
 }
 
 export function unclaimSubTicketApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/claim'), { method: 'DELETE' })
+  return orderFetch(ticketPath(code, no, '/claim'), { method: 'DELETE' })
 }
 
 /** Người giao cân bạc và xác nhận giao khâu cho thợ đã nhận. */
 export function handoverSubTicketApi(code: string, no: number, payload: SubTicketHandoverPayload) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/handover'), {
+  return orderFetch(ticketPath(code, no, '/handover'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -725,7 +757,7 @@ export function setSubTicketOutcomeApi(
   outcome: SubTicketOutcome,
   note?: string,
 ) {
-  return apiFetch<ProductionOrderDetail>(
+  return orderFetch(
     ticketPath(code, no, outcome === 'DEFECT' ? '/defect' : '/finish'),
     { method: 'POST', body: JSON.stringify({ note }) },
   )
@@ -733,19 +765,19 @@ export function setSubTicketOutcomeApi(
 
 /** Admin gỡ kết cục phiếu con: phiếu về lại luồng làm, đơn tính lại trạng thái và kho. */
 export function clearSubTicketOutcomeApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/outcome'), { method: 'DELETE' })
+  return orderFetch(ticketPath(code, no, '/outcome'), { method: 'DELETE' })
 }
 
 /** Thợ báo đã làm xong khâu đang giữ, nộp hàng cho KCS. */
 export function submitSubTicketApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/submit'), {
+  return orderFetch(ticketPath(code, no, '/submit'), {
     method: 'POST',
     body: '{}',
   })
 }
 
 export function unsubmitSubTicketApi(code: string, no: number) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/submit'), { method: 'DELETE' })
+  return orderFetch(ticketPath(code, no, '/submit'), { method: 'DELETE' })
 }
 
 /** Cấp thêm SL / bạc cho phiếu con. Bỏ trống một trong hai thì hiểu là 0. */
@@ -754,7 +786,7 @@ export function topUpSubTicketApi(
   no: number,
   payload: { qty?: number | null; silverWeight?: string | null; reason?: string },
 ) {
-  return apiFetch<ProductionOrderDetail>(ticketPath(code, no, '/top-up'), {
+  return orderFetch(ticketPath(code, no, '/top-up'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })

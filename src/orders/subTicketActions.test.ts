@@ -30,6 +30,8 @@ vi.mock('../auth/connectivity', () => ({
 
 const VARS: SubTicketVars = { orderCode: 'A012', no: 1, ticketCode: 'A012-1' }
 const ORDER = { code: 'A012' } as ProductionOrderDetail
+/** Tầng API bù phiếu con cho máy chủ cũ chưa trả trường này, nên bản vào cache có thêm hai khoá. */
+const CACHED_ORDER = { ...ORDER, subTickets: [], subTicketTotals: { qty: 0, silverWeight: '0' } }
 
 const fetchMock = vi.fn()
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -108,7 +110,7 @@ describe('có mạng', () => {
     await fire(client, 'claim').promise
 
     expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/claim'])
-    expect(client.getQueryData(['production-order', 'A012'])).toEqual(ORDER)
+    expect(client.getQueryData(['production-order', 'A012'])).toEqual(CACHED_ORDER)
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã nhận phiếu A012-1'))
     expect(toast.info).not.toHaveBeenCalled()
   })
@@ -200,7 +202,7 @@ describe('tắt app rồi mở lại', () => {
     await drain(client)
 
     expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/submit'])
-    expect(client.getQueryData(['production-order', 'A012'])).toEqual(ORDER)
+    expect(client.getQueryData(['production-order', 'A012'])).toEqual(CACHED_ORDER)
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã báo xong phiếu A012-1'))
   })
 
