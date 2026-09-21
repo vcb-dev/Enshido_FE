@@ -38,6 +38,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useWaitingCount } from '../orders/subTicketActions'
 import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
+import { InstallAppBanner } from './InstallAppBanner'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -205,6 +206,7 @@ export function AppShell() {
         }}
       >
         <Toolbar variant="dense" sx={{ flexShrink: 0 }} />
+        <InstallAppBanner sx={{ mb: 1.5, flexShrink: 0 }} />
         {offline ? (
           <Alert severity="warning" icon={<CloudOffIcon fontSize="small" />} sx={{ mb: 1.5, flexShrink: 0 }}>
             Đang ngoại tuyến — chỉ xem được dữ liệu đã tải. Có mạng lại là tự cập nhật
