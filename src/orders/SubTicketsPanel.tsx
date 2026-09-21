@@ -215,12 +215,17 @@ export function SubTicketsPanel({
                 const last = entries.at(-1)
                 const openEntry = ticket.openEntryId ? byId.get(ticket.openEntryId) : undefined
                 const stage = ticket.activeStage ?? last?.stage ?? null
+                // Cột Thợ phải nói về cùng khâu với cột Khâu. Đang chờ thợ nhận thì khâu mới
+                // chưa có ai — hiện thợ của khâu trước ở đây là trông như đã có người nhận.
+                const waiting = ticket.state === 'WAITING'
                 const worker =
                   ticket.state === 'CLAIMED'
                     ? ticket.claimedByName
                     : ticket.state === 'WORKING' || ticket.state === 'SUBMITTED'
                       ? openEntry?.craftsmanName
-                      : last?.craftsmanName
+                      : waiting
+                        ? null
+                        : last?.craftsmanName
                 return (
                   <TableRow key={ticket.id} hover>
                     <TableCell>
@@ -275,6 +280,11 @@ export function SubTicketsPanel({
                           nhận lúc {formatDateShort(ticket.claimedAt)}
                         </Typography>
                       ) : null}
+                      {waiting && last ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          khâu trước: {STAGE_LABEL[last.stage]} · {last.craftsmanName}
+                        </Typography>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
@@ -285,9 +295,16 @@ export function SubTicketsPanel({
                         ) : null}
                         {openEntry ? (
                           <>
-                            <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
-                              KCS nhận lại
-                            </Button>
+                            {/* KCS chỉ nhận lại khi thợ đã báo làm xong — khớp luật ở BE. */}
+                            {ticket.state === 'SUBMITTED' ? (
+                              <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
+                                KCS nhận lại
+                              </Button>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                chờ thợ báo xong
+                              </Typography>
+                            )}
                             <Button size="small" onClick={() => onEditHandover(openEntry)}>
                               Sửa giao
                             </Button>

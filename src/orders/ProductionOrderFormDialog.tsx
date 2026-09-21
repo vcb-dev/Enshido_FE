@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Divider } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
@@ -459,8 +459,16 @@ export function ProductionOrderFormDialog({
     [inventoryLookups.data?.colors, stoneColor],
   )
 
+  // Nạp form một lần mỗi lần mở. Trang chi tiết đơn tự làm mới định kỳ (thợ nhận phiếu ở máy
+  // khác…) — nạp lại theo `order` là xoá sạch những gì người dùng đang sửa dở.
+  const seeded = useRef(false)
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      seeded.current = false
+      return
+    }
+    if (seeded.current) return
+    seeded.current = true
     form.reset(
       order
         ? {

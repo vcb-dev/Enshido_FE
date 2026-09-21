@@ -20,6 +20,11 @@ export type CrudDialogShellProps<T extends FieldValues> = {
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   /** Ghi đè nhãn nút submit (mặc định "Thêm" / "Lưu" theo `kind`). */
   submitLabel?: string
+  /**
+   * Nhãn nút lúc đang gửi. Mặc định "Đang lên đơn…" / "Đang lưu…" theo `kind` — hộp thoại
+   * nào đổi `submitLabel` sang việc khác (giao thợ, xác nhận…) thì nên đổi cả nhãn này.
+   */
+  pendingLabel?: string
   children: ReactNode
 }
 
@@ -40,6 +45,7 @@ export function CrudDialogShell<T extends FieldValues>({
   onExited,
   maxWidth = 'md',
   submitLabel,
+  pendingLabel,
   children,
 }: CrudDialogShellProps<T>) {
   const fullScreen = useIsMobile()
@@ -53,6 +59,22 @@ export function CrudDialogShell<T extends FieldValues>({
       submitted.current = false
     }
   }, [open])
+
+  // Nơi gọi thường truyền `mutation.mutate(...)` vào onSubmit — hàm đó không ném lỗi, lỗi đi
+  // thẳng vào toast, nên nhánh catch bên dưới không bao giờ chạy. Không nhả ở đây thì
+  // mutation hỏng xong nút vẫn quay vòng mãi và nút Hủy cũng khoá theo. Dựa vào `saving`:
+  // vừa từ true về false mà hộp thoại còn mở thì là lỗi (thành công thì nơi gọi đã đóng).
+  const wasSaving = useRef(false)
+  useEffect(() => {
+    if (saving) {
+      wasSaving.current = true
+      return
+    }
+    if (!wasSaving.current) return
+    wasSaving.current = false
+    submitted.current = false
+    setBusy(false)
+  }, [saving])
 
   return (
     <Dialog
@@ -116,9 +138,7 @@ export function CrudDialogShell<T extends FieldValues>({
                 startIcon={pending ? <CircularProgress color="inherit" size={16} /> : undefined}
               >
                 {pending
-                  ? kind === 'edit'
-                    ? 'Đang lưu…'
-                    : 'Đang lên đơn…'
+                  ? (pendingLabel ?? (kind === 'edit' ? 'Đang lưu…' : 'Đang lên đơn…'))
                   : (submitLabel ?? (kind === 'edit' ? 'Lưu' : 'Thêm'))}
               </Button>
             </>
