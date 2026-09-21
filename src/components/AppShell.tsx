@@ -286,7 +286,8 @@ function DrawerNav({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, py: 1.5 }}>
-        <Box component="img" src={logo} alt="Enshido" sx={{ width: 150, height: 'auto' }} />
+        {/* Desktop: sidebar luôn mở cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
+        <Box component="img" src={logo} alt="Enshido" sx={{ width: { xs: 150, md: 96 }, height: 'auto' }} />
       </Box>
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
