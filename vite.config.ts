@@ -16,7 +16,7 @@ export default defineConfig({
     // (HTML/JS/CSS); dữ liệu đơn do react-query lưu lại (xem src/main.tsx).
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Enshido — Quản lý xưởng sản xuất',
         short_name: 'Enshido',

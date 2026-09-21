@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, Typography } from '@mui/material'
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import { resolvePostLoginPath } from '../auth/homePath'
 import { Form, FormTextField } from '../components/ui'
+import logo from '../assets/logo.png'
 
 type LoginFormValues = {
   username: string
@@ -64,14 +64,11 @@ export function LoginPage() {
         <Paper sx={{ p: 3 }}>
           <Form form={form} onSubmit={onSubmit}>
             <Stack spacing={2}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <PrecisionManufacturingIcon color="primary" />
-                <Box>
-                  <Typography variant="h6">Enshido</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Quản lý xưởng sản xuất
-                  </Typography>
-                </Box>
+              <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+                <Box component="img" src={logo} alt="Enshido" sx={{ width: 180, height: 'auto' }} />
+                <Typography variant="body2" color="text.secondary">
+                  Quản lý xưởng sản xuất
+                </Typography>
               </Stack>
 
               <Typography variant="subtitle1">Đăng nhập</Typography>
