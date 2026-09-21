@@ -25,6 +25,8 @@ import {
 import { listCatalogsApi } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   CrudDialogShell,
   DataTable,
   FormMoneyField,
@@ -45,7 +47,6 @@ import { MaterialField } from './MaterialField'
 import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
-import { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
 import { CONSUMABLE_CATEGORIES, stockProfile, withFallback } from './catalog'
 import {
   CATALOG_FILTER_DEFAULTS,

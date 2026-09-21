@@ -3,6 +3,7 @@ import type {
   ProductionSource,
   ProductionStatus,
   StageCode,
+  SubTicketState,
 } from '../api/productionOrders'
 
 type ChipTone = { label: string; bg: string; fg: string }
@@ -14,10 +15,12 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
   CASTING: { label: 'Đúc', bg: '#8e44ad', fg: '#ffffff' },
   FILING: { label: 'Nguội', bg: '#6c5ce7', fg: '#ffffff' },
   STONE_SETTING: { label: 'Vào đá', bg: '#00897b', fg: '#ffffff' },
-  POLISH_PLATING: { label: 'Bóng xi', bg: '#0097a7', fg: '#ffffff' },
+  ENGRAVING: { label: 'Khắc', bg: '#5d6d7e', fg: '#ffffff' },
+  POLISHING: { label: 'Bóng', bg: '#0097a7', fg: '#ffffff' },
+  PLATING: { label: 'Xi', bg: '#c2185b', fg: '#ffffff' },
+  DEFECT: { label: 'Sản xuất lỗi', bg: '#2d3436', fg: '#ffffff' },
   FINISHING: { label: 'Hoàn thiện', bg: '#27ae60', fg: '#ffffff' },
   DELIVERED: { label: 'Đã giao', bg: '#2563eb', fg: '#ffffff' },
-  DEFECT: { label: 'Sản xuất lỗi', bg: '#2d3436', fg: '#ffffff' },
 }
 
 /** Thứ tự tab trên danh sách đơn. Bỏ Mới / Sửa 3D — Đơn BTP không qua 3D. */
@@ -25,25 +28,33 @@ export const STATUS_TABS: ProductionStatus[] = [
   'CASTING',
   'FILING',
   'STONE_SETTING',
-  'POLISH_PLATING',
+  'ENGRAVING',
+  'POLISHING',
+  'PLATING',
+  'DEFECT',
   'FINISHING',
   'DELIVERED',
-  'DEFECT',
 ]
 
-/** Cột "Quá trình sản xuất" trên phiếu thợ (Đúc nằm ở đầu phiếu, không phải cột). */
-export const STAGES: StageCode[] = ['FILING', 'STONE_SETTING', 'POLISH_PLATING', 'ENGRAVING', 'APPEARANCE']
+/** Khâu giao thợ trên phiếu (Đúc nằm ở đầu phiếu, không phải cột). */
+export const STAGES: StageCode[] = ['FILING', 'STONE_SETTING', 'ENGRAVING', 'POLISHING', 'PLATING']
 
 export const STAGE_LABEL: Record<StageCode, string> = {
   FILING: 'Nguội',
   STONE_SETTING: 'Vào đá',
-  POLISH_PLATING: 'Đánh bóng xi',
   ENGRAVING: 'Khắc',
-  APPEARANCE: 'Ngoại Quan',
+  POLISHING: 'Đánh bóng',
+  PLATING: 'Xi',
 }
 
 /** Trạng thái đơn đang nằm ở một khâu trên phiếu; ngoài các trạng thái này thì được làm lại từ khâu bất kỳ. */
-const IN_STAGE_STATUSES: ProductionStatus[] = ['FILING', 'STONE_SETTING', 'POLISH_PLATING', 'FINISHING']
+const IN_STAGE_STATUSES: ProductionStatus[] = [
+  'FILING',
+  'STONE_SETTING',
+  'ENGRAVING',
+  'POLISHING',
+  'PLATING',
+]
 
 /**
  * Trạng thái đổi tay trên trang chi tiết. Đúc đổi qua "Báo Đúc", các khâu đổi khi giao thợ,
@@ -72,6 +83,31 @@ export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
 }
 
 export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK']
+
+/**
+ * Ngưỡng cảnh báo hao hụt bạc của một khâu (%). Đổi hai số này là đổi màu ở cả phiếu trên
+ * màn hình, phiếu in lẫn hộp thoại KCS nhận lại.
+ */
+export const SILVER_LOSS_LIMITS = { ok: 2, warn: 5 }
+
+export type SilverLossLevel = 'ok' | 'warn' | 'high'
+
+export const SILVER_LOSS_TONE: Record<SilverLossLevel, { bg: string; fg: string }> = {
+  ok: { bg: '#e9f7ef', fg: '#1e7e34' },
+  warn: { bg: '#fff4d6', fg: '#8a6100' },
+  high: { bg: '#fdecea', fg: '#b3261e' },
+}
+
+/** Hao hụt âm = nhận lại nhiều hơn giao, coi như bất thường (đỏ) để KCS cân lại. */
+export function silverLossLevel(percent: string | null | undefined): SilverLossLevel | null {
+  if (percent == null || percent === '') return null
+  const value = Number(percent)
+  if (!Number.isFinite(value)) return null
+  if (value < 0) return 'high'
+  if (value <= SILVER_LOSS_LIMITS.ok) return 'ok'
+  if (value <= SILVER_LOSS_LIMITS.warn) return 'warn'
+  return 'high'
+}
 
 /** Màu xi trên đơn sản xuất — chọn một, không gõ tự do. */
 export const PLATING_COLORS = [
@@ -123,7 +159,11 @@ export function normalizePlatingColor(value: string | null | undefined) {
 }
 
 export function platingColorOptions(current?: string) {
-  const options = PLATING_COLORS.map((value) => ({ value, label: value }))
+  // Màu cũ trên kho không nằm trong 5 màu chuẩn vẫn phải hiện được nên nới kiểu về string.
+  const options: Array<{ value: string; label: string }> = PLATING_COLORS.map((value) => ({
+    value,
+    label: value,
+  }))
   const extra = current?.trim()
   if (extra && !options.some((option) => option.value === extra)) {
     options.push({ value: extra, label: extra })
@@ -175,6 +215,23 @@ export function fromDateTimeInput(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+/** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / KCS cập nhật khâu ngay. */
 export function orderTicketUrl(code: string) {
-  return `${window.location.origin}/orders/${code}`
+  return `${window.location.origin}/orders/${code}?tab=production`
+}
+
+/** Link QR trên phiếu con: thợ quét để mở phiếu và bấm nhận. */
+export function subTicketUrl(ticketCode: string) {
+  return `${window.location.origin}/tickets/${ticketCode}`
+}
+
+/** Trạng thái phiếu con trong khâu hiện tại. */
+export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
+  IDLE: { label: 'Chờ mở khâu', bg: '#e8eaed', fg: '#34495e' },
+  WAITING: { label: 'Chờ thợ nhận', bg: '#fff4d6', fg: '#8a6100' },
+  CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
+  WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },
+  SUBMITTED: { label: 'Chờ KCS cân lại', bg: '#fff4d6', fg: '#8a6100' },
+  DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
+  FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }

@@ -14,6 +14,8 @@ import {
 } from '../api/btp'
 import { formatQty, formatStockedDate, getInventoryLookupsApi, qtyFromApi } from '../api/inventory'
 import {
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   CrudDialogShell,
   DataTable,
   FormQtyField,
@@ -29,7 +31,6 @@ import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, res
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
-import { ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
 import type { SearchSelectOption } from './SearchSelect'
 import { headerTotal, uniqueFilterOptions } from './stockFilters'
 

@@ -5,11 +5,33 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { getProductionOrderApi, markTicketPrintedApi, type ProductionOrderDetail } from '../api/productionOrders'
+import {
+  getProductionOrderApi,
+  markSubTicketPrintedApi,
+  markTicketPrintedApi,
+  type ProductionOrderDetail,
+  type SubTicket,
+} from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { cloudinaryFit } from '../api/uploads'
-import { formatDateTime, orderTicketUrl, STAGE_LABEL, STAGES, STATUS_META } from '../orders/catalog'
-import { latestByStage, TICKET_HEADER_BG, TICKET_ROWS, TICKET_TONE_BG } from '../orders/ticketRows'
+import {
+  formatDateTime,
+  orderTicketUrl,
+  SILVER_LOSS_TONE,
+  STAGE_LABEL,
+  STAGES,
+  STATUS_META,
+  subTicketUrl,
+} from '../orders/catalog'
+import {
+  outcomeLines,
+  stageColumns,
+  TICKET_HEADER_BG,
+  TICKET_OUTCOME_LABEL,
+  TICKET_OUTCOMES,
+  TICKET_ROWS,
+  TICKET_TONE_BG,
+} from '../orders/ticketRows'
 
 type Paper = 'A5' | 'A4'
 
@@ -19,8 +41,22 @@ const PAPER_WIDTH: Record<Paper, string> = { A5: '210mm', A4: '297mm' }
 const BLUE = '#2f5da8'
 const TITLE_RED = '#e0403a'
 
+/**
+ * Bảng phiếu = 1 cột nhãn + mỗi khâu một cột + 2 cột kết cục (Lỗi / Hoàn thiện). Khối thông tin
+ * đầu phiếu chỉ xếp theo 6 ô nên ô cuối mỗi hàng nuốt số cột dư — đổi số khâu là phiếu tự khớp
+ * lại, không lệch ô.
+ */
+const TICKET_COLS = STAGES.length + TICKET_OUTCOMES.length + 1
+const SPAN_1 = TICKET_COLS - 5
+const SPAN_2 = SPAN_1 + 1
+const SPAN_3 = SPAN_1 + 2
+/** Cột kết cục rộng hơn cột khâu vì chứa lý do lỗi / thông tin vào kho. */
+const OUTCOME_COL_WIDTH = 13
+const STAGE_COL_WIDTH = `${((81 - OUTCOME_COL_WIDTH * TICKET_OUTCOMES.length) / STAGES.length).toFixed(2)}%`
+
+/** In phiếu mẹ (`/orders/:code/print`) hoặc phiếu con cho thợ (`/orders/:code/tickets/:no/print`). */
 export function ProductionTicketPrintPage() {
-  const { code = '' } = useParams()
+  const { code = '', no } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -32,12 +68,29 @@ export function ProductionTicketPrintPage() {
     queryFn: () => getProductionOrderApi(code),
     staleTime: 0,
   })
+  const ticketNo = no != null ? Number(no) : null
+  const subTicket = ticketNo != null ? detail.data?.subTickets.find((ticket) => ticket.no === ticketNo) : undefined
+  const missingTicket = ticketNo != null && detail.data != null && !subTicket
   // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
-  const canPrint = detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate)
+  const canPrint = !missingTicket && (detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate))
 
   async function print() {
     window.print()
     try {
+      if (ticketNo != null) {
+        const { lastPrintedAt } = await markSubTicketPrintedApi(code, ticketNo)
+        queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
+          prev
+            ? {
+                ...prev,
+                subTickets: prev.subTickets.map((ticket) =>
+                  ticket.no === ticketNo ? { ...ticket, lastPrintedAt } : ticket,
+                ),
+              }
+            : prev,
+        )
+        return
+      }
       const { lastPrintedAt } = await markTicketPrintedApi(code)
       queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
         prev ? { ...prev, lastPrintedAt } : prev,
@@ -83,11 +136,15 @@ export function ProductionTicketPrintPage() {
       </Stack>
     )
   }
-  if (!detail.data) {
+  if (!detail.data || missingTicket) {
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="error">
-          {detail.error instanceof Error ? detail.error.message : 'Không tải được đơn sản xuất'}
+          {missingTicket
+            ? `Không tìm thấy phiếu con ${code}-${no}`
+            : detail.error instanceof Error
+              ? detail.error.message
+              : 'Không tải được đơn sản xuất'}
         </Alert>
       </Box>
     )
@@ -152,23 +209,49 @@ export function ProductionTicketPrintPage() {
           '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
         }}
       >
-        <Ticket order={order} printedBy={user?.fullName || user?.username || ''} />
+        <Ticket order={order} subTicket={subTicket} printedBy={user?.fullName || user?.username || ''} />
       </Box>
     </Box>
   )
 }
 
-function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy: string }) {
-  const latest = latestByStage(order.stages)
+function Ticket({
+  order,
+  subTicket,
+  printedBy,
+}: {
+  order: ProductionOrderDetail
+  subTicket?: SubTicket
+  printedBy: string
+}) {
+  const columns = stageColumns(order.stages, subTicket?.id)
+  const ticketIndex = subTicket ? order.subTickets.findIndex((ticket) => ticket.id === subTicket.id) : -1
+  const silverWeight = subTicket ? subTicket.silverWeight : order.silverWeight
+  const splitNote = subTicket
+    ? `Phiếu con của đơn ${order.code} (${order.qty} sp${
+        order.silverWeight != null ? ` · ${formatQty(order.silverWeight)} g bạc` : ''
+      })`
+    : order.subTickets.length
+      ? `Phiếu con: ${order.subTickets
+          .map((ticket) => `${ticket.code} (${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g)`)
+          .join(', ')}`
+      : ''
   const productImages = order.images.filter((image) => image.kind === 'PRODUCT')
   const images = (productImages.length ? productImages : order.images).slice(0, 2)
 
   return (
     <>
       <Box sx={{ position: 'relative', textAlign: 'center', minHeight: '11mm' }}>
-        <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>Phiếu sản xuất</Box>
+        <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>
+          {subTicket ? 'Phiếu sản xuất — phiếu con' : 'Phiếu sản xuất'}
+        </Box>
         <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
-          <QRCodeSVG value={orderTicketUrl(order.code)} size={96} marginSize={0} style={{ width: '11mm', height: '11mm' }} />
+          <QRCodeSVG
+            value={subTicket ? subTicketUrl(subTicket.code) : orderTicketUrl(order.code)}
+            size={96}
+            marginSize={0}
+            style={{ width: '11mm', height: '11mm' }}
+          />
         </Box>
       </Box>
 
@@ -176,27 +259,43 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
         <colgroup>
           <col style={{ width: '19%' }} />
           {STAGES.map((stage) => (
-            <col key={stage} style={{ width: '16.2%' }} />
+            <col key={stage} style={{ width: STAGE_COL_WIDTH }} />
+          ))}
+          {TICKET_OUTCOMES.map((outcome) => (
+            <col key={outcome} style={{ width: `${OUTCOME_COL_WIDTH}%` }} />
           ))}
         </colgroup>
         <tbody>
           <tr>
             <Head>Mã Sản xuất:</Head>
-            <Head style={{ fontSize: '1.1em' }}>{order.code}</Head>
+            <Head style={{ fontSize: '1.1em' }}>{subTicket ? subTicket.code : order.code}</Head>
             <Head>Ngày đặt đơn:</Head>
             <Head style={{ color: BLUE }}>{ticketDay(order.receivedDate)}</Head>
             <Head>Ngày cần trả:</Head>
-            <Head style={{ color: BLUE }}>{ticketDay(order.dueDate)}</Head>
+            <Head colSpan={SPAN_1} style={{ color: BLUE }}>
+              {ticketDay(order.dueDate)}
+            </Head>
           </tr>
           <tr>
-            <td style={center}>Phân đơn</td>
-            <td style={center}>
-              {order.split.no} / {order.split.total}
-            </td>
+            {subTicket ? (
+              <>
+                <td style={center}>Phiếu con</td>
+                <td style={center}>
+                  {ticketIndex + 1} / {order.subTickets.length}
+                </td>
+              </>
+            ) : (
+              <>
+                <td style={center}>Phân đơn</td>
+                <td style={center}>
+                  {order.split.no} / {order.split.total}
+                </td>
+              </>
+            )}
             {order.source === 'BTP' ? (
               <>
                 <Label>Mã BTP:</Label>
-                <td colSpan={3} style={{ ...center, color: BLUE, fontWeight: 700 }}>
+                <td colSpan={SPAN_3} style={{ ...center, color: BLUE, fontWeight: 700 }}>
                   {order.btp ? `${order.btp.sku ?? ''} · ${order.btp.name}` : order.btpSku}
                 </td>
               </>
@@ -205,12 +304,14 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
                 <Label>Ngày báo Đúc:</Label>
                 <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingSentDate)}</td>
                 <Label>Ngày Đúc về:</Label>
-                <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{ticketDay(order.castingReturnedDate)}</td>
+                <td colSpan={SPAN_1} style={{ ...center, color: BLUE, fontWeight: 700 }}>
+                  {ticketDay(order.castingReturnedDate)}
+                </td>
               </>
             )}
           </tr>
           <tr>
-            <td colSpan={2} rowSpan={6} style={{ padding: '1mm', verticalAlign: 'middle' }}>
+            <td colSpan={2} rowSpan={7} style={{ padding: '1mm', verticalAlign: 'middle' }}>
               <Box sx={{ display: 'flex', gap: '1.5mm', justifyContent: 'center', alignItems: 'center', height: '26mm' }}>
                 {images.map((image) => (
                   <Box
@@ -226,7 +327,7 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <Label>Size</Label>
             <Value>{order.sizeLabel}</Value>
             <Label>Loại đá</Label>
-            <Value>{order.stoneTypes.join(', ')}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneTypes.join(', ')}</Value>
           </tr>
           <tr>
             <Label>Kích thước</Label>
@@ -234,63 +335,102 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
             <Label>
               Số lượng đá <i>(viên)</i>:
             </Label>
-            <Value>{order.stoneCount}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneCount}</Value>
           </tr>
           <tr>
             <Label>Số lượng:</Label>
             <Value>
-              {order.qty}
+              {subTicket ? subTicket.qty : order.qty}
               {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
             </Value>
             <Label>Trọng lượng đá:</Label>
-            <Value>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
+            <Value colSpan={SPAN_1}>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
+          </tr>
+          <tr>
+            <Label>TL bạc (g):</Label>
+            <td style={{ ...center, color: BLUE, fontWeight: 700 }}>
+              {silverWeight != null ? formatQty(silverWeight) : ''}
+            </td>
+            <td colSpan={SPAN_2} style={{ fontSize: '0.9em' }}>
+              {splitNote}
+            </td>
           </tr>
           <tr>
             <Label>Chất liệu</Label>
             <td style={{ ...center, color: BLUE, fontWeight: 700 }}>{order.mainMaterial ?? ''}</td>
-            <td colSpan={2} style={{ ...center, fontWeight: 700 }}>
+            <td colSpan={SPAN_2} style={{ ...center, fontWeight: 700 }}>
               Nội dung khắc Laser:
             </td>
           </tr>
           <tr>
             <Label>Màu sắc:</Label>
             <Value>{order.platingColor}</Value>
-            <td colSpan={2} style={{ ...center, whiteSpace: 'pre-wrap' }}>
+            <td colSpan={SPAN_2} style={{ ...center, whiteSpace: 'pre-wrap' }}>
               {order.laserEngraving ?? ''}
             </td>
           </tr>
           <tr>
             <td style={{ ...center, fontStyle: 'italic', fontWeight: 700 }}>Yêu cầu khác</td>
-            <td colSpan={3} style={{ whiteSpace: 'pre-wrap' }}>
+            <td colSpan={SPAN_3} style={{ whiteSpace: 'pre-wrap' }}>
               {order.otherRequirements ?? ''}
             </td>
           </tr>
 
           <tr>
             <Head style={{ color: BLUE }}>Quá trình sản xuất</Head>
-            {STAGES.map((stage) => (
-              <Head key={stage}>
-                {STAGE_LABEL[stage]}
-                {latest[stage] && latest[stage].attempt > 1 ? ` (lần ${latest[stage].attempt})` : ''}
-              </Head>
+            {STAGES.map((stage) => {
+              const entry = columns[stage].entry
+              return (
+                <Head key={stage}>
+                  {STAGE_LABEL[stage]}
+                  {entry && entry.attempt > 1 ? ` (lần ${entry.attempt})` : ''}
+                </Head>
+              )
+            })}
+            {TICKET_OUTCOMES.map((outcome) => (
+              <Head key={outcome}>{TICKET_OUTCOME_LABEL[outcome]}</Head>
             ))}
           </tr>
-          {TICKET_ROWS.map((row) => (
+          {TICKET_ROWS.map((row, index) => (
             <tr key={row.key} style={row.tone ? { background: TICKET_TONE_BG[row.tone] } : undefined}>
-              {row.label != null ? (
-                <td rowSpan={row.labelRowSpan} style={{ fontWeight: row.tone ? 700 : 400 }}>
-                  {row.label}
-                  {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
-                </td>
-              ) : null}
+              <td style={{ fontWeight: row.tone ? 700 : 400 }}>
+                {row.label}
+                {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
+              </td>
               {STAGES.map((stage) => {
-                const entry = latest[stage]
+                const entry = columns[stage].entry
+                const level = entry && row.warnLevel ? row.warnLevel(entry) : null
                 return (
-                  <td key={stage} style={{ textAlign: row.numeric ? 'right' : 'left', height: '4.2mm' }}>
+                  <td
+                    key={stage}
+                    style={{
+                      textAlign: row.numeric ? 'right' : 'left',
+                      height: '4.2mm',
+                      // In đen trắng vẫn đọc được mức cảnh báo nhờ chữ đậm.
+                      ...(level
+                        ? {
+                            background: SILVER_LOSS_TONE[level].bg,
+                            color: SILVER_LOSS_TONE[level].fg,
+                            fontWeight: 700,
+                          }
+                        : null),
+                    }}
+                  >
                     {entry ? row.value(entry) : ''}
                   </td>
                 )
               })}
+              {index === 0
+                ? TICKET_OUTCOMES.map((outcome) => (
+                    <td
+                      key={outcome}
+                      rowSpan={TICKET_ROWS.length}
+                      style={{ verticalAlign: 'top', whiteSpace: 'pre-line' }}
+                    >
+                      {outcomeLines(order, outcome, subTicket).join('\n')}
+                    </td>
+                  ))
+                : null}
             </tr>
           ))}
         </tbody>
@@ -312,9 +452,11 @@ function Ticket({ order, printedBy }: { order: ProductionOrderDetail; printedBy:
 const center: CSSProperties = { textAlign: 'center' }
 
 /** Ô tiêu đề nền vàng như mẫu. */
-function Head({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+function Head({ children, colSpan, style }: { children: ReactNode; colSpan?: number; style?: CSSProperties }) {
   return (
-    <td style={{ background: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center', ...style }}>{children}</td>
+    <td colSpan={colSpan} style={{ background: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center', ...style }}>
+      {children}
+    </td>
   )
 }
 
@@ -322,8 +464,12 @@ function Label({ children }: { children: ReactNode }) {
   return <td style={{ fontWeight: 700 }}>{children}</td>
 }
 
-function Value({ children }: { children: ReactNode }) {
-  return <td style={{ textAlign: 'center' }}>{children ?? ''}</td>
+function Value({ children, colSpan }: { children: ReactNode; colSpan?: number }) {
+  return (
+    <td colSpan={colSpan} style={{ textAlign: 'center' }}>
+      {children ?? ''}
+    </td>
+  )
 }
 
 /** Ngày trên phiếu: 2026/05/08 như mẫu Excel. */

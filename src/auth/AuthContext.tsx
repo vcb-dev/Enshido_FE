@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { onlineManager, useQueryClient } from '@tanstack/react-query'
 import {
   loginApi,
   logoutApi,
@@ -15,8 +15,9 @@ import {
   type AuthUser,
   type SessionResponse,
 } from '../api/auth'
-import { clearCachedSession, hasCsrfCookie } from './session'
-import { sessionBoot } from './sessionBoot'
+import { clearCachedSession, hasCsrfCookie, readCachedUser, saveCachedUser } from './session'
+import { reportNetworkFailure } from './connectivity'
+import { isOffline, sessionBoot } from './sessionBoot'
 import { visibleWarehouses } from './screens'
 import { prefetchStaff, prefetchWarehouseStock } from './prefetchWarehouse'
 import { can, Permission } from './permissions'
@@ -24,6 +25,11 @@ import { can, Permission } from './permissions'
 type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
+  /**
+   * Máy chủ đang không với tới được: giao diện dựng từ dữ liệu đã tải, thao tác của thợ
+   * trên phiếu con thì nằm trong hàng chờ (xem orders/subTicketActions.ts).
+   */
+  offline: boolean
   login: (username: string, password: string) => Promise<AuthUser>
   logout: () => Promise<void>
 }
@@ -37,11 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [expiresAt, setExpiresAt] = useState<string | undefined>()
   const [loading, setLoading] = useState(hasCookieAtBoot)
+  // Bám theo onlineManager chứ không riêng navigator.onLine: nối được wifi mà không ra
+  // được máy chủ thì vẫn phải tính là ngoại tuyến (xem connectivity.ts).
+  const [offline, setOffline] = useState(!onlineManager.isOnline())
 
   const applySession = useCallback(
     (session: SessionResponse) => {
       setUser(session.user)
       setExpiresAt(session.expiresAt)
+      // Giữ lại hồ sơ để lần mở app không có mạng vẫn dựng được giao diện.
+      saveCachedUser(session.user)
       if (session.lookups) {
         queryClient.setQueryData(['inventory-lookups'], session.lookups)
       } else {
@@ -69,10 +80,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void sessionBoot.then((session) => {
       if (cancelled) return
-      if (session?.user) applySession(session)
-      else {
+      if (isOffline(session)) {
+        // Chưa xác minh được phiên vì mất mạng — dùng hồ sơ đã lưu, KHÔNG đăng xuất.
+        // Báo cho onlineManager luôn: nó vừa hỏng ngay ở lời gọi đầu tiên của app.
+        reportNetworkFailure()
+        setOffline(true)
+        setUser(readCachedUser())
+      } else if (session?.user) {
+        applySession(session)
+      } else {
         setUser(null)
         setExpiresAt(undefined)
+        clearCachedSession()
       }
       setLoading(false)
     })
@@ -81,6 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [applySession])
+
+  useEffect(() => onlineManager.subscribe((isOnline) => setOffline(!isOnline)), [])
 
   useEffect(() => {
     if (!user || !expiresAt || !hasCsrfCookie()) return
@@ -109,11 +130,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setExpiresAt(undefined)
     queryClient.clear()
+    // Dọn cả bản lưu ngoại tuyến: không để dữ liệu đơn nằm lại trên máy thợ.
+    const { clearPersistedQueries } = await import('./offlineCache')
+    clearPersistedQueries()
   }, [queryClient])
 
   const value = useMemo(
-    () => ({ user, loading, login, logout }),
-    [user, loading, login, logout],
+    () => ({ user, loading, offline, login, logout }),
+    [user, loading, offline, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

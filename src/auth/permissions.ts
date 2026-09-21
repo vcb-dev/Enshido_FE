@@ -1,4 +1,4 @@
-export type RoleCode = 'ADMIN' | 'USER'
+export type RoleCode = 'ADMIN' | 'USER' | 'WORKER'
 
 export const Permission = {
   USERS_MANAGE: 'users.manage',
@@ -9,6 +9,8 @@ export const Permission = {
   SCREEN_WAREHOUSE_THANH_PHAM: 'screen.warehouse.thanh-pham',
   SCREEN_LOCATIONS: 'screen.locations',
   SCREEN_CATALOGS: 'screen.catalogs',
+  /** Thợ sản xuất: tự nhận phiếu con ở màn "Phiếu của tôi". */
+  PRODUCTION_WORKER: 'production.worker',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]
@@ -18,11 +20,14 @@ export const ALL_PERMISSIONS: PermissionCode[] = Object.values(Permission)
 export const ROLE_LABELS: Record<RoleCode, string> = {
   ADMIN: 'Admin',
   USER: 'Nhân viên',
+  WORKER: 'Thợ',
 }
 
 const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   ADMIN: ALL_PERMISSIONS,
   USER: [],
+  // Thợ có sẵn quyền nhận phiếu con, không phải tick tay ở màn Nhân sự.
+  WORKER: [Permission.PRODUCTION_WORKER],
 }
 
 export function permissionsForRoles(
@@ -59,4 +64,14 @@ export function can(
     return false
   }
   return (ROLE_PERMISSIONS[roleOrUser] ?? []).includes(permission)
+}
+
+/**
+ * Tài khoản chỉ làm thợ — dùng để CHẶN các màn quản lý đơn. Hệ quyền màn hình chỉ biết
+ * "cho thêm" nên việc cấm phải hỏi tường minh ở đây. Thợ kiêm admin thì không bị chặn.
+ */
+export function isWorkerOnly(user: PermissionUser | undefined | null): boolean {
+  if (!user) return false
+  const roles = [user.roleCode, ...(user.extraRoles ?? [])].filter(Boolean)
+  return roles.includes('WORKER') && !roles.includes('ADMIN')
 }

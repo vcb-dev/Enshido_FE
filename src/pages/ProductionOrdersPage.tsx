@@ -21,6 +21,9 @@ import {
 } from '../api/productionOrders'
 import { formatStockedDate } from '../api/inventory'
 import {
+  ColumnHeaderDate,
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   DataTable,
   PageHeader,
   RowActions,
@@ -41,11 +44,6 @@ import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved } from '../orders/orderCache'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
-import {
-  ColumnHeaderDate,
-  ColumnHeaderFilter,
-  ColumnHeaderSearch,
-} from '../warehouses/ColumnHeaderFilter'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
 export function ProductionOrdersPage() {

@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createUserApi,
@@ -43,6 +43,7 @@ import { paginate, useTableParams } from '../hooks/useTableParams'
 const ROLE_OPTIONS: SelectOption<RoleCode>[] = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'USER', label: 'Nhân viên' },
+  { value: 'WORKER', label: 'Thợ' },
 ]
 
 export function UsersPage() {
@@ -211,10 +212,20 @@ function CreateUserDialog({
   onCreated: () => void
 }) {
   const form = useForm<UserFormValues>({ defaultValues: EMPTY_USER })
+  const [screens, setScreens] = useState<PermissionCode[]>([])
+  // Admin xem hết; thợ đã có quyền kèm role nên không cần tick màn hình nào.
+  const roleCode = useWatch({ control: form.control, name: 'roleCode' })
+  const presetRole = roleCode === 'ADMIN' || roleCode === 'WORKER'
 
   useEffect(() => {
-    if (open) form.reset(EMPTY_USER)
+    if (open) {
+      form.reset(EMPTY_USER)
+      setScreens([])
+    }
   }, [open, form])
+
+  const toggle = (key: PermissionCode, checked: boolean) =>
+    setScreens((prev) => (checked ? [...prev, key] : prev.filter((item) => item !== key)))
 
   const mutation = useMutation({
     mutationFn: (values: UserFormValues) =>
@@ -224,6 +235,7 @@ function CreateUserDialog({
         password: values.password,
         roleCode: values.roleCode,
         department: values.department.trim() || undefined,
+        allowedScreens: presetRole ? [] : screens,
       }),
     onMutate: (values) => {
       toast.success('Đã tạo nhân sự')
@@ -270,6 +282,39 @@ function CreateUserDialog({
             />
             <FormTextField<UserFormValues> name="department" label="Bộ phận" />
           </FormRow>
+          {presetRole ? (
+            <Typography variant="body2" color="text.secondary">
+              {roleCode === 'ADMIN'
+                ? 'Tài khoản Admin luôn xem được mọi màn hình.'
+                : 'Tài khoản Thợ chỉ dùng màn Phiếu của tôi — quyền đã kèm theo vai trò.'}
+            </Typography>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Tích màn hình được xem. Bỏ tích thì người này không vào được màn đó.
+              </Typography>
+              {SCREEN_GROUPS.map((group) => (
+                <Stack key={group.label} spacing={0.25}>
+                  <Typography variant="subtitle2">{group.label}</Typography>
+                  <FormGroup>
+                    {group.items.map((item) => (
+                      <FormControlLabel
+                        key={item.key}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={screens.includes(item.key)}
+                            onChange={(event) => toggle(item.key, event.target.checked)}
+                          />
+                        }
+                        label={item.label}
+                      />
+                    ))}
+                  </FormGroup>
+                </Stack>
+              ))}
+            </>
+          )}
           <FormCheckbox<UserFormValues> name="keepOpen" label="Lưu xong tiếp tục thêm người khác" />
         </DialogContent>
         <DialogActions>

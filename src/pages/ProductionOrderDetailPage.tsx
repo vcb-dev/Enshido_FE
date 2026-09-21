@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -9,23 +9,32 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  IconButton,
   Link,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -33,8 +42,8 @@ import {
   deleteProductionOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
+  handoverSubTicketApi,
   returnStageApi,
-  startStageApi,
   undoReturnApi,
   updateCastingApi,
   updateHandoverApi,
@@ -46,11 +55,12 @@ import {
   type ReturnPayload,
   type StageCode,
   type StageEntry,
+  type SubTicket,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader, SelectInput, TextInput } from '../components/ui'
+import { PageHeader, SelectInput, TextInput, TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { OrderCostingCard } from '../orders/OrderCostingCard'
 import {
@@ -59,9 +69,11 @@ import {
   isInStage,
   MANUAL_STATUSES,
   orderTicketUrl,
+  SILVER_LOSS_LIMITS,
   STAGE_LABEL,
   STAGES,
   STATUS_META,
+  STATUS_TABS,
 } from '../orders/catalog'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
@@ -74,7 +86,11 @@ import {
   KcsReturnDialog,
   type HandoverDialogState,
 } from '../orders/StageDialogs'
-import { latestByStage, TICKET_HEADER_BG, TICKET_ROWS, TICKET_TONE_BG } from '../orders/ticketRows'
+import { SubTicketsPanel } from '../orders/SubTicketsPanel'
+import { useOrderMutation } from '../orders/useOrderMutation'
+import { stageColumns } from '../orders/ticketRows'
+import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
+import { TicketMatrix } from '../orders/TicketMatrix'
 
 export function ProductionOrderDetailPage() {
   const { code = '' } = useParams()
@@ -89,7 +105,23 @@ export function ProductionOrderDetailPage() {
   const [returning, setReturning] = useState<StageEntry | null>(null)
   const [castingOpen, setCastingOpen] = useState(false)
   const [statusDialog, setStatusDialog] = useState(false)
+  const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Tab lưu trên URL để gửi link / quét QR là mở đúng khung cần xem.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab: TabKey = TABS.some((item) => item.value === tabParam) ? (tabParam as TabKey) : 'overview'
+  const setTab = (value: TabKey) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (value === 'overview') next.delete('tab')
+        else next.set('tab', value)
+        return next
+      },
+      { replace: true },
+    )
 
   const detail = useQuery({
     queryKey: ['production-order', code],
@@ -115,14 +147,24 @@ export function ProductionOrderDetailPage() {
     (payload: CastingPayload) => updateCastingApi(code, payload),
     'Đã lưu thông tin Đúc',
   )
+  // Giao khâu đi theo phiếu con: thợ tự nhận, người giao xác nhận. Ở đây chỉ còn xác nhận giao
+  // và sửa lại thông tin giao.
   const saveHandover = useOrderMutation(
     code,
     (payload: HandoverPayload & { stage?: StageCode }) => {
-      if (handover?.mode === 'edit') return updateHandoverApi(code, handover.entry.id, payload)
-      if (!payload.stage) throw new Error('Chọn khâu')
-      return startStageApi(code, { ...payload, stage: payload.stage })
+      if (handover?.mode === 'confirm') {
+        // Thợ là người đã tự nhận phiếu, khâu là khâu đang mở — server tự lấy.
+        return handoverSubTicketApi(code, handover.ticket.no, {
+          handedAt: payload.handedAt,
+          handedQty: payload.handedQty,
+          handedSilverWeight: payload.handedSilverWeight,
+          note: payload.note,
+        })
+      }
+      if (handover?.mode !== 'edit') throw new Error('Không có khâu nào để lưu')
+      return updateHandoverApi(code, handover.entry.id, payload)
     },
-    'Đã lưu thông tin giao',
+    handover?.mode === 'confirm' ? 'Đã xác nhận giao cho thợ' : 'Đã lưu thông tin giao',
   )
   const saveReturn = useOrderMutation(
     code,
@@ -177,25 +219,13 @@ export function ProductionOrderDetailPage() {
 
   const order = detail.data
   const stages = order.stages
-  const last = stages[stages.length - 1]
   const openEntry = stages.find((entry) => !entry.returnedAt)
-  // Đơn không nằm ở khâu nào (Mới / Sửa 3D / Đúc / Sản xuất lỗi) thì được giao lại bất kỳ khâu.
-  const reworking = !isInStage(order.status)
-  const startableStages =
-    !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
-  const castingReady = isBtp || Boolean(order.castingSentDate && order.castingReturnedDate)
-  const canStart = order.status !== 'DELIVERED' && castingReady && !openEntry && startableStages.length > 0
-  const startBlockedReason =
-    order.status === 'DELIVERED'
-      ? 'Đơn đã giao'
-      : !castingReady
-        ? 'Ghi ngày báo Đúc và ngày Đúc về trước khi giao thợ'
-        : openEntry
-          ? `Khâu ${STAGE_LABEL[openEntry.stage]} chưa được KCS nhận lại`
-          : 'Đã qua khâu cuối'
   const canPrint = isBtp || Boolean(order.castingSentDate)
+  const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
+  // Người lên đơn và admin được chia phiếu con.
+  const canManageTickets = isAdmin || (user != null && order.createdByUserId === user.id)
   const canDelete =
     isAdmin &&
     stages.length === 0 &&
@@ -203,13 +233,8 @@ export function ProductionOrderDetailPage() {
     (order.status === 'NEW' || (isBtp && order.status === 'FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
-  function openStart(stage?: StageCode) {
-    const ordered = stage ? [stage, ...startableStages.filter((item) => item !== stage)] : startableStages
-    setHandover({
-      mode: 'start',
-      stages: ordered,
-      defaults: { total: last?.returnedTotalWeight ?? null, silver: last?.returnedSilverWeight ?? null },
-    })
+  function openConfirmHandover(ticket: SubTicket) {
+    setHandover({ mode: 'confirm', ticket })
     setHandoverOpen(true)
   }
 
@@ -239,17 +264,7 @@ export function ProductionOrderDetailPage() {
           </Breadcrumbs>
         }
         actions={
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button variant="outlined" startIcon={<EditIcon fontSize="small" />} onClick={() => setEditing(true)}>
-              Sửa đơn
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => setStatusDialog(true)}
-              disabled={order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0}
-            >
-              Đổi trạng thái
-            </Button>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Tooltip title={canPrint ? '' : 'Chỉ in phiếu thợ khi đơn đã báo Đúc'}>
               <span>
                 <Button
@@ -264,14 +279,58 @@ export function ProductionOrderDetailPage() {
                 </Button>
               </span>
             </Tooltip>
-            {canDelete ? (
-              <Button color="error" onClick={() => setDeleting(true)}>
-                Xóa đơn
-              </Button>
-            ) : null}
+            {/* Thao tác ít dùng gom vào menu để đầu trang chỉ còn một nút chính. */}
+            <IconButton
+              aria-label="Thao tác khác"
+              onClick={(event) => setMoreMenu(event.currentTarget)}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+            >
+              <MoreHorizIcon fontSize="small" />
+            </IconButton>
           </Stack>
         }
       />
+
+      <Menu anchorEl={moreMenu} open={Boolean(moreMenu)} onClose={() => setMoreMenu(null)}>
+        <MenuItem
+          onClick={() => {
+            setMoreMenu(null)
+            setEditing(true)
+          }}
+        >
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Sửa đơn" />
+        </MenuItem>
+        <MenuItem
+          disabled={locked}
+          onClick={() => {
+            setMoreMenu(null)
+            setStatusDialog(true)
+          }}
+        >
+          <ListItemIcon>
+            <SwapHorizIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Đổi trạng thái" secondary={locked ? 'Đơn đã giao / đã xuất hàng' : undefined} />
+        </MenuItem>
+        {canDelete ? <Divider /> : null}
+        {canDelete ? (
+          <MenuItem
+            onClick={() => {
+              setMoreMenu(null)
+              setDeleting(true)
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon>
+              <TrashIcon />
+            </ListItemIcon>
+            <ListItemText primary="Xóa đơn" />
+          </MenuItem>
+        ) : null}
+      </Menu>
 
       {!canPrint ? (
         <Alert severity="info">Đơn chưa báo Đúc — báo Đúc thì mới in được phiếu và giao khâu cho thợ.</Alert>
@@ -290,24 +349,115 @@ export function ProductionOrderDetailPage() {
         sx={{
           display: 'grid',
           gap: 1.5,
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 300px' },
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 340px' },
           alignItems: 'start',
         }}
       >
         <Stack spacing={1.5} sx={{ minWidth: 0 }}>
-          <Section title="Thông tin đơn">
-            <InfoGrid order={order} />
-          </Section>
+          <Paper sx={{ px: { xs: 0.5, md: 1 } }}>
+            <Tabs
+              value={tab}
+              onChange={(_, value: TabKey) => setTab(value)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{ minHeight: 42, '& .MuiTab-root': { minHeight: 42, py: 0 } }}
+            >
+              {TABS.map((item) => (
+                <Tab
+                  key={item.value}
+                  value={item.value}
+                  label={
+                    item.value === 'goods' && order.finishedGoods
+                      ? `${item.label} (${order.finishedGoods.remainingQty})`
+                      : item.label
+                  }
+                />
+              ))}
+            </Tabs>
+          </Paper>
 
-          <Section title="Ảnh">
-            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-              <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
-              <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
-            </Box>
-          </Section>
+          {/* Mô tả, thông số và ảnh là một khối nhận diện đơn — gộp chung một thẻ cho trang ngắn lại. */}
+          {tab === 'overview' ? (
+            <Section title="Thông tin đơn">
+              <InfoGrid order={order} />
+              <Box sx={{ mt: 1.75, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+                <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
+                <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
+              </Box>
+            </Section>
+          ) : null}
+
+          {tab === 'production' ? (
+            <Section title="Quá trình sản xuất (theo phiếu thợ)">
+              <SubTicketsPanel
+                order={order}
+                canManage={canManageTickets}
+                isAdmin={isAdmin}
+                locked={locked}
+                canPrint={canPrint}
+                busy={undoReturn.isPending}
+                onConfirm={openConfirmHandover}
+                onReturn={setReturning}
+                onEditHandover={openEditHandover}
+                onUndoReturn={(entry) => undoReturn.mutate(entry)}
+              />
+              {openEntry && !openEntry.subTicketId ? (
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  Thợ {openEntry.craftsmanName} đang làm khâu {STAGE_LABEL[openEntry.stage]} — KCS cân lại bạc khi thợ
+                  nộp lại rồi mới giao khâu sau.
+                </Alert>
+              ) : null}
+              {/* Phiếu mẹ chỉ để xem: cột khâu là số cộng của các phiếu con. */}
+              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                Cả đơn (số cộng của các phiếu con)
+              </Typography>
+              <TicketMatrix order={order} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
+                {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
+              </Typography>
+              <ReworkHistory stages={stages} />
+
+              {order.subTickets.length ? (
+                <Typography variant="body2" sx={{ fontWeight: 700, mt: 2 }}>
+                  Từng phiếu con — chốt Lỗi / Hoàn thiện ở đây
+                </Typography>
+              ) : null}
+              {order.subTickets.map((ticket) => (
+                <Box key={ticket.id} sx={{ mt: 1 }}>
+                  <SubTicketMatrixCard order={order} ticket={ticket} isAdmin={isAdmin} linkToTicket />
+                </Box>
+              ))}
+            </Section>
+          ) : null}
+
+          {tab === 'cost' ? (
+            <OrderCostingCard code={order.code} editable={order.status !== 'DELIVERED'} />
+          ) : null}
+
+          {tab === 'goods' ? <FinishedGoodsCard order={order} /> : null}
         </Stack>
 
         <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+          <Section title="Mã QR">
+            <Stack spacing={1} sx={{ alignItems: 'center' }}>
+              <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #d5dbe0', borderRadius: 1 }}>
+                <QRCodeSVG value={orderTicketUrl(order.code)} size={148} marginSize={1} />
+              </Box>
+              <Typography variant="h6">{order.code}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+                Quét để mở đơn và cập nhật khâu
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                In lần cuối: {formatDateTime(order.lastPrintedAt)}
+              </Typography>
+            </Stack>
+          </Section>
+
+          <Section title="Trạng thái đơn">
+            <StatusTimeline order={order} isBtp={isBtp} />
+          </Section>
+
           {isBtp ? (
             <Section title="BTP">
               <Stack spacing={1}>
@@ -350,96 +500,8 @@ export function ProductionOrderDetailPage() {
             </Section>
           )}
 
-          <Section title="Mã QR">
-            <Stack spacing={1} sx={{ alignItems: 'center' }}>
-              <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #d5dbe0', borderRadius: 1 }}>
-                <QRCodeSVG value={orderTicketUrl(order.code)} size={148} marginSize={1} />
-              </Box>
-              <Typography variant="h6">{order.code}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-                Quét để mở đơn và cập nhật khâu
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                In lần cuối: {formatDateTime(order.lastPrintedAt)}
-              </Typography>
-            </Stack>
-          </Section>
         </Stack>
       </Box>
-
-      <Section
-        title="Quá trình sản xuất (theo phiếu thợ)"
-        action={
-          <Tooltip title={canStart ? '' : startBlockedReason}>
-            <span>
-              <Button variant="contained" onClick={() => openStart()} disabled={!canStart}>
-                Giao khâu cho thợ
-              </Button>
-            </span>
-          </Tooltip>
-        }
-      >
-        {openEntry ? (
-          <Alert severity="info" sx={{ mb: 1 }}>
-            Thợ {openEntry.craftsmanName} đang làm khâu {STAGE_LABEL[openEntry.stage]} — KCS cân lại bạc khi thợ nộp lại
-            rồi mới giao khâu sau.
-          </Alert>
-        ) : null}
-        <ProcessMatrix
-          stages={stages}
-          lastId={last?.id}
-          isAdmin={isAdmin}
-          // Đã có phiếu xuất hàng thì không gỡ nhận lại được (đơn đã ra khỏi sản xuất).
-          locked={order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0}
-          startable={canStart ? startableStages : []}
-          busy={undoReturn.isPending}
-          onStart={openStart}
-          onEdit={openEditHandover}
-          onReturn={setReturning}
-          onUndoReturn={(entry) => undoReturn.mutate(entry)}
-        />
-        <ReworkHistory stages={stages} />
-      </Section>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 1.5,
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 360px' },
-          alignItems: 'start',
-        }}
-      >
-        <OrderCostingCard code={order.code} editable={order.status !== 'DELIVERED'} />
-        <FinishedGoodsCard order={order} />
-      </Box>
-
-      <Section title="Lịch sử trạng thái">
-        <Stack spacing={1}>
-          {order.statusLogs.map((log) => (
-            <Box key={log.id}>
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                {log.fromStatus && log.fromStatus !== log.toStatus ? (
-                  <>
-                    <Typography variant="body2">{STATUS_META[log.fromStatus].label}</Typography>
-                    <Typography variant="body2">→</Typography>
-                  </>
-                ) : null}
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {STATUS_META[log.toStatus].label}
-                </Typography>
-                {log.note ? (
-                  <Typography variant="body2" color="text.secondary">
-                    · {log.note}
-                  </Typography>
-                ) : null}
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {log.changedBy ?? '—'} · {formatDateTime(log.changedAt)}
-              </Typography>
-            </Box>
-          ))}
-        </Stack>
-      </Section>
 
       <ProductionOrderFormDialog
         open={editing}
@@ -458,6 +520,7 @@ export function ProductionOrderDetailPage() {
         open={castingOpen}
         sentDate={order.castingSentDate}
         returnedDate={order.castingReturnedDate}
+        silverWeight={order.silverWeight}
         saving={casting.isPending}
         onClose={() => setCastingOpen(false)}
         onSave={(payload) => casting.mutate(payload, { onSuccess: () => setCastingOpen(false) })}
@@ -503,26 +566,6 @@ export function ProductionOrderDetailPage() {
   )
 }
 
-/** Mọi thao tác trả về chi tiết đơn mới — ghi thẳng vào cache rồi làm mới danh sách. */
-function useOrderMutation<V>(
-  code: string,
-  fn: (vars: V) => Promise<ProductionOrderDetail>,
-  success: string,
-) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: fn,
-    onSuccess: (order) => {
-      queryClient.setQueryData(['production-order', code], order)
-      // Tiền công, bạc thu hồi thay đổi theo từng lần nhận lại khâu.
-      void queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
-      toast.success(success)
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-}
-
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <Paper sx={{ p: { xs: 1.5, md: 2 } }}>
@@ -550,16 +593,115 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
+/**
+ * Quy trình đơn xếp dọc: mỗi lần đổi trạng thái là một dòng theo thứ tự thời gian (kể cả
+ * làm lại / ghi lỗi), dòng cuối là trạng thái hiện tại; các bước chưa tới liệt kê mờ phía dưới.
+ */
+function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp: boolean }) {
+  // API trả log mới nhất trước — đảo lại để đọc từ trên xuống theo thời gian.
+  const logs = [...order.statusLogs].reverse()
+  // Đơn BTP không qua 3D và Đúc; Sản xuất lỗi là nhánh ngoài luồng nên chỉ hiện khi đã xảy ra.
+  const flow = STATUS_TABS.filter(
+    (status) => status !== 'DEFECT' && !(isBtp && (status === 'REDO_3D' || status === 'CASTING')),
+  )
+  const passed = new Set(logs.map((log) => log.toStatus))
+  // Đơn đang ở Sản xuất lỗi thì không nằm trong luồng — lấy mốc là bước trong luồng gần nhất đã qua.
+  const anchor =
+    flow.indexOf(order.status) >= 0
+      ? order.status
+      : [...logs].reverse().find((log) => flow.includes(log.toStatus))?.toStatus
+  const anchorIndex = anchor ? flow.indexOf(anchor) : -1
+  const pending = flow.filter((status, index) => index > anchorIndex && !passed.has(status))
+
+  return (
+    <Table
+      size="small"
+      sx={{
+        '& td, & th': { px: 0.75, py: 0.5, fontSize: '0.78rem', borderColor: '#e3e8ec' },
+        '& th': { fontWeight: 700, color: 'text.secondary' },
+      }}
+    >
+      <TableHead>
+        <TableRow>
+          <TableCell>Trạng thái</TableCell>
+          <TableCell>Thời gian</TableCell>
+          <TableCell>Người xử lý</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {logs.map((log, index) => {
+          const current = index === logs.length - 1
+          return (
+            <Fragment key={log.id}>
+              <TableRow
+                sx={{
+                  ...(current ? { bgcolor: '#eaf3ff' } : null),
+                  ...(log.note ? { '& td': { borderBottom: 'none' } } : null),
+                }}
+              >
+                <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: current ? 700 : 400 }}>
+                  <StatusDot status={log.toStatus} />
+                  {STATUS_META[log.toStatus].label}
+                </TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateShort(log.changedAt)}</TableCell>
+                <TableCell>{log.changedBy ?? '—'}</TableCell>
+              </TableRow>
+              {log.note ? (
+                <TableRow sx={current ? { bgcolor: '#eaf3ff' } : undefined}>
+                  <TableCell colSpan={3} sx={{ pt: '0 !important', color: 'text.secondary', fontStyle: 'italic' }}>
+                    {log.note}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </Fragment>
+          )
+        })}
+        {pending.map((status) => (
+          <TableRow key={status} sx={{ opacity: 0.45 }}>
+            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+              <StatusDot status={status} />
+              {STATUS_META[status].label}
+            </TableCell>
+            <TableCell>—</TableCell>
+            <TableCell />
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function StatusDot({ status }: { status: ProductionStatus }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        mr: 0.75,
+        borderRadius: '50%',
+        bgcolor: STATUS_META[status].bg,
+        border: '1px solid #b7c2cc',
+        verticalAlign: 'middle',
+      }}
+    />
+  )
+}
+
 function InfoGrid({ order }: { order: ProductionOrderDetail }) {
-  const rows: Array<[string, ReactNode]> = [
+  const orderFields: Array<[string, ReactNode]> = [
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
     ['Thời gian cần', order.leadTime],
-    ['Phân đơn', `${order.split.no}/${order.split.total}`],
+    ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Người chốt', order.closedBy],
     ['Người được hỏi', order.askedUserName],
     ['Mã theo dõi đơn', order.trackingCode],
-    ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
+    ['Công nợ', order.debtStatus],
+  ]
+
+  const productFields: Array<[string, ReactNode]> = [
     ['Size', order.sizeLabel],
     ['Kích thước', order.size],
     ['Chất liệu', order.mainMaterial],
@@ -568,16 +710,12 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Màu đá', order.stoneColor],
     ['Số lượng đá (viên)', order.stoneCount],
     ['Trọng lượng đá (g)', order.stoneWeight != null ? formatQty(order.stoneWeight) : null],
-    ['Mã 3D', order.model3dCode],
-    [
-      'Link 3D',
-      order.model3dUrl ? (
-        <Link href={order.model3dUrl} target="_blank" rel="noreferrer" sx={{ overflowWrap: 'anywhere' }}>
-          {order.model3dUrl}
-        </Link>
-      ) : null,
-    ],
-    ['Công nợ', order.debtStatus],
+    ['Tổng TL bạc (g)', order.silverWeight != null ? formatQty(order.silverWeight) : null],
+  ]
+
+  // Đơn không tách thì Phân đơn luôn là 1/1 — giấu cả nhóm cho đỡ rối.
+  const splitFields: Array<[string, ReactNode]> = [
+    ['Phân đơn', `${order.split.no}/${order.split.total}`],
     [
       'Đơn mẹ',
       order.parentCode ? (
@@ -599,27 +737,61 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
       ) : null,
     ],
   ]
+  const hasSplit = order.parentCode != null || order.children.length > 0
 
   return (
-    <Stack spacing={1.5}>
-      <Field label="Mô tả / Yêu cầu sản phẩm" value={order.description} />
+    <Stack spacing={1.75}>
+      <Box sx={{ p: 1.25, bgcolor: '#f4f6f7', borderRadius: 1 }}>
+        <Field label="Mô tả / Yêu cầu sản phẩm" value={order.description} />
+      </Box>
+
+      <FieldGroup title="Đơn hàng" fields={orderFields} />
+
+      <FieldGroup title="Sản phẩm" fields={productFields}>
+        <Box sx={{ mt: 1, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+          <Field label="Nội dung khắc laser" value={order.laserEngraving} />
+          <Field label="Yêu cầu khác" value={order.otherRequirements} />
+        </Box>
+      </FieldGroup>
+
+      {hasSplit ? <FieldGroup title="Phân đơn" fields={splitFields} /> : null}
+    </Stack>
+  )
+}
+
+/** Một nhóm trường trong khối thông tin đơn: tiêu đề nhỏ + lưới 4 cột. */
+function FieldGroup({
+  title,
+  fields,
+  children,
+}: {
+  title: string
+  fields: Array<[string, ReactNode]>
+  children?: ReactNode
+}) {
+  return (
+    <Box>
+      <Typography
+        variant="caption"
+        sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}
+      >
+        {title}
+      </Typography>
       <Box
         sx={{
+          mt: 0.5,
           display: 'grid',
           columnGap: 2,
           rowGap: 1,
           gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
         }}
       >
-        {rows.map(([label, value]) => (
+        {fields.map(([label, value]) => (
           <Field key={label} label={label} value={value} />
         ))}
       </Box>
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-        <Field label="Nội dung khắc laser" value={order.laserEngraving} />
-        <Field label="Yêu cầu khác" value={order.otherRequirements} />
-      </Box>
-    </Stack>
+      {children}
+    </Box>
   )
 }
 
@@ -659,132 +831,21 @@ function Gallery({ label, images }: { label: string; images: ProductionOrderDeta
   )
 }
 
-const CELL_BORDER = '1px solid #b7c2cc'
+type TabKey = 'overview' | 'production' | 'cost' | 'goods'
 
-/** Bảng "Quá trình sản xuất" giống hệt phiếu in, thêm hàng nút thao tác cho từng khâu. */
-function ProcessMatrix({
-  stages,
-  lastId,
-  isAdmin,
-  locked,
-  startable,
-  busy,
-  onStart,
-  onEdit,
-  onReturn,
-  onUndoReturn,
-}: {
-  stages: StageEntry[]
-  lastId: string | undefined
-  isAdmin: boolean
-  locked: boolean
-  startable: StageCode[]
-  busy: boolean
-  onStart: (stage: StageCode) => void
-  onEdit: (entry: StageEntry) => void
-  onReturn: (entry: StageEntry) => void
-  onUndoReturn: (entry: StageEntry) => void
-}) {
-  const latest = latestByStage(stages)
-
-  return (
-    <TableContainer sx={{ overflowX: 'auto' }}>
-      <Table
-        size="small"
-        sx={{
-          minWidth: 900,
-          tableLayout: 'fixed',
-          borderCollapse: 'collapse',
-          '& td, & th': { border: CELL_BORDER, px: 1, py: 0.6, fontSize: '0.84rem' },
-        }}
-      >
-        <TableHead>
-          <TableRow sx={{ '& th': { bgcolor: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center' } }}>
-            <TableCell colSpan={2} sx={{ width: 220, color: '#1b4f9c' }}>
-              Quá trình sản xuất
-            </TableCell>
-            {STAGES.map((stage) => (
-              <TableCell key={stage}>
-                {STAGE_LABEL[stage]}
-                {latest[stage] && latest[stage].attempt > 1 ? ` (lần ${latest[stage].attempt})` : ''}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {TICKET_ROWS.map((row) => (
-            <TableRow key={row.key} sx={row.tone ? { bgcolor: TICKET_TONE_BG[row.tone] } : undefined}>
-              {row.label != null ? (
-                <TableCell
-                  colSpan={row.sub ? 1 : 2}
-                  rowSpan={row.labelRowSpan}
-                  sx={{ fontWeight: row.tone ? 700 : 400, verticalAlign: 'top' }}
-                >
-                  {row.label}
-                  {row.hint ? (
-                    <Typography component="span" variant="caption" sx={{ fontStyle: 'italic', display: 'block' }}>
-                      {row.hint}
-                    </Typography>
-                  ) : null}
-                </TableCell>
-              ) : null}
-              {row.sub ? (
-                <TableCell sx={{ width: 52, color: 'text.secondary', fontSize: '0.78rem !important' }}>{row.sub}</TableCell>
-              ) : null}
-              {STAGES.map((stage) => {
-                const entry = latest[stage]
-                return (
-                  <TableCell key={stage} sx={{ textAlign: row.numeric ? 'right' : 'left' }}>
-                    {entry ? row.value(entry) : ''}
-                  </TableCell>
-                )
-              })}
-            </TableRow>
-          ))}
-          <TableRow sx={{ '& td': { bgcolor: '#f4f6f7', textAlign: 'center' } }}>
-            <TableCell colSpan={2} sx={{ textAlign: 'left !important', color: 'text.secondary' }}>
-              Thao tác
-            </TableCell>
-            {STAGES.map((stage) => {
-              const entry = latest[stage]
-              return (
-                <TableCell key={stage}>
-                  <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
-                    {startable.includes(stage) && (!entry || entry.returnedAt) ? (
-                      <Button size="small" variant="outlined" onClick={() => onStart(stage)}>
-                        Giao thợ
-                      </Button>
-                    ) : null}
-                    {entry && !entry.returnedAt ? (
-                      <>
-                        <Button size="small" variant="contained" onClick={() => onReturn(entry)}>
-                          KCS nhận lại
-                        </Button>
-                        <Button size="small" onClick={() => onEdit(entry)}>
-                          Sửa giao
-                        </Button>
-                      </>
-                    ) : null}
-                    {entry?.returnedAt && isAdmin && entry.id === lastId && !locked ? (
-                      <Button size="small" color="inherit" disabled={busy} onClick={() => onUndoReturn(entry)}>
-                        Gỡ nhận lại
-                      </Button>
-                    ) : null}
-                  </Stack>
-                </TableCell>
-              )
-            })}
-          </TableRow>
-        </TableBody>
-      </Table>
-    </TableContainer>
-  )
-}
+/** Trang chi tiết chia theo việc: xem đơn → làm hàng → tiền → giao hàng. */
+const TABS: Array<{ value: TabKey; label: string }> = [
+  { value: 'overview', label: 'Tổng quan' },
+  { value: 'production', label: 'Sản xuất' },
+  { value: 'cost', label: 'Chi phí' },
+  { value: 'goods', label: 'Kho thành phẩm' },
+]
 
 /** Các lần làm trước của khâu đã làm lại — phiếu chỉ in lần gần nhất nên liệt kê riêng. */
 function ReworkHistory({ stages }: { stages: StageEntry[] }) {
-  const latest = latestByStage(stages)
-  const older = stages.filter((entry) => latest[entry.stage]?.id !== entry.id)
+  const columns = stageColumns(stages)
+  const shown = new Set(STAGES.flatMap((stage) => columns[stage].entries.map((entry) => entry.id)))
+  const older = stages.filter((entry) => !shown.has(entry.id))
   if (older.length === 0) return null
 
   return (
@@ -795,7 +856,8 @@ function ReworkHistory({ stages }: { stages: StageEntry[] }) {
       <Stack spacing={0.5}>
         {older.map((entry) => (
           <Typography key={entry.id} variant="body2" color="text.secondary">
-            {STAGE_LABEL[entry.stage]} lần {entry.attempt}: thợ {entry.craftsmanName}, giao{' '}
+            {STAGE_LABEL[entry.stage]} lần {entry.attempt}
+            {entry.subTicketNo ? ` (phiếu con ${entry.subTicketNo})` : ''}: thợ {entry.craftsmanName}, giao{' '}
             {formatDateShort(entry.handedAt)} ({entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'} g
             bạc) → KCS {entry.returnedByName ?? '—'} nhận lại {formatDateShort(entry.returnedAt)} (
             {entry.returnedSilverWeight ? formatQty(entry.returnedSilverWeight) : '—'} g bạc), hao hụt{' '}
@@ -807,14 +869,14 @@ function ReworkHistory({ stages }: { stages: StageEntry[] }) {
   )
 }
 
-/** Đơn trong kho thành phẩm: tự vào kho khi KCS nhận lại Ngoại Quan, xuất từng phần qua phiếu xuất hàng. */
+/** Đơn trong kho thành phẩm: vào kho khi chốt Hoàn thiện trên phiếu, xuất từng phần qua phiếu xuất hàng. */
 function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
   const goods = order.finishedGoods
   return (
     <Section title="Kho thành phẩm & xuất hàng">
       {!goods ? (
         <Typography variant="body2" color="text.secondary">
-          Chưa vào kho thành phẩm — đơn tự vào kho khi KCS nhận lại khâu Ngoại Quan.
+          Chưa vào kho thành phẩm — đơn vào kho khi bấm “Xác nhận hoàn thiện” ở cột Hoàn thiện trên phiếu.
         </Typography>
       ) : (
         <Stack spacing={1.25}>
@@ -901,8 +963,9 @@ function StatusDialog({
       <DialogTitle>Đổi trạng thái đơn</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         <Typography variant="body2" color="text.secondary">
-          Đúc đổi qua nút “Báo Đúc”; Nguội → Hoàn thiện đổi khi giao khâu cho thợ; Đã giao tự đổi khi lập phiếu
-          xuất hàng đủ số lượng. Đơn trong kho thành phẩm (chưa xuất) chuyển Sản xuất lỗi thì rút khỏi kho.
+          Đúc đổi qua nút “Báo Đúc”; Nguội → Xi đổi khi giao khâu cho thợ; Hoàn thiện chốt ở cột Hoàn thiện
+          trên phiếu; Đã giao tự đổi khi lập phiếu xuất hàng đủ số lượng. Đơn trong kho thành phẩm (chưa xuất)
+          chuyển Sản xuất lỗi thì rút khỏi kho.
         </Typography>
         <SelectInput<ProductionStatus>
           label="Trạng thái mới"

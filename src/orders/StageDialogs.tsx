@@ -7,6 +7,7 @@ import type {
   ReturnPayload,
   StageCode,
   StageEntry,
+  SubTicket,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import {
@@ -20,11 +21,21 @@ import {
   TextInput,
 } from '../components/ui'
 import { useOperatorName } from '../hooks/useOperatorName'
-import { formatDateShort, fromDateTimeInput, STAGE_LABEL, toDateTimeInput } from './catalog'
+import {
+  formatDateShort,
+  fromDateTimeInput,
+  SILVER_LOSS_LIMITS,
+  silverLossLevel,
+  STAGE_LABEL,
+  toDateTimeInput,
+} from './catalog'
 
 type Users = Array<{ id: string; username: string; fullName: string }>
 
 const DATE_LABEL = { inputLabel: { shrink: true } }
+
+/** Hao hụt bạc: đạt / cần xem lại / quá cao — cùng ngưỡng với màu trên phiếu thợ. */
+const LOSS_SEVERITY = { ok: 'success', warn: 'warning', high: 'error' } as const
 
 function nowInput() {
   return toDateTimeInput(new Date().toISOString())
@@ -36,7 +47,7 @@ type HandoverValues = {
   stage: StageCode | ''
   craftsmanUserId: string
   handedAt: string
-  handedTotalWeight: string
+  handedQty: string
   handedSilverWeight: string
   note: string
 }
@@ -45,10 +56,12 @@ export type HandoverDialogState =
   | {
       mode: 'start'
       stages: StageCode[]
-      /** TL nhận lại của khâu trước — thường chính là TL giao khâu sau. */
-      defaults: { total: string | null; silver: string | null }
+      /** SL / TL bạc nhận lại của khâu trước — thường chính là SL / TL giao khâu sau. */
+      defaults: { qty: number | null; silver: string | null }
     }
   | { mode: 'edit'; entry: StageEntry }
+  /** Phiếu con: thợ đã tự nhận khâu, người giao cân bạc rồi xác nhận. */
+  | { mode: 'confirm'; ticket: SubTicket }
 
 /** Giao khâu cho thợ. Người giao là tài khoản đang đăng nhập. */
 export function HandoverDialog({
@@ -74,7 +87,7 @@ export function HandoverDialog({
       stage: '',
       craftsmanUserId: '',
       handedAt: '',
-      handedTotalWeight: '',
+      handedQty: '',
       handedSilverWeight: '',
       note: '',
     },
@@ -87,8 +100,18 @@ export function HandoverDialog({
         stage: state.stages[0] ?? '',
         craftsmanUserId: '',
         handedAt: nowInput(),
-        handedTotalWeight: state.defaults.total ?? '',
+        handedQty: state.defaults.qty != null ? String(state.defaults.qty) : '',
         handedSilverWeight: state.defaults.silver ?? '',
+        note: '',
+      })
+    } else if (state.mode === 'confirm') {
+      const { ticket } = state
+      form.reset({
+        stage: ticket.pendingStage ?? '',
+        craftsmanUserId: ticket.claimedByUserId ?? '',
+        handedAt: nowInput(),
+        handedQty: String(ticket.availableQty),
+        handedSilverWeight: ticket.availableSilver,
         note: '',
       })
     } else {
@@ -97,7 +120,7 @@ export function HandoverDialog({
         stage: entry.stage,
         craftsmanUserId: entry.craftsmanUserId ?? '',
         handedAt: toDateTimeInput(entry.handedAt),
-        handedTotalWeight: entry.handedTotalWeight ?? '',
+        handedQty: entry.handedQty != null ? String(entry.handedQty) : '',
         handedSilverWeight: entry.handedSilverWeight ?? '',
         note: entry.note ?? '',
       })
@@ -105,16 +128,26 @@ export function HandoverDialog({
   }, [open, state, form])
 
   const starting = state?.mode === 'start'
+  const confirming = state?.mode === 'confirm'
+  const ticket = state?.mode === 'confirm' ? state.ticket : null
+  const entry = state?.mode === 'edit' ? state.entry : null
+  const stageLabel = ticket?.pendingStage
+    ? STAGE_LABEL[ticket.pendingStage]
+    : entry
+      ? STAGE_LABEL[entry.stage]
+      : ''
   const title = starting
     ? 'Giao khâu cho thợ'
-    : `Sửa thông tin giao — ${state ? STAGE_LABEL[state.entry.stage] : ''}`
+    : ticket
+      ? `Xác nhận giao ${stageLabel} — phiếu ${ticket.code}`
+      : `Sửa thông tin giao — ${stageLabel}${entry?.subTicketNo ? ` (phiếu con ${entry.subTicketNo})` : ''}`
 
   function submit(values: HandoverValues) {
     onSave({
       ...(starting && values.stage ? { stage: values.stage } : null),
       craftsmanUserId: values.craftsmanUserId,
       handedAt: fromDateTimeInput(values.handedAt) ?? new Date().toISOString(),
-      handedTotalWeight: values.handedTotalWeight || null,
+      handedQty: values.handedQty ? Number(values.handedQty) : null,
       handedSilverWeight: values.handedSilverWeight,
       note: values.note.trim(),
     })
@@ -123,12 +156,12 @@ export function HandoverDialog({
   return (
     <CrudDialogShell<HandoverValues>
       open={open}
-      kind={starting ? 'create' : 'edit'}
+      kind={starting || confirming ? 'create' : 'edit'}
       titles={{ create: title, edit: title, view: title }}
       form={form}
       onSubmit={submit}
       saving={saving}
-      submitLabel={starting ? 'Giao thợ' : 'Lưu'}
+      submitLabel={starting ? 'Giao thợ' : confirming ? 'Xác nhận giao' : 'Lưu'}
       maxWidth="sm"
       onClose={onClose}
       onExited={onExited}
@@ -142,7 +175,7 @@ export function HandoverDialog({
             options={state.stages.map((stage) => ({ value: stage, label: STAGE_LABEL[stage] }))}
           />
         ) : (
-          <TextInput label="Khâu" value={state ? STAGE_LABEL[state.entry.stage] : ''} readOnly />
+          <TextInput label="Khâu" value={stageLabel} readOnly />
         )}
         <TextInput
           label="Người giao"
@@ -151,15 +184,20 @@ export function HandoverDialog({
         />
       </FormRow>
 
-      <FormRow columns={2}>
-        <FormSearchSelect<HandoverValues>
-          name="craftsmanUserId"
-          label="Người chế tác (thợ)"
-          options={users.map((user) => ({ id: user.id, name: user.fullName, secondary: user.username }))}
-          required
-          displayValue={state?.mode === 'edit' ? state.entry.craftsmanName : undefined}
-          placeholder="Tìm tài khoản…"
-        />
+      {/* Sửa thông tin giao: thợ đã hiện trên phiếu, không đổi ở đây. */}
+      <FormRow columns={entry ? 1 : 2}>
+        {entry ? null : confirming ? (
+          // Thợ của phiếu con là người đã tự nhận khâu — chỉ hiển thị.
+          <TextInput label="Người chế tác (thợ đã nhận)" value={ticket?.claimedByName ?? ''} readOnly />
+        ) : (
+          <FormSearchSelect<HandoverValues>
+            name="craftsmanUserId"
+            label="Người chế tác (thợ)"
+            options={users.map((user) => ({ id: user.id, name: user.fullName, secondary: user.username }))}
+            required
+            placeholder="Tìm tài khoản…"
+          />
+        )}
         <FormTextField<HandoverValues>
           name="handedAt"
           label="Thời gian giao"
@@ -170,7 +208,21 @@ export function HandoverDialog({
       </FormRow>
 
       <FormRow columns={2}>
-        <FormQtyField<HandoverValues> name="handedTotalWeight" label="Trọng lượng giao — tổng (g)" />
+        <FormTextField<HandoverValues>
+          name="handedQty"
+          label="Số lượng giao"
+          type="number"
+          required
+          rules={{
+            validate: (value) => {
+              if (!(Number(value) >= 1)) return 'Số lượng giao phải từ 1'
+              if (ticket && Number(value) > ticket.availableQty) {
+                return `Không quá số phiếu con đang có (${ticket.availableQty})`
+              }
+              return true
+            },
+          }}
+        />
         <FormQtyField<HandoverValues>
           name="handedSilverWeight"
           label="Trọng lượng giao — bạc (g)"
@@ -187,8 +239,8 @@ export function HandoverDialog({
 
 type ReturnValues = {
   returnedAt: string
+  returnedQty: string
   laborCost: string
-  returnedTotalWeight: string
   returnedSilverWeight: string
   btpRecoveredWeight: string
   silverRecoveredWeight: string
@@ -211,8 +263,8 @@ export function KcsReturnDialog({
   const form = useForm<ReturnValues>({
     defaultValues: {
       returnedAt: '',
+      returnedQty: '',
       laborCost: '',
-      returnedTotalWeight: '',
       returnedSilverWeight: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
@@ -224,8 +276,8 @@ export function KcsReturnDialog({
     if (!entry) return
     form.reset({
       returnedAt: nowInput(),
+      returnedQty: entry.handedQty != null ? String(entry.handedQty) : '',
       laborCost: '',
-      returnedTotalWeight: '',
       returnedSilverWeight: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
@@ -249,8 +301,8 @@ export function KcsReturnDialog({
   function submit(values: ReturnValues) {
     onSave({
       returnedAt: fromDateTimeInput(values.returnedAt) ?? new Date().toISOString(),
+      returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
       laborCost: values.laborCost || null,
-      returnedTotalWeight: values.returnedTotalWeight || null,
       returnedSilverWeight: values.returnedSilverWeight,
       btpRecoveredWeight: values.btpRecoveredWeight || null,
       silverRecoveredWeight: values.silverRecoveredWeight || null,
@@ -277,7 +329,7 @@ export function KcsReturnDialog({
             Thợ <b>{entry.craftsmanName}</b> · giao lúc {formatDateShort(entry.handedAt)} bởi {entry.handedByName}
           </Typography>
           <Typography variant="body2">
-            TL giao: tổng <b>{entry.handedTotalWeight ? formatQty(entry.handedTotalWeight) : '—'}</b> g · bạc{' '}
+            SL giao: <b>{entry.handedQty ?? '—'}</b> · TL bạc giao:{' '}
             <b>{entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'}</b> g
           </Typography>
         </Box>
@@ -302,7 +354,21 @@ export function KcsReturnDialog({
       </FormRow>
 
       <FormRow columns={2}>
-        <FormQtyField<ReturnValues> name="returnedTotalWeight" label="Trọng lượng nhận lại — tổng (g)" />
+        <FormTextField<ReturnValues>
+          name="returnedQty"
+          label="Số lượng nhận lại"
+          type="number"
+          required
+          rules={{
+            validate: (value) => {
+              const qty = Number(value)
+              if (!(qty >= 0)) return 'Số lượng nhận lại không hợp lệ'
+              const handed = entry?.handedQty
+              if (handed != null && qty > handed) return `Không quá số đã giao (${handed})`
+              return true
+            },
+          }}
+        />
         <FormQtyField<ReturnValues>
           name="returnedSilverWeight"
           label="Trọng lượng nhận lại — bạc (g)"
@@ -316,10 +382,14 @@ export function KcsReturnDialog({
       </FormRow>
 
       {loss ? (
-        <Alert severity={loss.value < 0 ? 'warning' : 'info'} sx={{ py: 0 }}>
+        <Alert severity={LOSS_SEVERITY[silverLossLevel(loss.percent?.toFixed(2) ?? null) ?? 'ok']} sx={{ py: 0 }}>
           Hao hụt bạc: <b>{formatQty(loss.value.toFixed(4))} g</b>
           {loss.percent != null ? ` (${loss.percent.toFixed(2)}%)` : ''}
-          {loss.value < 0 ? ' — bạc nhận lại nhiều hơn bạc giao, kiểm tra lại số cân' : ''}
+          {loss.value < 0
+            ? ' — bạc nhận lại nhiều hơn bạc giao, kiểm tra lại số cân'
+            : loss.percent != null && loss.percent > SILVER_LOSS_LIMITS.warn
+              ? ` — vượt ngưỡng ${SILVER_LOSS_LIMITS.warn}%, kiểm tra lại trước khi nhận`
+              : ''}
         </Alert>
       ) : null}
 
@@ -334,13 +404,14 @@ export function KcsReturnDialog({
 
 // ---------------------------------------------------------------- Đúc
 
-type CastingValues = { sentDate: string; returnedDate: string }
+type CastingValues = { sentDate: string; returnedDate: string; silverWeight: string }
 
 /** Báo Đúc (đơn chuyển sang Đúc, từ đây mới in phiếu thợ) và ghi ngày Đúc về. */
 export function CastingDialog({
   open,
   sentDate,
   returnedDate,
+  silverWeight,
   saving,
   onClose,
   onSave,
@@ -348,16 +419,21 @@ export function CastingDialog({
   open: boolean
   sentDate: string | null
   returnedDate: string | null
+  silverWeight: string | null
   saving: boolean
   onClose: () => void
   onSave: (payload: CastingPayload) => void
 }) {
-  const form = useForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '' } })
+  const form = useForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '', silverWeight: '' } })
 
   useEffect(() => {
     if (!open) return
-    form.reset({ sentDate: sentDate ?? new Date().toISOString().slice(0, 10), returnedDate: returnedDate ?? '' })
-  }, [open, sentDate, returnedDate, form])
+    form.reset({
+      sentDate: sentDate ?? new Date().toISOString().slice(0, 10),
+      returnedDate: returnedDate ?? '',
+      silverWeight: silverWeight ?? '',
+    })
+  }, [open, sentDate, returnedDate, silverWeight, form])
 
   const title = sentDate ? 'Cập nhật Đúc' : 'Báo Đúc'
 
@@ -367,7 +443,13 @@ export function CastingDialog({
       kind={sentDate ? 'edit' : 'create'}
       titles={{ create: title, edit: title, view: title }}
       form={form}
-      onSubmit={(values) => onSave({ sentDate: values.sentDate, returnedDate: values.returnedDate || null })}
+      onSubmit={(values) =>
+        onSave({
+          sentDate: values.sentDate,
+          returnedDate: values.returnedDate || null,
+          silverWeight: values.silverWeight || null,
+        })
+      }
       saving={saving}
       submitLabel="Lưu"
       maxWidth="xs"
@@ -398,6 +480,11 @@ export function CastingDialog({
           }}
         />
       </FormRow>
+      <FormQtyField<CastingValues>
+        name="silverWeight"
+        label="Tổng TL bạc Đúc về (g)"
+        helperText="Mốc chia gram bạc cho các phiếu con"
+      />
     </CrudDialogShell>
   )
 }

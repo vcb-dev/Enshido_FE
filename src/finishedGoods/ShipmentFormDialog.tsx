@@ -193,7 +193,7 @@ export function ShipmentFormDialog({
       </Typography>
 
       {stock.length === 0 && !shipment ? (
-        <Alert severity="info">Kho thành phẩm đang trống — đơn vào kho khi KCS nhận lại khâu Ngoại Quan.</Alert>
+        <Alert severity="info">Kho thành phẩm đang trống — đơn vào kho khi chốt Hoàn thiện trên phiếu thợ.</Alert>
       ) : null}
 
       <Stack spacing={1}>

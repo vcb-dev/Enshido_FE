@@ -41,7 +41,16 @@ export const theme = createTheme({
         // dvh thay vì 100%: trên iOS Safari chiều cao 100% tính theo viewport lớn
         // nên ~60px cuối bị cắt mà không cuộn tới được. Trang đã khoá cuộn nên
         // thanh URL không bao giờ thu lại → dvh ổn định, không giật layout.
-        '#root': { height: '100dvh' },
+        // Cài PWA lên iPhone có tai thỏ: viewport-fit=cover cho nội dung chạm mép,
+        // padding safe-area trả lại phần bị tai thỏ / thanh home che.
+        '#root': {
+          height: '100dvh',
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingLeft: 'env(safe-area-inset-left)',
+          paddingRight: 'env(safe-area-inset-right)',
+          boxSizing: 'border-box',
+        },
       },
     },
     MuiButton: {

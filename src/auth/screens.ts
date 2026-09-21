@@ -1,4 +1,4 @@
-import { Permission, can, type PermissionCode, type PermissionUser } from './permissions'
+import { can, isWorkerOnly, Permission, type PermissionCode, type PermissionUser } from './permissions'
 import { WAREHOUSES, warehousePath, type WarehouseCode } from '../warehouses/catalog'
 
 export type ScreenGroup = {
@@ -19,6 +19,10 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
       { key: Permission.SCREEN_WAREHOUSE_TIEU_HAO, label: 'Kho NVL tiêu hao' },
       { key: Permission.SCREEN_WAREHOUSE_THANH_PHAM, label: 'Kho thành phẩm' },
     ],
+  },
+  {
+    label: 'Sản xuất',
+    items: [{ key: Permission.PRODUCTION_WORKER, label: 'Thợ sản xuất (nhận phiếu con)' }],
   },
   {
     label: 'Cấu hình',
@@ -55,11 +59,14 @@ export function hasAnyWarehouse(user: PermissionUser | undefined | null) {
 }
 
 export function firstAllowedPath(user: PermissionUser | undefined | null): string {
+  // Thợ vào thẳng phần việc của mình, kể cả khi được tick thêm màn hình khác.
+  if (isWorkerOnly(user)) return '/my-tickets'
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
   const firstWarehouse = visibleWarehouses(user)[0]
   if (firstWarehouse) return warehousePath(firstWarehouse)
   if (can(user, Permission.SCREEN_LOCATIONS)) return '/settings/locations'
   if (can(user, Permission.SCREEN_CATALOGS)) return '/settings/catalogs'
   if (can(user, Permission.USERS_MANAGE)) return '/users'
+  if (can(user, Permission.PRODUCTION_WORKER)) return '/my-tickets'
   return '/'
 }
