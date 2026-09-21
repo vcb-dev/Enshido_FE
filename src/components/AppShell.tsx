@@ -39,6 +39,7 @@ import { useWaitingCount } from '../orders/subTicketActions'
 import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
+import { InstallAppButton } from './InstallAppButton'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -109,6 +110,7 @@ export function AppShell() {
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
             {/* Ở thanh trên cùng nên quét được phiếu giấy từ bất kỳ màn nào. */}
             <ScanQrButton compact />
+            <InstallAppButton />
             <Avatar
               sx={{
                 width: 32,
