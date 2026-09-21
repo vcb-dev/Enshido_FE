@@ -150,6 +150,8 @@ export type ProductionOrderListParams = {
   requestType?: ProductionRequestType | ''
   source?: ProductionSource | ''
   search?: string
+  receivedDate?: string
+  dueDate?: string
   page: number
   pageSize: number
   sort?: string

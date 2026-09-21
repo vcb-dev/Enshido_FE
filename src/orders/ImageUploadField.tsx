@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Box,
-  Button,
   IconButton,
   LinearProgress,
   Stack,
   Tooltip,
   Typography,
 } from '@mui/material'
-import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
+import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import { toast } from 'sonner'
 import type { OrderImage, ProductionImageKind } from '../api/productionOrders'
@@ -79,25 +78,21 @@ export function ImageUploadField({
     onChange(value.filter((image) => image.publicId !== publicId))
   }
 
+  const empty = value.length === 0 && pending.length === 0
+  const canAdd = !readOnly
+
+  function openPicker() {
+    inputRef.current?.click()
+  }
+
   return (
     <Stack spacing={0.75}>
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {label}{' '}
-          <Typography component="span" variant="caption" color="text.secondary">
-            ({value.length})
-          </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {label}{' '}
+        <Typography component="span" variant="caption" color="text.secondary">
+          ({value.length})
         </Typography>
-        {readOnly ? null : (
-          <Button
-            size="small"
-            startIcon={<AddPhotoAlternateIcon fontSize="small" />}
-            onClick={() => inputRef.current?.click()}
-          >
-            Thêm ảnh
-          </Button>
-        )}
-      </Stack>
+      </Typography>
 
       <input
         ref={inputRef}
@@ -116,12 +111,34 @@ export function ImageUploadField({
           display: 'flex',
           flexWrap: 'wrap',
           gap: 1,
-          minHeight: THUMB,
+          alignItems: empty ? 'center' : 'flex-start',
+          justifyContent: empty ? 'center' : 'flex-start',
+          minHeight: empty ? 112 : THUMB,
           p: 1,
           border: '1px dashed',
           borderColor: 'divider',
           borderRadius: 1,
+          ...(empty && canAdd
+            ? {
+                cursor: 'pointer',
+                '&:hover': { borderColor: 'primary.main', bgcolor: '#f7fafc' },
+              }
+            : {}),
         }}
+        onClick={empty && canAdd ? openPicker : undefined}
+        role={empty && canAdd ? 'button' : undefined}
+        tabIndex={empty && canAdd ? 0 : undefined}
+        aria-label={empty && canAdd ? `Thêm ${label}` : undefined}
+        onKeyDown={
+          empty && canAdd
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  openPicker()
+                }
+              }
+            : undefined
+        }
       >
         {value.map((image) => (
           <Box key={image.publicId} sx={{ position: 'relative', width: THUMB, height: THUMB }}>
@@ -183,10 +200,39 @@ export function ImageUploadField({
           </Stack>
         ))}
 
-        {value.length === 0 && pending.length === 0 ? (
-          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+        {empty && canAdd ? (
+          <AddIcon sx={{ fontSize: 36, color: 'text.secondary' }} />
+        ) : null}
+
+        {empty && !canAdd ? (
+          <Typography variant="caption" color="text.secondary">
             Chưa có ảnh
           </Typography>
+        ) : null}
+
+        {!empty && canAdd ? (
+          <Box
+            component="button"
+            type="button"
+            aria-label={`Thêm ${label}`}
+            onClick={openPicker}
+            sx={{
+              width: THUMB,
+              height: THUMB,
+              display: 'grid',
+              placeItems: 'center',
+              p: 0,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: 'transparent',
+              cursor: 'pointer',
+              color: 'text.secondary',
+              '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: '#f7fafc' },
+            }}
+          >
+            <AddIcon />
+          </Box>
         ) : null}
       </Box>
     </Stack>

@@ -91,3 +91,26 @@ export function ColumnHeaderSearch({
     />
   )
 }
+
+/** Ô chọn ngày trên hàng filter, cùng kiểu với tìm/select. */
+export function ColumnHeaderDate({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <TextField
+      size="small"
+      hiddenLabel
+      type="date"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{
+        ...FILTER_FIELD_SX,
+        '& input[type="date"]': { minWidth: 0, fontSize: 12 },
+      }}
+    />
+  )
+}
