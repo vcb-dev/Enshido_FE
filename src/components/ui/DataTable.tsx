@@ -305,6 +305,16 @@ export function DataTable<T, S = never>({
   const showSkeleton = loading && rows.length === 0
   // Cột đầu: STT, và mũi tên xổ / thu nếu bảng có dòng con.
   const leadCol = Boolean(showIndex || subRows)
+  // Khóa cứng: table-layout:fixed lấy độ rộng từ hàng đầu (hàng lọc), ô STT
+  // hàng đó nếu không có width sẽ nuốt hết phần dư khi bảng giãn 100%.
+  const leadColWidth = showIndex ? (subRows ? 72 : 44) : 44
+  const leadColSx = {
+    width: leadColWidth,
+    minWidth: leadColWidth,
+    maxWidth: leadColWidth,
+    boxSizing: 'border-box' as const,
+    px: 0.5,
+  }
   const colCount = columns.length + (leadCol ? 1 : 0)
   const showFilterRow = columns.some((column) => column.filter != null)
 
@@ -384,7 +394,7 @@ export function DataTable<T, S = never>({
     <TableCell
       align="center"
       rowSpan={grouped ? 2 : undefined}
-      sx={{ width: subRows ? (showIndex ? 76 : 44) : 48 }}
+      sx={leadColSx}
     >
       <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', justifyContent: 'center' }}>
         {subRows && expandableKeys.length ? (
@@ -479,10 +489,18 @@ export function DataTable<T, S = never>({
               ...tableSx,
             }}
           >
+            {leadCol || columns.some((column) => column.width != null) ? (
+              <colgroup>
+                {leadCol ? <col style={{ width: leadColWidth, minWidth: leadColWidth }} /> : null}
+                {columns.map((column) => (
+                  <col key={column.key} style={column.width != null ? { width: column.width } : undefined} />
+                ))}
+              </colgroup>
+            ) : null}
             <TableHead>
               {showFilterRow ? (
                 <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
-                  {leadCol ? <TableCell /> : null}
+                  {leadCol ? <TableCell sx={leadColSx} /> : null}
                   {columns.map((column) => (
                     <TableCell key={column.key}>{column.filter}</TableCell>
                   ))}
@@ -559,7 +577,7 @@ export function DataTable<T, S = never>({
                         }
                       >
                         {leadCol ? (
-                          <TableCell align="center">
+                          <TableCell align="center" sx={leadColSx}>
                             <Stack
                               direction="row"
                               spacing={0.25}
@@ -590,7 +608,7 @@ export function DataTable<T, S = never>({
                       ...subs.map((sub) => (
                         <TableRow key={`${key}::${subRows.key(sub)}`} hover sx={SUB_ROW_SX}>
                           {leadCol ? (
-                            <TableCell align="right">
+                            <TableCell align="right" sx={leadColSx}>
                               <SubdirectoryArrowRightIcon
                                 fontSize="small"
                                 sx={{ color: 'text.disabled', verticalAlign: 'middle' }}

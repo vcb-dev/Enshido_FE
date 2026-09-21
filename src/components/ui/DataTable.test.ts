@@ -78,4 +78,16 @@ describe('DataTable — dòng con', () => {
     expect(markup).not.toContain('Xổ tất cả')
     expect(markup).not.toContain('aria-expanded')
   })
+
+  it('cột STT có colgroup khóa rộng, kể cả khi hàng lọc đứng trước tiêu đề', () => {
+    const markup = html(
+      createElement(DataTable<Order, Sub>, {
+        ...props,
+        fixedLayout: true,
+        columns: [{ key: 'code', header: 'Mã', width: 168, filter: createElement('input') }],
+      }),
+    )
+    expect(markup).toContain('<colgroup>')
+    expect(markup).toMatch(/<col[^>]*style="[^"]*width:72px/)
+  })
 })
