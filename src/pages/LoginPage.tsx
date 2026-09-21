@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import { resolvePostLoginPath } from '../auth/homePath'
 import { Form, FormTextField } from '../components/ui'
+import { InstallAppBanner } from '../components/InstallAppBanner'
 import logo from '../assets/logo.png'
 
 type LoginFormValues = {
@@ -61,6 +62,8 @@ export function LoginPage() {
       }}
     >
       <Container maxWidth="xs">
+        {/* Thợ thường mở link từ nhóm Zalo — nhắc ra trình duyệt thật ngay từ lúc đăng nhập. */}
+        <InstallAppBanner sx={{ mb: 2 }} />
         <Paper sx={{ p: 3 }}>
           <Form form={form} onSubmit={onSubmit}>
             <Stack spacing={2}>

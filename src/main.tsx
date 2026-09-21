@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import './auth/sessionBoot'
+// Bắt beforeinstallprompt trước khi React dựng xong — sự kiện có thể bắn rất sớm.
+import './pwa/installPrompt'
 import { persistOptions } from './auth/offlineCache'
 import { watchConnectivity } from './auth/connectivity'
 import { AuthProvider } from './auth/AuthContext'
