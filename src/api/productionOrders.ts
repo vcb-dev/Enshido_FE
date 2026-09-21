@@ -66,6 +66,24 @@ export type ProductionOrderRow = {
   createdAt: string
   updatedAt: string
   images: Array<{ id: string; kind: ProductionImageKind; url: string }>
+  /** Phiếu con của đơn — thành dòng con xổ ra dưới đơn ở danh sách. Đơn chưa chia thì rỗng. */
+  subTickets: SubTicketSummary[]
+}
+
+/** Một phiếu con ở danh sách đơn: đang ở khâu nào, trạng thái gì, ai đang giữ hàng. */
+export type SubTicketSummary = {
+  code: string
+  no: number
+  qty: number
+  /** Gram bạc đã chia cho phiếu (gồm cả phần cấp thêm). */
+  silverWeight: string
+  note: string | null
+  createdAt: string
+  state: SubTicketState
+  /** Khâu đang chạy, hoặc khâu vừa xong nếu đang rảnh / đã chốt. Chưa giao khâu nào thì null. */
+  stage: StageCode | null
+  /** Người đang giữ hàng (đã nhận hoặc đang làm). Đang chờ nhận / rảnh thì null. */
+  workerName: string | null
 }
 
 export type ProductionOrderListResponse = {
@@ -182,7 +200,8 @@ export type SubTicket = {
   createdAt: string
 }
 
-export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images'> & {
+// Bản chi tiết có `subTickets` đầy đủ của riêng nó — bỏ bản tóm tắt của dòng danh sách đi.
+export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTickets'> & {
   btp: { id: string; sku: string | null; name: string } | null
   nvl: { id: string; sku: string | null; name: string } | null
   sourceOrderCode: string | null

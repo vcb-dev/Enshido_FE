@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type MouseEvent, type ReactNode } from 'react'
 import {
   Alert,
   Box,
   Button,
   Collapse,
   Divider,
+  IconButton,
   LinearProgress,
   Paper,
   Skeleton,
@@ -21,8 +22,12 @@ import {
   Typography,
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material'
-import type { Breakpoint } from '@mui/material/styles'
+import { keyframes, type Breakpoint } from '@mui/material/styles'
 import TuneIcon from '@mui/icons-material/Tune'
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
+import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight'
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess'
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
 import { useIsCardMode, useIsCompact, useIsMobile } from '../../hooks/useBreakpoint'
 import type { SortDir } from '../../hooks/useTableParams'
 
@@ -33,12 +38,17 @@ export type ColumnGroup = {
   headSx?: SxProps<Theme>
 }
 
-export type Column<T> = {
+export type Column<T, S = never> = {
   /** Định danh cột, cũng là khoá sắp xếp mặc định. */
   key: string
   header: ReactNode
   /** Tự vẽ ô. Không truyền thì lấy `row[field]` hoặc `row[key]`. */
   render?: (row: T, index: number) => ReactNode
+  /**
+   * Ô của dòng con (xem `DataTableProps.subRows`). Không khai thì ô để trống — dòng con chỉ
+   * nên hiện những gì khác dòng cha, phần kế thừa để trống cho dễ đọc.
+   */
+  renderSub?: (sub: S, parent: T) => ReactNode
   field?: keyof T
   align?: 'left' | 'center' | 'right'
   width?: number | string
@@ -71,10 +81,24 @@ export type Column<T> = {
  */
 export type CardRole = 'title' | 'meta' | 'body' | 'actions' | 'hidden'
 
-export type DataTableProps<T> = {
-  columns: Column<T>[]
+/**
+ * Dòng con xổ ra dưới dòng cha (vd. phiếu con dưới đơn mẹ), dùng chung bộ cột với dòng cha —
+ * mỗi cột tự vẽ ô dòng con qua `Column.renderSub`. Dòng có con thì bấm vào dòng (hoặc mũi tên
+ * ở cột đầu) để xổ / thu; tiêu đề cột đầu có nút xổ / thu tất cả.
+ */
+export type SubRowsConfig<T, S> = {
+  /** Các dòng con của một dòng; rỗng thì dòng đó không có mũi tên. */
+  get: (row: T) => S[]
+  key: (sub: S) => string
+  /** Tên gọi theo số lượng, cho tooltip và trình đọc màn hình — vd `3 phiếu con`. */
+  label?: (count: number) => string
+}
+
+export type DataTableProps<T, S = never> = {
+  columns: Column<T, S>[]
   rows: T[]
   rowKey: (row: T, index: number) => string
+  subRows?: SubRowsConfig<T, S>
   loading?: boolean
   errorText?: string
   emptyText?: ReactNode
@@ -93,6 +117,7 @@ export type DataTableProps<T> = {
   showIndex?: boolean
   /** Số dòng đã bỏ qua ở các trang trước, để STT chạy tiếp. */
   indexOffset?: number
+  /** Dòng có dòng con thì bấm vào là xổ / thu, không gọi `onRowClick`. */
   onRowClick?: (row: T) => void
   isRowSelected?: (row: T) => boolean
   sort?: { key: string; dir: SortDir }
@@ -157,14 +182,65 @@ function defaultCell(value: unknown): ReactNode {
   return String(value)
 }
 
+const subRowIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
+
+/** Dòng con: nền nhạt hơn dòng cha, hiện dần khi xổ ra. */
+const SUB_ROW_SX = { bgcolor: '#f6f8fa', animation: `${subRowIn} 160ms ease-out` } as const
+/** Dòng cha đang xổ: tô nhẹ để nhìn ra nhóm. */
+const OPEN_PARENT_SX = { bgcolor: '#eef3f8', cursor: 'pointer' } as const
+
+/**
+ * Bấm vào link / nút / ô nhập bên trong dòng thì để chúng tự xử lý, không xổ / thu dòng.
+ * Kéo chuột bôi đen chữ cũng không tính là bấm.
+ */
+function isToggleClick(event: MouseEvent) {
+  if (typeof window !== 'undefined' && window.getSelection()?.toString()) return false
+  const target = event.target
+  return !(
+    target instanceof Element &&
+    target.closest(
+      'a, button, input, textarea, select, label, [role="button"], [role="checkbox"], [role="menuitem"]',
+    )
+  )
+}
+
+/** Mũi tên xổ / thu ở cột đầu. */
+function ExpandButton({
+  open,
+  label,
+  onToggle,
+}: {
+  open: boolean
+  label: string
+  onToggle: () => void
+}) {
+  return (
+    <Tooltip title={open ? `Thu gọn ${label}` : `Xem ${label}`}>
+      <IconButton
+        size="small"
+        aria-expanded={open}
+        aria-label={open ? `Thu gọn ${label}` : `Xem ${label}`}
+        onClick={onToggle}
+        sx={{ p: 0.25 }}
+      >
+        <KeyboardArrowRightIcon
+          fontSize="small"
+          sx={{ transition: 'transform 150ms', transform: open ? 'rotate(90deg)' : 'none' }}
+        />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
 /**
  * Bảng dùng chung: sắp xếp, phân trang, trạng thái đang tải / lỗi / rỗng.
  * Ghép với [useTableParams](../../hooks/useTableParams.ts) để lưu trạng thái lên URL.
  */
-export function DataTable<T>({
+export function DataTable<T, S = never>({
   columns,
   rows,
   rowKey,
+  subRows,
   loading,
   errorText,
   emptyText = 'Chưa có dữ liệu.',
@@ -193,27 +269,77 @@ export function DataTable<T>({
   renderCard,
   sx,
   tableSx,
-}: DataTableProps<T>) {
+}: DataTableProps<T, S>) {
   // Dưới `md` cả app chuyển sang một cổng cuộn duy nhất (Box trong AppShell):
   // bảng bỏ khoá chiều cao và bỏ sticky header, nội dung chảy ra ngoài.
   const flowMode = useIsCompact()
   const cardMode = useIsCardMode(cardBreakpoint)
   const isMobile = useIsMobile()
 
+  // Dòng đang xổ, theo `rowKey`. Giữ nguyên qua các lần làm mới dữ liệu.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const subsOf = (row: T): S[] => subRows?.get(row) ?? []
+  const labelOf = (count: number) => subRows?.label?.(count) ?? `${count} dòng con`
+  const toggle = (key: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
+  const expandableKeys = subRows
+    ? rows.flatMap((row, index) => (subsOf(row).length ? [rowKey(row, index)] : []))
+    : []
+  const allOpen = expandableKeys.length > 0 && expandableKeys.every((key) => expanded.has(key))
+  const toggleAll = () =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      for (const key of expandableKeys) {
+        if (allOpen) next.delete(key)
+        else next.add(key)
+      }
+      return next
+    })
+
   const showPagination = page != null && pageSize != null && onPageChange != null
   const rowCount = total ?? rows.length
   const showSkeleton = loading && rows.length === 0
-  const colCount = columns.length + (showIndex ? 1 : 0)
+  // Cột đầu: STT, và mũi tên xổ / thu nếu bảng có dòng con.
+  const leadCol = Boolean(showIndex || subRows)
+  const colCount = columns.length + (leadCol ? 1 : 0)
   const showFilterRow = columns.some((column) => column.filter != null)
 
-  function cellContent(column: Column<T>, row: T, index: number): ReactNode {
+  function cellContent(column: Column<T, S>, row: T, index: number): ReactNode {
     return column.render
       ? column.render(row, index)
       : defaultCell((row as Record<string, unknown>)[(column.field as string) ?? column.key])
   }
 
+  /** Một ô thân bảng — dùng chung cho dòng cha và dòng con để canh lề / cắt chữ giống nhau. */
+  function bodyCell(column: Column<T, S>, content: ReactNode) {
+    const cell = (
+      <TableCell
+        key={column.key}
+        align={column.align ?? (column.numeric ? 'right' : undefined)}
+        className={column.className}
+        sx={{
+          ...(column.numeric ? NUMERIC_SX : null),
+          ...(column.ellipsis ? ELLIPSIS_SX : null),
+          ...column.cellSx,
+        }}
+      >
+        {content}
+      </TableCell>
+    )
+    if (!column.ellipsis || typeof content !== 'string') return cell
+    return (
+      <Tooltip key={column.key} title={content} disableHoverListener={!content || content === '—'}>
+        {cell}
+      </Tooltip>
+    )
+  }
+
   // Gom cột liền kề cùng nhóm thành từng dải; cột không nhóm là dải một cột.
-  const bands: Array<{ group?: ColumnGroup; columns: Column<T>[] }> = []
+  const bands: Array<{ group?: ColumnGroup; columns: Column<T, S>[] }> = []
   for (const column of columns) {
     const last = bands[bands.length - 1]
     if (column.group && last?.group?.key === column.group.key) last.columns.push(column)
@@ -221,7 +347,7 @@ export function DataTable<T>({
   }
   const grouped = bands.some((band) => band.group)
 
-  function headCell(column: Column<T>, rowSpan?: number) {
+  function headCell(column: Column<T, S>, rowSpan?: number) {
     const sortKey = column.sortKey ?? column.key
     const active = sort?.key === sortKey
     return (
@@ -254,9 +380,27 @@ export function DataTable<T>({
     )
   }
 
-  const indexHeadCell = showIndex ? (
-    <TableCell align="center" rowSpan={grouped ? 2 : undefined} sx={{ width: 48 }}>
-      STT
+  const indexHeadCell = leadCol ? (
+    <TableCell
+      align="center"
+      rowSpan={grouped ? 2 : undefined}
+      sx={{ width: subRows ? (showIndex ? 76 : 44) : 48 }}
+    >
+      <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', justifyContent: 'center' }}>
+        {subRows && expandableKeys.length ? (
+          <Tooltip title={allOpen ? 'Thu gọn tất cả' : 'Xổ tất cả'}>
+            <IconButton
+              size="small"
+              aria-label={allOpen ? 'Thu gọn tất cả' : 'Xổ tất cả'}
+              onClick={toggleAll}
+              sx={{ p: 0.25 }}
+            >
+              {allOpen ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+        ) : null}
+        {showIndex ? <span>STT</span> : null}
+      </Stack>
     </TableCell>
   ) : null
 
@@ -311,6 +455,9 @@ export function DataTable<T>({
             rowKey={rowKey}
             cellContent={cellContent}
             renderCard={renderCard}
+            subRows={subRows}
+            expanded={expanded}
+            onToggle={toggle}
             showIndex={showIndex}
             indexOffset={indexOffset}
             loading={loading}
@@ -335,7 +482,7 @@ export function DataTable<T>({
             <TableHead>
               {showFilterRow ? (
                 <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
-                  {showIndex ? <TableCell /> : null}
+                  {leadCol ? <TableCell /> : null}
                   {columns.map((column) => (
                     <TableCell key={column.key}>{column.filter}</TableCell>
                   ))}
@@ -385,52 +532,78 @@ export function DataTable<T>({
                       ))}
                     </TableRow>
                   ))
-                : rows.map((row, index) => (
-                    <TableRow
-                      key={rowKey(row, index)}
-                      hover
-                      selected={isRowSelected?.(row) ?? false}
-                      onClick={onRowClick ? () => onRowClick(row) : undefined}
-                      sx={onRowClick ? { cursor: 'pointer' } : undefined}
-                    >
-                      {showIndex ? (
-                        <TableCell align="center">{indexOffset + index + 1}</TableCell>
-                      ) : null}
-                      {columns.map((column) => {
-                        const content = column.render
-                          ? column.render(row, index)
-                          : defaultCell(
-                              (row as Record<string, unknown>)[
-                                (column.field as string) ?? column.key
-                              ],
-                            )
-                        const cell = (
-                          <TableCell
-                            key={column.key}
-                            align={column.align ?? (column.numeric ? 'right' : undefined)}
-                            className={column.className}
-                            sx={{
-                              ...(column.numeric ? NUMERIC_SX : null),
-                              ...(column.ellipsis ? ELLIPSIS_SX : null),
-                              ...column.cellSx,
-                            }}
-                          >
-                            {content}
+                : rows.flatMap((row, index) => {
+                    const key = rowKey(row, index)
+                    const subs = subsOf(row)
+                    const open = subs.length > 0 && expanded.has(key)
+                    const parent = (
+                      <TableRow
+                        key={key}
+                        hover
+                        selected={isRowSelected?.(row) ?? false}
+                        onClick={
+                          subs.length
+                            ? (event) => {
+                                if (isToggleClick(event)) toggle(key)
+                              }
+                            : onRowClick
+                              ? () => onRowClick(row)
+                              : undefined
+                        }
+                        sx={
+                          open
+                            ? OPEN_PARENT_SX
+                            : subs.length || onRowClick
+                              ? { cursor: 'pointer' }
+                              : undefined
+                        }
+                      >
+                        {leadCol ? (
+                          <TableCell align="center">
+                            <Stack
+                              direction="row"
+                              spacing={0.25}
+                              sx={{ alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              {subRows ? (
+                                subs.length ? (
+                                  <ExpandButton
+                                    open={open}
+                                    label={labelOf(subs.length)}
+                                    onToggle={() => toggle(key)}
+                                  />
+                                ) : (
+                                  // Giữ chỗ để STT các dòng không có con vẫn thẳng cột.
+                                  <Box sx={{ width: 24, flexShrink: 0 }} />
+                                )
+                              ) : null}
+                              {showIndex ? <span>{indexOffset + index + 1}</span> : null}
+                            </Stack>
                           </TableCell>
-                        )
-                        if (!column.ellipsis || typeof content !== 'string') return cell
-                        return (
-                          <Tooltip
-                            key={column.key}
-                            title={content}
-                            disableHoverListener={!content || content === '—'}
-                          >
-                            {cell}
-                          </Tooltip>
-                        )
-                      })}
-                    </TableRow>
-                  ))}
+                        ) : null}
+                        {columns.map((column) => bodyCell(column, cellContent(column, row, index)))}
+                      </TableRow>
+                    )
+                    if (!open || !subRows) return [parent]
+                    return [
+                      parent,
+                      ...subs.map((sub) => (
+                        <TableRow key={`${key}::${subRows.key(sub)}`} hover sx={SUB_ROW_SX}>
+                          {leadCol ? (
+                            <TableCell align="right">
+                              <SubdirectoryArrowRightIcon
+                                fontSize="small"
+                                sx={{ color: 'text.disabled', verticalAlign: 'middle' }}
+                              />
+                            </TableCell>
+                          ) : null}
+                          {columns.map((column) =>
+                            bodyCell(column, column.renderSub ? column.renderSub(sub, row) : null),
+                          )}
+                        </TableRow>
+                      )),
+                    ]
+                  })}
 
               {!loading && rows.length === 0 ? (
                 <TableRow>
@@ -468,7 +641,7 @@ export function DataTable<T>({
 }
 
 /** Nhãn của một cột khi hiển thị trong thẻ: ưu tiên `cardLabel`, rồi `group · header`. */
-function cardLabelOf<T>(column: Column<T>): ReactNode {
+function cardLabelOf<T, S>(column: Column<T, S>): ReactNode {
   if (column.cardLabel != null) return column.cardLabel
   if (column.group) {
     return (
@@ -486,7 +659,7 @@ function cardLabelOf<T>(column: Column<T>): ReactNode {
  * `actions` tự nhận vai trò nút hành động.
  */
 /** Chế độ thẻ không có hàng tiêu đề, nên ô lọc của từng cột gom vào một khối thu gọn. */
-function CardFilters<T>({ columns }: { columns: Column<T>[] }) {
+function CardFilters<T, S>({ columns }: { columns: Column<T, S>[] }) {
   const [open, setOpen] = useState(false)
   const filterable = columns.filter((column) => column.filter != null)
 
@@ -522,23 +695,29 @@ function CardFilters<T>({ columns }: { columns: Column<T>[] }) {
   )
 }
 
-function CardList<T>({
+function CardList<T, S>({
   columns,
   rows,
   rowKey,
   cellContent,
   renderCard,
+  subRows,
+  expanded,
+  onToggle,
   showIndex,
   indexOffset,
   loading,
   showSkeleton,
   emptyText,
 }: {
-  columns: Column<T>[]
+  columns: Column<T, S>[]
   rows: T[]
   rowKey: (row: T, index: number) => string
-  cellContent: (column: Column<T>, row: T, index: number) => ReactNode
+  cellContent: (column: Column<T, S>, row: T, index: number) => ReactNode
   renderCard?: (row: T, index: number) => ReactNode
+  subRows?: SubRowsConfig<T, S>
+  expanded: ReadonlySet<string>
+  onToggle: (key: string) => void
   showIndex?: boolean
   indexOffset: number
   loading?: boolean
@@ -546,17 +725,17 @@ function CardList<T>({
   emptyText: ReactNode
 }) {
   const declaredTitle = columns.some((column) => column.card === 'title')
-  const roleOf = (column: Column<T>, index: number): CardRole => {
+  const roleOf = (column: Column<T, S>, index: number): CardRole => {
     if (column.card) return column.card
     if (column.key === 'actions') return 'actions'
     if (!declaredTitle && index === 0) return 'title'
     return 'body'
   }
 
-  const titles: Column<T>[] = []
-  const metas: Column<T>[] = []
-  const bodies: Column<T>[] = []
-  const actions: Column<T>[] = []
+  const titles: Column<T, S>[] = []
+  const metas: Column<T, S>[] = []
+  const bodies: Column<T, S>[] = []
+  const actions: Column<T, S>[] = []
   columns.forEach((column, index) => {
     const role = roleOf(column, index)
     if (role === 'title') titles.push(column)
@@ -589,9 +768,12 @@ function CardList<T>({
     <Stack spacing={1} sx={{ p: 1.5, width: '100%', minWidth: 0 }}>
       {rows.map((row, index) => {
         if (renderCard) return <Box key={rowKey(row, index)}>{renderCard(row, index)}</Box>
+        const key = rowKey(row, index)
+        const subs = subRows?.get(row) ?? []
+        const open = expanded.has(key)
 
         return (
-          <Paper key={rowKey(row, index)} variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
+          <Paper key={key} variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
             <Stack
               direction="row"
               spacing={1}
@@ -670,6 +852,91 @@ function CardList<T>({
                     </Stack>
                   ))}
                 </Box>
+              </>
+            ) : null}
+
+            {subRows && subs.length ? (
+              <>
+                <Button
+                  size="small"
+                  aria-expanded={open}
+                  onClick={() => onToggle(key)}
+                  startIcon={
+                    <KeyboardArrowRightIcon
+                      sx={{ transition: 'transform 150ms', transform: open ? 'rotate(90deg)' : 'none' }}
+                    />
+                  }
+                  sx={{ mt: 1, px: 0.5 }}
+                >
+                  {subRows.label?.(subs.length) ?? `${subs.length} dòng con`}
+                </Button>
+                <Collapse in={open} unmountOnExit>
+                  <Stack spacing={0.75} sx={{ mt: 0.75 }}>
+                    {subs.map((sub) => {
+                      // Thẻ con chỉ hiện những cột có `renderSub` — phần kế thừa từ dòng cha bỏ qua.
+                      const has = (column: Column<T, S>) => column.renderSub != null
+                      const subCell = (column: Column<T, S>) => column.renderSub!(sub, row)
+                      return (
+                        <Paper
+                          key={subRows.key(sub)}
+                          variant="outlined"
+                          sx={{ p: 1, bgcolor: '#f6f8fa', minWidth: 0 }}
+                        >
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}
+                          >
+                            <Box sx={{ minWidth: 0 }}>
+                              {titles.filter(has).map((column) => (
+                                <Typography
+                                  key={column.key}
+                                  variant="body2"
+                                  component="div"
+                                  sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}
+                                >
+                                  {subCell(column)}
+                                </Typography>
+                              ))}
+                              <Stack
+                                direction="row"
+                                sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.25, alignItems: 'center' }}
+                              >
+                                {metas.filter(has).map((column) => (
+                                  <Box key={column.key}>{subCell(column)}</Box>
+                                ))}
+                              </Stack>
+                            </Box>
+                            {actions.filter(has).map((column) => (
+                              <Box key={column.key} sx={{ flexShrink: 0 }}>
+                                {subCell(column)}
+                              </Box>
+                            ))}
+                          </Stack>
+                          {bodies.filter(has).map((column) => (
+                            <Stack
+                              key={column.key}
+                              direction="row"
+                              spacing={1}
+                              sx={{ justifyContent: 'space-between', alignItems: 'baseline', mt: 0.5 }}
+                            >
+                              <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                                {cardLabelOf(column)}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                component="div"
+                                sx={{ textAlign: 'right', overflowWrap: 'anywhere' }}
+                              >
+                                {subCell(column)}
+                              </Typography>
+                            </Stack>
+                          ))}
+                        </Paper>
+                      )
+                    })}
+                  </Stack>
+                </Collapse>
               </>
             ) : null}
           </Paper>
