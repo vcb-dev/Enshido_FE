@@ -21,6 +21,15 @@ export function useOrderMutation<V>(
       const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn: () => void) => window.setTimeout(fn, 0)
       idle(() => {
         void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+        // KCS chốt / gỡ phiếu con ghi phiếu nhập kho thành phẩm; tiền công khâu đổi giá vốn trong sổ.
+        for (const queryKey of [
+          ['finished-goods-stock'],
+          ['finished-goods-receipts'],
+          ['finished-goods-order-options'],
+          ['finished-product-options'],
+        ]) {
+          void queryClient.invalidateQueries({ queryKey })
+        }
       })
     },
     onError: (error: Error) => toast.error(error.message),
