@@ -128,6 +128,11 @@ export function ProductionOrderDetailPage() {
     queryFn: () => getProductionOrderApi(code),
     staleTime: 15_000,
     placeholderData: keepPreviousData,
+    // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
+    // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
+    // giữa chừng không xoá thứ người dùng đang gõ.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -533,7 +538,17 @@ export function ProductionOrderDetailPage() {
         saving={saveHandover.isPending}
         onClose={() => setHandoverOpen(false)}
         onExited={() => setHandover(null)}
-        onSave={(payload) => saveHandover.mutate(payload, { onSuccess: () => setHandoverOpen(false) })}
+        onSave={(payload) =>
+          saveHandover.mutate(payload, {
+            onSuccess: () => setHandoverOpen(false),
+            // Máy chủ từ chối thì form đang mở đã không còn đúng (phiếu đổi trạng thái, thiếu
+            // quyền…): đóng lại, toast đã nói lý do, tải lại đơn để thấy trạng thái thật.
+            onError: () => {
+              setHandoverOpen(false)
+              void queryClient.invalidateQueries({ queryKey: ['production-order', code] })
+            },
+          })
+        }
       />
 
       <KcsReturnDialog

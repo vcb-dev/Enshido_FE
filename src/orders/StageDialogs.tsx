@@ -20,6 +20,7 @@ import {
   FormTextField,
   TextInput,
 } from '../components/ui'
+import { useAuth } from '../auth/AuthContext'
 import { useOperatorName } from '../hooks/useOperatorName'
 import {
   formatDateShort,
@@ -82,6 +83,8 @@ export function HandoverDialog({
   onSave: (payload: HandoverPayload & { stage?: StageCode }) => void
 }) {
   const operatorName = useOperatorName()
+  const { user } = useAuth()
+  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
   const form = useForm<HandoverValues>({
     defaultValues: {
       stage: '',
@@ -141,6 +144,10 @@ export function HandoverDialog({
     : ticket
       ? `Xác nhận giao ${stageLabel} — phiếu ${ticket.code}`
       : `Sửa thông tin giao — ${stageLabel}${entry?.subTicketNo ? ` (phiếu con ${entry.subTicketNo})` : ''}`
+  // Người đang xác nhận cũng chính là thợ đã nhận phiếu. Khớp luật ở BE: chỉ admin được
+  // tự giao cho mình, người khác bấm cũng chỉ nhận lỗi nên chặn luôn ở đây.
+  const selfConfirm = Boolean(ticket && user && ticket.claimedByUserId === user.id)
+  const selfConfirmBlocked = selfConfirm && !isAdmin
 
   function submit(values: HandoverValues) {
     onSave({
@@ -161,11 +168,24 @@ export function HandoverDialog({
       form={form}
       onSubmit={submit}
       saving={saving}
+      submitDisabled={selfConfirmBlocked}
       submitLabel={starting ? 'Giao thợ' : confirming ? 'Xác nhận giao' : 'Lưu'}
+      pendingLabel={starting ? 'Đang giao…' : confirming ? 'Đang xác nhận…' : 'Đang lưu…'}
       maxWidth="sm"
       onClose={onClose}
       onExited={onExited}
     >
+      {selfConfirmBlocked ? (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          Bạn là thợ đã nhận phiếu này — không tự xác nhận giao cho mình được. Nhờ người khác
+          cân bạc và xác nhận.
+        </Alert>
+      ) : selfConfirm ? (
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          Bạn đang tự xác nhận giao cho chính mình (quyền admin) — lần cân bạc này chỉ có một
+          người. Lịch sử khâu sẽ ghi người giao và thợ là cùng một người.
+        </Alert>
+      ) : null}
       <FormRow columns={2} sx={{ mt: 1 }}>
         {starting ? (
           <FormSelect<HandoverValues>

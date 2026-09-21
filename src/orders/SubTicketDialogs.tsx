@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Alert, Checkbox, FormControlLabel, Stack, Typography } from '@mui/material'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import type {
@@ -48,8 +48,16 @@ export function SubTicketFormDialog({
   const form = useForm<TicketValues>({ defaultValues: { qty: '', silverWeight: '', note: '' } })
   const remaining = useMemo(() => remainingSplit(order, ticket?.id), [order, ticket])
 
+  // Nạp form một lần mỗi lần mở. Trang đơn tự làm mới định kỳ; `remaining` đổi theo mỗi lần
+  // có ai đó đổi đơn, nạp lại theo nó là xoá mất số người dùng đang gõ.
+  const seeded = useRef(false)
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      seeded.current = false
+      return
+    }
+    if (seeded.current) return
+    seeded.current = true
     form.reset(
       ticket
         ? { qty: String(ticket.qty), silverWeight: ticket.silverWeight, note: ticket.note ?? '' }
@@ -145,21 +153,34 @@ function lastStageOf(order: ProductionOrderDetail, ticket: SubTicket): StageCode
   return last?.stage ?? null
 }
 
-/** Các khâu mở được cho từng phiếu con đang rảnh — không lùi khâu trừ khi đơn đang làm lại. */
+/**
+ * Các khâu mở được cho từng phiếu con đang rảnh — không lùi khâu trừ khi đơn đang làm lại.
+ * Mỗi phiếu đi khâu của riêng nó: phiếu xong trước thì mở khâu sau luôn, không đợi các phiếu
+ * còn đang làm khâu cũ (khớp luật ở BE).
+ */
 export function openableStages(order: ProductionOrderDetail) {
-  const active = order.subTickets.find((ticket) => ticket.activeStage)?.activeStage ?? null
   const reworking = !isInStage(order.status)
   const idle = order.subTickets.filter((ticket) => ticket.state === 'IDLE')
   const byTicket = new Map<number, StageCode[]>()
+  const lastBy = new Map<number, StageCode | null>()
   for (const ticket of idle) {
     const last = lastStageOf(order, ticket)
-    const allowed =
-      !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last))
-    // Các phiếu khác đang ở một khâu thì chỉ mở đúng khâu đó cho phiếu còn lại.
-    byTicket.set(ticket.no, active ? allowed.filter((stage) => stage === active) : allowed)
+    lastBy.set(ticket.no, last)
+    byTicket.set(
+      ticket.no,
+      !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last)),
+    )
   }
   const stages = STAGES.filter((stage) => idle.some((ticket) => byTicket.get(ticket.no)?.includes(stage)))
-  return { stages, idle, byTicket }
+  /** Các khâu phiếu này sẽ bị bỏ qua nếu mở `stage` — rỗng nghĩa là đúng khâu kế tiếp. */
+  const skipped = (no: number, stage: StageCode): StageCode[] => {
+    const last = lastBy.get(no)
+    if (!last || reworking) return []
+    return STAGES.filter(
+      (item) => STAGES.indexOf(item) > STAGES.indexOf(last) && STAGES.indexOf(item) < STAGES.indexOf(stage),
+    )
+  }
+  return { stages, idle, byTicket, skipped }
 }
 
 export function OpenStageDialog({
@@ -176,27 +197,38 @@ export function OpenStageDialog({
   onSave: (payload: { stage: StageCode; nos: number[] }) => void
 }) {
   const form = useForm<OpenStageValues>({ defaultValues: { stage: '', nos: [] } })
-  const { stages, idle, byTicket } = useMemo(() => openableStages(order), [order])
+  const { stages, idle, byTicket, skipped } = useMemo(() => openableStages(order), [order])
   const stage = useWatch({ control: form.control, name: 'stage' })
   const eligible = idle.filter((ticket) => stage && byTicket.get(ticket.no)?.includes(stage))
 
-  useEffect(() => {
-    if (!open) return
-    const first = stages[0] ?? ''
-    form.reset({
-      stage: first,
-      nos: idle.filter((ticket) => first && byTicket.get(ticket.no)?.includes(first)).map((ticket) => ticket.no),
-    })
-  }, [open, stages, idle, byTicket, form])
+  // Chỉ chọn sẵn phiếu mà khâu này là khâu kế tiếp. Phiếu con đi lệch khâu nhau, nên chọn
+  // Khắc cho phiếu đã xong Vào đá thì phiếu mới xong Nguội cũng "mở được" Khắc — tick sẵn nó
+  // là để nó âm thầm nhảy cóc Vào đá. Muốn bỏ qua khâu thật thì người dùng tự tick.
+  const preselect = (target: StageCode | '') =>
+    target
+      ? idle
+          .filter((ticket) => byTicket.get(ticket.no)?.includes(target) && skipped(ticket.no, target).length === 0)
+          .map((ticket) => ticket.no)
+      : []
 
-  // Đổi khâu thì chọn lại mọi phiếu mở được khâu đó.
+  // Chọn khâu và tick sẵn phiếu chỉ lúc mở hộp thoại và lúc người dùng đổi khâu — không làm
+  // lại mỗi lần trang đơn tự làm mới, kẻo xoá mất những ô người dùng vừa tick / bỏ tick.
+  const seededStage = useRef<StageCode | '' | null>(null)
   useEffect(() => {
-    if (!open || !stage) return
-    form.setValue(
-      'nos',
-      idle.filter((ticket) => byTicket.get(ticket.no)?.includes(stage)).map((ticket) => ticket.no),
-    )
-  }, [open, stage, idle, byTicket, form])
+    if (!open) {
+      seededStage.current = null
+      return
+    }
+    if (seededStage.current === null) {
+      const first = stages[0] ?? ''
+      seededStage.current = first
+      form.reset({ stage: first, nos: preselect(first) })
+      return
+    }
+    if (!stage || stage === seededStage.current) return
+    seededStage.current = stage
+    form.setValue('nos', preselect(stage))
+  }, [open, stage, stages, idle, byTicket, skipped, form])
 
   const title = 'Mở khâu cho thợ nhận'
 
@@ -251,7 +283,16 @@ export function OpenStageDialog({
                     }
                   />
                 }
-                label={`${ticket.code} · ${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g`}
+                label={
+                  <>
+                    {`${ticket.code} · ${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g`}
+                    {stage && skipped(ticket.no, stage).length ? (
+                      <Typography component="span" variant="caption" color="warning.main" sx={{ ml: 0.75 }}>
+                        bỏ qua {skipped(ticket.no, stage).map((item) => STAGE_LABEL[item]).join(', ')}
+                      </Typography>
+                    ) : null}
+                  </>
+                }
               />
             ))}
             {eligible.length === 0 ? (

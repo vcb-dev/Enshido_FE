@@ -6,6 +6,7 @@ import type {
   ProductionOrderDetail,
   ProductionOrderListResponse,
   ProductionOrderRow,
+  SubTicketSummary,
 } from '../api/productionOrders'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock, invalidateNvlWarehouse } from './nvlStock'
@@ -129,7 +130,35 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
       kind: image.kind,
       url: image.url,
     })),
+    subTickets: summarizeSubTickets(order),
   }
+}
+
+/**
+ * Tóm tắt phiếu con từ bản chi tiết — khớp `subTicketSummary` bên BE, để dòng danh sách vá
+ * sau mỗi lần sửa đơn hiện y như lúc tải lại từ máy chủ.
+ */
+export function summarizeSubTickets(order: ProductionOrderDetail): SubTicketSummary[] {
+  return order.subTickets.map((ticket) => {
+    const own = order.stages.filter((entry) => entry.subTicketId === ticket.id)
+    const open = ticket.openEntryId ? own.find((entry) => entry.id === ticket.openEntryId) : undefined
+    return {
+      code: ticket.code,
+      no: ticket.no,
+      qty: ticket.qty,
+      silverWeight: ticket.silverWeight,
+      note: ticket.note,
+      createdAt: ticket.createdAt,
+      state: ticket.state,
+      stage: ticket.activeStage ?? own.at(-1)?.stage ?? null,
+      workerName:
+        ticket.state === 'CLAIMED'
+          ? ticket.claimedByName
+          : ticket.state === 'WORKING' || ticket.state === 'SUBMITTED'
+            ? (open?.craftsmanName ?? null)
+            : null,
+    }
+  })
 }
 
 function patchOrderList(

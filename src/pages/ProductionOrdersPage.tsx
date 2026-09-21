@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Stack, Tab, Tabs } from '@mui/material'
+import { Box, Button, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -17,14 +17,16 @@ import {
   type ProductionRequestType,
   type ProductionSource,
   type ProductionStatus,
+  type SubTicketSummary,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
-import { formatStockedDate } from '../api/inventory'
+import { formatQty, formatStockedDate } from '../api/inventory'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
   ColumnHeaderSearch,
   DataTable,
+  EyeIcon,
   PageHeader,
   RowActions,
   type Column,
@@ -38,8 +40,9 @@ import {
   REQUEST_TYPE_META,
   STATUS_META,
   STATUS_TABS,
+  SUB_TICKET_STATE_META,
 } from '../orders/catalog'
-import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
+import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved } from '../orders/orderCache'
@@ -261,6 +264,11 @@ export function ProductionOrdersPage() {
         columns={columns}
         rows={items}
         rowKey={(row) => row.id}
+        subRows={{
+          get: (row) => row.subTickets,
+          key: (sub) => sub.code,
+          label: (count) => `${count} phiếu con`,
+        }}
         loading={list.isFetching}
         errorText={list.error instanceof Error ? list.error.message : undefined}
         emptyText={
@@ -272,7 +280,7 @@ export function ProductionOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={listSource === 'BTP' ? 1408 : 1288}
+        minWidth={listSource === 'BTP' ? 1436 : 1316}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         sort={table.sortState}
@@ -366,8 +374,8 @@ function orderColumns(
     receivedDate: ReactNode
     dueDate: ReactNode
   },
-): Column<ProductionOrderRow>[] {
-  const btpSku: Column<ProductionOrderRow> | null =
+): Column<ProductionOrderRow, SubTicketSummary>[] {
+  const btpSku: Column<ProductionOrderRow, SubTicketSummary> | null =
     source === 'BTP'
       ? {
           key: 'btpSku',
@@ -386,6 +394,7 @@ function orderColumns(
       sortable: true,
       card: 'meta',
       render: (row) => formatDateTime(row.createdAt),
+      renderSub: (sub) => formatDateTime(sub.createdAt),
     },
     {
       key: 'status',
@@ -394,6 +403,7 @@ function orderColumns(
       sortable: true,
       card: 'meta',
       render: (row) => <StatusChip status={row.status} />,
+      renderSub: (sub) => <SubTicketStatus sub={sub} />,
     },
     {
       key: 'code',
@@ -403,6 +413,29 @@ function orderColumns(
       card: 'title',
       cellSx: { fontWeight: 700 },
       filter: filters.search,
+      render: (row) =>
+        row.subTickets.length ? (
+          <>
+            {row.code}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
+              {row.subTickets.length} phiếu con
+            </Typography>
+          </>
+        ) : (
+          row.code
+        ),
+      renderSub: (sub) => (
+        <>
+          <Link component={RouterLink} to={`/tickets/${sub.code}`} sx={{ fontWeight: 600 }}>
+            {sub.code}
+          </Link>
+          {sub.workerName ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
+              thợ {sub.workerName}
+            </Typography>
+          ) : null}
+        </>
+      ),
     },
     ...(btpSku ? [btpSku] : []),
     {
@@ -420,7 +453,7 @@ function orderColumns(
             width: 80,
             ellipsis: true,
             render: (row: ProductionOrderRow) => row.sizeLabel ?? '—',
-          } satisfies Column<ProductionOrderRow>,
+          } satisfies Column<ProductionOrderRow, SubTicketSummary>,
         ]
       : []),
     {
@@ -430,6 +463,15 @@ function orderColumns(
       numeric: true,
       sortable: true,
       render: (row) => `${row.qty}${row.qtyUnit ? ` ${row.qtyUnit}` : ''}`,
+      renderSub: (sub, row) => (
+        <>
+          {sub.qty}
+          {row.qtyUnit ? ` ${row.qtyUnit}` : ''}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            {formatQty(sub.silverWeight)} g bạc
+          </Typography>
+        </>
+      ),
     },
     { key: 'returnedQty', header: 'Đã trả', width: 68, numeric: true },
     {
@@ -447,7 +489,13 @@ function orderColumns(
       render: (row) => row.trackingCode ?? '—',
     },
     { key: 'closedBy', header: 'Người chốt', width: 120, ellipsis: true, sortable: true },
-    { key: 'description', header: 'Mô tả / Yêu cầu sản phẩm', width: 260, ellipsis: true },
+    {
+      key: 'description',
+      header: 'Mô tả / Yêu cầu sản phẩm',
+      width: 260,
+      ellipsis: true,
+      renderSub: (sub) => sub.note,
+    },
     {
       key: 'size',
       header: 'Kích thước',
@@ -492,6 +540,33 @@ function orderColumns(
           />
         </Box>
       ),
+      renderSub: (sub) => (
+        <Stack direction="row" sx={{ justifyContent: 'center' }}>
+          <Tooltip title="Xem phiếu con">
+            <IconButton size="small" aria-label={`Xem phiếu con ${sub.code}`} component={RouterLink} to={`/tickets/${sub.code}`}>
+              <EyeIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      ),
     },
   ]
+}
+
+/**
+ * Trạng thái của một phiếu con: khâu đang ở (cùng màu chip với trạng thái đơn ở dòng cha, để
+ * dò cột là thấy tiến độ), bên dưới là bước trong khâu — chờ thợ nhận, đang làm, chờ KCS…
+ */
+function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
+  if (sub.state === 'FINISH') return <StatusChip status="FINISHING" />
+  if (sub.state === 'DEFECT') return <StatusChip status="DEFECT" />
+  if (!sub.stage) return <SubTicketStateChip state="IDLE" label="Chưa giao khâu" />
+  return (
+    <>
+      <StatusChip status={sub.stage} />
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+        {SUB_TICKET_STATE_META[sub.state].label}
+      </Typography>
+    </>
+  )
 }
