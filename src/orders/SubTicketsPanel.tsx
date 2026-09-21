@@ -313,7 +313,7 @@ export function SubTicketsPanel({
                             Cấp thêm
                           </Button>
                         ) : null}
-                        {canManage && active && ticket.entryCount === 0 ? (
+                        {canManage && active && ticket.entryCount === 0 && ticket.topUps.length === 0 ? (
                           <Button
                             size="small"
                             onClick={() => {
@@ -324,7 +324,7 @@ export function SubTicketsPanel({
                             Sửa
                           </Button>
                         ) : null}
-                        {canManage && ticket.entryCount === 0 ? (
+                        {canManage && ticket.entryCount === 0 && ticket.topUps.length === 0 ? (
                           <IconButton size="small" aria-label="Xoá phiếu con" onClick={() => setDeleting(ticket)}>
                             <TrashIcon />
                           </IconButton>
