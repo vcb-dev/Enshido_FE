@@ -39,6 +39,7 @@ import { useWaitingCount } from '../orders/subTicketActions'
 import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
+import { InstallAppButton } from './InstallAppButton'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -109,6 +110,7 @@ export function AppShell() {
           <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
             {/* Ở thanh trên cùng nên quét được phiếu giấy từ bất kỳ màn nào. */}
             <ScanQrButton compact />
+            <InstallAppButton />
             <Avatar
               sx={{
                 width: 32,
@@ -284,7 +286,8 @@ function DrawerNav({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, py: 1.5 }}>
-        <Box component="img" src={logo} alt="Enshido" sx={{ width: 150, height: 'auto' }} />
+        {/* Desktop: sidebar luôn mở cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
+        <Box component="img" src={logo} alt="Enshido" sx={{ width: { xs: 150, md: 96 }, height: 'auto' }} />
       </Box>
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>

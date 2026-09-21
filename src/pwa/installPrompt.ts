@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { installHint, type InstallHint } from './installHint'
 
 /**
  * Chrome/Edge/Samsung Internet báo "cài được" bằng sự kiện beforeinstallprompt, thường bắn
@@ -11,6 +12,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 let deferred: BeforeInstallPromptEvent | null = null
+// Cài xong thì tab trình duyệt vẫn mở tiếp — đừng mời cài lần nữa ở tab đó.
+let installed = false
 const listeners = new Set<() => void>()
 
 function emit() {
@@ -26,6 +29,7 @@ if (typeof window !== 'undefined') {
   })
   window.addEventListener('appinstalled', () => {
     deferred = null
+    installed = true
     emit()
   })
 }
@@ -37,12 +41,23 @@ function subscribe(listener: () => void) {
   }
 }
 
-export function useCanPromptInstall() {
-  return useSyncExternalStore(
-    subscribe,
-    () => deferred !== null,
-    () => false,
-  )
+type PromptState = 'idle' | 'ready' | 'installed'
+
+function promptState(): PromptState {
+  if (installed) return 'installed'
+  return deferred ? 'ready' : 'idle'
+}
+
+/** Lời nhắc cài app hợp với máy đang mở — dùng chung cho banner và icon trên thanh trên. */
+export function useInstallHint(): InstallHint {
+  const state = useSyncExternalStore(subscribe, promptState, () => 'idle' as const)
+  if (state === 'installed') return 'none'
+  return installHint({
+    userAgent: navigator.userAgent,
+    maxTouchPoints: navigator.maxTouchPoints ?? 0,
+    standalone: isStandalone(),
+    canPrompt: state === 'ready',
+  })
 }
 
 /** Mở hộp thoại cài của trình duyệt. Trả true nếu người dùng đồng ý cài. */

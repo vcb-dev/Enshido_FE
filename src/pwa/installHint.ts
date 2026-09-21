@@ -6,8 +6,10 @@
  * - `ios`: Safari iOS không bao giờ tự mời cài, phải chỉ đường qua nút Chia sẻ.
  * - `in-app`: trình duyệt nhúng trong Zalo/Messenger… không cài được app, camera cũng
  *   hay bị chặn — nhắc mở bằng Chrome/Safari.
+ * - `manual`: máy cảm ứng khác (Android chưa bắn beforeinstallprompt, Firefox…) — không
+ *   tự mời được, chỉ đường qua menu trình duyệt khi người dùng bấm icon cài app.
  */
-export type InstallHint = 'none' | 'prompt' | 'ios' | 'in-app'
+export type InstallHint = 'none' | 'prompt' | 'ios' | 'in-app' | 'manual'
 
 const IN_APP_BROWSER =
   /\bZalo\b|FBAN|FBAV|FB_IAB|FBIOS|Messenger|Instagram|\bLine\/|MicroMessenger|TikTok|musical_ly/i
@@ -33,6 +35,6 @@ export function installHint(env: {
   if (isInAppBrowser(env.userAgent)) return 'in-app'
   if (isIos(env.userAgent, env.maxTouchPoints)) return 'ios'
   // Máy tính của quản lý cũng nhận được sự kiện — chỉ mời cài trên máy cảm ứng.
-  if (env.canPrompt && env.maxTouchPoints > 0) return 'prompt'
-  return 'none'
+  if (env.maxTouchPoints === 0) return 'none'
+  return env.canPrompt ? 'prompt' : 'manual'
 }

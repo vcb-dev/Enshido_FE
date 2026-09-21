@@ -25,8 +25,8 @@ describe('installHint — nhắc cài app theo từng máy', () => {
     expect(installHint({ ...base, userAgent: UA.androidChrome, canPrompt: true })).toBe('prompt')
   })
 
-  it('Android Chrome chưa báo thì im — không hứa cái nút bấm không được', () => {
-    expect(installHint({ ...base, userAgent: UA.androidChrome })).toBe('none')
+  it('Android Chrome chưa báo thì chỉ đường qua menu trình duyệt', () => {
+    expect(installHint({ ...base, userAgent: UA.androidChrome })).toBe('manual')
   })
 
   it('iPhone và iPad (tự nhận là Mac) chỉ đường qua nút Chia sẻ', () => {

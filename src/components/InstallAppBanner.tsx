@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Alert, Button, IconButton, Stack } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { installHint } from '../pwa/installHint'
-import { isStandalone, promptInstall, useCanPromptInstall } from '../pwa/installPrompt'
+import { promptInstall, useInstallHint } from '../pwa/installPrompt'
 
 const DISMISS_KEY = 'enshido_install_hint_dismissed_at'
 const DISMISS_FOR = 7 * 24 * 60 * 60_000
@@ -28,18 +27,13 @@ function rememberDismiss() {
 /**
  * Nhắc thợ cài Enshido lên màn hình chính. Không có lời nhắc này thì iPhone không bao giờ
  * tự mời cài, còn Android chỉ mời khi Chrome thấy "đủ tương tác" — thợ không biết là cài được.
- * Tắt thì ẩn 7 ngày.
+ * Tắt thì ẩn 7 ngày; icon cài app trên thanh trên cùng (InstallAppButton) vẫn còn đó.
  */
 export function InstallAppBanner({ sx }: { sx?: SxProps<Theme> }) {
-  const canPrompt = useCanPromptInstall()
+  const hint = useInstallHint()
   const [dismissed, setDismissed] = useState(dismissedRecently)
-  const hint = installHint({
-    userAgent: navigator.userAgent,
-    maxTouchPoints: navigator.maxTouchPoints ?? 0,
-    standalone: isStandalone(),
-    canPrompt,
-  })
-  if (hint === 'none' || dismissed) return null
+  // `manual` không có gì bấm được ngay — để icon cài app trên thanh trên cùng lo.
+  if (hint === 'none' || hint === 'manual' || dismissed) return null
 
   const dismiss = () => {
     rememberDismiss()
