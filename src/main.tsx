@@ -6,6 +6,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import './auth/sessionBoot'
 // Bắt beforeinstallprompt trước khi React dựng xong — sự kiện có thể bắn rất sớm.
 import './pwa/installPrompt'
+import { registerServiceWorker } from './pwa/registerServiceWorker'
 import { persistOptions } from './auth/offlineCache'
 import { watchConnectivity } from './auth/connectivity'
 import { AuthProvider } from './auth/AuthContext'
@@ -31,6 +32,7 @@ const queryClient = new QueryClient({
 })
 
 watchConnectivity()
+registerServiceWorker()
 // Phải đăng ký trước khi khôi phục bản lưu: thao tác treo từ phiên trước dựng lại từ đây.
 registerSubTicketActions(queryClient)
 
