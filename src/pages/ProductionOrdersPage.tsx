@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Box, Stack, Tab, Tabs } from '@mui/material'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Box, Button, Stack, Tab, Tabs } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -21,12 +21,12 @@ import {
 } from '../api/productionOrders'
 import { formatStockedDate } from '../api/inventory'
 import {
+  ColumnHeaderDate,
+  ColumnHeaderFilter,
+  ColumnHeaderSearch,
   DataTable,
-  FILTER_FIELD_SX,
   PageHeader,
-  PanelToolbar,
   RowActions,
-  SelectInput,
   type Column,
 } from '../components/ui'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -55,7 +55,13 @@ export function ProductionOrdersPage() {
   const [editing, setEditing] = useState<ProductionOrderDetail | null>(null)
   const table = useTableParams({
     pageSize: 25,
-    filters: { status: '', requestType: '', source: 'NVL' as ProductionSource },
+    filters: {
+      status: '',
+      requestType: '',
+      source: 'NVL' as ProductionSource,
+      receivedDate: '',
+      dueDate: '',
+    },
   })
   const { params } = table
   const listSource: ProductionSource = params.source === 'BTP' ? 'BTP' : 'NVL'
@@ -69,6 +75,8 @@ export function ProductionOrdersPage() {
     requestType: params.requestType as ProductionRequestType | '',
     source: listSource,
     search,
+    receivedDate: params.receivedDate,
+    dueDate: params.dueDate,
     page: params.page,
     pageSize: params.pageSize,
     sort: params.sort || undefined,
@@ -142,19 +150,67 @@ export function ProductionOrdersPage() {
     },
   })
 
+  const requestTypeOptions = useMemo(
+    () => REQUEST_TYPES.map((type) => ({ id: type, name: REQUEST_TYPE_META[type].label })),
+    [],
+  )
   const columns = useMemo(
     () =>
-      orderColumns(listSource, {
-        onView: (row) => navigate(`/orders/${row.code}`),
-        onEdit: (row) => loadEdit.mutate(row),
-        onDelete: (row) => del.request(row),
-        isAdmin,
-      }),
-    [del.request, isAdmin, listSource, loadEdit.mutate, navigate],
+      orderColumns(
+        listSource,
+        {
+          onView: (row) => navigate(`/orders/${row.code}`),
+          onEdit: (row) => loadEdit.mutate(row),
+          onDelete: (row) => del.request(row),
+          isAdmin,
+        },
+        {
+          search: (
+            <ColumnHeaderSearch
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder="Tìm mã SX, mô tả…"
+            />
+          ),
+          requestType: {
+            valueId: params.requestType,
+            options: requestTypeOptions,
+            onChange: (id) => table.setFilter({ requestType: id }),
+          },
+          receivedDate: (
+            <ColumnHeaderDate
+              value={params.receivedDate}
+              onChange={(value) => table.setFilter({ receivedDate: value })}
+            />
+          ),
+          dueDate: (
+            <ColumnHeaderDate
+              value={params.dueDate}
+              onChange={(value) => table.setFilter({ dueDate: value })}
+            />
+          ),
+        },
+      ),
+    [
+      del.request,
+      isAdmin,
+      listSource,
+      loadEdit.mutate,
+      navigate,
+      params.dueDate,
+      params.receivedDate,
+      params.requestType,
+      params.search,
+      requestTypeOptions,
+      table,
+    ],
   )
   const counts = list.data?.statusCounts
   const items = list.data?.items ?? []
-  const narrowed = Boolean(statusTab || params.requestType || params.search.trim())
+  const columnFiltered = Boolean(
+    params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
+  )
+  const narrowed = Boolean(statusTab || columnFiltered)
 
   return (
     <Stack
@@ -216,7 +272,7 @@ export function ProductionOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={listSource === 'BTP' ? 1328 : 1208}
+        minWidth={listSource === 'BTP' ? 1408 : 1288}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         sort={table.sortState}
@@ -229,28 +285,29 @@ export function ProductionOrdersPage() {
         rowsLabel="đơn"
         sx={{ flex: { md: 1 } }}
         toolbar={
-          <PanelToolbar
-            search={params.search}
-            onSearchChange={table.setSearch}
-            searchPlaceholder="Tìm mã SX, mã theo dõi, người chốt, mô tả…"
-            filters={
-              <SelectInput
-                label="Yêu cầu làm hàng"
-                value={params.requestType}
-                onChange={(value) => table.setFilter({ requestType: value })}
-                options={REQUEST_TYPES.map((type) => ({ value: type, label: REQUEST_TYPE_META[type].label }))}
-                placeholder="Tất cả"
-                sx={FILTER_FIELD_SX}
-              />
-            }
-            filterCount={params.requestType ? 1 : 0}
-            onClearFilters={() => table.setFilter({ requestType: '' })}
-            createLabel={listSource === 'BTP' ? 'Lên đơn BTP' : 'Lên đơn mới'}
-            onCreate={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-          />
+          <>
+            {columnFiltered ? (
+              <Button
+                size="small"
+                onClick={() => {
+                  table.setSearch('')
+                  table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
+                }}
+              >
+                Xóa lọc
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button
+              variant="contained"
+              onClick={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+            >
+              {listSource === 'BTP' ? 'Lên đơn BTP' : 'Lên đơn mới'}
+            </Button>
+          </>
         }
       />
 
@@ -299,6 +356,16 @@ function orderColumns(
     onDelete: (row: ProductionOrderRow) => void
     isAdmin: boolean
   },
+  filters: {
+    search: ReactNode
+    requestType: {
+      valueId: string
+      options: Array<{ id: string; name: string }>
+      onChange: (id: string) => void
+    }
+    receivedDate: ReactNode
+    dueDate: ReactNode
+  },
 ): Column<ProductionOrderRow>[] {
   const btpSku: Column<ProductionOrderRow> | null =
     source === 'BTP'
@@ -331,16 +398,18 @@ function orderColumns(
     {
       key: 'code',
       header: 'Mã SX',
-      width: 76,
+      width: 168,
       sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
+      filter: filters.search,
     },
     ...(btpSku ? [btpSku] : []),
     {
       key: 'requestType',
       header: 'Yêu cầu làm hàng',
-      width: 124,
+      width: 148,
+      filter: <ColumnHeaderFilter {...filters.requestType} />,
       render: (row) => <RequestTypeChip type={row.requestType} />,
     },
     ...(source === 'NVL'
@@ -389,14 +458,16 @@ function orderColumns(
     {
       key: 'receivedDate',
       header: 'Ngày đặt đơn',
-      width: 108,
+      width: 148,
       sortable: true,
+      filter: filters.receivedDate,
       render: (row) => formatStockedDate(row.receivedDate),
     },
     {
       key: 'dueDate',
       header: 'Ngày cần trả',
-      width: 108,
+      width: 148,
+      filter: filters.dueDate,
       render: (row) => formatStockedDate(row.dueDate),
     },
     {
