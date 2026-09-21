@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { pathFromScan } from './qrScan'
+import { cameraErrorMessage, pathFromScan } from './qrScan'
 import { canAccessPath } from '../auth/homePath'
 import { parseSubTicketCode } from '../api/productionOrders'
 import { orderTicketUrl, subTicketUrl } from '../orders/catalog'
@@ -41,6 +41,33 @@ describe('pathFromScan — thợ quét QR trên phiếu giấy', () => {
     // /orders/A012/print là trang in, không phải đích của QR.
     expect(pathFromScan('https://enshido.vercel.app/orders/A012/print')).toBeNull()
     expect(pathFromScan('https://enshido.vercel.app/tickets/A012-1/abc')).toBeNull()
+  })
+})
+
+describe('cameraErrorMessage — Html5Qrcode báo lỗi bằng chuỗi', () => {
+  it('bị từ chối quyền camera (Chrome và Safari)', () => {
+    const msg = 'Chưa được phép dùng camera. Bật quyền camera cho trang này rồi thử lại.'
+    expect(cameraErrorMessage('Error getting userMedia, error = NotAllowedError: Permission denied')).toBe(msg)
+    expect(
+      cameraErrorMessage(
+        'Error getting userMedia, error = NotAllowedError: The request is not allowed by the user agent',
+      ),
+    ).toBe(msg)
+  })
+
+  it('trình duyệt không có camera API — Zalo/Messenger hoặc http', () => {
+    expect(cameraErrorMessage('Camera streaming not supported by the browser.')).toMatch(/Chrome hoặc Safari/)
+  })
+
+  it('camera đang bị ứng dụng khác giữ', () => {
+    expect(
+      cameraErrorMessage('Error getting userMedia, error = NotReadableError: Could not start video source'),
+    ).toMatch(/ứng dụng khác/)
+  })
+
+  it('lỗi lạ vẫn ra câu chung, không ném', () => {
+    expect(cameraErrorMessage(undefined)).toBe('Không mở được camera trên thiết bị này.')
+    expect(cameraErrorMessage(new Error('boom'))).toBe('Không mở được camera trên thiết bị này.')
   })
 })
 
