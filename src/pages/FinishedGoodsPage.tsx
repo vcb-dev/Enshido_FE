@@ -531,7 +531,6 @@ function FinishedGoodsOutboundTable() {
         ['finished-goods-shipments'],
         ['finished-goods-lookups'],
         ['production-orders'],
-        ['production-order'],
       ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
 

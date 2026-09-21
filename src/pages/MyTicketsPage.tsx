@@ -22,21 +22,17 @@ export function MyTicketsPage() {
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
-    // Người giao xác nhận / KCS nhận lại ở máy khác — tự làm mới để thợ thấy ngay.
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
 
-  // Kéo sẵn chi tiết những đơn đang liên quan tới thợ. Lúc còn sóng thì tốn vài request,
-  // đổi lại ra xưởng mất mạng mà quét QR phiếu giấy vẫn mở được trang phiếu con và bấm
-  // nhận — bản lưu ngoại tuyến giữ đúng các key này (xem auth/offlineCache.ts).
   useEffect(() => {
     if (!tickets.data) return
-    const done = new Set<string>()
     for (const item of [...tickets.data.available, ...tickets.data.mine]) {
-      if (done.has(item.orderCode)) continue
-      done.add(item.orderCode)
+      const key = ['production-order', item.orderCode] as const
+      if (queryClient.getQueryData(key)) continue
       void queryClient.prefetchQuery({
-        queryKey: ['production-order', item.orderCode],
+        queryKey: key,
         queryFn: () => getSubTicketOrderApi(item.ticketCode),
         staleTime: 60_000,
       })

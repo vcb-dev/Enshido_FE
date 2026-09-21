@@ -18,7 +18,7 @@ import {
 import { clearCachedSession, hasCsrfCookie, readCachedUser, saveCachedUser } from './session'
 import { reportNetworkFailure } from './connectivity'
 import { isOffline, sessionBoot } from './sessionBoot'
-import { visibleWarehouses } from './screens'
+import { firstAllowedPath } from './screens'
 import { prefetchStaff, prefetchWarehouseStock } from './prefetchWarehouse'
 import { can, Permission } from './permissions'
 
@@ -67,10 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void import('../pages/DashboardPage')
       void import('../pages/WarehousesPage')
       if (can(session.user, Permission.USERS_MANAGE)) prefetchStaff(queryClient)
-      prefetchWarehouseStock(
-        queryClient,
-        visibleWarehouses(session.user).map((warehouse) => warehouse.code),
-      )
+      const homeWarehouse = firstAllowedPath(session.user).match(/^\/warehouses\/([^/]+)/)?.[1]
+      if (homeWarehouse) prefetchWarehouseStock(queryClient, [homeWarehouse])
     },
     [queryClient],
   )

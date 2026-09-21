@@ -92,18 +92,32 @@ export function useTableParams<F extends ParamDefaults = Record<string, never>>(
   /** Có đang thu hẹp kết quả không (bộ lọc hoặc từ khoá). */
   const hasFilters = filterCount > 0 || params.search.trim() !== ''
 
-  return {
-    params,
-    sortState,
-    filterCount,
-    hasFilters,
-    setPage,
-    setPageSize,
-    setSearch,
-    setFilter,
-    toggleSort,
-    reset,
-  }
+  return useMemo(
+    () => ({
+      params,
+      sortState,
+      filterCount,
+      hasFilters,
+      setPage,
+      setPageSize,
+      setSearch,
+      setFilter,
+      toggleSort,
+      reset,
+    }),
+    [
+      params,
+      sortState,
+      filterCount,
+      hasFilters,
+      setPage,
+      setPageSize,
+      setSearch,
+      setFilter,
+      toggleSort,
+      reset,
+    ],
+  )
 }
 
 /** Cắt trang phía client khi API chưa hỗ trợ phân trang. */

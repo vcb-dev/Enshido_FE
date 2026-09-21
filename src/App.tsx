@@ -1,19 +1,11 @@
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/LoginPage'
-import { ProductionOrdersPage } from './pages/ProductionOrdersPage'
-import { ProductionOrderDetailPage } from './pages/ProductionOrderDetailPage'
-import { OrderReferencePage } from './pages/OrderReferencePage'
 import { useAuth } from './auth/AuthContext'
 import { isWorkerOnly } from './auth/permissions'
-import { ProductionTicketPrintPage } from './pages/ProductionTicketPrintPage'
-import { MyTicketsPage } from './pages/MyTicketsPage'
-import { SubTicketPage } from './pages/SubTicketPage'
 import { LegacyRedirect } from './components/LegacyRedirect'
-import { ShipmentDetailPage } from './pages/ShipmentDetailPage'
-import { ShipmentPrintPage } from './pages/ShipmentPrintPage'
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
@@ -31,6 +23,30 @@ const LocationsPage = lazy(() =>
 const CatalogsPage = lazy(() =>
   import('./pages/CatalogsPage').then((m) => ({ default: m.CatalogsPage })),
 )
+const ProductionOrdersPage = lazy(() =>
+  import('./pages/ProductionOrdersPage').then((m) => ({ default: m.ProductionOrdersPage })),
+)
+const ProductionOrderDetailPage = lazy(() =>
+  import('./pages/ProductionOrderDetailPage').then((m) => ({ default: m.ProductionOrderDetailPage })),
+)
+const OrderReferencePage = lazy(() =>
+  import('./pages/OrderReferencePage').then((m) => ({ default: m.OrderReferencePage })),
+)
+const ProductionTicketPrintPage = lazy(() =>
+  import('./pages/ProductionTicketPrintPage').then((m) => ({ default: m.ProductionTicketPrintPage })),
+)
+const MyTicketsPage = lazy(() =>
+  import('./pages/MyTicketsPage').then((m) => ({ default: m.MyTicketsPage })),
+)
+const SubTicketPage = lazy(() =>
+  import('./pages/SubTicketPage').then((m) => ({ default: m.SubTicketPage })),
+)
+const ShipmentDetailPage = lazy(() =>
+  import('./pages/ShipmentDetailPage').then((m) => ({ default: m.ShipmentDetailPage })),
+)
+const ShipmentPrintPage = lazy(() =>
+  import('./pages/ShipmentPrintPage').then((m) => ({ default: m.ShipmentPrintPage })),
+)
 
 export default function App() {
   return (
@@ -43,9 +59,30 @@ export default function App() {
       <Route path="/cau-hinh-gia" element={<LegacyRedirect />} />
       <Route element={<ProtectedRoute />}>
         {/* Phiếu in không nằm trong khung app để trang in chỉ còn nội dung phiếu. */}
-        <Route path="/orders/:code/print" element={<ProductionTicketPrintPage />} />
-        <Route path="/orders/:code/tickets/:no/print" element={<ProductionTicketPrintPage />} />
-        <Route path="/finished-goods/shipments/:code/print" element={<ShipmentPrintPage />} />
+        <Route
+          path="/orders/:code/print"
+          element={
+            <Suspense fallback={null}>
+              <ProductionTicketPrintPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/orders/:code/tickets/:no/print"
+          element={
+            <Suspense fallback={null}>
+              <ProductionTicketPrintPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/finished-goods/shipments/:code/print"
+          element={
+            <Suspense fallback={null}>
+              <ShipmentPrintPage />
+            </Suspense>
+          }
+        />
         <Route element={<AppShell />}>
           <Route path="/orders" element={<ProductionOrdersPage />} />
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}

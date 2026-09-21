@@ -138,6 +138,27 @@ const SECTION_SX = {
 
 const digitsOnly = (value: string) => value.replace(/\D/g, '')
 
+function asProductImages(
+  images: Array<{
+    url: string
+    publicId: string
+    width?: number | null
+    height?: number | null
+    kind?: OrderImage['kind']
+  }>,
+): OrderImage[] {
+  const preferred = images.some((image) => image.kind === 'PRODUCT')
+    ? images.filter((image) => image.kind === 'PRODUCT')
+    : images
+  return preferred.map((image) => ({
+    kind: 'PRODUCT',
+    url: image.url,
+    publicId: image.publicId,
+    width: image.width ?? null,
+    height: image.height ?? null,
+  }))
+}
+
 // `rules.validate` của react-hook-form đưa xuống giá trị kiểu hợp của cả form nên nhận unknown.
 function qtyOverStock(value: unknown, max: number | null) {
   const raw = value == null ? '' : String(value)
@@ -545,17 +566,27 @@ export function ProductionOrderFormDialog({
     form.setValue(field, [...kept, ...added], { shouldDirty: true })
   }
 
-  function applyBtpCatalog(next: BtpOption | undefined) {
+  function applyBtpCatalog(next: BtpOption | undefined, previous: BtpOption | undefined) {
     form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
     form.setValue('btpCategory', next?.category ?? '', { shouldDirty: true })
     form.setValue('mainMaterial', next?.bodyMetal ?? '', { shouldDirty: true })
     form.setValue('productKind', next?.productKind ?? '', { shouldDirty: true })
     form.setValue('platingColor', normalizePlatingColor(next?.platingColor), { shouldDirty: true })
     form.setValue('stoneColor', next?.stoneColor ?? '', { shouldDirty: true })
+    replaceKindImages(
+      'productImages',
+      previous?.images.map((image) => image.publicId) ?? [],
+      asProductImages(next?.images ?? []),
+    )
   }
 
-  function applyFinishedProduct(next: FinishedProductOption | undefined) {
+  function applyFinishedProduct(next: FinishedProductOption | undefined, previous: FinishedProductOption | undefined) {
     form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
+    replaceKindImages(
+      'productImages',
+      asProductImages(previous?.images ?? []).map((image) => image.publicId),
+      asProductImages(next?.images ?? []),
+    )
     if (form.getValues('finishedProductQty')) void form.trigger('finishedProductQty')
   }
 
@@ -578,7 +609,7 @@ export function ProductionOrderFormDialog({
     replaceKindImages(
       'productImages',
       previous?.images.map((image) => image.publicId) ?? [],
-      (next?.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
+      asProductImages(next?.images ?? []),
     )
     if (form.getValues('stoneCount')) void form.trigger('stoneCount')
   }
@@ -676,8 +707,12 @@ export function ProductionOrderFormDialog({
                     inputRef={field.ref}
                     onBlur={field.onBlur}
                     onChange={(code) => {
+                      const previous = finishedItems.find((item) => item.code === field.value)
                       field.onChange(code)
-                      applyFinishedProduct(finishedItems.find((item) => item.code === code))
+                      applyFinishedProduct(
+                        finishedItems.find((item) => item.code === code),
+                        previous,
+                      )
                     }}
                   />
                 )}
@@ -866,8 +901,12 @@ export function ProductionOrderFormDialog({
                     onBlur={field.onBlur}
                     errorText={fieldState.error?.message}
                     onChange={(id) => {
+                      const previous = btpItems.find((item) => item.id === field.value)
                       field.onChange(id)
-                      applyBtpCatalog(btpItems.find((item) => item.id === id))
+                      applyBtpCatalog(
+                        btpItems.find((item) => item.id === id),
+                        previous,
+                      )
                       if (form.getValues('finishedProductQty')) void form.trigger('finishedProductQty')
                     }}
                   />
@@ -1115,7 +1154,6 @@ export function ProductionOrderFormDialog({
               value={field.value}
               onChange={field.onChange}
               onUploadingChange={onProductUploading}
-              readOnly
             />
           )}
         />

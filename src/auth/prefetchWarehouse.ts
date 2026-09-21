@@ -1,11 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
 
+/** Chỉ kéo kho đang mở / sắp mở — không prefetch cả 4 kho lúc đăng nhập. */
 export function prefetchWarehouseStock(queryClient: QueryClient, codes: string[]) {
-  const materialCodes = codes.filter((code) => code !== THANH_PHAM_WAREHOUSE)
+  const unique = Array.from(new Set(codes)).slice(0, 1)
+  const materialCodes = unique.filter((code) => code !== THANH_PHAM_WAREHOUSE)
   if (materialCodes.length) {
     void import('../api/inventory').then(({ getWarehouseStockApi }) => {
       for (const code of materialCodes) {
+        if (queryClient.getQueryState(['warehouse-stock', code])) continue
         void queryClient.prefetchQuery({
           queryKey: ['warehouse-stock', code],
           queryFn: () => getWarehouseStockApi(code),
@@ -14,28 +17,16 @@ export function prefetchWarehouseStock(queryClient: QueryClient, codes: string[]
       }
     })
   }
-  if (codes.includes(THANH_PHAM_WAREHOUSE)) {
-    void import('../api/finishedGoods').then(
-      ({ getFinishedGoodsStockApi, listFinishedGoodsReceiptsApi, listAllShipmentsApi }) => {
-        void queryClient.prefetchQuery({
-          queryKey: ['finished-goods-stock'],
-          queryFn: () => getFinishedGoodsStockApi(),
-          staleTime: 15_000,
-        })
-        void queryClient.prefetchQuery({
-          queryKey: ['finished-goods-receipts', ''],
-          queryFn: () => listFinishedGoodsReceiptsApi(),
-          staleTime: 15_000,
-        })
-        void queryClient.prefetchQuery({
-          queryKey: ['finished-goods-shipments', ''],
-          queryFn: () => listAllShipmentsApi(),
-          staleTime: 15_000,
-        })
-      },
-    )
+  if (unique.includes(THANH_PHAM_WAREHOUSE)) {
+    if (queryClient.getQueryState(['finished-goods-stock'])) return
+    void import('../api/finishedGoods').then(({ getFinishedGoodsStockApi }) => {
+      void queryClient.prefetchQuery({
+        queryKey: ['finished-goods-stock'],
+        queryFn: () => getFinishedGoodsStockApi(),
+        staleTime: 15_000,
+      })
+    })
   }
-  void import('../pages/WarehouseDetailPage')
 }
 
 export function prefetchStaff(queryClient: QueryClient) {

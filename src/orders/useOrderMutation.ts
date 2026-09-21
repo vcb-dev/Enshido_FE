@@ -18,7 +18,10 @@ export function useOrderMutation<V>(
       // Phiếu con đổi trạng thái thì màn "Phiếu của tôi" của thợ cũng đổi.
       void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
       toast.success(success)
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn: () => void) => window.setTimeout(fn, 0)
+      idle(() => {
+        void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      })
     },
     onError: (error: Error) => toast.error(error.message),
   })

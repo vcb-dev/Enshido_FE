@@ -157,6 +157,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     queryKey: ['production-order-options'],
     queryFn: () => listOrderOptionsApi(),
     staleTime: 60_000,
+    enabled: dialog.open,
   })
   const orderOptions: SearchSelectOption[] = useMemo(
     () =>
@@ -295,8 +296,10 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         replaceMoveId(current, ctx?.tempId ?? row.id, row),
       )
       void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
-      // NVL gắn đơn đổi thì chi phí đơn đổi theo.
-      void queryClient.invalidateQueries({ queryKey: ['production-order-costing'] })
+      const orderCode = input.payload.productionOrderCode?.trim()
+      if (orderCode) {
+        void queryClient.invalidateQueries({ queryKey: ['production-order-costing', orderCode] })
+      }
       const dest = input.payload.destWarehouseCode
       if (dest && dest !== warehouseCode) {
         void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', dest] })
@@ -315,12 +318,17 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       deleteWhenReady(row.id, (id) => deleteWarehouseOutboundApi(warehouseCode, id)),
     successMessage: 'Đã xóa phiếu xuất',
     queryKeys: [['warehouse-outbounds', warehouseCode]],
-    invalidateKeys: [['warehouse-stock', warehouseCode], ['production-order-costing']],
+    invalidateKeys: [['warehouse-stock', warehouseCode]],
     onRemoved: (row) => {
       queryClient.setQueryData(
         ['warehouse-outbounds', warehouseCode],
         (current: OutboundResponse | undefined) => removeMoveList(current, row.id),
       )
+      if (row.productionOrderCode) {
+        void queryClient.invalidateQueries({
+          queryKey: ['production-order-costing', row.productionOrderCode],
+        })
+      }
     },
   })
 

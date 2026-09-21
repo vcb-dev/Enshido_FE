@@ -260,7 +260,6 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     queryFn: getInventoryLookupsApi,
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
-    enabled: stock.isSuccess,
   })
 
   const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])

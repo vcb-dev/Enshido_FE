@@ -90,12 +90,13 @@ export function ProductionOrdersPage() {
     queryKey: ['production-orders', listParams],
     queryFn: () => listProductionOrdersApi(listParams),
     placeholderData: keepPreviousData,
-    staleTime: 15_000,
+    staleTime: 60_000,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
     queryFn: getProductionOrderLookupsApi,
     staleTime: 5 * 60_000,
+    enabled: formOpen,
   })
 
   const create = useMutation({
@@ -205,7 +206,8 @@ export function ProductionOrdersPage() {
       params.requestType,
       params.search,
       requestTypeOptions,
-      table,
+      table.setSearch,
+      table.setFilter,
     ],
   )
   const counts = list.data?.statusCounts
@@ -269,7 +271,7 @@ export function ProductionOrdersPage() {
           key: (sub) => sub.code,
           label: (count) => `${count} phiếu con`,
         }}
-        loading={list.isFetching}
+        loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
         emptyText={
           narrowed

@@ -84,7 +84,6 @@ export function registerSubTicketActions(queryClient: QueryClient) {
             queryKey: ['production-order-costing', vars.orderCode],
           })
           void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
-          void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
           toast.success(def.done(vars.ticketCode))
         },
         onError: (error, vars) => {
