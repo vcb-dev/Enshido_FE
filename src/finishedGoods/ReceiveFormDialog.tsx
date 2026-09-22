@@ -105,8 +105,7 @@ export function ReceiveFormDialog({
       return
     }
     form.setValue('qtyUnit', item.qtyUnit ?? '')
-    // Hàng đã trên Tồn: để trống số lượng để nhập thêm, không ghi đè tồn hiện tại.
-    form.setValue('qty', item.inStock ? '' : String(item.qty))
+    form.setValue('qty', '')
   }, [form, open, options.data?.items, orderCode, row])
 
   const selected = options.data?.items.find((item) => item.code === orderCode)
@@ -117,9 +116,7 @@ export function ReceiveFormDialog({
     return (options.data?.items ?? []).map((item) => ({
       id: item.code,
       name: item.description || item.code,
-      secondary: item.inStock
-        ? `${item.code} · tồn ${item.remainingQty ?? item.qty}`
-        : `${item.code} · chưa vào kho`,
+      secondary: `${item.code} · tồn ${item.remainingQty ?? item.qty}`,
     }))
   }, [options.data?.items, row])
 
@@ -188,8 +185,8 @@ export function ReceiveFormDialog({
           readOnly={Boolean(row) || readOnly}
           displayValue={row?.description}
           allowClear={!row && !readOnly}
-          placeholder="Tìm tên thành phẩm trên Tồn hoặc đơn chưa nhập…"
-          noOptionsText="Không có thành phẩm khớp"
+          placeholder="Tìm thành phẩm trên Tồn…"
+          noOptionsText="Chưa có hàng trên Tồn. Tạo trên tab Tồn trước."
         />
         <TextInput label={profile.skuLabel} value={orderCode || '—'} readOnly />
       </FormRow>
