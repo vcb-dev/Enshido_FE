@@ -13,7 +13,7 @@ import {
 import type { CrudDialogKind } from '../hooks/useCrudDialog'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
-import { stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
+import { finishedGoodsQtyUnitOptions, stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
 
 type FormValues = {
   description: string
@@ -154,10 +154,7 @@ export function FinishedGoodsStockDialog({
               label="Đơn vị"
               required
               placeholder="Chọn đơn vị…"
-              options={[
-                { value: 'gram', label: 'Gram' },
-                { value: 'viên', label: 'Viên' },
-              ]}
+              options={finishedGoodsQtyUnitOptions(row?.qtyUnit)}
             />
             <FormTextField<FormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
             <FormSelect<FormValues>

@@ -143,6 +143,9 @@ export type FinishedGoodsOrderOption = {
   qtyUnit: string | null
   sizeLabel: string | null
   mainMaterial: string | null
+  /** Đã có trên tab Tồn — nhập thêm cộng vào dòng đó. */
+  inStock?: boolean
+  remainingQty?: number
 }
 
 export function listFinishedGoodsOrderOptionsApi(search = '') {

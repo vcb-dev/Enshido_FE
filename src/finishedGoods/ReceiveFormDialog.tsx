@@ -19,7 +19,7 @@ import {
 } from '../components/ui'
 import type { CrudDialogKind } from '../hooks/useCrudDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
-import { stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
+import { finishedGoodsQtyUnitOptions, stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
 
 type FormValues = {
   orderCode: string
@@ -105,7 +105,8 @@ export function ReceiveFormDialog({
       return
     }
     form.setValue('qtyUnit', item.qtyUnit ?? '')
-    form.setValue('qty', String(item.qty))
+    // Hàng đã trên Tồn: để trống số lượng để nhập thêm, không ghi đè tồn hiện tại.
+    form.setValue('qty', item.inStock ? '' : String(item.qty))
   }, [form, open, options.data?.items, orderCode, row])
 
   const selected = options.data?.items.find((item) => item.code === orderCode)
@@ -116,7 +117,9 @@ export function ReceiveFormDialog({
     return (options.data?.items ?? []).map((item) => ({
       id: item.code,
       name: item.description || item.code,
-      secondary: item.code,
+      secondary: item.inStock
+        ? `${item.code} · tồn ${item.remainingQty ?? item.qty}`
+        : `${item.code} · chưa vào kho`,
     }))
   }, [options.data?.items, row])
 
@@ -171,10 +174,7 @@ export function ReceiveFormDialog({
           required
           readOnly={readOnly}
           placeholder="Chọn đơn vị…"
-          options={[
-            { value: 'gram', label: 'Gram' },
-            { value: 'viên', label: 'Viên' },
-          ]}
+          options={finishedGoodsQtyUnitOptions(row?.qtyUnit ?? selected?.qtyUnit)}
         />
         <TextInput label="Người nhập" value={row?.receivedByName || operatorName || '—'} readOnly />
       </FormRow>
@@ -188,8 +188,8 @@ export function ReceiveFormDialog({
           readOnly={Boolean(row) || readOnly}
           displayValue={row?.description}
           allowClear={!row && !readOnly}
-          placeholder="Tìm tên thành phẩm…"
-          noOptionsText="Không còn đơn nào chưa vào kho"
+          placeholder="Tìm tên thành phẩm trên Tồn hoặc đơn chưa nhập…"
+          noOptionsText="Không có thành phẩm khớp"
         />
         <TextInput label={profile.skuLabel} value={orderCode || '—'} readOnly />
       </FormRow>

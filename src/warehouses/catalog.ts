@@ -189,6 +189,21 @@ export function stockProfile(code: string): StockProfile {
   return STOCK_PROFILES[code] ?? DEFAULT_STOCK_PROFILE
 }
 
+/** Đơn vị tính kho thành phẩm. Dòng cũ gram/viên vẫn hiện nếu đang lưu. */
+export const FINISHED_GOODS_QTY_UNITS = [
+  { value: 'chiếc', label: 'Chiếc' },
+  { value: 'đôi', label: 'Đôi' },
+] as const
+
+export function finishedGoodsQtyUnitOptions(current?: string | null) {
+  const units: Array<{ value: string; label: string }> = [...FINISHED_GOODS_QTY_UNITS]
+  const extra = current?.trim()
+  if (extra && !units.some((unit) => unit.value === extra)) {
+    units.push({ value: extra, label: extra })
+  }
+  return units
+}
+
 /// Lọc danh mục nhóm NVL cho đúng kho đang mở.
 export function materialTypesFor<T extends { code: string }>(profile: StockProfile, types: T[]) {
   if (profile.typeCodes) {
