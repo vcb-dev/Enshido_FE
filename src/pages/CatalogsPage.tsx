@@ -9,6 +9,7 @@ import {
   DialogTitle,
   IconButton,
   Paper,
+  Skeleton,
   Stack,
   Tab,
   Tabs,
@@ -40,9 +41,9 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
-const NAVY = '#1b4f72'
-const NAVY_SOFT = '#eaf0f6'
-const BORDER = '#d5dbe0'
+const BRAND = '#6b4513'
+const BRAND_SOFT = '#f1e6d5'
+const BORDER = '#ded3c3'
 
 type FormValues = { name: string }
 const EMPTY: FormValues = { name: '' }
@@ -227,11 +228,7 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
           gap: 1.5,
         }}
       >
-        {list.isLoading
-          ? [0, 1, 2].map((key) => (
-              <Paper key={key} sx={{ height: 140, border: `1px solid ${BORDER}` }} />
-            ))
-          : null}
+        {list.isLoading ? [0, 1, 2, 3, 4, 5].map((key) => <ParentCardSkeleton key={key} />) : null}
         {visibleParents.map((row) => (
           <ParentCard
             key={row.id}
@@ -413,7 +410,7 @@ function ParentEditorDialog({
           </Form>
 
           <Stack spacing={1} sx={{ minHeight: 0, flex: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: NAVY }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: BRAND }}>
               {copy.childSection}
             </Typography>
             <DataTable
@@ -475,6 +472,25 @@ function ParentEditorDialog({
   )
 }
 
+/** Cùng khung với ParentCard: tên nhóm + 2 nút, chip số danh mục con, dòng xem trước. */
+function ParentCardSkeleton() {
+  return (
+    <Paper sx={{ p: 2, border: `1px solid ${BORDER}` }}>
+      <Stack spacing={1.25}>
+        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Skeleton variant="text" width="55%" sx={{ fontSize: 18 }} />
+          <Stack direction="row" spacing={0.5}>
+            <Skeleton variant="circular" width={28} height={28} />
+            <Skeleton variant="circular" width={28} height={28} />
+          </Stack>
+        </Stack>
+        <Skeleton variant="rounded" width={112} height={24} />
+        <Skeleton variant="text" width="80%" />
+      </Stack>
+    </Paper>
+  )
+}
+
 function ParentCard({
   row,
   copy,
@@ -500,12 +516,12 @@ function ParentCard({
         border: `1px solid ${BORDER}`,
         cursor: 'pointer',
         transition: 'border-color 120ms, box-shadow 120ms',
-        '&:hover': { borderColor: NAVY, boxShadow: '0 8px 20px rgba(27,79,114,0.08)' },
+        '&:hover': { borderColor: BRAND, boxShadow: '0 8px 20px rgba(107,69,19,0.12)' },
       }}
     >
       <Stack spacing={1.25}>
         <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-          <Typography variant="h6" sx={{ fontSize: 18, fontWeight: 700, color: NAVY }}>
+          <Typography variant="h6" sx={{ fontSize: 18, fontWeight: 700, color: BRAND }}>
             {row.name}
           </Typography>
           <Stack direction="row" onClick={(event) => event.stopPropagation()}>
@@ -520,7 +536,7 @@ function ParentCard({
         <Chip
           size="small"
           label={`${kids.length} danh mục con`}
-          sx={{ alignSelf: 'flex-start', bgcolor: NAVY_SOFT, color: NAVY, fontWeight: 600 }}
+          sx={{ alignSelf: 'flex-start', bgcolor: BRAND_SOFT, color: BRAND, fontWeight: 600 }}
         />
         <Typography variant="body2" color="text.secondary">
           {preview ? `${preview}${kids.length > 3 ? '…' : ''}` : copy.emptyChild.split('.')[0]}

@@ -105,6 +105,7 @@ function subtractQty<T extends { id: string; qty: string }>(
 }
 
 function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
+  const parentEntries = order.stages.filter((entry) => !entry.subTicketId)
   return {
     id: order.id,
     code: order.code,
@@ -136,6 +137,10 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
     debtStatus: order.debtStatus,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+    workState: order.subTickets.length ? null : (order.workTicket?.state ?? null),
+    workStage: order.subTickets.length
+      ? null
+      : (order.workTicket?.activeStage ?? parentEntries.at(-1)?.stage ?? null),
     images: order.images.map((image) => ({
       id: image.id ?? image.publicId,
       kind: image.kind,

@@ -15,13 +15,13 @@ export type StockFigures = {
 }
 
 const GROUPS = [
-  { key: 'open', label: 'Tồn đầu kỳ', bg: '#edf1f4', note: 'TT = SL × đơn giá tồn' },
+  { key: 'open', label: 'Tồn đầu kỳ', bg: '#f3eee6', note: 'TT = SL × đơn giá tồn' },
   { key: 'in', label: 'Nhập', bg: '#e4f0e8', note: 'Tổng phiếu nhập (Σ SL × đơn giá)' },
   { key: 'out', label: 'Xuất', bg: '#f3ebe7', note: 'Tổng phiếu xuất theo ngày' },
-  { key: 'stock', label: 'Tồn', bg: '#d6e3ee', note: 'Công thức cố định' },
+  { key: 'stock', label: 'Tồn', bg: '#e8d8bd', note: 'Công thức cố định' },
 ] as const
 
-const LINE = '#b7c2cc'
+const LINE = '#cbbda9'
 
 /**
  * Lưới 4 nhóm (Tồn đầu kỳ / Nhập / Xuất / Tồn) × 2 dòng SL / TT, dùng chung
@@ -132,14 +132,14 @@ export function StockFigureGrid({
 }
 
 function CornerCell() {
-  return <Box sx={{ bgcolor: '#f4f6f7' }} />
+  return <Box sx={{ bgcolor: '#f8f3eb' }} />
 }
 
 function AxisCell({ label, align = 'left' }: { label: string; align?: 'left' | 'right' }) {
   return (
     <Box
       sx={{
-        bgcolor: '#f4f6f7',
+        bgcolor: '#f8f3eb',
         fontSize: 12,
         fontWeight: 700,
         color: 'text.secondary',
@@ -223,7 +223,7 @@ function EditableCell({ value, onChange }: { value: string; onChange: (value: st
         }}
         sx={{
           '& .MuiOutlinedInput-root': { bgcolor: '#fff' },
-          '& fieldset': { borderColor: '#d5dbe0' },
+          '& fieldset': { borderColor: '#ded3c3' },
         }}
       />
     </Box>

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Box,
-  Dialog,
   IconButton,
   LinearProgress,
   Stack,
@@ -12,7 +11,8 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import { toast } from 'sonner'
 import type { OrderImage, ProductionImageKind } from '../api/productionOrders'
-import { cloudinaryFit, cloudinaryThumb, uploadImageToCloudinary } from '../api/uploads'
+import { uploadImageToCloudinary } from '../api/uploads'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 
 type Pending = { key: string; name: string; progress: number }
 
@@ -39,7 +39,7 @@ export function ImageUploadField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
-  const [preview, setPreview] = useState<OrderImage | null>(null)
+  const [viewing, setViewing] = useState<number | null>(null)
   // Upload chạy song song nên đọc giá trị mới nhất qua ref, tránh ghi đè lẫn nhau.
   const latest = useRef(value)
   latest.current = value
@@ -123,7 +123,7 @@ export function ImageUploadField({
           ...(empty && canAdd
             ? {
                 cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.main', bgcolor: '#f7fafc' },
+                '&:hover': { borderColor: 'primary.main', bgcolor: '#fbf8f2' },
               }
             : {}),
         }}
@@ -142,30 +142,14 @@ export function ImageUploadField({
             : undefined
         }
       >
-        {value.map((image) => (
+        {value.map((image, index) => (
           <Box key={image.publicId} sx={{ position: 'relative', width: THUMB, height: THUMB }}>
-            <Box
-              component="button"
-              type="button"
-              aria-label="Xem ảnh"
-              onClick={() => setPreview(image)}
-              sx={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
-                p: 0,
-                border: 0,
-                bgcolor: 'transparent',
-                cursor: 'zoom-in',
-              }}
-            >
-              <Box
-                component="img"
-                src={cloudinaryThumb(image.url, THUMB * 2)}
-                alt=""
-                sx={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid #d5dbe0' }}
-              />
-            </Box>
+            <ZoomThumb
+              url={image.url}
+              size={THUMB}
+              label={`Xem ảnh lớn ${index + 1}/${value.length}`}
+              onClick={() => setViewing(index)}
+            />
             {readOnly ? null : (
               <Tooltip title="Gỡ ảnh">
                 <IconButton
@@ -203,7 +187,7 @@ export function ImageUploadField({
               justifyContent: 'center',
               px: 0.75,
               borderRadius: 1,
-              bgcolor: '#f4f6f7',
+              bgcolor: '#f8f3eb',
             }}
           >
             <Typography variant="caption" noWrap color="text.secondary">
@@ -241,7 +225,7 @@ export function ImageUploadField({
               bgcolor: 'transparent',
               cursor: 'pointer',
               color: 'text.secondary',
-              '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: '#f7fafc' },
+              '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: '#fbf8f2' },
             }}
           >
             <AddIcon />
@@ -249,52 +233,13 @@ export function ImageUploadField({
         ) : null}
       </Box>
 
-      <Dialog
-        open={Boolean(preview)}
-        onClose={() => setPreview(null)}
-        maxWidth="md"
-        fullWidth
-        onClick={(event) => event.stopPropagation()}
-        slotProps={{
-          paper: {
-            sx: {
-              bgcolor: '#111',
-              boxShadow: 'none',
-              overflow: 'hidden',
-            },
-          },
-        }}
-      >
-        <IconButton
-          aria-label="Đóng"
-          onClick={() => setPreview(null)}
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            zIndex: 1,
-            color: '#fff',
-            bgcolor: 'rgba(0,0,0,0.45)',
-            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-        {preview ? (
-          <Box
-            component="img"
-            src={cloudinaryFit(preview.url, 1400)}
-            alt="Xem trước ảnh"
-            sx={{
-              display: 'block',
-              width: '100%',
-              maxHeight: '86vh',
-              objectFit: 'contain',
-              bgcolor: '#111',
-            }}
-          />
-        ) : null}
-      </Dialog>
+      <ImageLightbox
+        images={value.map((image) => ({ id: image.publicId, url: image.url }))}
+        index={viewing}
+        title={label}
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
     </Stack>
   )
 }

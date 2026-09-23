@@ -11,6 +11,9 @@ export type FinishedGoodsReceiptRow = {
   mainMaterial: string | null
   imageUrl: string | null
   qty: string
+  stockedQty: number
+  pendingQty: number
+  status: 'PENDING' | 'RECEIVED'
   unitPrice: string
   amount: string
   shippedQty: number
@@ -223,6 +226,14 @@ export function updateFinishedGoodsReceiptApi(id: string, payload: UpsertReceipt
   return apiFetch<{ success: boolean }>(`${BASE}/receipts/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  })
+}
+
+/** Kho xác nhận nhận hàng vào tồn. Bỏ trống `qty` là nhận hết phần đang chờ. */
+export function receiveFinishedGoodsReceiptApi(id: string, qty?: number) {
+  return apiFetch<{ success: boolean }>(`${BASE}/receipts/${encodeURIComponent(id)}/receive`, {
+    method: 'POST',
+    body: JSON.stringify(qty != null ? { qty } : {}),
   })
 }
 

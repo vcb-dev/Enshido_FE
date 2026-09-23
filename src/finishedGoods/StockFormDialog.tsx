@@ -306,7 +306,7 @@ function StockForm({
             <Button onClick={onClose} disabled={saving}>
               Hủy
             </Button>
-            <Button type="submit" variant="contained" disabled={saving}>
+            <Button type="submit" variant="contained" loading={saving} loadingPosition="start">
               {row ? 'Lưu' : profile.createLabel}
             </Button>
           </>
@@ -396,7 +396,7 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, mt: 1.5 }}>
             Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
           </Typography>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
             TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
           </Typography>
         </Paper>
@@ -477,7 +477,7 @@ function NvlViewTable({ lines }: { lines: FinishedGoodsNvlOption[] }) {
                         height: 32,
                         objectFit: 'cover',
                         borderRadius: 0.5,
-                        border: '1px solid #d5dbe0',
+                        border: '1px solid #ded3c3',
                       }}
                     />
                   ) : null}

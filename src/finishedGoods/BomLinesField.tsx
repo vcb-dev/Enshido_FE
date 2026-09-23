@@ -165,7 +165,7 @@ export function NvlSpecGrid({ material }: { material: FinishedGoodsNvlOption }) 
             height: 72,
             objectFit: 'cover',
             borderRadius: 0.5,
-            border: '1px solid #d5dbe0',
+            border: '1px solid #ded3c3',
           }}
         />
       ) : null}

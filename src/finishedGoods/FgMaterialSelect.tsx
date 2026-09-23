@@ -6,7 +6,10 @@ import ExpandMore from '@mui/icons-material/ExpandMore'
 import { useController } from 'react-hook-form'
 import { READ_ONLY_FIELD_SX } from '../components/ui'
 
-const FG_MATERIAL_GROUPS = [
+const FG_MATERIAL_GROUPS: readonly {
+  label: string
+  children?: readonly string[]
+}[] = [
   { label: 'Bạc', children: ['Bạc S925', 'Bạc S999'] },
   { label: 'Vàng', children: ['Vàng 18K', 'Vàng 24K'] },
   { label: 'Đồng' },
@@ -107,7 +110,7 @@ export function FormFgMaterialSelect({
         }}
         sx={{
           '& .MuiInputBase-input': {
-            color: value ? undefined : '#5d6d7e',
+            color: value ? undefined : '#6f6254',
           },
         }}
       />
@@ -115,11 +118,10 @@ export function FormFgMaterialSelect({
         id={menuId}
         anchorEl={anchorRef.current}
         open={open}
-        onClose={(_event, reason) => {
-          if (reason === 'itemClick') return
-          setOpen(false)
+        onClose={() => setOpen(false)}
+        slotProps={{
+          list: { 'aria-labelledby': buttonId, dense: true, sx: { py: 0.5, minWidth: 220 } },
         }}
-        MenuListProps={{ 'aria-labelledby': buttonId, dense: true, sx: { py: 0.5, minWidth: 220 } }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       >

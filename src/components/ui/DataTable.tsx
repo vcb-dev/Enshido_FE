@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -92,6 +92,8 @@ export type SubRowsConfig<T, S> = {
   key: (sub: S) => string
   /** Tên gọi theo số lượng, cho tooltip và trình đọc màn hình — vd `3 phiếu con`. */
   label?: (count: number) => string
+  /** Tự xổ các dòng có con; đổi key để xổ lại khi ngữ cảnh lọc thay đổi. */
+  autoExpandKey?: string
 }
 
 export type DataTableProps<T, S = never> = {
@@ -157,7 +159,7 @@ const GRID_TABLE_SX = {
   borderCollapse: 'separate',
   borderSpacing: 0,
   '& .MuiTableCell-root': {
-    border: '1px solid #b7c2cc',
+    border: '1px solid #cbbda9',
     py: 0.75,
     px: 1,
   },
@@ -185,9 +187,9 @@ function defaultCell(value: unknown): ReactNode {
 const subRowIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
 
 /** Dòng con: nền nhạt hơn dòng cha, hiện dần khi xổ ra. */
-const SUB_ROW_SX = { bgcolor: '#f6f8fa', animation: `${subRowIn} 160ms ease-out` } as const
+const SUB_ROW_SX = { bgcolor: '#faf6f0', animation: `${subRowIn} 160ms ease-out` } as const
 /** Dòng cha đang xổ: tô nhẹ để nhìn ra nhóm. */
-const OPEN_PARENT_SX = { bgcolor: '#eef3f8', cursor: 'pointer' } as const
+const OPEN_PARENT_SX = { bgcolor: '#f3e9da', cursor: 'pointer' } as const
 
 /**
  * Bấm vào link / nút / ô nhập bên trong dòng thì để chúng tự xử lý, không xổ / thu dòng.
@@ -289,6 +291,16 @@ export function DataTable<T, S = never>({
   const expandableKeys = subRows
     ? rows.flatMap((row, index) => (subsOf(row).length ? [rowKey(row, index)] : []))
     : []
+  const expandableKeyToken = expandableKeys.join('\u0000')
+
+  useEffect(() => {
+    if (!subRows?.autoExpandKey || expandableKeys.length === 0) return
+    setExpanded((current) => {
+      const next = new Set(current)
+      for (const key of expandableKeys) next.add(key)
+      return next
+    })
+  }, [expandableKeyToken, subRows?.autoExpandKey])
   const allOpen = expandableKeys.length > 0 && expandableKeys.every((key) => expanded.has(key))
   const toggleAll = () =>
     setExpanded((current) => {
@@ -651,7 +663,7 @@ export function DataTable<T, S = never>({
           labelDisplayedRows={({ from, to, count }) =>
             isMobile ? `${from}–${to}/${count}` : `${from}–${to} / ${count} ${rowsLabel}`
           }
-          sx={{ flexShrink: 0, borderTop: '1px solid #d5dbe0' }}
+          sx={{ flexShrink: 0, borderTop: '1px solid #ded3c3' }}
         />
       ) : null}
     </Paper>
@@ -898,7 +910,7 @@ function CardList<T, S>({
                         <Paper
                           key={subRows.key(sub)}
                           variant="outlined"
-                          sx={{ p: 1, bgcolor: '#f6f8fa', minWidth: 0 }}
+                          sx={{ p: 1, bgcolor: '#faf6f0', minWidth: 0 }}
                         >
                           <Stack
                             direction="row"

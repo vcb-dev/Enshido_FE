@@ -15,7 +15,6 @@ import {
   getInventoryLookupsApi,
   getWarehouseOutboundsApi,
   getWarehouseStockApi,
-  moneyDigitsFromApi,
   qtyFromApi,
   updateWarehouseOutboundApi,
   type CreateOutboundPayload,

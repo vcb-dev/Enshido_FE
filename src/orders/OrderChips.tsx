@@ -7,12 +7,20 @@ import type {
 } from '../api/productionOrders'
 import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META } from './catalog'
 
-export function StatusChip({ status, size = 'small' }: { status: ProductionStatus; size?: 'small' | 'medium' }) {
+export function StatusChip({
+  status,
+  size = 'small',
+  label,
+}: {
+  status: ProductionStatus
+  size?: 'small' | 'medium'
+  label?: string
+}) {
   const meta = STATUS_META[status]
   return (
     <Chip
       size={size}
-      label={meta.label}
+      label={label ?? meta.label}
       sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600, borderRadius: 1 }}
     />
   )

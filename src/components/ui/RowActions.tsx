@@ -7,6 +7,8 @@ export type RowActionsProps = {
   onEdit?: () => void
   /** Hiện nút Sửa nhưng không bấm được, vd: phiếu chuyển kho. */
   editDisabled?: boolean
+  /** Nút Sửa đang tải dữ liệu trước khi mở form (vd: kéo chi tiết đơn). */
+  editLoading?: boolean
   onLock?: () => void
   locked?: boolean
   onDelete?: () => void
@@ -37,6 +39,7 @@ export function RowActions({
   onView,
   onEdit,
   editDisabled,
+  editLoading,
   onLock,
   locked,
   onDelete,
@@ -58,6 +61,7 @@ export function RowActions({
             size="small"
             aria-label={titles?.edit ?? 'Chỉnh sửa'}
             disabled={editDisabled}
+            loading={editLoading}
             onClick={onEdit}
           >
             <PencilIcon />

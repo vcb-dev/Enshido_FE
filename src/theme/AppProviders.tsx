@@ -10,6 +10,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       {children}
       <Toaster
         position="top-right"
+        // Toast nằm fixed ở mép trên — lùi xuống dưới tai thỏ khi chạy như app đã cài.
+        offset={{ top: 'calc(env(safe-area-inset-top) + 24px)' }}
+        mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 16px)' }}
         closeButton
         richColors
         duration={3500}

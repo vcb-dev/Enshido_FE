@@ -277,7 +277,7 @@ export function ShipmentFormDialog({
         </Alert>
       ))}
 
-      <Box sx={{ p: 1.25, bgcolor: '#f4f6f7', borderRadius: 1 }}>
+      <Box sx={{ p: 1.25, bgcolor: '#f8f3eb', borderRadius: 1 }}>
         <Typography variant="body2">
           Tổng SL <b>{totals.qty}</b> · Thành tiền <b>{formatMoney(String(totals.amount))}</b> · Chi phí (giá vốn
           hiện tại) <b>{formatMoney(String(Math.round(totals.cost)))}</b>

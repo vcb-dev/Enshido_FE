@@ -7,7 +7,10 @@ import { withRequiredRule } from './field'
 import type { FormFieldBaseProps } from './field'
 
 export type FormQtyFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
-  Omit<TextInputProps, 'name' | 'value' | 'onChange' | 'onBlur' | 'errorText' | 'inputRef'>
+  Omit<TextInputProps, 'name' | 'value' | 'onChange' | 'onBlur' | 'errorText' | 'inputRef'> & {
+    /** Chuẩn hoá giá trị ngay khi gõ, vd chặn không cho vượt một mức trần. */
+    transform?: (value: string) => string
+  }
 
 /**
  * Ô nhập số lượng: chỉ nhận chữ số và một dấu thập phân (gõ "." hay "," đều được),
@@ -18,6 +21,7 @@ export function FormQtyField<T extends FieldValues>({
   control,
   rules,
   required,
+  transform,
   ...props
 }: FormQtyFieldProps<T>) {
   const { field, fieldState } = useController({
@@ -33,9 +37,12 @@ export function FormQtyField<T extends FieldValues>({
       {...props}
       {...rest}
       value={formatQtyInput(String(value ?? ''))}
-      onChange={(event) =>
-        onChange(parseQtyInput(typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data)))
-      }
+      onChange={(event) => {
+        const next = parseQtyInput(
+          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
+        )
+        onChange(transform ? transform(next) : next)
+      }}
       inputRef={ref}
       required={required}
       errorText={fieldState.error?.message}

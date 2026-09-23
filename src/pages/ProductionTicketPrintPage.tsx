@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { Alert, Box, Button, CircularProgress, GlobalStyles, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
+import { Alert, Box, Button, GlobalStyles, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
@@ -13,10 +13,12 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
+import { PrintSheetSkeleton } from '../components/ui'
 import { cloudinaryFit } from '../api/uploads'
 import {
   formatDateTime,
   orderTicketUrl,
+  parentWorkTicketUrl,
   SILVER_LOSS_TONE,
   STAGE_LABEL,
   STAGES,
@@ -129,13 +131,7 @@ export function ProductionTicketPrintPage() {
     />
   )
 
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 8, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <PrintSheetSkeleton />
   if (!detail.data || missingTicket) {
     return (
       <Box sx={{ p: 2 }}>
@@ -247,7 +243,13 @@ function Ticket({
         </Box>
         <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
           <QRCodeSVG
-            value={subTicket ? subTicketUrl(subTicket.code) : orderTicketUrl(order.code)}
+            value={
+              subTicket
+                ? subTicketUrl(subTicket.code)
+                : order.subTickets.length === 0
+                  ? parentWorkTicketUrl(order.code)
+                  : orderTicketUrl(order.code)
+            }
             size={96}
             marginSize={0}
             style={{ width: '11mm', height: '11mm' }}

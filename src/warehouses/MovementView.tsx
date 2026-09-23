@@ -148,7 +148,7 @@ function MovementFrame({
 }
 
 function moneyOrDash(value: string | null | undefined) {
-  return Number(value) ? formatMoney(value) : ''
+  return value && Number(value) ? formatMoney(value) : ''
 }
 
 function outboundPrice(row: OutboundRow) {

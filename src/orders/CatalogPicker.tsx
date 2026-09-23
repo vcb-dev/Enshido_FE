@@ -111,7 +111,7 @@ function Thumb({ url }: { url: string | null }) {
     height: 40,
     flexShrink: 0,
     borderRadius: 0.5,
-    border: '1px solid #d5dbe0',
+    border: '1px solid #ded3c3',
   }
   if (!url) return <Box sx={{ ...sx, bgcolor: 'action.hover' }} />
   return <Box component="img" src={cloudinaryThumb(url, 80)} alt="" loading="lazy" sx={{ ...sx, objectFit: 'cover' }} />

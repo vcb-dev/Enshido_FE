@@ -9,7 +9,6 @@ import {
   Divider,
   Drawer,
   IconButton,
-  LinearProgress,
   List,
   ListItemButton,
   ListItemIcon,
@@ -40,6 +39,8 @@ import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
 import { InstallAppButton } from './InstallAppButton'
+import { RouteSkeleton } from './RouteSkeleton'
+import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -61,6 +62,7 @@ export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const waiting = useWaitingCount()
   const canManageUsers = can(user, Permission.USERS_MANAGE)
   const canSeeConfig =
@@ -77,12 +79,18 @@ export function AppShell() {
   useEffect(() => setMobileOpen(false), [location.pathname])
 
   async function onLogout() {
-    await logout()
-    navigate('/login', { replace: true })
+    setLoggingOut(true)
+    try {
+      await logout()
+      navigate('/login', { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <ScreenLoadingBar />
       <AppBar
         position="fixed"
         sx={{
@@ -98,7 +106,7 @@ export function AppShell() {
           >
             <TableRowsIcon />
           </IconButton>
-          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0, color: 'primary.dark', fontWeight: 700 }}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
               Hệ thống quản lý xưởng
             </Box>
@@ -115,7 +123,7 @@ export function AppShell() {
               sx={{
                 width: 32,
                 height: 32,
-                bgcolor: 'primary.main',
+                bgcolor: 'secondary.main',
                 fontSize: '0.8rem',
                 fontWeight: 600,
               }}
@@ -132,6 +140,7 @@ export function AppShell() {
             </Box>
             <Button
               variant="outlined"
+              loading={loggingOut}
               onClick={() => void onLogout()}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
@@ -139,6 +148,7 @@ export function AppShell() {
             </Button>
             <IconButton
               aria-label="Đăng xuất"
+              loading={loggingOut}
               onClick={() => void onLogout()}
               sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
             >
@@ -216,7 +226,7 @@ export function AppShell() {
           </Alert>
         ) : null}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          <Suspense fallback={<LinearProgress />}>
+          <Suspense fallback={<RouteSkeleton />}>
             <Outlet />
           </Suspense>
         </Box>
@@ -251,10 +261,22 @@ function NavItem({
       sx={{
         borderRadius: 1,
         mb: 0.5,
+        position: 'relative',
         '&.active': {
           bgcolor: 'action.selected',
-          color: 'primary.main',
+          color: 'primary.dark',
+          fontWeight: 700,
           '& .MuiListItemIcon-root': { color: 'primary.main' },
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: -8,
+            top: 7,
+            bottom: 7,
+            width: 3,
+            borderRadius: 2,
+            bgcolor: 'secondary.main',
+          },
         },
       }}
     >
@@ -285,7 +307,15 @@ function DrawerNav({
 }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, py: 1.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          px: 2,
+          py: 1.5,
+          background: 'linear-gradient(180deg, #fffdfa 0%, #f5ead9 100%)',
+        }}
+      >
         {/* Desktop: sidebar luôn mở cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
         <Box component="img" src={logo} alt="Enshido" sx={{ width: { xs: 150, md: 96 }, height: 'auto' }} />
       </Box>

@@ -7,10 +7,14 @@
     <!-- viewport-fit=cover để nội dung chạm mép trên iPhone có tai thỏ; theme.ts bù safe-area. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Phiếu sản xuất và phiếu con cho thợ xưởng Enshido" />
-    <meta name="theme-color" content="#1b4f72" />
-    <!-- Cài lên màn hình chính iOS: chạy toàn màn hình, không thanh địa chỉ Safari. -->
+    <meta name="theme-color" content="#6b4513" />
+    <!-- Cài lên màn hình chính iOS: chạy toàn màn hình, không thanh địa chỉ Safari.
+         status-bar-style default: thanh trạng thái nền sáng chữ tối, trang bắt đầu dưới nó.
+         black-translucent cũ cho trang chui dưới thanh trạng thái với chữ trắng — đè lên
+         header trắng là mất giờ/pin. Máy đã cài từ trước vẫn giữ kiểu cũ tới khi cài lại;
+         header vẫn đúng nhờ theme.ts bù safe-area. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Enshido" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Enshido | Quản lý xưởng sản xuất</title>

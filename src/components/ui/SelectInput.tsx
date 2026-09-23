@@ -84,7 +84,7 @@ export function SelectInput<V extends SelectOptionValue = string>({
           displayEmpty: allowEmpty,
           renderValue: (selected) => {
             if (selected === '' || selected == null) {
-              return <span style={{ color: '#5d6d7e' }}>{emptyHint}</span>
+              return <span style={{ color: '#6f6254' }}>{emptyHint}</span>
             }
             const option = options.find((item) => item.value === selected)
             return option?.label ?? String(selected)

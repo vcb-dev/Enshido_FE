@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { cameraErrorMessage, pathFromScan } from './qrScan'
 import { canAccessPath } from '../auth/homePath'
 import { parseSubTicketCode } from '../api/productionOrders'
-import { orderTicketUrl, subTicketUrl } from '../orders/catalog'
+import { orderTicketUrl, parentWorkTicketUrl, subTicketUrl } from '../orders/catalog'
 
 describe('pathFromScan — thợ quét QR trên phiếu giấy', () => {
   it('QR phiếu con đưa thẳng tới phiếu đó', () => {
@@ -100,6 +100,13 @@ describe('QR in ra rồi quét lại', () => {
     const path = pathFromScan(orderTicketUrl('A001'))
 
     expect(path).toBe('/orders/A001')
+    expect(canAccessPath(worker, path!)).toBe(true)
+  })
+
+  it('QR phiếu mẹ không chia → màn tự nhận giống phiếu con', () => {
+    const path = pathFromScan(parentWorkTicketUrl('A001'))
+
+    expect(path).toBe('/tickets/A001')
     expect(canAccessPath(worker, path!)).toBe(true)
   })
 

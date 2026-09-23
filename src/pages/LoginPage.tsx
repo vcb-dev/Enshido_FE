@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import { resolvePostLoginPath } from '../auth/homePath'
-import { Form, FormTextField } from '../components/ui'
+import { Form, FormTextField, LoginSkeleton } from '../components/ui'
 import { InstallAppBanner } from '../components/InstallAppBanner'
 import logo from '../assets/logo.png'
 
@@ -32,14 +32,7 @@ export function LoginPage() {
     return <Navigate to={resolvePostLoginPath(user, fromState)} replace />
   }
 
-  if (loading) {
-    return (
-      <Stack spacing={1.5} sx={{ minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress size={28} />
-        <Typography color="text.secondary">Đang kiểm tra phiên đăng nhập…</Typography>
-      </Stack>
-    )
-  }
+  if (loading) return <LoginSkeleton />
 
   async function onSubmit(values: LoginFormValues) {
     setError('')
@@ -93,7 +86,7 @@ export function LoginPage() {
 
               {error ? <Alert severity="error">{error}</Alert> : null}
 
-              <Button type="submit" variant="contained" size="medium" disabled={submitting}>
+              <Button type="submit" variant="contained" size="medium" loading={submitting} loadingPosition="start">
                 {submitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
               </Button>
             </Stack>

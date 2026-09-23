@@ -56,6 +56,32 @@ export const TICKET_ROWS: TicketRow[] = [
     numeric: true,
     value: (e) => weight(e.handedSilverWeight),
   },
+  {
+    key: 'handedStoneCount',
+    label: 'Số viên đá giao',
+    numeric: true,
+    value: (e) => (e.handedStoneCount != null ? String(e.handedStoneCount) : ''),
+  },
+  {
+    key: 'handedStoneWeight',
+    label: 'Trọng lượng đá giao',
+    hint: '(g)',
+    numeric: true,
+    value: (e) => weight(e.handedStoneWeight),
+  },
+  {
+    key: 'stoneCount',
+    label: 'Số viên đá gắn',
+    numeric: true,
+    value: (e) => (e.stoneCount != null ? String(e.stoneCount) : ''),
+  },
+  {
+    key: 'stoneWeight',
+    label: 'Trọng lượng đá gắn',
+    hint: '(g)',
+    numeric: true,
+    value: (e) => weight(e.stoneWeight),
+  },
   { key: 'craftsman', label: 'Người chế tác (Thợ)', tone: 'craftsman', value: (e) => e.craftsmanName },
   { key: 'kcs', label: 'Người KCS', tone: 'kcs', value: (e) => e.returnedByName ?? '' },
   { key: 'returnedAt', label: 'Thời gian nhận lại', value: (e) => formatDateShort(e.returnedAt, '') },
@@ -74,6 +100,17 @@ export const TICKET_ROWS: TicketRow[] = [
   },
   { key: 'btp', label: 'BTP Thu hồi sau nguội', numeric: true, value: (e) => weight(e.btpRecoveredWeight) },
   { key: 'silverRecovered', label: 'Bạc S925 Thu hồi sau nguội', numeric: true, value: (e) => weight(e.silverRecoveredWeight) },
+  {
+    key: 'qtyLoss',
+    label: 'Hao hụt số lượng',
+    numeric: true,
+    value: (e) => {
+      if (!e.returnedAt || e.handedQty == null || e.returnedQty == null) return ''
+      const lost = e.handedQty - e.returnedQty
+      const percent = e.handedQty > 0 ? ((lost / e.handedQty) * 100).toFixed(2) : null
+      return `${lost}${percent != null ? ` (${formatQty(percent)}%)` : ''}`
+    },
+  },
   {
     key: 'silverLoss',
     label: 'Hao hụt bạc',
@@ -150,13 +187,21 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
   const names = (pick: (entry: StageEntry) => string | null) =>
     Array.from(new Set(entries.map(pick).filter((name): name is string => Boolean(name)))).join(', ')
   const handedSilver = sumWeights(entries.map((entry) => entry.handedSilverWeight))
+  const stone = sumWeights(entries.map((entry) => entry.stoneWeight))
   const returnedSilver = sumWeights(entries.map((entry) => entry.returnedSilverWeight))
   const btp = sumWeights(entries.map((entry) => entry.btpRecoveredWeight))
   const silverRecovered = sumWeights(entries.map((entry) => entry.silverRecoveredWeight))
   const handedQty = sumCounts(entries.map((entry) => entry.handedQty))
+  // Đá gắn ở khâu Vào đá nằm trong TL cân lại nên phải cộng vào vế giao, giống công thức ở BE.
   const loss =
     done && handedSilver != null && returnedSilver != null
-      ? round4(Number(handedSilver) - Number(returnedSilver) - Number(btp ?? 0) - Number(silverRecovered ?? 0))
+      ? round4(
+          Number(handedSilver) +
+            Number(stone ?? 0) -
+            Number(returnedSilver) -
+            Number(btp ?? 0) -
+            Number(silverRecovered ?? 0),
+        )
       : null
   const lossPercent =
     loss != null && handedSilver != null && Number(handedSilver) > 0
@@ -177,6 +222,10 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
     handedAt,
     handedQty,
     handedSilverWeight: handedSilver,
+    handedStoneCount: sumCounts(entries.map((entry) => entry.handedStoneCount)),
+    handedStoneWeight: sumWeights(entries.map((entry) => entry.handedStoneWeight)),
+    stoneCount: sumCounts(entries.map((entry) => entry.stoneCount)),
+    stoneWeight: stone,
     craftsmanUserId: null,
     craftsmanName: names((entry) => entry.craftsmanName),
     // Cột cộng không phải một lần nộp thật của ai — để trống thay vì gộp mốc thời gian.
@@ -249,7 +298,7 @@ export function outcomeLines(
     return [
       formatDateShort(goods.receivedAt),
       goods.receivedByName,
-      `Vào kho: ${goods.qty}`,
+      goods.pendingQty > 0 ? `Chờ vào tồn: ${goods.pendingQty}` : `Vào tồn: ${goods.qty}`,
     ]
   }
 

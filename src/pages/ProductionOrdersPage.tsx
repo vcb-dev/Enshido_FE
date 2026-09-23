@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -49,6 +49,7 @@ import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/Order
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved } from '../orders/orderCache'
+import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
@@ -94,6 +95,10 @@ export function ProductionOrdersPage() {
     queryFn: () => listProductionOrdersApi(listParams),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+    // Đây là màn điều hành; trạng thái phiếu có thể đổi từ điện thoại của thợ.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -169,6 +174,7 @@ export function ProductionOrdersPage() {
           onView: (row) => navigate(`/orders/${row.code}`),
           onEdit: (row) => loadEdit.mutate(row),
           onDelete: (row) => del.request(row),
+          loadingEditId: loadEdit.isPending ? (loadEdit.variables?.id ?? null) : null,
           isAdmin,
         },
         {
@@ -203,6 +209,8 @@ export function ProductionOrdersPage() {
       isAdmin,
       listSource,
       loadEdit.mutate,
+      loadEdit.isPending,
+      loadEdit.variables,
       navigate,
       params.dueDate,
       params.receivedDate,
@@ -261,7 +269,7 @@ export function ProductionOrdersPage() {
       >
         <Tab value="" label={tabLabel('Tất cả', counts?.ALL)} />
         {STATUS_TABS.map((status) => (
-          <Tab key={status} value={status} label={tabLabel(STATUS_META[status].label, counts?.[status])} />
+          <Tab key={status} value={status} label={<StatusTabLabel status={status} count={counts?.[status]} />} />
         ))}
       </Tabs>
 
@@ -270,9 +278,16 @@ export function ProductionOrdersPage() {
         rows={items}
         rowKey={(row) => row.id}
         subRows={{
-          get: (row) => row.subTickets,
+          get: (row) =>
+            statusTab
+              ? row.subTickets.filter((sub) => {
+                  const subStatus = subTicketListStatus(sub)
+                  return subStatus === statusTab || (subStatus == null && row.status === statusTab)
+                })
+              : row.subTickets,
           key: (sub) => sub.code,
           label: (count) => `${count} phiếu con`,
+          autoExpandKey: statusTab || undefined,
         }}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
@@ -285,7 +300,7 @@ export function ProductionOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={listSource === 'BTP' ? 1436 : 1316}
+        minWidth={listSource === 'BTP' ? 1540 : 1420}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         sort={table.sortState}
@@ -380,6 +395,16 @@ function tabLabel(label: string, count: number | undefined) {
   return count == null ? label : `${label} (${count})`
 }
 
+function StatusTabLabel({ status, count }: { status: ProductionStatus; count: number | undefined }) {
+  const meta = STATUS_META[status]
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: meta.bg, flexShrink: 0 }} />
+      <span>{tabLabel(meta.label, count)}</span>
+    </Stack>
+  )
+}
+
 function deleteHint(row: ProductionOrderRow, isAdmin: boolean) {
   if (!isAdmin) return 'Chỉ admin được xóa đơn'
   if (row.status === 'NEW') return 'Xóa'
@@ -393,6 +418,8 @@ function orderColumns(
     onView: (row: ProductionOrderRow) => void
     onEdit: (row: ProductionOrderRow) => void
     onDelete: (row: ProductionOrderRow) => void
+    /** Đơn đang được tải chi tiết để mở form sửa. */
+    loadingEditId: string | null
     isAdmin: boolean
   },
   filters: {
@@ -430,10 +457,10 @@ function orderColumns(
     {
       key: 'status',
       header: 'Trạng thái',
-      width: 116,
+      width: 220,
       sortable: true,
       card: 'meta',
-      render: (row) => <StatusChip status={row.status} />,
+      render: (row) => <OrderStatus row={row} />,
       renderSub: (sub) => <SubTicketStatus sub={sub} />,
     },
     {
@@ -544,9 +571,9 @@ function orderColumns(
     {
       key: 'dueDate',
       header: 'Ngày cần trả',
-      width: 148,
+      width: 156,
       filter: filters.dueDate,
-      render: (row) => formatStockedDate(row.dueDate),
+      render: (row) => <DeadlineCell row={row} />,
     },
     {
       key: 'actions',
@@ -560,6 +587,7 @@ function orderColumns(
           <RowActions
             onView={() => actions.onView(row)}
             onEdit={() => actions.onEdit(row)}
+            editLoading={actions.loadingEditId === row.id}
             onDelete={() => actions.onDelete(row)}
             deleteDisabled={!actions.isAdmin || !(row.status === 'NEW' || (row.source === 'BTP' && row.status === 'FILING'))}
             titles={{
@@ -592,11 +620,89 @@ function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
   if (sub.state === 'DEFECT') return <StatusChip status="DEFECT" />
   if (!sub.stage) return <SubTicketStateChip state="IDLE" label="Chưa giao khâu" />
   return (
-    <>
+    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
       <StatusChip status={sub.stage} />
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-        {SUB_TICKET_STATE_META[sub.state].label}
+      <SubTicketStateChip
+        state={sub.state}
+        label={sub.state === 'IDLE' ? 'KCS đã nhận lại' : undefined}
+      />
+    </Stack>
+  )
+}
+
+function OrderStatus({ row }: { row: ProductionOrderRow }) {
+  if (row.subTickets.length) {
+    const counts = new Map<ProductionStatus, number>()
+    for (const ticket of row.subTickets) {
+      const status = subTicketListStatus(ticket)
+      if (status) counts.set(status, (counts.get(status) ?? 0) + 1)
+    }
+    if (counts.size) {
+      return (
+        <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+          {STATUS_TABS.filter((status) => counts.has(status)).map((status) => (
+            <StatusChip
+              key={status}
+              status={status}
+              label={`${STATUS_META[status].label} · ${counts.get(status)}`}
+            />
+          ))}
+        </Stack>
+      )
+    }
+  }
+  const detail =
+    row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT'
+      ? row.workState === 'IDLE'
+        ? 'KCS đã nhận lại'
+        : SUB_TICKET_STATE_META[row.workState].label
+      : null
+  return (
+    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+      <StatusChip status={row.status} />
+      {detail ? (
+        <SubTicketStateChip state={row.workState!} label={detail} />
+      ) : null}
+    </Stack>
+  )
+}
+
+function subTicketListStatus(sub: SubTicketSummary): ProductionStatus | null {
+  if (sub.state === 'FINISH') return 'FINISHING'
+  if (sub.state === 'DEFECT') return 'DEFECT'
+  return sub.stage
+}
+
+const DEADLINE_TONE = {
+  overdue: { bg: '#fdecea', fg: '#b3261e', border: '#ef9a9a' },
+  today: { bg: '#ffebee', fg: '#b71c1c', border: '#e57373' },
+  soon: { bg: '#fff4d6', fg: '#8a6100', border: '#f0c36d' },
+} as const
+
+function DeadlineCell({ row }: { row: ProductionOrderRow }) {
+  const warning = deadlineWarning(row.dueDate, row.status)
+  if (!row.dueDate) return '—'
+  const tone = warning ? DEADLINE_TONE[warning.tone] : null
+  return (
+    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+      <Typography variant="body2" sx={{ fontWeight: warning ? 700 : 400, color: tone?.fg }}>
+        {formatStockedDate(row.dueDate)}
       </Typography>
-    </>
+      {warning && tone ? (
+        <Chip
+          size="small"
+          label={warning.label}
+          sx={{
+            height: 22,
+            bgcolor: tone.bg,
+            color: tone.fg,
+            border: '1px solid',
+            borderColor: tone.border,
+            fontWeight: 700,
+            '& .MuiChip-label': { px: 0.75 },
+          }}
+        />
+      ) : null}
+    </Stack>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { Alert, Box, Button, Chip, CircularProgress, Link, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Link, Paper, Stack, Typography } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
 import {
@@ -9,21 +9,23 @@ import {
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader } from '../components/ui'
+import { CardGroupSkeleton, PageHeader } from '../components/ui'
 import { ScanQrButton } from '../components/ScanQrButton'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
-import { queuedLabel, type QueuedSubTicketAction } from '../orders/subTicketQueue'
+import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '../orders/subTicketQueue'
 
-/** Màn của thợ: nhận phiếu con ở khâu đang mở, theo dõi phiếu đang giữ và phiếu vừa nộp. */
+/** Màn của thợ: nhận phiếu mẹ hoặc phiếu con đang mở, theo dõi việc đang giữ và vừa nộp. */
 export function MyTicketsPage() {
   const queryClient = useQueryClient()
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
-    refetchInterval: 60_000,
+    // Khâu vừa được mở từ máy người giao phải xuất hiện sớm trên máy của thợ.
+    refetchInterval: 10_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   useEffect(() => {
@@ -48,6 +50,12 @@ export function MyTicketsPage() {
   // vẫn phải bấm được phiếu khác. Bảng này còn nguyên sau khi tắt mở lại app.
   const queued = useQueuedSubTickets()
 
+  // Đang gửi lên máy chủ thì nút quay; nằm chờ mạng thì chỉ khoá — chip "Chờ gửi" đã nói rõ.
+  const sending = (item: MyTicketItem, action: SubTicketAction) => {
+    const entry = queued.get(item.ticketCode)
+    return entry?.action === action && !entry.waiting
+  }
+
   const vars = (item: MyTicketItem) => ({
     orderCode: item.orderCode,
     no: item.no,
@@ -58,11 +66,11 @@ export function MyTicketsPage() {
     <Stack spacing={2} sx={{ pb: 3 }}>
       <PageHeader
         title="Phiếu của tôi"
-        subtitle="Nhận phiếu con ở khâu đang mở, rồi mang hàng tới người giao cân bạc và xác nhận."
+        subtitle="Nhận phiếu ở khâu đang mở, rồi mang hàng tới người giao cân bạc và xác nhận."
         actions={
           <Stack direction="row" spacing={1}>
             <ScanQrButton />
-            <Button variant="outlined" onClick={() => void tickets.refetch()} disabled={tickets.isFetching}>
+            <Button variant="outlined" onClick={() => void tickets.refetch()} loading={tickets.isFetching}>
               Làm mới
             </Button>
           </Stack>
@@ -70,9 +78,10 @@ export function MyTicketsPage() {
       />
 
       {tickets.isLoading ? (
-        <Stack sx={{ py: 6, alignItems: 'center' }}>
-          <CircularProgress size={28} />
-        </Stack>
+        <>
+          <CardGroupSkeleton count={2} media />
+          <CardGroupSkeleton count={2} media />
+        </>
       ) : !tickets.data ? (
         <Alert severity="error">
           {tickets.error instanceof Error ? tickets.error.message : 'Không tải được phiếu'}
@@ -98,6 +107,7 @@ export function MyTicketsPage() {
                       size="small"
                       color="inherit"
                       disabled={queued.has(item.ticketCode)}
+                      loading={sending(item, 'unclaim')}
                       onClick={() => unclaim.mutate(vars(item))}
                     >
                       Huỷ nhận
@@ -107,6 +117,7 @@ export function MyTicketsPage() {
                       size="small"
                       variant="contained"
                       disabled={queued.has(item.ticketCode)}
+                      loading={sending(item, 'submit')}
                       onClick={() => submit.mutate(vars(item))}
                     >
                       Đã làm xong
@@ -116,6 +127,7 @@ export function MyTicketsPage() {
                       size="small"
                       color="inherit"
                       disabled={queued.has(item.ticketCode)}
+                      loading={sending(item, 'unsubmit')}
                       onClick={() => unsubmit.mutate(vars(item))}
                     >
                       Bỏ báo xong
@@ -128,7 +140,7 @@ export function MyTicketsPage() {
 
           <Group
             title="Chờ nhận"
-            empty="Chưa có phiếu con nào đang mở khâu."
+            empty="Chưa có phiếu nào đang mở khâu."
             count={tickets.data.available.length}
           >
             {tickets.data.available.map((item) => (
@@ -141,6 +153,7 @@ export function MyTicketsPage() {
                   <Button
                     variant="contained"
                     disabled={queued.has(item.ticketCode)}
+                    loading={sending(item, 'claim')}
                     onClick={() => claim.mutate(vars(item))}
                   >
                     Nhận phiếu
@@ -222,8 +235,8 @@ function TicketCard({
           height: 72,
           flexShrink: 0,
           borderRadius: 1,
-          border: '1px solid #d5dbe0',
-          bgcolor: '#f4f6f7',
+          border: '1px solid #ded3c3',
+          bgcolor: '#f8f3eb',
           overflow: 'hidden',
         }}
       >

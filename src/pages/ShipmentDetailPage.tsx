@@ -4,7 +4,6 @@ import {
   Box,
   Breadcrumbs,
   Button,
-  CircularProgress,
   Link,
   Paper,
   Stack,
@@ -30,8 +29,8 @@ import {
   type ShipmentPayload,
 } from '../api/finishedGoods'
 import { formatMoney, formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader } from '../components/ui'
+import { ImageLightbox, ZoomThumb, type LightboxImage } from '../components/ImageLightbox'
+import { PageHeader, ShipmentDetailSkeleton } from '../components/ui'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
 import { formatDateTime } from '../orders/catalog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
@@ -46,6 +45,7 @@ export function ShipmentDetailPage() {
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [viewing, setViewing] = useState<number | null>(null)
 
   const detail = useQuery({ queryKey: ['shipment', code], queryFn: () => getShipmentApi(code), staleTime: 60_000 })
   const stock = useQuery({
@@ -88,13 +88,7 @@ export function ShipmentDetailPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 6, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <ShipmentDetailSkeleton />
   if (!detail.data) {
     return (
       <Alert severity="error">
@@ -104,6 +98,10 @@ export function ShipmentDetailPage() {
   }
 
   const shipment = detail.data
+  // Ảnh các dòng có ảnh, lướt qua lại trong một hộp xem ảnh; chú thích theo mã đơn.
+  const lineImages: LightboxImage[] = shipment.lines.flatMap((line) =>
+    line.imageUrl ? [{ id: line.id, url: line.imageUrl, caption: `${line.orderCode} · ${line.description}` }] : [],
+  )
   const margin = Number(shipment.totals.amount) - Number(shipment.totals.costAmount)
   const stale = shipment.lastPrintedAt != null && shipment.dataChangedAt > shipment.lastPrintedAt
 
@@ -182,11 +180,12 @@ export function ShipmentDetailPage() {
                   <TableCell>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                       {line.imageUrl ? (
-                        <Box
-                          component="img"
-                          src={cloudinaryThumb(line.imageUrl, 72)}
-                          alt=""
-                          sx={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
+                        <ZoomThumb
+                          url={line.imageUrl}
+                          size={36}
+                          label={`Xem ảnh lớn ${line.orderCode}`}
+                          onClick={() => setViewing(lineImages.findIndex((image) => image.id === line.id))}
+                          sx={{ borderRadius: 0.5 }}
                         />
                       ) : null}
                       <Box>
@@ -205,7 +204,7 @@ export function ShipmentDetailPage() {
                   <TableCell>{line.note ?? '—'}</TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ '& td': { fontWeight: 700, bgcolor: '#f4f6f7' } }}>
+              <TableRow sx={{ '& td': { fontWeight: 700, bgcolor: '#f8f3eb' } }}>
                 <TableCell colSpan={2}>Cộng</TableCell>
                 <TableCell sx={NUM}>{shipment.totals.qty}</TableCell>
                 <TableCell />
@@ -226,6 +225,13 @@ export function ShipmentDetailPage() {
         </Typography>
       </Paper>
 
+      <ImageLightbox
+        images={lineImages}
+        index={viewing}
+        title="Ảnh sản phẩm"
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
       <ShipmentFormDialog
         open={editing}
         shipment={shipment}

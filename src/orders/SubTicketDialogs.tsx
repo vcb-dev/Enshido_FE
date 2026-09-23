@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { Alert, Checkbox, FormControlLabel, Stack, Typography } from '@mui/material'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import type {
   ProductionOrderDetail,
@@ -14,6 +27,157 @@ import { isInStage, STAGE_LABEL, STAGES } from './catalog'
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
 
 type TicketValues = { qty: string; silverWeight: string; note: string }
+
+type SplitRow = { qty: string; silverWeight: string; note: string }
+
+/** Chia lần đầu thành ít nhất hai phiếu; lưu nguyên khối để không bao giờ sinh một phiếu lẻ. */
+export function SplitSubTicketsDialog({
+  open,
+  order,
+  saving,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  order: ProductionOrderDetail
+  saving: boolean
+  onClose: () => void
+  onSave: (tickets: SubTicketPayload[]) => void
+}) {
+  const [rows, setRows] = useState<SplitRow[]>([])
+  const seeded = useRef(false)
+
+  useEffect(() => {
+    if (!open) {
+      seeded.current = false
+      return
+    }
+    if (seeded.current) return
+    seeded.current = true
+    const firstQty = Math.floor(order.qty / 2)
+    const secondQty = order.qty - firstQty
+    const totalSilver = Number(order.silverWeight ?? 0)
+    const firstSilver = round4(totalSilver / 2)
+    const secondSilver = round4(totalSilver - firstSilver)
+    setRows([
+      { qty: firstQty > 0 ? String(firstQty) : '', silverWeight: firstSilver > 0 ? String(firstSilver) : '', note: '' },
+      { qty: secondQty > 0 ? String(secondQty) : '', silverWeight: secondSilver > 0 ? String(secondSilver) : '', note: '' },
+    ])
+  }, [open, order.qty, order.silverWeight])
+
+  const update = (index: number, field: keyof SplitRow, value: string) =>
+    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)))
+  const totalQty = rows.reduce((sum, row) => sum + Number(row.qty || 0), 0)
+  const totalSilver = round4(rows.reduce((sum, row) => sum + Number(row.silverWeight || 0), 0))
+  const invalidRow = rows.some(
+    (row) => !Number.isInteger(Number(row.qty)) || Number(row.qty) < 1 || !(Number(row.silverWeight) > 0),
+  )
+  // Cả hai vế làm tròn 4 số lẻ như cột Decimal(18,4) ở DB, rồi so đúng như BE so Decimal —
+  // dung sai sẽ cho qua những mức mà BE chặn, người dùng bấm Lưu mới biết.
+  const invalidTotals =
+    totalQty > order.qty ||
+    order.silverWeight == null ||
+    totalSilver > round4(Number(order.silverWeight))
+  const canSubmit = rows.length >= 2 && !invalidRow && !invalidTotals
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Chia đơn {order.code} thành phiếu con</DialogTitle>
+      <DialogContent sx={{ pt: '8px !important' }}>
+        <Alert severity="info" sx={{ mb: 1.5 }}>
+          Chỉ chia khi có từ 2 phần việc trở lên. Nếu một thợ làm toàn bộ đơn, đóng hộp thoại và giao khâu trực
+          tiếp trên phiếu mẹ.
+        </Alert>
+        <Stack spacing={1}>
+          {rows.map((row, index) => (
+            <Box
+              key={index}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr 1fr', sm: '72px 1fr 1fr 1.5fr auto' },
+                gap: 1,
+                alignItems: 'start',
+                p: 1,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 700, pt: 1.25 }}>
+                Phiếu {index + 1}
+              </Typography>
+              <TextField
+                size="small"
+                type="number"
+                label="Số lượng"
+                value={row.qty}
+                onChange={(event) => update(index, 'qty', event.target.value)}
+                slotProps={{ htmlInput: { min: 1 } }}
+              />
+              <TextField
+                size="small"
+                type="number"
+                label="Gram bạc"
+                value={row.silverWeight}
+                onChange={(event) => update(index, 'silverWeight', event.target.value)}
+                slotProps={{ htmlInput: { min: 0, step: 'any' } }}
+              />
+              <TextField
+                size="small"
+                label="Ghi chú"
+                value={row.note}
+                onChange={(event) => update(index, 'note', event.target.value)}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+              />
+              <Button
+                size="small"
+                color="error"
+                disabled={rows.length <= 2}
+                onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                sx={{ mt: 0.5 }}
+              >
+                Xóa
+              </Button>
+            </Box>
+          ))}
+        </Stack>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, justifyContent: 'space-between' }}>
+          <Button
+            size="small"
+            onClick={() => setRows((current) => [...current, { qty: '', silverWeight: '', note: '' }])}
+          >
+            Thêm phiếu
+          </Button>
+          <Typography variant="body2" color={invalidTotals ? 'error.main' : 'text.secondary'}>
+            Đã chia {totalQty}/{order.qty} sp · {formatQty(String(totalSilver))}/
+            {formatQty(order.silverWeight ?? '0')} g bạc
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>
+          Hủy
+        </Button>
+        <Button
+          variant="contained"
+          disabled={!canSubmit}
+          loading={saving}
+          onClick={() =>
+            onSave(
+              rows.map((row) => ({
+                qty: Number(row.qty),
+                silverWeight: row.silverWeight,
+                note: row.note.trim() || undefined,
+              })),
+            )
+          }
+        >
+          Tạo {rows.length} phiếu
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 
 /** Phần số lượng / gram còn chưa chia (không tính phiếu đang sửa). */
 export function remainingSplit(order: ProductionOrderDetail, exceptId?: string) {

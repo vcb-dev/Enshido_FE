@@ -201,12 +201,12 @@ export function WarehouseDetailPage() {
 
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
-const split = { borderLeft: '2px solid #1b4f72' }
+const split = { borderLeft: '2px solid #6b4513' }
 const groupHead = {
-  open: { ...split, bgcolor: '#edf1f4', fontWeight: 700 },
+  open: { ...split, bgcolor: '#f3eee6', fontWeight: 700 },
   in: { ...split, bgcolor: '#e4f0e8', fontWeight: 700 },
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
-  stock: { ...split, bgcolor: '#d6e3ee', fontWeight: 700, color: 'primary.main' },
+  stock: { ...split, bgcolor: '#e8d8bd', fontWeight: 700, color: 'primary.main' },
 }
 /** Bốn nhóm tiêu đề bậc 1 của bảng tồn: mỗi nhóm gộp một cặp SL / TT. */
 const STOCK_GROUPS = {
@@ -217,10 +217,10 @@ const STOCK_GROUPS = {
 } satisfies Record<string, ColumnGroup>
 
 const groupBody = {
-  open: { ...split, ...numCell, bgcolor: '#f7f9fb' },
+  open: { ...split, ...numCell, bgcolor: '#fbf8f3' },
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
   out: { ...split, ...numCell, bgcolor: '#faf6f4' },
-  stock: { ...split, ...numCell, bgcolor: '#eaf0f6', fontWeight: 700 },
+  stock: { ...split, ...numCell, bgcolor: '#f1e6d5', fontWeight: 700 },
 }
 
 function availabilityColor(code: AvailabilityCode) {
@@ -859,7 +859,7 @@ function stockColumns(
       group: STOCK_GROUPS.stock,
       headSx: { bgcolor: groupHead.stock.bgcolor, color: 'primary.main' },
       align: 'right',
-      cellSx: { ...groupBody.stock, borderLeft: '1px solid #b7c2cc' },
+      cellSx: { ...groupBody.stock, borderLeft: '1px solid #cbbda9' },
       render: (row) => formatMoney(row.amount),
     },
   )
@@ -1317,7 +1317,6 @@ function StockEditDialog({
                   index={index}
                   form={form}
                   profile={profile}
-                  kind={kind}
                   row={row}
                   nameSuggestions={nameSuggestions}
                   categoryOptions={categoryOptions}
@@ -1348,7 +1347,12 @@ function StockEditDialog({
             <Button onClick={onClose} disabled={saving}>
               Hủy
             </Button>
-            <Button type="submit" variant="contained" disabled={saving || uploading}>
+            <Button
+              type="submit"
+              variant="contained"
+              loading={saving || uploading}
+              loadingPosition="start"
+            >
               {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
             </Button>
           </DialogActions>
@@ -1428,7 +1432,6 @@ function StockItemFields({
   index,
   form,
   profile,
-  kind,
   row,
   nameSuggestions,
   categoryOptions,
@@ -1449,7 +1452,6 @@ function StockItemFields({
   index: number
   form: UseFormReturn<StockDialogValues>
   profile: StockProfile
-  kind: CrudDialogKind
   row: StockRow | null
   nameSuggestions: string[]
   categoryOptions: LookupItem[]
@@ -1709,4 +1711,3 @@ function moneyDigitsFromApi(value: string) {
   if (!Number.isFinite(n) || n === 0) return ''
   return String(Math.round(n))
 }
-

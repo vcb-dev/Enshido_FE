@@ -65,6 +65,10 @@ export type ProductionOrderRow = {
   debtStatus: string | null
   createdAt: string
   updatedAt: string
+  /** Trạng thái thao tác của phiếu mẹ khi đơn không chia phiếu con. */
+  workState: SubTicketState | null
+  /** Khâu đang chạy hoặc vừa được KCS nhận lại của phiếu mẹ. */
+  workStage: StageCode | null
   images: Array<{ id: string; kind: ProductionImageKind; url: string }>
   /** Phiếu con của đơn — thành dòng con xổ ra dưới đơn ở danh sách. Đơn chưa chia thì rỗng. */
   subTickets: SubTicketSummary[]
@@ -104,6 +108,10 @@ export type StageEntry = {
   /** Số lượng sản phẩm giao cho thợ (đơn cũ chưa ghi thì null). */
   handedQty: number | null
   handedSilverWeight: string | null
+  /** Khâu Vào đá: số viên đá phát cho thợ lúc giao. */
+  handedStoneCount: number | null
+  /** Khâu Vào đá: TL đá phát cho thợ (g). */
+  handedStoneWeight: string | null
   craftsmanUserId: string | null
   craftsmanName: string
   /** Thợ bấm "Đã làm xong" lúc nào; null là chưa báo. */
@@ -114,7 +122,12 @@ export type StageEntry = {
   returnedAt: string | null
   /** Số lượng KCS nhận lại — ít hơn số giao khi có hàng hỏng ở khâu. */
   returnedQty: number | null
+  /** Khâu Vào đá cân cả cụm bạc + đá; khâu khác chỉ là bạc. */
   returnedSilverWeight: string | null
+  /** Khâu Vào đá: số viên đá gắn lên, đá không tính hao hụt. */
+  stoneCount: number | null
+  /** Khâu Vào đá: TL đá gắn lên (g) — cộng vào TL giao khi tính hao hụt. */
+  stoneWeight: string | null
   btpRecoveredWeight: string | null
   silverRecoveredWeight: string | null
   silverLoss: string | null
@@ -192,7 +205,7 @@ export type SubTicket = {
   outcomeByName: string | null
   /** Khâu phiếu đang ở lúc chốt — cột Lỗi ghi khâu nào lỗi. */
   outcomeStage: StageCode | null
-  /** Số lượng chốt hoàn thiện, đã vào kho thành phẩm. */
+  /** Số lượng chốt hoàn thiện, chờ kho thành phẩm xác nhận nhập. */
   outcomeQty: number | null
   outcomeNote: string | null
   lastPrintedAt: string | null
@@ -200,8 +213,27 @@ export type SubTicket = {
   createdAt: string
 }
 
+/** Phiếu mẹ khi đơn không chia: dùng cùng luồng tự nhận như phiếu con. */
+export type OrderWorkTicket = {
+  code: string
+  state: SubTicketState
+  activeStage: StageCode | null
+  pendingStage: StageCode | null
+  pendingAt: string | null
+  pendingByName: string | null
+  claimedByUserId: string | null
+  claimedByName: string | null
+  claimedAt: string | null
+  openEntryId: string | null
+  availableQty: number
+  availableSilver: string | null
+}
+
 // Bản chi tiết có `subTickets` đầy đủ của riêng nó — bỏ bản tóm tắt của dòng danh sách đi.
-export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTickets'> & {
+export type ProductionOrderDetail = Omit<
+  ProductionOrderRow,
+  'images' | 'subTickets' | 'workState' | 'workStage'
+> & {
   btp: { id: string; sku: string | null; name: string } | null
   nvl: { id: string; sku: string | null; name: string } | null
   sourceOrderCode: string | null
@@ -222,7 +254,12 @@ export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTick
   /** Số dòng phiếu xuất NVL đang gắn đơn. */
   linkedOutbounds: number
   finishedGoods: {
+    /** Số lượng đã được kho xác nhận vào tồn. */
     qty: number
+    /** Tổng số lượng sản xuất đã chốt hoàn thiện. */
+    completedQty: number
+    /** Số lượng đã hoàn thiện nhưng kho chưa xác nhận nhập. */
+    pendingQty: number
     receivedAt: string
     receivedByName: string
     shippedQty: number
@@ -236,6 +273,7 @@ export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTick
   createdByUserId: string | null
   images: Array<OrderImage & { id: string }>
   stages: StageEntry[]
+  workTicket: OrderWorkTicket | null
   subTickets: SubTicket[]
   subTicketTotals: { qty: number; silverWeight: string }
   statusLogs: StatusLog[]
@@ -308,6 +346,9 @@ export type HandoverPayload = {
   handedAt: string
   handedQty?: number | null
   handedSilverWeight: string
+  /** Khâu Vào đá: số viên đá và TL đá (g) phát cho thợ. Khâu khác không gửi. */
+  handedStoneCount?: number | null
+  handedStoneWeight?: string | null
   note?: string
 }
 
@@ -316,6 +357,10 @@ export type ReturnPayload = {
   returnedQty?: number | null
   laborCost?: string | null
   returnedSilverWeight: string
+  /** Khâu Vào đá: số viên đá gắn lên. Khâu khác không gửi. */
+  stoneCount?: number | null
+  /** Khâu Vào đá: TL đá gắn lên (g). */
+  stoneWeight?: string | null
   btpRecoveredWeight?: string | null
   silverRecoveredWeight?: string | null
   note?: string
@@ -334,9 +379,10 @@ export type SubTicketHandoverPayload = Omit<HandoverPayload, 'craftsmanUserId'>
 
 /** Một dòng ở màn "Phiếu của tôi". */
 export type MyTicketItem = {
+  scope: 'ORDER' | 'SUB_TICKET'
   ticketCode: string
   orderCode: string
-  no: number
+  no: number | null
   orderStatus: ProductionStatus
   description: string
   dueDate: string | null
@@ -444,11 +490,16 @@ function orderPath(code: string, suffix = '') {
  */
 type Sparse<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
-type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets'>
+type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets' | 'workState' | 'workStage'>
 type SparseOrderDetail = Sparse<ProductionOrderDetail, 'subTickets' | 'subTicketTotals'>
 
 function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
-  return { ...row, subTickets: row.subTickets ?? [] }
+  return {
+    ...row,
+    workState: row.workState ?? null,
+    workStage: row.workStage ?? null,
+    subTickets: row.subTickets ?? [],
+  }
 }
 
 function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
@@ -555,14 +606,6 @@ export function changeProductionStatusApi(
 export function updateCastingApi(code: string, payload: CastingPayload) {
   return orderFetch(orderPath(code, '/casting'), {
     method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Giao khâu cho thợ — người giao là tài khoản đăng nhập. */
-export function startStageApi(code: string, payload: HandoverPayload & { stage: StageCode }) {
-  return orderFetch(orderPath(code, '/stages'), {
-    method: 'POST',
     body: JSON.stringify(payload),
   })
 }
@@ -739,6 +782,18 @@ export function createSubTicketApi(code: string, payload: SubTicketPayload) {
   })
 }
 
+/** Lần chia đầu tiên tạo tối thiểu hai phiếu trong cùng một transaction. */
+export function splitSubTicketsApi(code: string, tickets: SubTicketPayload[]) {
+  return orderFetch(orderPath(code, '/sub-tickets/split'), {
+    method: 'POST',
+    body: JSON.stringify({ tickets }),
+  })
+}
+
+export function clearSubTicketsApi(code: string) {
+  return orderFetch(orderPath(code, '/sub-tickets'), { method: 'DELETE' })
+}
+
 export function updateSubTicketApi(code: string, no: number, payload: SubTicketPayload) {
   return orderFetch(ticketPath(code, no), {
     method: 'PATCH',
@@ -758,6 +813,17 @@ export function openSubTicketStageApi(code: string, payload: { stage: StageCode;
   })
 }
 
+export function openOrderStageApi(code: string, stage: StageCode) {
+  return orderFetch(orderPath(code, '/work/open-stage'), {
+    method: 'POST',
+    body: JSON.stringify({ stage }),
+  })
+}
+
+export function cancelOrderPendingApi(code: string) {
+  return orderFetch(orderPath(code, '/work/pending'), { method: 'DELETE' })
+}
+
 export function cancelSubTicketPendingApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/pending'), { method: 'DELETE' })
 }
@@ -770,13 +836,28 @@ export function claimSubTicketApi(code: string, no: number) {
   })
 }
 
+export function claimOrderApi(code: string) {
+  return orderFetch(orderPath(code, '/work/claim'), { method: 'POST', body: '{}' })
+}
+
 export function unclaimSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/claim'), { method: 'DELETE' })
+}
+
+export function unclaimOrderApi(code: string) {
+  return orderFetch(orderPath(code, '/work/claim'), { method: 'DELETE' })
 }
 
 /** Người giao cân bạc và xác nhận giao khâu cho thợ đã nhận. */
 export function handoverSubTicketApi(code: string, no: number, payload: SubTicketHandoverPayload) {
   return orderFetch(ticketPath(code, no, '/handover'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function handoverOrderApi(code: string, payload: SubTicketHandoverPayload) {
+  return orderFetch(orderPath(code, '/work/handover'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -808,8 +889,16 @@ export function submitSubTicketApi(code: string, no: number) {
   })
 }
 
+export function submitOrderApi(code: string) {
+  return orderFetch(orderPath(code, '/work/submit'), { method: 'POST', body: '{}' })
+}
+
 export function unsubmitSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/submit'), { method: 'DELETE' })
+}
+
+export function unsubmitOrderApi(code: string) {
+  return orderFetch(orderPath(code, '/work/submit'), { method: 'DELETE' })
 }
 
 /** Cấp thêm SL / bạc cho phiếu con. Bỏ trống một trong hai thì hiểu là 0. */
