@@ -184,7 +184,7 @@ function WorkerOverview({ order }: { order: OrderReference }) {
   }
 
   return (
-    <Paper sx={{ p: 2, border: '1px solid', borderColor: 'primary.light', bgcolor: '#eef6ff' }}>
+    <Paper sx={{ p: 2, border: '1px solid', borderColor: 'primary.light', bgcolor: '#fbf4e8' }}>
       <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
         Việc cần làm
       </Typography>

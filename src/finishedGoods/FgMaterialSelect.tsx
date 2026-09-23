@@ -110,7 +110,7 @@ export function FormFgMaterialSelect({
         }}
         sx={{
           '& .MuiInputBase-input': {
-            color: value ? undefined : '#5d6d7e',
+            color: value ? undefined : '#6f6254',
           },
         }}
       />

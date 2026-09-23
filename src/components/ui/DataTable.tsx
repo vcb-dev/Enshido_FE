@@ -159,7 +159,7 @@ const GRID_TABLE_SX = {
   borderCollapse: 'separate',
   borderSpacing: 0,
   '& .MuiTableCell-root': {
-    border: '1px solid #b7c2cc',
+    border: '1px solid #cbbda9',
     py: 0.75,
     px: 1,
   },
@@ -187,9 +187,9 @@ function defaultCell(value: unknown): ReactNode {
 const subRowIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
 
 /** Dòng con: nền nhạt hơn dòng cha, hiện dần khi xổ ra. */
-const SUB_ROW_SX = { bgcolor: '#f6f8fa', animation: `${subRowIn} 160ms ease-out` } as const
+const SUB_ROW_SX = { bgcolor: '#faf6f0', animation: `${subRowIn} 160ms ease-out` } as const
 /** Dòng cha đang xổ: tô nhẹ để nhìn ra nhóm. */
-const OPEN_PARENT_SX = { bgcolor: '#eef3f8', cursor: 'pointer' } as const
+const OPEN_PARENT_SX = { bgcolor: '#f3e9da', cursor: 'pointer' } as const
 
 /**
  * Bấm vào link / nút / ô nhập bên trong dòng thì để chúng tự xử lý, không xổ / thu dòng.
@@ -663,7 +663,7 @@ export function DataTable<T, S = never>({
           labelDisplayedRows={({ from, to, count }) =>
             isMobile ? `${from}–${to}/${count}` : `${from}–${to} / ${count} ${rowsLabel}`
           }
-          sx={{ flexShrink: 0, borderTop: '1px solid #d5dbe0' }}
+          sx={{ flexShrink: 0, borderTop: '1px solid #ded3c3' }}
         />
       ) : null}
     </Paper>
@@ -910,7 +910,7 @@ function CardList<T, S>({
                         <Paper
                           key={subRows.key(sub)}
                           variant="outlined"
-                          sx={{ p: 1, bgcolor: '#f6f8fa', minWidth: 0 }}
+                          sx={{ p: 1, bgcolor: '#faf6f0', minWidth: 0 }}
                         >
                           <Stack
                             direction="row"

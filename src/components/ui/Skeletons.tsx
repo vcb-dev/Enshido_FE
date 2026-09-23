@@ -138,7 +138,7 @@ export function StatRowSkeleton({
       {Array.from({ length: count }, (_, index) => (
         <Box
           key={index}
-          sx={{ border: '1px solid #d5dbe0', borderLeft: '4px solid #d5dbe0', borderRadius: 1, px: 1.25, py: 1 }}
+          sx={{ border: '1px solid #ded3c3', borderLeft: '4px solid #ded3c3', borderRadius: 1, px: 1.25, py: 1 }}
         >
           <Skeleton variant="text" width="60%" sx={{ fontSize: '0.75rem' }} />
           <Skeleton variant="text" width="45%" sx={{ fontSize: '1rem' }} />
@@ -160,8 +160,8 @@ export function TableRowsSkeleton({ rows = 5, columns = 6 }: { rows?: number; co
           gap: 2,
           px: 1.5,
           py: 1,
-          bgcolor: '#f4f6f7',
-          borderBottom: '1px solid #d5dbe0',
+          bgcolor: '#f8f3eb',
+          borderBottom: '1px solid #ded3c3',
         }}
       >
         {Array.from({ length: columns }, (_, index) => (
@@ -177,7 +177,7 @@ export function TableRowsSkeleton({ rows = 5, columns = 6 }: { rows?: number; co
             gap: 2,
             px: 1.5,
             py: 1.1,
-            borderBottom: '1px solid #e3e8ec',
+            borderBottom: '1px solid #e9e0d4',
           }}
         >
           {Array.from({ length: columns }, (_, cellIndex) => (
@@ -217,7 +217,7 @@ export function TableSkeleton({
       </Box>
       <Stack spacing={1} sx={{ display: { xs: 'flex', sm: 'none' }, p: 1 }}>
         {Array.from({ length: Math.min(rows, 4) }, (_, index) => (
-          <Box key={index} sx={{ border: '1px solid #e3e8ec', borderRadius: 1, p: 1.25 }}>
+          <Box key={index} sx={{ border: '1px solid #e9e0d4', borderRadius: 1, p: 1.25 }}>
             <Skeleton variant="text" width="40%" />
             <Skeleton variant="text" width="90%" />
             <Skeleton variant="text" width="65%" />
@@ -420,7 +420,7 @@ export function DashboardSkeleton() {
             key={index}
             direction={{ xs: 'column', sm: 'row' }}
             spacing={{ xs: 0.25, sm: 2 }}
-            sx={{ py: 1.25, borderBottom: index < 4 ? '1px solid #d5dbe0' : undefined }}
+            sx={{ py: 1.25, borderBottom: index < 4 ? '1px solid #ded3c3' : undefined }}
           >
             <Skeleton variant="text" sx={{ width: { xs: 100, sm: 180 }, flexShrink: 0 }} />
             <Skeleton variant="text" sx={{ width: { xs: '70%', sm: 260 } }} />

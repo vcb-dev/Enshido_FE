@@ -10,12 +10,12 @@ type ChipTone = { label: string; bg: string; fg: string }
 
 /** Màu bám theo view Lark Base "Đơn Sản xuất" để người dùng nhận ra ngay. */
 export const STATUS_META: Record<ProductionStatus, ChipTone> = {
-  NEW: { label: 'Mới', bg: '#e8eaed', fg: '#34495e' },
+  NEW: { label: 'Mới', bg: '#eee8df', fg: '#4a3d2f' },
   REDO_3D: { label: 'Sửa 3D', bg: '#f39c12', fg: '#ffffff' },
   CASTING: { label: 'Đúc', bg: '#8e44ad', fg: '#ffffff' },
   FILING: { label: 'Nguội', bg: '#6c5ce7', fg: '#ffffff' },
   STONE_SETTING: { label: 'Vào đá', bg: '#00897b', fg: '#ffffff' },
-  ENGRAVING: { label: 'Khắc', bg: '#5d6d7e', fg: '#ffffff' },
+  ENGRAVING: { label: 'Khắc', bg: '#6f6254', fg: '#ffffff' },
   POLISHING: { label: 'Bóng', bg: '#0097a7', fg: '#ffffff' },
   PLATING: { label: 'Xi', bg: '#c2185b', fg: '#ffffff' },
   DEFECT: { label: 'Sản xuất lỗi', bg: '#2d3436', fg: '#ffffff' },
@@ -79,7 +79,7 @@ export const MANUAL_STATUSES: ProductionStatus[] = ['NEW', 'REDO_3D', 'DEFECT']
 export const SOURCES: ProductionSource[] = ['NVL', 'BTP']
 
 export const SOURCE_META: Record<ProductionSource, ChipTone> = {
-  NVL: { label: 'Đơn NVL', bg: '#eef2f7', fg: '#34495e' },
+  NVL: { label: 'Đơn NVL', bg: '#f5eee3', fg: '#4a3d2f' },
   BTP: { label: 'Đơn BTP', bg: '#fdebd0', fg: '#935116' },
 }
 
@@ -245,7 +245,7 @@ export function subTicketUrl(ticketCode: string) {
 
 /** Trạng thái phiếu con trong khâu hiện tại. */
 export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
-  IDLE: { label: 'Chờ mở khâu', bg: '#e8eaed', fg: '#34495e' },
+  IDLE: { label: 'Chờ mở khâu', bg: '#eee8df', fg: '#4a3d2f' },
   WAITING: { label: 'Chờ thợ nhận', bg: '#fff4d6', fg: '#8a6100' },
   CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
   WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },

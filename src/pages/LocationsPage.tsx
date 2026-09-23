@@ -43,9 +43,9 @@ import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { formatQty } from '../api/inventory'
 
 const WAREHOUSE_CODE = 'nvl-chinh'
-const NAVY = '#1b4f72'
-const NAVY_SOFT = '#eaf0f6'
-const BORDER = '#d5dbe0'
+const BRAND = '#6b4513'
+const BRAND_SOFT = '#f1e6d5'
+const BORDER = '#ded3c3'
 
 const STATUS_FILTERS = [
   ['all', 'Tất cả'],
@@ -156,7 +156,7 @@ export function LocationsPage() {
         cellSx: {
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           fontWeight: 700,
-          color: NAVY,
+          color: BRAND,
           letterSpacing: '0.03em',
         },
       },
@@ -211,7 +211,7 @@ export function LocationsPage() {
           <Chip
             size="small"
             label="Kho NVL chính"
-            sx={{ bgcolor: NAVY_SOFT, color: NAVY, fontWeight: 600, height: 24 }}
+            sx={{ bgcolor: BRAND_SOFT, color: BRAND, fontWeight: 600, height: 24 }}
           />
         }
         actions={
@@ -253,10 +253,10 @@ export function LocationsPage() {
                   onClick={() => table.setFilter({ status: id })}
                   sx={{
                     fontWeight: 600,
-                    bgcolor: params.status === id ? NAVY : '#fff',
+                    bgcolor: params.status === id ? BRAND : '#fff',
                     color: params.status === id ? '#fff' : 'text.secondary',
-                    border: `1px solid ${params.status === id ? NAVY : BORDER}`,
-                    '&:hover': { bgcolor: params.status === id ? NAVY : NAVY_SOFT },
+                    border: `1px solid ${params.status === id ? BRAND : BORDER}`,
+                    '&:hover': { bgcolor: params.status === id ? BRAND : BRAND_SOFT },
                   }}
                 />
               ))}
@@ -287,7 +287,7 @@ export function LocationsPage() {
         sx={{ flex: { md: 1 } }}
         tableSx={{
           '& .MuiTableCell-root': { py: 1, px: 1.5, borderColor: '#e6ebef' },
-          '& .MuiTableRow-hover:hover .MuiTableCell-root': { bgcolor: '#f7fafc' },
+          '& .MuiTableRow-hover:hover .MuiTableCell-root': { bgcolor: '#fbf8f2' },
         }}
       />
 
@@ -346,7 +346,7 @@ function FormulaStrip() {
       <FormulaPart label="Tầng" sample="C" />
       <PlusSign />
       <FormulaPart label="Số" sample="12" />
-      <Typography variant="body2" sx={{ px: 0.25, fontWeight: 700, color: NAVY }}>
+      <Typography variant="body2" sx={{ px: 0.25, fontWeight: 700, color: BRAND }}>
         =
       </Typography>
       <FormulaPart label="Mã" sample="A1C12" accent />
@@ -363,14 +363,14 @@ function FormulaPart({ label, sample, accent }: { label: string; sample: string;
         minWidth: 44,
         textAlign: 'center',
         border: `1px solid ${accent ? '#c5d3de' : BORDER}`,
-        bgcolor: accent ? NAVY_SOFT : '#fff',
+        bgcolor: accent ? BRAND_SOFT : '#fff',
         borderRadius: 1,
       }}
     >
       <Typography sx={{ fontSize: 9, lineHeight: 1.1, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
         {sample}
       </Typography>
     </Box>
@@ -400,7 +400,7 @@ function StatCard({ label, value, color }: { label: string; value: number; color
       <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
         {label}
       </Typography>
-      <Typography sx={{ fontWeight: 700, color: color ?? NAVY, fontSize: '1.05rem', lineHeight: 1.25 }}>
+      <Typography sx={{ fontWeight: 700, color: color ?? BRAND, fontSize: '1.05rem', lineHeight: 1.25 }}>
         {value}
       </Typography>
     </Box>
@@ -679,7 +679,7 @@ function EditLocationDialog({
           <FormulaPart label="Tầng" sample={levelLetter || '·'} />
           <PlusSign />
           <FormulaPart label="Số" sample={values.position || '·'} />
-          <Typography variant="body2" sx={{ px: 0.25, fontWeight: 700, color: NAVY }}>
+          <Typography variant="body2" sx={{ px: 0.25, fontWeight: 700, color: BRAND }}>
             =
           </Typography>
           <FormulaPart label="Mã" sample={preview || '—'} accent />

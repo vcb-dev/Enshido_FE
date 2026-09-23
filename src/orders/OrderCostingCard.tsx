@@ -293,7 +293,7 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
             )}
           </Block>
 
-          <Box sx={{ p: 1.25, bgcolor: '#f4f6f7', borderRadius: 1 }}>
+          <Box sx={{ p: 1.25, bgcolor: '#f8f3eb', borderRadius: 1 }}>
             <Typography variant="body2">
               Tổng chi phí = NVL {formatMoney(data.materialTotal)} − thu hồi {formatMoney(data.recovered.amount)} + tiền
               công {formatMoney(data.laborTotal)} + chi phí khác {formatMoney(data.otherTotal)} ={' '}

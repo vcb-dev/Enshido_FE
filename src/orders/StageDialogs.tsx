@@ -493,7 +493,7 @@ export function KcsReturnDialog({
       onExited={() => undefined}
     >
       {entry ? (
-        <Box sx={{ mt: 1, p: 1.25, bgcolor: '#f4f6f7', borderRadius: 1 }}>
+        <Box sx={{ mt: 1, p: 1.25, bgcolor: '#f8f3eb', borderRadius: 1 }}>
           <Typography variant="body2">
             Thợ <b>{entry.craftsmanName}</b> · giao lúc {formatDateShort(entry.handedAt)} bởi {entry.handedByName}
           </Typography>

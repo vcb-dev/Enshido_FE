@@ -4,11 +4,11 @@ import { Box, Stack, Typography } from '@mui/material'
 export type SummaryTone = 'open' | 'in' | 'out' | 'stock' | 'neutral'
 
 export const SUMMARY_TONES: Record<SummaryTone, { bg: string; bar: string }> = {
-  open: { bg: '#f7f9fb', bar: '#5d6d7e' },
+  open: { bg: '#fbf8f3', bar: '#6f6254' },
   in: { bg: '#f2f8f4', bar: '#1e8449' },
   out: { bg: '#faf6f4', bar: '#c0392b' },
-  stock: { bg: '#eaf0f6', bar: '#1b4f72' },
-  neutral: { bg: '#f4f6f7', bar: '#5d6d7e' },
+  stock: { bg: '#f1e6d5', bar: '#6b4513' },
+  neutral: { bg: '#f8f3eb', bar: '#6f6254' },
 }
 
 /** Khung ô số liệu: nền theo tone + vạch màu bên trái. */
@@ -28,7 +28,7 @@ function SummaryBox({
         ...(grow ? { flex: 1 } : null),
         minWidth: 0,
         bgcolor: colors.bg,
-        border: '1px solid #b7c2cc',
+        border: '1px solid #cbbda9',
         borderLeft: `4px solid ${colors.bar}`,
         borderRadius: 1,
         px: 1.25,

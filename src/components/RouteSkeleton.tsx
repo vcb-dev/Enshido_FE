@@ -75,7 +75,7 @@ export function AppBootSkeleton() {
           px: 2,
           alignItems: 'center',
           bgcolor: 'background.paper',
-          borderBottom: '1px solid #d5dbe0',
+          borderBottom: '1px solid #ded3c3',
         }}
       >
         <Skeleton variant="text" sx={{ flex: 1, maxWidth: 220 }} />
@@ -91,7 +91,7 @@ export function AppBootSkeleton() {
             width: DRAWER_WIDTH,
             flexShrink: 0,
             border: 'none',
-            borderRight: '1px solid #d5dbe0',
+            borderRight: '1px solid #ded3c3',
             p: 1,
           }}
         >

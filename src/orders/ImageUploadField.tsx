@@ -123,7 +123,7 @@ export function ImageUploadField({
           ...(empty && canAdd
             ? {
                 cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.main', bgcolor: '#f7fafc' },
+                '&:hover': { borderColor: 'primary.main', bgcolor: '#fbf8f2' },
               }
             : {}),
         }}
@@ -187,7 +187,7 @@ export function ImageUploadField({
               justifyContent: 'center',
               px: 0.75,
               borderRadius: 1,
-              bgcolor: '#f4f6f7',
+              bgcolor: '#f8f3eb',
             }}
           >
             <Typography variant="caption" noWrap color="text.secondary">
@@ -225,7 +225,7 @@ export function ImageUploadField({
               bgcolor: 'transparent',
               cursor: 'pointer',
               color: 'text.secondary',
-              '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: '#f7fafc' },
+              '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: '#fbf8f2' },
             }}
           >
             <AddIcon />

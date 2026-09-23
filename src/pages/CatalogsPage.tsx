@@ -41,9 +41,9 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
-const NAVY = '#1b4f72'
-const NAVY_SOFT = '#eaf0f6'
-const BORDER = '#d5dbe0'
+const BRAND = '#6b4513'
+const BRAND_SOFT = '#f1e6d5'
+const BORDER = '#ded3c3'
 
 type FormValues = { name: string }
 const EMPTY: FormValues = { name: '' }
@@ -410,7 +410,7 @@ function ParentEditorDialog({
           </Form>
 
           <Stack spacing={1} sx={{ minHeight: 0, flex: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: NAVY }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: BRAND }}>
               {copy.childSection}
             </Typography>
             <DataTable
@@ -516,12 +516,12 @@ function ParentCard({
         border: `1px solid ${BORDER}`,
         cursor: 'pointer',
         transition: 'border-color 120ms, box-shadow 120ms',
-        '&:hover': { borderColor: NAVY, boxShadow: '0 8px 20px rgba(27,79,114,0.08)' },
+        '&:hover': { borderColor: BRAND, boxShadow: '0 8px 20px rgba(107,69,19,0.12)' },
       }}
     >
       <Stack spacing={1.25}>
         <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-          <Typography variant="h6" sx={{ fontSize: 18, fontWeight: 700, color: NAVY }}>
+          <Typography variant="h6" sx={{ fontSize: 18, fontWeight: 700, color: BRAND }}>
             {row.name}
           </Typography>
           <Stack direction="row" onClick={(event) => event.stopPropagation()}>
@@ -536,7 +536,7 @@ function ParentCard({
         <Chip
           size="small"
           label={`${kids.length} danh mục con`}
-          sx={{ alignSelf: 'flex-start', bgcolor: NAVY_SOFT, color: NAVY, fontWeight: 600 }}
+          sx={{ alignSelf: 'flex-start', bgcolor: BRAND_SOFT, color: BRAND, fontWeight: 600 }}
         />
         <Typography variant="body2" color="text.secondary">
           {preview ? `${preview}${kids.length > 3 ? '…' : ''}` : copy.emptyChild.split('.')[0]}

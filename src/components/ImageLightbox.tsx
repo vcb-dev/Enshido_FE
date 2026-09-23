@@ -251,10 +251,10 @@ export function ZoomThumb({
         height: size,
         borderRadius: 1,
         overflow: 'hidden',
-        border: '1px solid #d5dbe0',
+        border: '1px solid #ded3c3',
         cursor: 'zoom-in',
         transition: 'border-color 120ms, box-shadow 120ms',
-        '&:hover, &.Mui-focusVisible': { borderColor: 'primary.main', boxShadow: '0 2px 8px rgba(27,79,114,0.18)' },
+        '&:hover, &.Mui-focusVisible': { borderColor: 'primary.main', boxShadow: '0 2px 8px rgba(107,69,19,0.20)' },
         ...sx,
       }}
     >

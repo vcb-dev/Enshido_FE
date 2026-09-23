@@ -6,12 +6,12 @@ import ClearIcon from '@mui/icons-material/Clear'
 /** Chữ rõ như ô nhập thường — không xám disabled, không in đậm. */
 export const READ_ONLY_FIELD_SX = {
   '& .MuiInputBase-input.Mui-disabled': {
-    WebkitTextFillColor: '#1c2833',
-    color: '#1c2833',
+    WebkitTextFillColor: '#2b241c',
+    color: '#2b241c',
     fontWeight: 400,
   },
   '& .MuiChip-root': { opacity: 1 },
-  '& .MuiChip-label': { color: '#1c2833', fontWeight: 400 },
+  '& .MuiChip-label': { color: '#2b241c', fontWeight: 400 },
 } as const
 
 export type TextInputProps = Omit<TextFieldProps, 'error' | 'helperText'> & {

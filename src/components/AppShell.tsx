@@ -106,7 +106,7 @@ export function AppShell() {
           >
             <TableRowsIcon />
           </IconButton>
-          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0, color: 'primary.dark', fontWeight: 700 }}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
               Hệ thống quản lý xưởng
             </Box>
@@ -123,7 +123,7 @@ export function AppShell() {
               sx={{
                 width: 32,
                 height: 32,
-                bgcolor: 'primary.main',
+                bgcolor: 'secondary.main',
                 fontSize: '0.8rem',
                 fontWeight: 600,
               }}
@@ -261,10 +261,22 @@ function NavItem({
       sx={{
         borderRadius: 1,
         mb: 0.5,
+        position: 'relative',
         '&.active': {
           bgcolor: 'action.selected',
-          color: 'primary.main',
+          color: 'primary.dark',
+          fontWeight: 700,
           '& .MuiListItemIcon-root': { color: 'primary.main' },
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: -8,
+            top: 7,
+            bottom: 7,
+            width: 3,
+            borderRadius: 2,
+            bgcolor: 'secondary.main',
+          },
         },
       }}
     >
@@ -295,7 +307,15 @@ function DrawerNav({
 }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, py: 1.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          px: 2,
+          py: 1.5,
+          background: 'linear-gradient(180deg, #fffdfa 0%, #f5ead9 100%)',
+        }}
+      >
         {/* Desktop: sidebar luôn mở cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
         <Box component="img" src={logo} alt="Enshido" sx={{ width: { xs: 150, md: 96 }, height: 'auto' }} />
       </Box>

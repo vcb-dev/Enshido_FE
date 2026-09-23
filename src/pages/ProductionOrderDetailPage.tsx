@@ -710,7 +710,7 @@ export function ProductionOrderDetailPage() {
         >
           <Section title="Mã QR">
             <Stack spacing={1} sx={{ alignItems: 'center' }}>
-              <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #d5dbe0', borderRadius: 1 }}>
+              <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1 }}>
                 <QRCodeSVG
                   value={directOnParent ? parentWorkTicketUrl(order.code) : orderTicketUrl(order.code)}
                   size={112}
@@ -931,7 +931,7 @@ function ProductionTicketSummary({ tickets }: { tickets: SubTicket[] }) {
 
   const count = (state: SubTicketState) => tickets.filter((ticket) => ticket.state === state).length
   const cards: Array<{ label: string; value: number; state?: SubTicketState; tone?: string }> = [
-    { label: 'Tổng phiếu', value: tickets.length, tone: '#eef2f6' },
+    { label: 'Tổng phiếu', value: tickets.length, tone: '#f3eee6' },
     { label: 'Chờ mở', value: count('IDLE'), state: 'IDLE' },
     { label: 'Chờ thợ', value: count('WAITING'), state: 'WAITING' },
     { label: 'Đã nhận', value: count('CLAIMED'), state: 'CLAIMED' },
@@ -1020,7 +1020,7 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
     <Table
       size="small"
       sx={{
-        '& td, & th': { px: 0.75, py: 0.5, fontSize: '0.78rem', borderColor: '#e3e8ec' },
+        '& td, & th': { px: 0.75, py: 0.5, fontSize: '0.78rem', borderColor: '#e9e0d4' },
         '& th': { fontWeight: 700, color: 'text.secondary' },
       }}
     >
@@ -1038,7 +1038,7 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
             <Fragment key={log.id}>
               <TableRow
                 sx={{
-                  ...(current ? { bgcolor: '#eaf3ff' } : null),
+                  ...(current ? { bgcolor: '#f6e9d4' } : null),
                   ...(log.note ? { '& td': { borderBottom: 'none' } } : null),
                 }}
               >
@@ -1050,7 +1050,7 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
                 <TableCell>{log.changedBy ?? '—'}</TableCell>
               </TableRow>
               {log.note ? (
-                <TableRow sx={current ? { bgcolor: '#eaf3ff' } : undefined}>
+                <TableRow sx={current ? { bgcolor: '#f6e9d4' } : undefined}>
                   <TableCell colSpan={3} sx={{ pt: '0 !important', color: 'text.secondary', fontStyle: 'italic' }}>
                     {log.note}
                   </TableCell>
@@ -1085,7 +1085,7 @@ function StatusDot({ status }: { status: ProductionStatus }) {
         mr: 0.75,
         borderRadius: '50%',
         bgcolor: STATUS_META[status].bg,
-        border: '1px solid #b7c2cc',
+        border: '1px solid #cbbda9',
         verticalAlign: 'middle',
       }}
     />
@@ -1178,7 +1178,7 @@ function OverviewSummary({
           borderRadius: 1.5,
           border: '1px solid',
           borderColor: 'primary.light',
-          bgcolor: '#eef6ff',
+          bgcolor: '#fbf4e8',
         }}
       >
         <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
@@ -1340,7 +1340,7 @@ function FieldGroup({
           color: 'text.secondary',
           textTransform: 'uppercase',
           letterSpacing: 0.4,
-          bgcolor: '#f4f6f7',
+          bgcolor: '#f8f3eb',
           borderBottom: '1px solid',
           borderColor: 'divider',
         }}

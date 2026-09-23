@@ -259,8 +259,8 @@ export function SubTicketsPanel({
             size="small"
             sx={{
               minWidth: 720,
-              '& td, & th': { px: 1, py: 0.6, fontSize: '0.84rem', borderColor: '#dfe5ea' },
-              '& th': { fontWeight: 700, bgcolor: '#f4f6f7' },
+              '& td, & th': { px: 1, py: 0.6, fontSize: '0.84rem', borderColor: '#e9e0d4' },
+              '& th': { fontWeight: 700, bgcolor: '#f8f3eb' },
             }}
           >
             <TableHead>

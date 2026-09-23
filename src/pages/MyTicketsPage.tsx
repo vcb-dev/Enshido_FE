@@ -235,8 +235,8 @@ function TicketCard({
           height: 72,
           flexShrink: 0,
           borderRadius: 1,
-          border: '1px solid #d5dbe0',
-          bgcolor: '#f4f6f7',
+          border: '1px solid #ded3c3',
+          bgcolor: '#f8f3eb',
           overflow: 'hidden',
         }}
       >

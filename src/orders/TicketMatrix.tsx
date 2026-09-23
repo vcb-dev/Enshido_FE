@@ -23,7 +23,7 @@ import {
   type TicketOutcome,
 } from './ticketRows'
 
-const CELL_BORDER = '1px solid #b7c2cc'
+const CELL_BORDER = '1px solid #cbbda9'
 
 /** Nền hai cột kết cục: lỗi đỏ nhạt, hoàn thiện xanh nhạt — nhìn phát biết phiếu kết ở nhánh nào. */
 const TICKET_OUTCOME_BG: Record<TicketOutcome, string> = {
@@ -77,7 +77,7 @@ export function TicketMatrix({
       >
         <TableHead>
           <TableRow sx={{ '& th': { bgcolor: TICKET_HEADER_BG, fontWeight: 700, textAlign: 'center' } }}>
-            <TableCell sx={{ width: 220, color: '#1b4f9c' }}>Quá trình sản xuất</TableCell>
+            <TableCell sx={{ width: 220, color: '#6b4513' }}>Quá trình sản xuất</TableCell>
             {STAGES.map((stage) => {
               const column = columns[stage]
               return (
@@ -147,7 +147,7 @@ export function TicketMatrix({
             </TableRow>
           ))}
           {actions.length ? (
-            <TableRow sx={{ '& td': { bgcolor: '#f4f6f7', textAlign: 'center' } }}>
+            <TableRow sx={{ '& td': { bgcolor: '#f8f3eb', textAlign: 'center' } }}>
               <TableCell sx={{ textAlign: 'left !important', color: 'text.secondary' }}>Thao tác</TableCell>
               <TableCell colSpan={STAGES.length} />
               {TICKET_OUTCOMES.map((outcome) => (

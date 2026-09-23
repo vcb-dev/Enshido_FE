@@ -204,7 +204,7 @@ export function ShipmentDetailPage() {
                   <TableCell>{line.note ?? '—'}</TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ '& td': { fontWeight: 700, bgcolor: '#f4f6f7' } }}>
+              <TableRow sx={{ '& td': { fontWeight: 700, bgcolor: '#f8f3eb' } }}>
                 <TableCell colSpan={2}>Cộng</TableCell>
                 <TableCell sx={NUM}>{shipment.totals.qty}</TableCell>
                 <TableCell />
