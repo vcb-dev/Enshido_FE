@@ -53,6 +53,7 @@ import {
   handoverSubTicketApi,
   returnStageApi,
   openOrderStageApi,
+  submitOrderApi,
   undoFinishOrderApi,
   undoReturnApi,
   updateCastingApi,
@@ -238,6 +239,14 @@ export function ProductionOrderDetailPage() {
     code,
     () => cancelOrderPendingApi(code),
     'Đã hủy mở khâu trên phiếu mẹ',
+  )
+  // Lối thoát cho khâu giao bằng luồng cũ: lúc đó chưa có bước thợ bấm "Đã làm xong", nên
+  // nếu không ghi hộ được thì KCS không bao giờ nhận lại được khâu đó. Mốc báo xong ghi tên
+  // người bấm, không mạo danh thợ.
+  const submitParentStage = useOrderMutation(
+    code,
+    () => submitOrderApi(code),
+    'Đã ghi nhận thợ báo xong — KCS nhận lại được rồi',
   )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
@@ -507,9 +516,25 @@ export function ProductionOrderDetailPage() {
                           KCS nhận lại
                         </Button>
                       ) : parentWork?.state === 'WORKING' ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                          Chờ thợ báo xong
-                        </Typography>
+                        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Chờ thợ báo xong
+                          </Typography>
+                          {isAdmin ? (
+                            <Tooltip title="Thợ đã nộp hàng nhưng chưa bấm trên máy — ghi hộ để KCS nhận lại được. Mốc báo xong sẽ mang tên bạn.">
+                              <span>
+                                <Button
+                                  size="small"
+                                  color="inherit"
+                                  loading={submitParentStage.isPending}
+                                  onClick={() => submitParentStage.mutate(undefined)}
+                                >
+                                  Ghi thợ đã xong
+                                </Button>
+                              </span>
+                            </Tooltip>
+                          ) : null}
+                        </Stack>
                       ) : parentWork?.state === 'WAITING' ? (
                         <Button
                           size="small"
@@ -863,7 +888,8 @@ export function ProductionOrderDetailPage() {
       <FinishDialog
         open={finishOpen}
         ticketCode={order.code}
-        qty={order.qty}
+        // Số vào kho là số KCS nhận lại ở khâu cuối — cùng nguồn với BE.
+        qty={parentWork?.availableQty ?? order.qty}
         scope="order"
         saving={finish.isPending}
         onClose={() => setFinishOpen(false)}

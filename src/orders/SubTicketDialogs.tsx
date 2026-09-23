@@ -72,8 +72,12 @@ export function SplitSubTicketsDialog({
   const invalidRow = rows.some(
     (row) => !Number.isInteger(Number(row.qty)) || Number(row.qty) < 1 || !(Number(row.silverWeight) > 0),
   )
+  // Cả hai vế làm tròn 4 số lẻ như cột Decimal(18,4) ở DB, rồi so đúng như BE so Decimal —
+  // dung sai sẽ cho qua những mức mà BE chặn, người dùng bấm Lưu mới biết.
   const invalidTotals =
-    totalQty > order.qty || order.silverWeight == null || totalSilver > Number(order.silverWeight) + 0.00001
+    totalQty > order.qty ||
+    order.silverWeight == null ||
+    totalSilver > round4(Number(order.silverWeight))
   const canSubmit = rows.length >= 2 && !invalidRow && !invalidTotals
 
   return (

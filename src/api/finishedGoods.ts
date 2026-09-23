@@ -229,10 +229,11 @@ export function updateFinishedGoodsReceiptApi(id: string, payload: UpsertReceipt
   })
 }
 
-export function receiveFinishedGoodsReceiptApi(id: string) {
+/** Kho xác nhận nhận hàng vào tồn. Bỏ trống `qty` là nhận hết phần đang chờ. */
+export function receiveFinishedGoodsReceiptApi(id: string, qty?: number) {
   return apiFetch<{ success: boolean }>(`${BASE}/receipts/${encodeURIComponent(id)}/receive`, {
     method: 'POST',
-    body: '{}',
+    body: JSON.stringify(qty != null ? { qty } : {}),
   })
 }
 

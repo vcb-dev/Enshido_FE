@@ -92,9 +92,10 @@ export function FinishDialog({
       <DialogTitle>Hoàn thiện — {scope === 'order' ? 'đơn' : 'phiếu'} {ticketCode}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         <Typography variant="body2" color="text.secondary">
+          {/* Cả hai đường chốt đều lấy số KCS nhận lại ở khâu cuối, không phải số đặt hàng. */}
           {scope === 'order'
-            ? `Hàng đạt, đơn kết thúc: ${qty} sản phẩm vào kho thành phẩm. Người xác nhận lấy từ tài khoản đang đăng nhập.`
-            : `Hàng đạt, phiếu này kết thúc: ${qty} sản phẩm vào kho thành phẩm ngay, không chờ các phiếu con khác. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`}
+            ? `Hàng đạt, đơn kết thúc: ${qty} sản phẩm chờ kho thành phẩm nhận. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`
+            : `Hàng đạt, phiếu này kết thúc: ${qty} sản phẩm chờ kho thành phẩm nhận, không chờ các phiếu con khác. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`}
         </Typography>
         <TextInput
           label="Ghi chú"

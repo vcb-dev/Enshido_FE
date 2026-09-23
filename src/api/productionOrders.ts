@@ -610,14 +610,6 @@ export function updateCastingApi(code: string, payload: CastingPayload) {
   })
 }
 
-/** Giao khâu cho thợ — người giao là tài khoản đăng nhập. */
-export function startStageApi(code: string, payload: HandoverPayload & { stage: StageCode }) {
-  return orderFetch(orderPath(code, '/stages'), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
 export function updateHandoverApi(code: string, stageId: string, payload: HandoverPayload) {
   return orderFetch(orderPath(code, `/stages/${stageId}`), {
     method: 'PATCH',

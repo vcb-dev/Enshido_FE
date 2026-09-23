@@ -47,6 +47,7 @@ import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
 import { ReceiveFormDialog } from '../finishedGoods/ReceiveFormDialog'
+import { ReceiveStockDialog } from '../finishedGoods/ReceiveStockDialog'
 import { FinishedGoodsStockDialog } from '../finishedGoods/StockFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
@@ -391,10 +392,14 @@ function FinishedGoodsInboundTable() {
     },
   })
 
+  // Kho đếm hàng rồi mới nhập, nên nút mở hộp thoại nhập số lượng thay vì nhận thẳng.
+  const [receiving, setReceiving] = useState<FinishedGoodsReceiptRow | null>(null)
   const receive = useMutation({
-    mutationFn: (row: FinishedGoodsReceiptRow) => receiveFinishedGoodsReceiptApi(row.id),
-    onSuccess: async (_result, row) => {
-      toast.success(`Đã nhập ${formatQty(String(row.pendingQty))} ${row.qtyUnit ?? 'sản phẩm'} vào tồn`)
+    mutationFn: ({ row, qty }: { row: FinishedGoodsReceiptRow; qty: number }) =>
+      receiveFinishedGoodsReceiptApi(row.id, qty),
+    onSuccess: async (_result, { row, qty }) => {
+      setReceiving(null)
+      toast.success(`Đã nhập ${formatQty(String(qty))} ${row.qtyUnit ?? 'sản phẩm'} vào tồn`)
       await Promise.all(
         [
           ['finished-goods-stock'],
@@ -419,10 +424,10 @@ function FinishedGoodsInboundTable() {
       onView: dialog.openView,
       onEdit: dialog.openEdit,
       onDelete: (row) => del.request(row),
-      onReceive: (row) => receive.mutate(row),
-      receivingId: receive.isPending ? (receive.variables?.id ?? null) : null,
+      onReceive: (row) => setReceiving(row),
+      receivingId: receive.isPending ? (receive.variables?.row.id ?? null) : null,
     }),
-    [del.request, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.mutate, receive.variables, table, totals],
+    [del.request, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.variables, table, totals],
   )
 
   const save = useMutation({
@@ -494,6 +499,12 @@ function FinishedGoodsInboundTable() {
         saving={save.isPending}
         onClose={dialog.close}
         onSaved={(payload) => save.mutate({ id: dialog.row?.id, payload })}
+      />
+      <ReceiveStockDialog
+        row={receiving}
+        saving={receive.isPending}
+        onClose={() => setReceiving(null)}
+        onConfirm={(qty) => receiving && receive.mutate({ row: receiving, qty })}
       />
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
@@ -855,16 +866,23 @@ function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertR
 function patchFinishedGoodsReceiptRow(row: FinishedGoodsReceiptRow, payload: UpsertReceiptPayload): FinishedGoodsReceiptRow {
   const qty = String(payload.qty)
   const unitPrice = Number(row.unitPrice) || 0
+  // Khớp đúng luật ở BE: phiếu đã vào tồn đủ thì tồn đi theo số mới, phiếu còn dở chỉ bị
+  // cắt khi số mới thấp hơn phần đã nhận.
+  const stockedQty =
+    row.stockedQty === Number(row.qty)
+      ? payload.qty
+      : Math.min(row.stockedQty, payload.qty)
+  const pendingQty = Math.max(0, payload.qty - stockedQty)
   return {
     ...row,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     qty,
-    stockedQty: payload.qty,
-    pendingQty: 0,
-    status: 'RECEIVED',
-    remainingQty: payload.qty - row.shippedQty,
+    stockedQty,
+    pendingQty,
+    status: pendingQty > 0 ? 'PENDING' : 'RECEIVED',
+    remainingQty: stockedQty - row.shippedQty,
     amount: String(Math.round(payload.qty * unitPrice)),
   }
 }
