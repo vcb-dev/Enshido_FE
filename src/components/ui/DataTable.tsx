@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -92,6 +92,8 @@ export type SubRowsConfig<T, S> = {
   key: (sub: S) => string
   /** Tên gọi theo số lượng, cho tooltip và trình đọc màn hình — vd `3 phiếu con`. */
   label?: (count: number) => string
+  /** Tự xổ các dòng có con; đổi key để xổ lại khi ngữ cảnh lọc thay đổi. */
+  autoExpandKey?: string
 }
 
 export type DataTableProps<T, S = never> = {
@@ -289,6 +291,16 @@ export function DataTable<T, S = never>({
   const expandableKeys = subRows
     ? rows.flatMap((row, index) => (subsOf(row).length ? [rowKey(row, index)] : []))
     : []
+  const expandableKeyToken = expandableKeys.join('\u0000')
+
+  useEffect(() => {
+    if (!subRows?.autoExpandKey || expandableKeys.length === 0) return
+    setExpanded((current) => {
+      const next = new Set(current)
+      for (const key of expandableKeys) next.add(key)
+      return next
+    })
+  }, [expandableKeyToken, subRows?.autoExpandKey])
   const allOpen = expandableKeys.length > 0 && expandableKeys.every((key) => expanded.has(key))
   const toggleAll = () =>
     setExpanded((current) => {
