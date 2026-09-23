@@ -277,7 +277,13 @@ export function ProductionOrdersPage() {
         rows={items}
         rowKey={(row) => row.id}
         subRows={{
-          get: (row) => row.subTickets,
+          get: (row) =>
+            statusTab
+              ? row.subTickets.filter((sub) => {
+                  const subStatus = subTicketListStatus(sub)
+                  return subStatus === statusTab || (subStatus == null && row.status === statusTab)
+                })
+              : row.subTickets,
           key: (sub) => sub.code,
           label: (count) => `${count} phiếu con`,
         }}
@@ -442,7 +448,7 @@ function orderColumns(
       width: 116,
       sortable: true,
       card: 'meta',
-      render: (row) => <StatusChip status={row.status} />,
+      render: (row) => <OrderStatus row={row} />,
       renderSub: (sub) => <SubTicketStatus sub={sub} />,
     },
     {
@@ -605,8 +611,33 @@ function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
     <>
       <StatusChip status={sub.stage} />
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-        {SUB_TICKET_STATE_META[sub.state].label}
+        {sub.state === 'IDLE' ? 'KCS đã nhận lại' : SUB_TICKET_STATE_META[sub.state].label}
       </Typography>
     </>
   )
+}
+
+function OrderStatus({ row }: { row: ProductionOrderRow }) {
+  const detail =
+    row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT'
+      ? row.workState === 'IDLE'
+        ? 'KCS đã nhận lại'
+        : SUB_TICKET_STATE_META[row.workState].label
+      : null
+  return (
+    <>
+      <StatusChip status={row.status} />
+      {detail ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+          {detail}
+        </Typography>
+      ) : null}
+    </>
+  )
+}
+
+function subTicketListStatus(sub: SubTicketSummary): ProductionStatus | null {
+  if (sub.state === 'FINISH') return 'FINISHING'
+  if (sub.state === 'DEFECT') return 'DEFECT'
+  return sub.stage
 }

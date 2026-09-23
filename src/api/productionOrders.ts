@@ -65,6 +65,10 @@ export type ProductionOrderRow = {
   debtStatus: string | null
   createdAt: string
   updatedAt: string
+  /** Trạng thái thao tác của phiếu mẹ khi đơn không chia phiếu con. */
+  workState: SubTicketState | null
+  /** Khâu đang chạy hoặc vừa được KCS nhận lại của phiếu mẹ. */
+  workStage: StageCode | null
   images: Array<{ id: string; kind: ProductionImageKind; url: string }>
   /** Phiếu con của đơn — thành dòng con xổ ra dưới đơn ở danh sách. Đơn chưa chia thì rỗng. */
   subTickets: SubTicketSummary[]
@@ -226,7 +230,10 @@ export type OrderWorkTicket = {
 }
 
 // Bản chi tiết có `subTickets` đầy đủ của riêng nó — bỏ bản tóm tắt của dòng danh sách đi.
-export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTickets'> & {
+export type ProductionOrderDetail = Omit<
+  ProductionOrderRow,
+  'images' | 'subTickets' | 'workState' | 'workStage'
+> & {
   btp: { id: string; sku: string | null; name: string } | null
   nvl: { id: string; sku: string | null; name: string } | null
   sourceOrderCode: string | null
@@ -478,11 +485,16 @@ function orderPath(code: string, suffix = '') {
  */
 type Sparse<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
-type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets'>
+type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets' | 'workState' | 'workStage'>
 type SparseOrderDetail = Sparse<ProductionOrderDetail, 'subTickets' | 'subTicketTotals'>
 
 function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
-  return { ...row, subTickets: row.subTickets ?? [] }
+  return {
+    ...row,
+    workState: row.workState ?? null,
+    workStage: row.workStage ?? null,
+    subTickets: row.subTickets ?? [],
+  }
 }
 
 function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
