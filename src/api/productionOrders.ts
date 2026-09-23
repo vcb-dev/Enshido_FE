@@ -205,7 +205,7 @@ export type SubTicket = {
   outcomeByName: string | null
   /** Khâu phiếu đang ở lúc chốt — cột Lỗi ghi khâu nào lỗi. */
   outcomeStage: StageCode | null
-  /** Số lượng chốt hoàn thiện, đã vào kho thành phẩm. */
+  /** Số lượng chốt hoàn thiện, chờ kho thành phẩm xác nhận nhập. */
   outcomeQty: number | null
   outcomeNote: string | null
   lastPrintedAt: string | null

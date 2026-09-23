@@ -7,6 +7,7 @@ import {
   Box,
   Breadcrumbs,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -105,6 +106,8 @@ import { useOrderMutation } from '../orders/useOrderMutation'
 import { stageColumns } from '../orders/ticketRows'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
+import { deadlineWarning } from '../orders/deadline'
+import { VerticalInfoList } from '../orders/VerticalInfoList'
 
 export function ProductionOrderDetailPage() {
   const { code = '' } = useParams()
@@ -223,7 +226,7 @@ export function ProductionOrderDetailPage() {
   const finish = useOrderMutation(
     code,
     (note?: string) => finishOrderApi(code, { note }),
-    'Đã hoàn thiện đơn và nhập kho thành phẩm',
+    'Đã hoàn thiện đơn và tạo phiếu chờ nhập kho',
   )
   const undoFinish = useOrderMutation(code, () => undoFinishOrderApi(code), 'Đã gỡ hoàn thiện đơn')
   const openParentStage = useOrderMutation(
@@ -440,12 +443,14 @@ export function ProductionOrderDetailPage() {
 
           {/* Mô tả, thông số và ảnh là một khối nhận diện đơn — gộp chung một thẻ cho trang ngắn lại. */}
           {tab === 'overview' ? (
-            <Section title="Thông tin đơn">
+            <Section title="Tổng quan đơn">
+              <OverviewSummary order={order} onOpenProduction={() => setTab('production')} />
+              <Divider sx={{ my: 2 }} />
               <InfoGrid order={order} />
-              <Box sx={{ mt: 1.75, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+              <Stack spacing={2} sx={{ mt: 2 }}>
                 <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
                 <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
-              </Box>
+              </Stack>
             </Section>
           ) : null}
 
@@ -1087,6 +1092,168 @@ function StatusDot({ status }: { status: ProductionStatus }) {
   )
 }
 
+/** Ảnh chụp vận hành của đơn: người điều hành nhìn từ trên xuống là biết việc tiếp theo. */
+function OverviewSummary({
+  order,
+  onOpenProduction,
+}: {
+  order: ProductionOrderDetail
+  onOpenProduction: () => void
+}) {
+  const tickets = order.subTickets.length
+    ? order.subTickets.map((ticket) => ({
+        state: ticket.state,
+        activeStage: ticket.activeStage,
+        pendingStage: ticket.pendingStage,
+        availableQty: ticket.outcome ? 0 : ticket.availableQty,
+        availableSilver: ticket.outcome ? '0' : ticket.availableSilver,
+      }))
+    : order.workTicket
+      ? [
+          {
+            state: order.workTicket.state,
+            activeStage: order.workTicket.activeStage,
+            pendingStage: order.workTicket.pendingStage,
+            availableQty: order.finishedGoods ? 0 : order.workTicket.availableQty,
+            availableSilver: order.finishedGoods ? '0' : order.workTicket.availableSilver,
+          },
+        ]
+      : []
+  const count = (state: SubTicketState) => tickets.filter((ticket) => ticket.state === state).length
+  const stages = Array.from(
+    new Set(
+      tickets
+        .map((ticket) => ticket.activeStage ?? ticket.pendingStage)
+        .filter((stage): stage is StageCode => stage != null),
+    ),
+  )
+  const availableQty = tickets.reduce((sum, ticket) => sum + ticket.availableQty, 0)
+  const availableSilver = tickets.reduce((sum, ticket) => sum + Number(ticket.availableSilver ?? 0), 0)
+  const deadline = deadlineWarning(order.dueDate, order.status)
+  const waitingForStock = (order.finishedGoods?.pendingQty ?? 0) > 0
+
+  let actionTitle = 'Theo dõi tiến độ đơn'
+  let actionDetail = 'Mở phần Sản xuất để xem lịch sử và điều hành từng phiếu.'
+  if (waitingForStock) {
+    actionTitle = `${order.finishedGoods!.pendingQty} ${order.qtyUnit ?? 'sản phẩm'} đang chờ vào tồn`
+    actionDetail = 'Kho thành phẩm cần xác nhận phiếu nhập trước khi số lượng được tính vào tồn.'
+  } else if (count('SUBMITTED') > 0) {
+    actionTitle = `${count('SUBMITTED')} phiếu chờ KCS nhận lại`
+    actionDetail = 'Cân lại số lượng và bạc, sau đó xác nhận nhận lại cho thợ.'
+  } else if (count('CLAIMED') > 0) {
+    actionTitle = `${count('CLAIMED')} phiếu đã có thợ nhận`
+    actionDetail = 'Cân hàng và xác nhận giao để thợ bắt đầu làm.'
+  } else if (count('IDLE') > 0 && !order.finishedGoods) {
+    actionTitle = `${count('IDLE')} phiếu chờ mở khâu tiếp theo`
+    actionDetail = 'Kiểm tra khâu vừa xong rồi mở khâu tiếp theo hoặc chốt kết cục phiếu.'
+  } else if (count('WAITING') > 0) {
+    actionTitle = `${count('WAITING')} phiếu đang chờ thợ nhận`
+    actionDetail = 'Phiếu đã mở khâu; theo dõi để giao hàng ngay khi thợ nhận.'
+  } else if (count('WORKING') > 0) {
+    actionTitle = `${count('WORKING')} phiếu đang được thợ thực hiện`
+    actionDetail = 'Chờ thợ báo xong, sau đó KCS cân và nhận lại.'
+  } else if (order.status === 'NEW' || order.status === 'REDO_3D') {
+    actionTitle = order.status === 'NEW' ? 'Cần báo Đúc' : 'Đang chờ sửa 3D'
+    actionDetail = 'Hoàn tất bước chuẩn bị để có thể in phiếu và mở khâu cho thợ.'
+  } else if (order.finishedGoods) {
+    actionTitle = 'Sản xuất đã hoàn thiện'
+    actionDetail = 'Theo dõi nhập tồn và xuất hàng tại phần Kho thành phẩm.'
+  }
+
+  const progress = ([
+    ['Chờ mở', count('IDLE')],
+    ['Chờ thợ', count('WAITING')],
+    ['Đã nhận', count('CLAIMED')],
+    ['Đang làm', count('WORKING')],
+    ['Chờ KCS', count('SUBMITTED')],
+    ['Hoàn thiện', count('FINISH')],
+    ['Lỗi', count('DEFECT')],
+  ] satisfies Array<[string, number]>).filter(([, value]) => value > 0)
+
+  return (
+    <Stack spacing={1.25}>
+      <Box
+        sx={{
+          p: 1.5,
+          borderRadius: 1.5,
+          border: '1px solid',
+          borderColor: 'primary.light',
+          bgcolor: '#eef6ff',
+        }}
+      >
+        <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+          Việc cần làm
+        </Typography>
+        <Typography variant="h6" sx={{ mt: 0.25, fontWeight: 700 }}>
+          {actionTitle}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+          {actionDetail}
+        </Typography>
+        {waitingForStock ? (
+          <Button
+            size="small"
+            variant="contained"
+            component={RouterLink}
+            to="/warehouses/thanh-pham/inbound"
+            sx={{ mt: 1.25 }}
+          >
+            Mở phiếu nhập thành phẩm
+          </Button>
+        ) : (
+          <Button size="small" variant="contained" onClick={onOpenProduction} sx={{ mt: 1.25 }}>
+            Mở điều hành sản xuất
+          </Button>
+        )}
+      </Box>
+
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, px: 1.5 }}>
+        <VerticalInfoList
+          items={[
+            {
+              label: 'Đang ở đâu',
+              value: stages.length ? stages.map((stage) => STAGE_LABEL[stage]).join(', ') : STATUS_META[order.status].label,
+            },
+            {
+              label: tickets.length ? 'Đang có trên phiếu' : 'Tổng đơn',
+              value: tickets.length
+                ? `${availableQty} ${order.qtyUnit ?? 'sản phẩm'} · ${formatQty(String(availableSilver))} g bạc`
+                : `${order.qty} ${order.qtyUnit ?? 'sản phẩm'} · ${order.silverWeight != null ? formatQty(order.silverWeight) : '—'} g bạc`,
+            },
+            {
+              label: 'Tiến độ phiếu',
+              value: progress.length ? (
+                <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  {progress.map(([label, value]) => (
+                    <Chip key={label} size="small" variant="outlined" label={`${label}: ${value}`} />
+                  ))}
+                </Stack>
+              ) : (
+                'Chưa mở phiếu sản xuất'
+              ),
+            },
+            {
+              label: 'Hạn trả',
+              value: (
+                <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span>{order.dueDate ? formatStockedDate(order.dueDate) : '—'}</span>
+                  {deadline ? (
+                    <Chip
+                      size="small"
+                      color={deadline.tone === 'overdue' ? 'error' : 'warning'}
+                      label={deadline.label}
+                    />
+                  ) : null}
+                </Stack>
+              ),
+            },
+          ]}
+        />
+      </Box>
+    </Stack>
+  )
+}
+
 function InfoGrid({ order }: { order: ProductionOrderDetail }) {
   const orderFields: Array<[string, ReactNode]> = [
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
@@ -1108,6 +1275,8 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Số lượng đá (viên)', order.stoneCount],
     ['Trọng lượng đá (g)', order.stoneWeight != null ? formatQty(order.stoneWeight) : null],
     ['Tổng TL bạc (g)', order.silverWeight != null ? formatQty(order.silverWeight) : null],
+    ['Nội dung khắc laser', order.laserEngraving],
+    ['Yêu cầu khác', order.otherRequirements],
   ]
 
   // Đơn không tách thì Phân đơn luôn là 1/1 — giấu cả nhóm cho đỡ rối.
@@ -1138,56 +1307,49 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
 
   return (
     <Stack spacing={1.75}>
-      <Box sx={{ p: 1.25, bgcolor: '#f4f6f7', borderRadius: 1 }}>
-        <Field label="Mô tả / Yêu cầu sản phẩm" value={order.description} />
+      <Box sx={{ px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, bgcolor: '#f8fafb' }}>
+        <VerticalInfoList items={[{ label: 'Mô tả / Yêu cầu sản phẩm', value: order.description }]} />
       </Box>
 
       <FieldGroup title="Đơn hàng" fields={orderFields} />
 
-      <FieldGroup title="Sản phẩm" fields={productFields}>
-        <Box sx={{ mt: 1, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-          <Field label="Nội dung khắc laser" value={order.laserEngraving} />
-          <Field label="Yêu cầu khác" value={order.otherRequirements} />
-        </Box>
-      </FieldGroup>
+      <FieldGroup title="Sản phẩm" fields={productFields} />
 
       {hasSplit ? <FieldGroup title="Phân đơn" fields={splitFields} /> : null}
     </Stack>
   )
 }
 
-/** Một nhóm trường trong khối thông tin đơn: tiêu đề nhỏ + lưới 4 cột. */
+/** Một nhóm trường theo chiều dọc để đọc lần lượt, không phải quét ngang qua nhiều cột. */
 function FieldGroup({
   title,
   fields,
-  children,
 }: {
   title: string
   fields: Array<[string, ReactNode]>
-  children?: ReactNode
 }) {
   return (
-    <Box>
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>
       <Typography
         variant="caption"
-        sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}
+        sx={{
+          display: 'block',
+          px: 1.5,
+          py: 1,
+          fontWeight: 700,
+          color: 'text.secondary',
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          bgcolor: '#f4f6f7',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
       >
         {title}
       </Typography>
-      <Box
-        sx={{
-          mt: 0.5,
-          display: 'grid',
-          columnGap: 2,
-          rowGap: 1,
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
-        }}
-      >
-        {fields.map(([label, value]) => (
-          <Field key={label} label={label} value={value} />
-        ))}
+      <Box sx={{ px: 1.5 }}>
+        <VerticalInfoList items={fields.map(([label, value]) => ({ label, value }))} />
       </Box>
-      {children}
     </Box>
   )
 }

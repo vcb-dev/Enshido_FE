@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import {
   Alert,
   Box,
   Breadcrumbs,
+  Button,
   Chip,
   Link,
   Paper,
@@ -17,6 +18,7 @@ import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { PageHeader, TicketDetailSkeleton } from '../components/ui'
 import { STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
+import { VerticalInfoList } from '../orders/VerticalInfoList'
 
 /**
  * Thợ quét QR trên phiếu giấy đã in sẽ vào đây thay vì màn quản lý đơn: đủ thông số để làm
@@ -66,11 +68,13 @@ function ReferenceView({ order }: { order: OrderReference }) {
         báo làm xong.
       </Alert>
 
+      <WorkerOverview order={order} />
+
       <Paper sx={{ p: 2 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Sản phẩm
         </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Stack spacing={2}>
           {order.images.length ? (
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap' }}>
               {shown.map((image, index) => (
@@ -91,22 +95,26 @@ function ReferenceView({ order }: { order: OrderReference }) {
             onIndexChange={setViewing}
             onClose={() => setViewing(null)}
           />
-          <Stack spacing={1} sx={{ minWidth: 0 }}>
+          <Stack spacing={1.25} sx={{ minWidth: 0 }}>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
               {order.description}
             </Typography>
-            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              <Info label="Số lượng đơn" value={order.qty} />
-              <Info label="Ngày cần trả" value={order.dueDate ? formatStockedDate(order.dueDate) : null} />
-              <Info label="Size" value={order.sizeLabel ?? order.size} />
-              <Info label="Chất liệu" value={order.mainMaterial} />
-              <Info label="Màu xi" value={order.platingColor} />
-              <Info label="Màu đá" value={order.stoneColor} />
-              <Info label="Loại đá" value={order.stoneTypes.join(', ')} />
-              <Info label="Số lượng đá" value={order.stoneCount} />
+            <Box sx={{ px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
+              <VerticalInfoList
+                items={[
+                  { label: 'Số lượng đơn', value: order.qty },
+                  { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
+                  { label: 'Size', value: order.sizeLabel ?? order.size },
+                  { label: 'Chất liệu', value: order.mainMaterial },
+                  { label: 'Màu xi', value: order.platingColor },
+                  { label: 'Màu đá', value: order.stoneColor },
+                  { label: 'Loại đá', value: order.stoneTypes.join(', ') },
+                  { label: 'Số lượng đá', value: order.stoneCount },
+                  { label: 'Nội dung khắc laser', value: order.laserEngraving },
+                  { label: 'Yêu cầu khác', value: order.otherRequirements },
+                ]}
+              />
             </Box>
-            <Info label="Nội dung khắc laser" value={order.laserEngraving} />
-            <Info label="Yêu cầu khác" value={order.otherRequirements} />
           </Stack>
         </Stack>
       </Paper>
@@ -150,15 +158,52 @@ function ReferenceView({ order }: { order: OrderReference }) {
   )
 }
 
-function Info({ label, value }: { label: string; value: ReactNode }) {
+function WorkerOverview({ order }: { order: OrderReference }) {
+  const count = (state: OrderReference['subTickets'][number]['state']) =>
+    order.subTickets.filter((ticket) => ticket.state === state).length
+  const actionable =
+    order.subTickets.find((ticket) => ticket.state === 'WORKING') ??
+    order.subTickets.find((ticket) => ticket.state === 'CLAIMED') ??
+    order.subTickets.find((ticket) => ticket.state === 'WAITING') ??
+    order.subTickets.find((ticket) => ticket.state === 'SUBMITTED')
+
+  let title = 'Chưa có phiếu nào cần xử lý'
+  let detail = 'Theo dõi trạng thái đơn và chờ người điều hành mở khâu.'
+  if (count('WORKING') > 0) {
+    title = `${count('WORKING')} phiếu đang được thực hiện`
+    detail = 'Mở đúng phiếu của bạn; làm xong thì báo hoàn thành và nộp hàng cho KCS.'
+  } else if (count('CLAIMED') > 0) {
+    title = `${count('CLAIMED')} phiếu đã có thợ nhận`
+    detail = 'Chờ người giao cân bạc và xác nhận giao trước khi bắt đầu làm.'
+  } else if (count('WAITING') > 0) {
+    title = `${count('WAITING')} phiếu đang chờ thợ nhận`
+    detail = 'Chọn phiếu đúng khâu của bạn và bấm nhận phiếu.'
+  } else if (count('SUBMITTED') > 0) {
+    title = `${count('SUBMITTED')} phiếu đã báo xong`
+    detail = 'Mang hàng tới KCS và chờ cân nhận lại.'
+  }
+
   return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="caption" color="text.secondary">
-        {label}
+    <Paper sx={{ p: 2, border: '1px solid', borderColor: 'primary.light', bgcolor: '#eef6ff' }}>
+      <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+        Việc cần làm
       </Typography>
-      <Typography variant="body2" component="div" sx={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
-        {value == null || value === '' ? '—' : value}
+      <Typography variant="h6" sx={{ mt: 0.25, fontWeight: 700 }}>
+        {title}
       </Typography>
-    </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+        {detail}
+      </Typography>
+      {actionable ? (
+        <Button
+          component={RouterLink}
+          to={`/tickets/${actionable.code}`}
+          variant="contained"
+          sx={{ mt: 1.25 }}
+        >
+          Mở phiếu {actionable.code}
+        </Button>
+      ) : null}
+    </Paper>
   )
 }

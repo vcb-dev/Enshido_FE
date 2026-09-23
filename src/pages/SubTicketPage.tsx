@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import {
   Alert,
   Box,
@@ -30,6 +30,7 @@ import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from 
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
+import { VerticalInfoList } from '../orders/VerticalInfoList'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 
@@ -227,7 +228,7 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Sản phẩm
         </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Stack spacing={2}>
           {shown.length ? (
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
               {shown.map((image, index) => (
@@ -248,22 +249,29 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
             onIndexChange={setViewing}
             onClose={() => setViewing(null)}
           />
-          <Stack spacing={1} sx={{ minWidth: 0 }}>
+          <Stack spacing={1.25} sx={{ minWidth: 0 }}>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
               {order.description}
             </Typography>
-            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              <Info label="Số lượng" value={`${order.qty} ${order.qtyUnit ?? 'sp'}`} />
-              <Info label="Hiện có" value={`${ticket.availableQty} sp · ${ticket.availableSilver != null ? formatQty(ticket.availableSilver) : '—'} g`} />
-              <Info label="Ngày cần trả" value={order.dueDate ? formatStockedDate(order.dueDate) : null} />
-              <Info label="Size" value={order.sizeLabel} />
-              <Info label="Chất liệu" value={order.mainMaterial} />
-              <Info label="Màu xi" value={order.platingColor} />
-              <Info label="Loại đá" value={order.stoneTypes.join(', ')} />
-              <Info label="Số lượng đá" value={order.stoneCount} />
+            <Box sx={{ px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
+              <VerticalInfoList
+                items={[
+                  { label: 'Số lượng', value: `${order.qty} ${order.qtyUnit ?? 'sp'}` },
+                  {
+                    label: 'Hiện có',
+                    value: `${ticket.availableQty} sp · ${ticket.availableSilver != null ? formatQty(ticket.availableSilver) : '—'} g`,
+                  },
+                  { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
+                  { label: 'Size', value: order.sizeLabel },
+                  { label: 'Chất liệu', value: order.mainMaterial },
+                  { label: 'Màu xi', value: order.platingColor },
+                  { label: 'Loại đá', value: order.stoneTypes.join(', ') },
+                  { label: 'Số lượng đá', value: order.stoneCount },
+                  { label: 'Nội dung khắc laser', value: order.laserEngraving },
+                  { label: 'Yêu cầu khác', value: order.otherRequirements },
+                ]}
+              />
             </Box>
-            <Info label="Nội dung khắc laser" value={order.laserEngraving} />
-            <Info label="Yêu cầu khác" value={order.otherRequirements} />
           </Stack>
         </Stack>
       </Paper>
@@ -474,7 +482,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Sản phẩm
         </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Stack spacing={2}>
           {shown.length ? (
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
               {shown.map((image, index) => (
@@ -495,23 +503,27 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
             onIndexChange={setViewing}
             onClose={() => setViewing(null)}
           />
-          <Stack spacing={1} sx={{ minWidth: 0 }}>
+          <Stack spacing={1.25} sx={{ minWidth: 0 }}>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
               {order.description}
             </Typography>
-            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              <Info label="Phiếu con" value={`${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g`} />
-              <Info label="Hiện có" value={`${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g`} />
-              <Info label="Ngày cần trả" value={order.dueDate ? formatStockedDate(order.dueDate) : null} />
-              <Info label="Size" value={order.sizeLabel} />
-              <Info label="Chất liệu" value={order.mainMaterial} />
-              <Info label="Màu xi" value={order.platingColor} />
-              <Info label="Loại đá" value={order.stoneTypes.join(', ')} />
-              <Info label="Số lượng đá" value={order.stoneCount} />
+            <Box sx={{ px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
+              <VerticalInfoList
+                items={[
+                  { label: 'Phiếu con', value: `${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g` },
+                  { label: 'Hiện có', value: `${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g` },
+                  { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
+                  { label: 'Size', value: order.sizeLabel },
+                  { label: 'Chất liệu', value: order.mainMaterial },
+                  { label: 'Màu xi', value: order.platingColor },
+                  { label: 'Loại đá', value: order.stoneTypes.join(', ') },
+                  { label: 'Số lượng đá', value: order.stoneCount },
+                  { label: 'Nội dung khắc laser', value: order.laserEngraving },
+                  { label: 'Yêu cầu khác', value: order.otherRequirements },
+                  ...(ticket.note ? [{ label: 'Ghi chú phiếu', value: ticket.note }] : []),
+                ]}
+              />
             </Box>
-            <Info label="Nội dung khắc laser" value={order.laserEngraving} />
-            <Info label="Yêu cầu khác" value={order.otherRequirements} />
-            {ticket.note ? <Info label="Ghi chú phiếu" value={ticket.note} /> : null}
           </Stack>
         </Stack>
       </Paper>
@@ -600,19 +612,6 @@ function EntryRow({ entry }: { entry: StageEntry }) {
           Chưa được KCS nhận lại
         </Typography>
       )}
-    </Box>
-  )
-}
-
-function Info({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" component="div" sx={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
-        {value == null || value === '' ? '—' : value}
-      </Typography>
     </Box>
   )
 }
