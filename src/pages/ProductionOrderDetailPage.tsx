@@ -143,7 +143,7 @@ export function ProductionOrderDetailPage() {
   const detail = useQuery({
     queryKey: ['production-order', code],
     queryFn: () => getProductionOrderApi(code),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
@@ -771,18 +771,20 @@ export function ProductionOrderDetailPage() {
         </Stack>
       </Box>
 
-      <ProductionOrderFormDialog
-        open={editing}
-        order={order}
-        lookups={lookups.data}
-        saving={update.isPending}
-        onClose={() => setEditing(false)}
-        onSave={async (payload) => {
-          const saved = await update.mutateAsync(payload)
-          setEditing(false)
-          afterProductionOrderSaved(queryClient, saved, order)
-        }}
-      />
+      {editing ? (
+        <ProductionOrderFormDialog
+          open
+          order={order}
+          lookups={lookups.data}
+          saving={update.isPending}
+          onClose={() => setEditing(false)}
+          onSave={async (payload) => {
+            const saved = await update.mutateAsync(payload)
+            setEditing(false)
+            afterProductionOrderSaved(queryClient, saved, order)
+          }}
+        />
+      ) : null}
 
       <CastingDialog
         open={castingOpen}
@@ -1089,7 +1091,6 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
   const orderFields: Array<[string, ReactNode]> = [
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
-    ['Thời gian cần', order.leadTime],
     ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Người chốt', order.closedBy],
     ['Người được hỏi', order.askedUserName],

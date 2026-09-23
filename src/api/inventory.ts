@@ -272,6 +272,7 @@ export type UpdateStockPayload = {
   unitId?: string
   shapeId?: string | null
   colorId?: string | null
+  colorName?: string | null
   materialTypeId?: string | null
   classification?: ClassificationCode
   metalKind?: MetalKindCode | null

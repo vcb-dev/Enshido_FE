@@ -1,5 +1,5 @@
 import { useMemo, type Ref } from 'react'
-import { Autocomplete, Box, Stack, TextField, Typography } from '@mui/material'
+import { Autocomplete, Box, Stack, TextField, Typography, createFilterOptions } from '@mui/material'
 import { cloudinaryThumb } from '../api/uploads'
 
 export type CatalogPickerItem = {
@@ -8,6 +8,11 @@ export type CatalogPickerItem = {
   summary: string
   thumb: string | null
 }
+
+const filterCatalogOptions = createFilterOptions<CatalogPickerItem>({
+  limit: 50,
+  stringify: (item) => `${item.label} ${item.summary}`,
+})
 
 export function CatalogPicker({
   value,
@@ -52,12 +57,7 @@ export function CatalogPicker({
       onBlur={onBlur}
       getOptionLabel={(item) => item.label}
       isOptionEqualToValue={(a, b) => a.id === b.id}
-      filterOptions={(rows, state) => {
-        const q = state.inputValue.trim().toLowerCase()
-        return q
-          ? rows.filter((item) => `${item.label} ${item.summary}`.toLowerCase().includes(q))
-          : rows
-      }}
+      filterOptions={filterCatalogOptions}
       loading={loading}
       loadingText={loadingText}
       noOptionsText={noOptionsText}
@@ -66,15 +66,17 @@ export function CatalogPicker({
         const { key, ...rest } = props
         return (
           <li key={key} {...rest}>
-            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', minWidth: 0, width: '100%' }}>
+            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start', minWidth: 0, width: '100%', py: 0.5 }}>
               <Thumb url={item.thumb} />
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'normal' }}>
                   {item.label}
                 </Typography>
-                <Typography variant="caption" component="div" noWrap color="text.secondary">
-                  {item.summary}
-                </Typography>
+                {item.summary ? (
+                  <Typography variant="caption" component="div" color="text.secondary" sx={{ whiteSpace: 'normal' }}>
+                    {item.summary}
+                  </Typography>
+                ) : null}
               </Box>
             </Stack>
           </li>
@@ -83,6 +85,8 @@ export function CatalogPicker({
       renderInput={(params) => (
         <TextField
           {...params}
+          multiline
+          maxRows={3}
           label={label}
           required={required}
           autoFocus={autoFocus}
@@ -90,6 +94,11 @@ export function CatalogPicker({
           inputRef={inputRef}
           error={Boolean(errorText)}
           helperText={errorText ?? helperText ?? selected?.summary}
+          title={selected?.label}
+          sx={{
+            '& .MuiAutocomplete-input': { whiteSpace: 'pre-wrap' },
+            '& .MuiInputBase-root': { alignItems: 'flex-start' },
+          }}
         />
       )}
     />

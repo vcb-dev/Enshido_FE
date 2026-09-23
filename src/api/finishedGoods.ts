@@ -28,7 +28,10 @@ export type FinishedGoodsStockRow = {
   qtyUnit: string | null
   sizeLabel: string | null
   mainMaterial: string | null
+  platingColor: string | null
   imageUrl: string | null
+  /** NVL cấu thành thành phẩm — nhiều mã xếp chồng trên bảng Tồn. */
+  bomLines: FinishedGoodsNvlOption[]
   openingQty: string
   openingAmount: string
   inQty: string
@@ -49,6 +52,27 @@ export type FinishedGoodsStockRow = {
   availabilityLabel: string
   /** true = tạo trên Tồn (đầu kỳ). false = phiếu tab Nhập. */
   isOpening?: boolean
+}
+
+/** Trạng thái kho (nhập/xuất) — khác trạng thái thành phẩm (còn / hết hàng). */
+export type FgFlowStatus = 'WAITING_IN' | 'RECEIVED' | 'WAITING_OUT' | 'SHIPPED'
+
+export const FG_FLOW_STATUS: Record<FgFlowStatus, { label: string; color: 'warning' | 'success' | 'info' | 'default' }> = {
+  WAITING_IN: { label: 'Chờ nhập', color: 'warning' },
+  RECEIVED: { label: 'Đã nhập', color: 'success' },
+  WAITING_OUT: { label: 'Chờ xuất', color: 'info' },
+  SHIPPED: { label: 'Đã xuất', color: 'default' },
+}
+
+export function fgFlowStatus(
+  row: Pick<FinishedGoodsStockRow, 'qty' | 'shippedQty'>,
+): FgFlowStatus {
+  const remaining = Number(row.qty) || 0
+  const shipped = Number(row.shippedQty) || 0
+  if (remaining <= 0 && shipped > 0) return 'SHIPPED'
+  if (remaining > 0 && shipped === 0) return 'RECEIVED'
+  if (remaining > 0 && shipped > 0) return 'WAITING_OUT'
+  return 'WAITING_IN'
 }
 
 export type ShipmentListLine = {
@@ -143,6 +167,26 @@ export type FinishedGoodsOrderOption = {
   qtyUnit: string | null
   sizeLabel: string | null
   mainMaterial: string | null
+  /** Đã có trên tab Tồn — nhập thêm cộng vào dòng đó. */
+  inStock?: boolean
+  remainingQty?: number
+}
+
+export type FinishedGoodsNvlOption = {
+  id: string
+  sku: string | null
+  name: string
+  unit: string
+  qty: string
+  locationCode: string | null
+  shape: string | null
+  color: string | null
+  materialType: string | null
+  bodyMetal: string | null
+  metalKind: string | null
+  sizeLabel: string | null
+  note: string | null
+  imageUrl: string | null
 }
 
 export function listFinishedGoodsOrderOptionsApi(search = '') {
@@ -150,15 +194,22 @@ export function listFinishedGoodsOrderOptionsApi(search = '') {
   return apiFetch<{ items: FinishedGoodsOrderOption[] }>(`${BASE}/order-options${query}`)
 }
 
+export function listFinishedGoodsNvlOptionsApi(search = '') {
+  const query = search ? `?search=${encodeURIComponent(search)}` : ''
+  return apiFetch<{ items: FinishedGoodsNvlOption[] }>(`${BASE}/nvl-options${query}`)
+}
+
 export type UpsertReceiptPayload = {
   orderCode?: string
   description?: string
   mainMaterial?: string
+  platingColor?: string
   stockUnitPrice?: string
   qty: number
   receivedAt: string
   sizeLabel?: string
   qtyUnit?: string
+  bomLines?: Array<{ materialId: string }>
 }
 
 export function createFinishedGoodsReceiptApi(payload: UpsertReceiptPayload) {

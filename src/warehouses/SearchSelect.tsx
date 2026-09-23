@@ -84,13 +84,13 @@ export function SearchSelect({
       getOptionLabel={(option) => option.name}
       isOptionEqualToValue={(a, b) => a.id === b.id}
       filterOptions={(opts, state) => {
-        const q = state.inputValue.trim().toLowerCase()
+        const q = state.inputValue.trim().toLocaleLowerCase('vi')
         const matched = !q
           ? opts
           : opts.filter(
               (item) =>
-                item.name.toLowerCase().includes(q) ||
-                (item.secondary ?? '').toLowerCase().includes(q),
+                item.name.toLocaleLowerCase('vi').includes(q) ||
+                (item.secondary ?? '').toLocaleLowerCase('vi').includes(q),
             )
         return matched.slice(0, 50)
       }}

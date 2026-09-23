@@ -155,7 +155,10 @@ export function ImageUploadField({
                 <IconButton
                   size="small"
                   aria-label="Gỡ ảnh"
-                  onClick={() => remove(image.publicId)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    remove(image.publicId)
+                  }}
                   sx={{
                     position: 'absolute',
                     top: -8,

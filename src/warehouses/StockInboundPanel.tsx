@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Button, Stack } from '@mui/material'
+import { Box, Button, Dialog, Paper, Stack } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
@@ -37,12 +37,15 @@ import {
   RowActions,
   TextInput,
 } from '../components/ui'
+import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { InboundView } from './MovementView'
+import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
 import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
@@ -271,6 +274,21 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       if (ctx?.previous) queryClient.setQueryData(inboundKey, ctx.previous)
       toast.error(error.message)
     },
+  })
+  const saveMany = useMutation({
+    mutationFn: async (payloads: CreateInboundPayload[]) => {
+      const rows: InboundRow[] = []
+      for (const payload of payloads) {
+        rows.push(await createWarehouseInboundApi(warehouseCode, payload))
+      }
+      return rows
+    },
+    onSuccess: (rows) => {
+      toast.success(`Đã thêm ${rows.length} ${profile.noun}`)
+      void queryClient.invalidateQueries({ queryKey: inboundKey })
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+    },
+    onError: (error: Error) => toast.error(error.message),
   })
 
   const del = useDeleteRowDialog({
@@ -538,10 +556,18 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => {
+        onSave={(payloads) => {
           const id = dialog.kind === 'edit' ? dialog.row?.id : undefined
           dialog.close()
-          save.mutate({ id, payload })
+          if (id) {
+            save.mutate({ id, payload: payloads[0] })
+            return
+          }
+          if (payloads.length === 1) {
+            save.mutate({ payload: payloads[0] })
+            return
+          }
+          saveMany.mutate(payloads)
         }}
       />
       <ConfirmDeleteDialog
@@ -560,34 +586,40 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 }
 
-type InboundFormValues = {
-  receivedAt: string
+type InboundLineValues = {
   name: string
   sku: string
   materialId: string | null
   unitId: string
-  locationCode: string
   otherClassId: string
   qty: string
   unitPrice: string
+}
+
+type InboundFormValues = {
+  receivedAt: string
   note: string
   supplierSku: string
   supplierId: string
+  lines: InboundLineValues[]
 }
 
-const EMPTY_INBOUND: InboundFormValues = {
-  receivedAt: '',
+const EMPTY_INBOUND_LINE: InboundLineValues = {
   name: '',
   sku: '',
   materialId: null,
   unitId: '',
-  locationCode: '',
   otherClassId: '',
   qty: '',
   unitPrice: '',
+}
+
+const EMPTY_INBOUND: InboundFormValues = {
+  receivedAt: '',
   note: '',
   supplierSku: '',
   supplierId: '',
+  lines: [EMPTY_INBOUND_LINE],
 }
 
 function InboundDialog({
@@ -619,9 +651,11 @@ function InboundDialog({
   operatorName: string
   onClose: () => void
   onExited: () => void
-  onSave: (payload: CreateInboundPayload) => void
+  onSave: (payloads: CreateInboundPayload[]) => void
 }) {
   const form = useForm<InboundFormValues>({ defaultValues: EMPTY_INBOUND })
+  const lines = useFieldArray({ control: form.control, name: 'lines' })
+  const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
   const profile = stockProfile(warehouseCode)
   const nvlCatalogs = useQuery({
     queryKey: ['catalogs', 'CATALOG'],
@@ -642,42 +676,38 @@ function InboundDialog({
       row
         ? {
             receivedAt: row.receivedAt,
-            name: row.name,
-            sku:
-              row.sku ??
-              materials.find((item) => item.id === row.materialId)?.sku ??
-              '',
-            materialId: row.materialId,
-            unitId:
-              row.unitId ?? units.find((item) => item.name === row.unit)?.id ?? units[0]?.id ?? '',
-            locationCode: '',
-            otherClassId:
-              materials.find((item) => item.id === row.materialId)?.otherClassId ?? '',
-            qty: qtyFromApi(row.qty),
-            unitPrice: moneyDigitsFromApi(
-              Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice,
-            ),
             note: row.note ?? '',
             supplierSku: row.supplierSku ?? '',
             supplierId: row.supplierId ?? '',
+            lines: [
+              {
+                name: row.name,
+                sku:
+                  row.sku ??
+                  materials.find((item) => item.id === row.materialId)?.sku ??
+                  '',
+                materialId: row.materialId,
+                unitId:
+                  row.unitId ??
+                  units.find((item) => item.name === row.unit)?.id ??
+                  units[0]?.id ??
+                  '',
+                otherClassId:
+                  materials.find((item) => item.id === row.materialId)?.otherClassId ?? '',
+                qty: qtyFromApi(row.qty),
+                unitPrice: moneyDigitsFromApi(
+                  Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice,
+                ),
+              },
+            ],
           }
         : {
             ...EMPTY_INBOUND,
             receivedAt: new Date().toISOString().slice(0, 10),
-            unitId: units[0]?.id ?? '',
+            lines: [{ ...EMPTY_INBOUND_LINE, unitId: units[0]?.id ?? '' }],
           },
     )
   }, [open, row, units, materials, form])
-
-  const qty = form.watch('qty')
-  const unitPrice = form.watch('unitPrice')
-  const sku = form.watch('sku')
-  const amount = useMemo(() => {
-    const q = Number(qty)
-    const p = Number(unitPrice)
-    if (!Number.isFinite(q) || !Number.isFinite(p)) return ''
-    return String(Math.round(q * p))
-  }, [qty, unitPrice])
 
   const unitOptions: SearchSelectOption[] = units.map((unit) => ({
     id: unit.id,
@@ -696,26 +726,46 @@ function InboundDialog({
     }),
   )
 
+  const fullScreen = useIsMobile()
+
   function submit(values: InboundFormValues) {
     if (readOnly) return
-    onSave({
-      receivedAt: values.receivedAt,
-      name: values.name.trim(),
-      sku: values.sku.trim() || undefined,
-      materialId: values.materialId,
-      unitId: values.unitId || undefined,
-      unitName: units.find((unit) => unit.id === values.unitId)?.name,
-      qty: values.qty,
-      stockUnitPrice: '0',
-      unitPrice: values.unitPrice || '0',
-      amount:
-        amount || String(Math.round((Number(values.qty) || 0) * (Number(values.unitPrice) || 0))),
-      note: values.note.trim() || undefined,
-      supplierSku: values.supplierSku.trim() || undefined,
-      supplierId: values.supplierId || undefined,
-      applyToStock: !row,
-      otherClassId: values.otherClassId || null,
-    })
+    const payloads = values.lines
+      .filter((line) => line.name.trim())
+      .map((line) => ({
+        receivedAt: values.receivedAt,
+        name: line.name.trim(),
+        sku: line.sku.trim() || undefined,
+        materialId: line.materialId,
+        unitId: line.unitId || undefined,
+        unitName: units.find((unit) => unit.id === line.unitId)?.name,
+        qty: line.qty,
+        stockUnitPrice: '0',
+        unitPrice: line.unitPrice || '0',
+        amount: String(Math.round((Number(line.qty) || 0) * (Number(line.unitPrice) || 0))),
+        note: values.note.trim() || undefined,
+        supplierSku: values.supplierSku.trim() || undefined,
+        supplierId: values.supplierId || undefined,
+        applyToStock: !row,
+        otherClassId: line.otherClassId || null,
+      }))
+    if (!payloads.length) return
+    onSave(payloads)
+  }
+
+  if (readOnly && row) {
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        fullWidth
+        fullScreen={fullScreen}
+        maxWidth="md"
+        slotProps={{ transition: { onExited } }}
+      >
+        <InboundView row={row} profile={profile} onClose={onClose} />
+      </Dialog>
+    )
   }
 
   return (
@@ -734,7 +784,7 @@ function InboundDialog({
       onClose={onClose}
       onExited={onExited}
     >
-      <FormRow columns={3} sx={{ mt: 1 }}>
+      <FormRow columns={2} sx={{ mt: 1 }}>
         <FormTextField<InboundFormValues>
           name="receivedAt"
           label="Ngày nhập"
@@ -743,15 +793,6 @@ function InboundDialog({
           readOnly={readOnly}
           slotProps={{ inputLabel: { shrink: true } }}
         />
-        <FormSearchSelect<InboundFormValues>
-          name="unitId"
-          label="Đơn vị tính"
-          options={unitOptions}
-          required
-          readOnly={readOnly}
-          displayValue={row?.unit}
-          placeholder="Tìm đơn vị…"
-        />
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
@@ -759,62 +800,119 @@ function InboundDialog({
         />
       </FormRow>
 
-      <FormRow>
-        <MaterialField
-          // Control<T> của RHF không gán được giữa các T khác nhau (hạn chế
-          // variance của thư viện), nên MaterialField nhận Control<any> và ép kiểu ở đây.
-          control={form.control as unknown as Control<any>}
-          kind={kind}
-          readOnly={readOnly}
-          materials={materials}
-          loading={materialsLoading}
-          noun={profile.noun}
-          nameLabel={profile.nameLabel}
-          createLabel={profile.createLabel}
-          allowCreate={Boolean(profile.typeCodes)}
-          onSelect={(material) => {
-            if (!material) {
-              if (kind !== 'edit') form.setValue('materialId', null)
-              form.setValue('sku', '')
-              return
-            }
-            form.setValue('materialId', material.id)
-            form.setValue('sku', material.sku ?? '')
-            if (material.unitId) form.setValue('unitId', material.unitId)
-            form.setValue('otherClassId', material.otherClassId ?? '')
-          }}
-        />
-        <TextInput label={profile.skuLabel} value={sku || '—'} readOnly />
-      </FormRow>
-
-      {profile.typeCodes ? (
-        <FormSearchSelect<InboundFormValues>
-          name="otherClassId"
-          label="Danh mục"
-          options={consumableOptions}
-          required={!form.watch('materialId')}
-          readOnly={readOnly || Boolean(form.watch('materialId'))}
-          placeholder="Chọn danh mục…"
-          rules={{
-            validate: (value) =>
-              Boolean(form.getValues('materialId') || value) || 'Vui lòng chọn danh mục',
-          }}
-        />
-      ) : null}
-
-      <FormRow columns={3}>
-        <FormQtyField<InboundFormValues>
-          name="qty"
-          label="Số lượng"
-          required
-          readOnly={readOnly}
-          rules={{
-            validate: (value) => (Number(value) || 0) > 0 || 'Số lượng phải lớn hơn 0',
-          }}
-        />
-        <FormMoneyField<InboundFormValues> name="unitPrice" label="Đơn giá" readOnly={readOnly} />
-        <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
-      </FormRow>
+      <Stack spacing={1.25}>
+        {lines.fields.map((field, index) => {
+          const line = watchedLines[index]
+          const lineAmount = String(
+            Math.round((Number(line?.qty) || 0) * (Number(line?.unitPrice) || 0)),
+          )
+          return (
+            <Paper key={field.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <FormRow>
+                    <MaterialField
+                      control={form.control as unknown as Control<any>}
+                      name={`lines.${index}.name`}
+                      kind={kind}
+                      readOnly={readOnly}
+                      materials={materials}
+                      loading={materialsLoading}
+                      noun={profile.noun}
+                      nameLabel={profile.nameLabel}
+                      createLabel={profile.createLabel}
+                      allowCreate={Boolean(profile.typeCodes)}
+                      onSelect={(material) => {
+                        if (!material) {
+                          if (kind !== 'edit') form.setValue(`lines.${index}.materialId`, null)
+                          form.setValue(`lines.${index}.sku`, '')
+                          return
+                        }
+                        form.setValue(`lines.${index}.materialId`, material.id)
+                        form.setValue(`lines.${index}.sku`, material.sku ?? '')
+                        if (material.unitId) form.setValue(`lines.${index}.unitId`, material.unitId)
+                        form.setValue(`lines.${index}.otherClassId`, material.otherClassId ?? '')
+                      }}
+                    />
+                    <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
+                  </FormRow>
+                  {profile.typeCodes ? (
+                    <FormSearchSelect<InboundFormValues>
+                      name={`lines.${index}.otherClassId`}
+                      label="Danh mục"
+                      options={consumableOptions}
+                      required={!line?.materialId}
+                      readOnly={readOnly || Boolean(line?.materialId)}
+                      placeholder="Chọn danh mục…"
+                      rules={{
+                        validate: (value) =>
+                          Boolean(form.getValues(`lines.${index}.materialId`) || value) ||
+                          'Vui lòng chọn danh mục',
+                      }}
+                    />
+                  ) : null}
+                  <FormRow columns={4}>
+                    <FormSearchSelect<InboundFormValues>
+                      name={`lines.${index}.unitId`}
+                      label="Đơn vị tính"
+                      options={unitOptions}
+                      required
+                      readOnly={readOnly}
+                      displayValue={index === 0 ? row?.unit : undefined}
+                      placeholder="Tìm đơn vị…"
+                    />
+                    <FormQtyField<InboundFormValues>
+                      name={`lines.${index}.qty`}
+                      label="Số lượng"
+                      required
+                      readOnly={readOnly}
+                      rules={{
+                        validate: (value) => (Number(value) || 0) > 0 || 'Số lượng phải lớn hơn 0',
+                      }}
+                    />
+                    <FormMoneyField<InboundFormValues>
+                      name={`lines.${index}.unitPrice`}
+                      label="Đơn giá"
+                      readOnly={readOnly}
+                    />
+                    <TextInput
+                      label="Thành tiền"
+                      value={Number(lineAmount) ? formatMoney(lineAmount) : ''}
+                      readOnly
+                    />
+                  </FormRow>
+                </Box>
+                {kind === 'create' ? (
+                  <LineActions
+                    addLabel={`Thêm ${profile.noun}`}
+                    removeLabel={`Xóa ${profile.noun}`}
+                    onAdd={() =>
+                      lines.insert(
+                        index + 1,
+                        {
+                          ...EMPTY_INBOUND_LINE,
+                          unitId: form.getValues('lines.0.unitId') || units[0]?.id || '',
+                        },
+                        { shouldFocus: false },
+                      )
+                    }
+                    onRemove={() => {
+                      if (lines.fields.length <= 1) {
+                        form.setValue('lines', [
+                          { ...EMPTY_INBOUND_LINE, unitId: units[0]?.id ?? '' },
+                        ])
+                        return
+                      }
+                      lines.remove(index)
+                    }}
+                    removeDisabled={lines.fields.length <= 1 && !line?.name}
+                  />
+                ) : null}
+              </Stack>
+            </Paper>
+          )
+        })}
+      </Stack>
 
       <FormRow>
         <FormSearchSelect<InboundFormValues>

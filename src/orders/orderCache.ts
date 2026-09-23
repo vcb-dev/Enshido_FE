@@ -21,7 +21,7 @@ export function seedProductionOrder(queryClient: QueryClient, order: ProductionO
 }
 
 export function refreshProductionOrderLists(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+  void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
 }
 
 /**
@@ -56,11 +56,22 @@ function scheduleIdle(fn: () => void) {
 }
 
 function patchPickerStock(queryClient: QueryClient, order: ProductionOrderDetail) {
-  const nvlUsed = order.stoneCount ?? 0
-  if (order.nvl?.id && nvlUsed > 0) {
-    queryClient.setQueryData(['nvl-options'], (items: NvlOption[] | undefined) =>
-      subtractQty(items, order.nvl!.id, nvlUsed),
-    )
+  const issuedNvl = order.nvlLines?.filter((line) => line.materialId && (line.qty ?? 0) > 0) ?? []
+  if (issuedNvl.length) {
+    queryClient.setQueryData(['nvl-options'], (items: NvlOption[] | undefined) => {
+      let next = items
+      for (const line of issuedNvl) {
+        next = subtractQty(next, line.materialId, line.qty ?? 0)
+      }
+      return next
+    })
+  } else {
+    const nvlUsed = order.stoneCount ?? 0
+    if (order.nvl?.id && nvlUsed > 0) {
+      queryClient.setQueryData(['nvl-options'], (items: NvlOption[] | undefined) =>
+        subtractQty(items, order.nvl!.id, nvlUsed),
+      )
+    }
   }
   const btpUsed = order.finishedProductQty ?? order.qty
   if (order.btp?.id && btpUsed > 0) {

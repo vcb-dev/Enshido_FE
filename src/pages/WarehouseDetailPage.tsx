@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom'
 import {
-  Autocomplete,
   Box,
   Breadcrumbs,
   Button,
@@ -15,11 +14,10 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   formatMoney,
@@ -40,10 +38,8 @@ import {
   type UpdateStockPayload,
 } from '../api/inventory'
 import type { OrderImage } from '../api/productionOrders'
-import { cloudinaryThumb } from '../api/uploads'
 import { ImageUploadField } from '../orders/ImageUploadField'
-import { colorHex, COLOR_CATALOG } from '../warehouses/colorPalette'
-import { listCatalogsApi } from '../api/catalogs'
+import { listCatalogsApi, type CatalogItem } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
 import {
   ColumnHeaderFilter,
@@ -64,8 +60,11 @@ import { useCrudDialog, type CrudDialogKind } from '../hooks/useCrudDialog'
 import { isTempId, newTempId, registerTempId, resolveTempId, rejectTempId } from '../hooks/pendingRowId'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 import { CategorySelect } from '../warehouses/CategorySelect'
+import { LineActions } from '../warehouses/LineActions'
 import type { SearchSelectOption } from '../warehouses/SearchSelect'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
+import { validateStockName } from '../warehouses/stockName'
+import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
@@ -412,6 +411,21 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       toast.error(error.message)
     },
   })
+  const saveMany = useMutation({
+    mutationFn: async (payloads: UpdateStockPayload[]) => {
+      const rows: StockRow[] = []
+      for (const payload of payloads) {
+        rows.push(await createWarehouseStockApi(warehouseCode, payload))
+      }
+      return rows
+    },
+    onSuccess: (rows) => {
+      toast.success(`Đã thêm ${rows.length} ${profile.noun}`)
+      void queryClient.invalidateQueries({ queryKey: stockKey })
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
 
   const { setFilter, setSearch } = table
   const columns = useMemo(
@@ -548,10 +562,18 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         saving={false}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => {
+        onSave={(payloads) => {
           const id = dialog.row?.id
           dialog.close()
-          save.mutate({ id, payload })
+          if (id) {
+            save.mutate({ id, payload: payloads[0] })
+            return
+          }
+          if (payloads.length === 1) {
+            save.mutate({ payload: payloads[0] })
+            return
+          }
+          saveMany.mutate(payloads)
         }}
       />
     </Stack>
@@ -879,22 +901,6 @@ function stockColumns(
       { key: 'platingColor', header: 'Màu xi', render: (row) => row.platingColor ?? '—' },
       { key: 'color', header: 'Màu đá', render: (row) => row.color ?? '—' },
       { key: 'sizeLabel', header: 'Size', render: (row) => row.sizeLabel ?? '—' },
-      {
-        key: 'images',
-        header: 'Ảnh',
-        render: (row) =>
-          row.images?.length ? (
-            <Box
-              component="img"
-              src={cloudinaryThumb(row.images[0].url, 64)}
-              alt=""
-              loading="lazy"
-              sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
-            />
-          ) : (
-            '—'
-          ),
-      },
     )
   }
   if (profile.showStatus) {
@@ -968,6 +974,7 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
   const unitId = payload.unitId ?? row.unitId
   const shapeId = payload.shapeId !== undefined ? payload.shapeId : row.shapeId
   const colorId = payload.colorId !== undefined ? payload.colorId : row.colorId
+  const colorName = payload.colorName !== undefined ? payload.colorName : undefined
   const materialTypeId = payload.materialTypeId !== undefined ? payload.materialTypeId : row.materialTypeId
   const otherClassId = payload.otherClassId !== undefined ? payload.otherClassId : row.otherClassId
   const bodyMetalId = payload.bodyMetalId !== undefined ? payload.bodyMetalId : row.bodyMetalId
@@ -983,8 +990,13 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
     unit: lookupName(lookups?.units, unitId) ?? row.unit,
     shapeId: shapeId ?? null,
     shape: shapeId ? lookupName(lookups?.shapes, shapeId) ?? row.shape : null,
-    colorId: colorId ?? null,
-    color: colorId ? lookupName(lookups?.colors, colorId) ?? row.color : null,
+    colorId: colorName !== undefined ? row.colorId : colorId ?? null,
+    color:
+      colorName !== undefined
+        ? colorName || null
+        : colorId
+          ? lookupName(lookups?.colors, colorId) ?? row.color
+          : null,
     materialTypeId: materialTypeId ?? null,
     materialType:
       payload.otherClassName ||
@@ -1085,6 +1097,7 @@ type StockFormValues = {
   sku: string
   shapeId: string
   colorId: string
+  colorName: string
   name: string
   unitId: string
   materialTypeId: string
@@ -1108,6 +1121,7 @@ const EMPTY_STOCK: StockFormValues = {
   sku: '',
   shapeId: '',
   colorId: '',
+  colorName: '',
   name: '',
   unitId: '',
   materialTypeId: '',
@@ -1147,9 +1161,12 @@ function StockEditDialog({
   saving: boolean
   onClose: () => void
   onExited: () => void
-  onSave: (payload: UpdateStockPayload) => void
+  onSave: (payloads: UpdateStockPayload[]) => void
 }) {
-  const form = useForm<StockFormValues>({ defaultValues: EMPTY_STOCK })
+  const form = useForm<StockDialogValues>({
+    defaultValues: { items: [EMPTY_STOCK] },
+  })
+  const items = useFieldArray({ control: form.control, name: 'items' })
   const [uploading, setUploading] = useState(false)
   const onUploadingChange = useCallback((busy: boolean) => setUploading(busy), [])
   const lookups = useQuery({
@@ -1180,37 +1197,37 @@ function StockEditDialog({
 
   useEffect(() => {
     if (!open) return
-    form.reset(
-      row
-        ? {
-            locationCode: row.locationCode ?? '',
-            sku: row.sku ?? '',
-            shapeId: row.shapeId ?? '',
-            colorId: row.colorId ?? '',
-            name: row.name,
-            unitId: row.unitId,
-            materialTypeId: row.otherClassId ?? row.materialTypeId ?? '',
-            metalKind: row.otherClassId ? 'OTHER' : (row.metalKind ?? ''),
-            bodyMetalId: row.bodyMetalId ?? '',
-            productKindId: row.productKindId ?? '',
-            btpCategoryId: row.otherClassId ?? '',
-            platingColorId: row.platingColorId ?? '',
-            sizeLabel: row.sizeLabel ?? '',
-            images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
-            openingQty: qtyFromApi(row.openingQty),
-            stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
-            inQty: qtyFromApi(row.inQty),
-            inAmount: row.inAmount,
-            outQty: qtyFromApi(row.outQty),
-            outAmount: row.outAmount,
-          }
-        : EMPTY_STOCK,
-    )
+    form.reset({
+      items: [
+        row
+          ? {
+              locationCode: row.locationCode ?? '',
+              sku: row.sku ?? '',
+              shapeId: row.shapeId ?? '',
+              colorId: row.colorId ?? '',
+              colorName: row.color ?? '',
+              name: row.name,
+              unitId: row.unitId,
+              materialTypeId: row.otherClassId ?? row.materialTypeId ?? '',
+              metalKind: row.otherClassId ? 'OTHER' : (row.metalKind ?? ''),
+              bodyMetalId: row.bodyMetalId ?? '',
+              productKindId: row.productKindId ?? '',
+              btpCategoryId: row.otherClassId ?? '',
+              platingColorId: row.platingColorId ?? '',
+              sizeLabel: row.sizeLabel ?? '',
+              images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
+              openingQty: qtyFromApi(row.openingQty),
+              stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
+              inQty: qtyFromApi(row.inQty),
+              inAmount: row.inAmount,
+              outQty: qtyFromApi(row.outQty),
+              outAmount: row.outAmount,
+            }
+          : EMPTY_STOCK,
+      ],
+    })
   }, [open, row, form])
 
-  const locationCode = form.watch('locationCode')
-  const metalKind = form.watch('metalKind')
-  const isStone = metalKind === 'STONE'
   const typeOptions: LookupItem[] = materialTypesFor(
     profile,
     lookups.data?.materialTypes ?? [],
@@ -1229,53 +1246,26 @@ function StockEditDialog({
     }),
   )
 
-  useEffect(() => {
-    if (!open || isStone) return
-    form.setValue('shapeId', '')
-  }, [open, isStone, form])
+  const watchedItems = useWatch({ control: form.control, name: 'items' }) ?? []
+  const selectedLocations = watchedItems.map((item) => item.locationCode).filter(Boolean)
 
-  const colors = useMemo(() => {
-    const api = lookups.data?.colors ?? []
-    const byCode = new Map(api.map((item) => [item.code, item]))
-    const ordered: LookupItem[] = []
-    for (const pal of COLOR_CATALOG) {
-      const hit = byCode.get(pal.code)
-      if (hit) {
-        ordered.push(hit)
-        byCode.delete(pal.code)
-      }
-    }
-    ordered.push(...byCode.values())
-    return ordered
-  }, [lookups.data?.colors])
-
-  const openingQty = form.watch('openingQty')
-  const stockUnitPrice = form.watch('stockUnitPrice')
-  const inQty = form.watch('inQty')
-  const inAmount = form.watch('inAmount')
-  const outQty = form.watch('outQty')
-  const outAmount = form.watch('outAmount')
-  const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
-  const qty = String((Number(openingQty) || 0) + (Number(inQty) || 0) - (Number(outQty) || 0))
-  const amount = String(
-    Math.round((Number(openingAmount) || 0) + (Number(inAmount) || 0) - (Number(outAmount) || 0)),
-  )
-
-  // Chỉ gợi ý ô kệ còn trống, trừ ô đang gán cho chính NVL này.
+  // Chỉ gợi ý ô kệ còn trống, trừ ô đang gán cho các dòng đang nhập.
   const locationOptions: SearchSelectOption[] = useMemo(() => {
     const slots = locationSlots.data?.items ?? []
     const opts = slots
-      .filter((slot) => !slot.occupied || slot.code === locationCode)
+      .filter((slot) => !slot.occupied || selectedLocations.includes(slot.code))
       .map((slot) => ({
         id: slot.code,
         name: slot.code,
         secondary: slot.occupied ? (slot.materialName ?? 'Đang dùng') : 'Trống',
       }))
-    if (locationCode && !opts.some((item) => item.id === locationCode)) {
-      opts.unshift({ id: locationCode, name: locationCode, secondary: 'Hiện tại' })
+    for (const code of selectedLocations) {
+      if (code && !opts.some((item) => item.id === code)) {
+        opts.unshift({ id: code, name: code, secondary: 'Hiện tại' })
+      }
     }
     return opts
-  }, [locationCode, locationSlots.data?.items])
+  }, [selectedLocations, locationSlots.data?.items])
 
   const shapeOptions: SearchSelectOption[] = lookups.data?.shapes ?? []
   const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
@@ -1283,62 +1273,13 @@ function StockEditDialog({
 
   const readOnly = kind === 'view'
 
-  function submit(values: StockFormValues) {
+  function submit(values: { items: StockFormValues[] }) {
     if (readOnly) return
-    if (profile.showBtpCategory) {
-      onSave({
-        name: values.name.trim(),
-        unitId: values.unitId,
-        materialTypeId: null,
-        metalKind: null,
-        otherClassName: null,
-        btpCategoryId: values.btpCategoryId || null,
-        bodyMetalId: values.bodyMetalId || null,
-        productKindId: values.productKindId || null,
-        platingColorId: values.platingColorId || null,
-        colorId: values.colorId || null,
-        sizeLabel: values.sizeLabel.trim(),
-        images: values.images.map(({ url, publicId, width, height }) => ({ url, publicId, width, height })),
-        openingQty: values.openingQty,
-        stockUnitPrice: values.stockUnitPrice || '0',
-      })
-      return
-    }
-    const picked = categoryOptions.find((item) => item.id === values.materialTypeId)
-    if (profile.typeCodes) {
-      onSave({
-        ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
-        name: values.name.trim(),
-        unitId: values.unitId,
-        materialTypeId: null,
-        metalKind: null,
-        otherClassName: null,
-        otherClassId: values.materialTypeId || null,
-        openingQty: values.openingQty,
-        stockUnitPrice: values.stockUnitPrice || '0',
-      })
-      return
-    }
-    const isOther = picked?.metalKind === 'OTHER' || values.metalKind === 'OTHER'
-    onSave({
-      ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
-      name: values.name.trim(),
-      unitId: values.unitId,
-      shapeId: profile.showShapeColor && picked?.metalKind === 'STONE' ? values.shapeId || null : null,
-      colorId: profile.showShapeColor ? values.colorId || null : null,
-      materialTypeId: isOther ? null : values.materialTypeId || null,
-      metalKind: isOther
-        ? null
-        : picked?.metalKind && picked.metalKind !== 'OTHER'
-          ? picked.metalKind
-          : values.metalKind
-            ? (values.metalKind as MetalKindCode)
-            : null,
-      otherClassName: isOther ? picked?.name ?? null : null,
-      sizeLabel: values.sizeLabel.trim(),
-      openingQty: values.openingQty,
-      stockUnitPrice: values.stockUnitPrice || '0',
-    })
+    const payloads = values.items
+      .filter((item) => item.name.trim())
+      .map((item) => stockPayloadFromItem(item, profile, categoryOptions))
+    if (!payloads.length) return
+    onSave(payloads)
   }
 
   const fullScreen = useIsMobile()
@@ -1352,50 +1293,240 @@ function StockEditDialog({
       maxWidth="md"
       slotProps={{ transition: { onExited } }}
     >
-      <Form form={form} onSubmit={submit}>
-        <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
-          {kind === 'view'
-            ? `Chi tiết ${row?.name || profile.noun}`
-            : row
-              ? `Chỉnh sửa ${row.name || profile.noun}`
-              : profile.createLabel}
-        </DialogTitle>
-        <DialogContent
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            pt: 1,
-            overflowX: 'hidden',
-            pointerEvents: readOnly ? 'none' : undefined,
-            '& .MuiFormLabel-asterisk':
-              kind === 'view' ? { display: 'none' } : { color: 'error.main' },
-          }}
-        >
-          <FormTextField<StockFormValues>
-            name="name"
+      {readOnly && row ? (
+        <WarehouseStockView row={row} profile={profile} onClose={onClose} />
+      ) : (
+        <Form form={form} onSubmit={submit}>
+          <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
+            {row ? `Chỉnh sửa ${row.name || profile.noun}` : profile.createLabel}
+          </DialogTitle>
+          <DialogContent
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              pt: 1,
+              overflowX: 'hidden',
+              '& .MuiFormLabel-asterisk': { color: 'error.main' },
+            }}
+          >
+            <Stack spacing={1.5} sx={{ mt: 1.5 }}>
+              {items.fields.map((field, index) => (
+                <StockItemFields
+                  key={field.id}
+                  index={index}
+                  form={form}
+                  profile={profile}
+                  row={row}
+                  nameSuggestions={nameSuggestions}
+                  categoryOptions={categoryOptions}
+                  consumableOptions={consumableOptions}
+                  nestedTypes={nestedTypes}
+                  flatTypeOptions={flatTypeOptions}
+                  unitOptions={unitOptions}
+                  shapeOptions={shapeOptions}
+                  locationOptions={locationOptions}
+                  lookups={lookups.data}
+                  btpCatalogs={btpCatalogs.data}
+                  onUploadingChange={onUploadingChange}
+                  showLineActions={!row}
+                  onAdd={() => items.insert(index + 1, { ...EMPTY_STOCK }, { shouldFocus: false })}
+                  onRemove={() => {
+                    if (items.fields.length <= 1) {
+                      form.reset({ items: [EMPTY_STOCK] })
+                      return
+                    }
+                    items.remove(index)
+                  }}
+                  removeDisabled={items.fields.length <= 1 && !watchedItems[index]?.name}
+                />
+              ))}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} disabled={saving}>
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              loading={saving || uploading}
+              loadingPosition="start"
+            >
+              {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
+            </Button>
+          </DialogActions>
+        </Form>
+      )}
+    </Dialog>
+  )
+}
+
+type StockDialogValues = { items: StockFormValues[] }
+
+function stockPayloadFromItem(
+  values: StockFormValues,
+  profile: StockProfile,
+  categoryOptions: LookupItem[],
+): UpdateStockPayload {
+  if (profile.showBtpCategory) {
+    return {
+      name: values.name.trim(),
+      unitId: values.unitId,
+      materialTypeId: null,
+      metalKind: null,
+      otherClassName: null,
+      btpCategoryId: values.btpCategoryId || null,
+      bodyMetalId: values.bodyMetalId || null,
+      productKindId: values.productKindId || null,
+      platingColorId: values.platingColorId || null,
+      colorName: values.colorName.trim(),
+      sizeLabel: values.sizeLabel.trim(),
+      images: values.images.map(({ url, publicId, width, height }) => ({
+        url,
+        publicId,
+        width,
+        height,
+      })),
+      openingQty: values.openingQty,
+      stockUnitPrice: values.stockUnitPrice || '0',
+    }
+  }
+  const picked = categoryOptions.find((item) => item.id === values.materialTypeId)
+  if (profile.typeCodes) {
+    return {
+      ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
+      name: values.name.trim(),
+      unitId: values.unitId,
+      materialTypeId: null,
+      metalKind: null,
+      otherClassName: null,
+      otherClassId: values.materialTypeId || null,
+      openingQty: values.openingQty,
+      stockUnitPrice: values.stockUnitPrice || '0',
+    }
+  }
+  const isOther = picked?.metalKind === 'OTHER' || values.metalKind === 'OTHER'
+  return {
+    ...(profile.showLocation ? { locationCode: values.locationCode } : {}),
+    name: values.name.trim(),
+    unitId: values.unitId,
+    shapeId: profile.showShapeColor && picked?.metalKind === 'STONE' ? values.shapeId || null : null,
+    colorName: profile.showShapeColor ? values.colorName.trim() : undefined,
+    materialTypeId: isOther ? null : values.materialTypeId || null,
+    metalKind: isOther
+      ? null
+      : picked?.metalKind && picked.metalKind !== 'OTHER'
+        ? picked.metalKind
+        : values.metalKind
+          ? (values.metalKind as MetalKindCode)
+          : null,
+    otherClassName: isOther ? picked?.name ?? null : null,
+    sizeLabel: values.sizeLabel.trim(),
+    openingQty: values.openingQty,
+    stockUnitPrice: values.stockUnitPrice || '0',
+  }
+}
+
+function StockItemFields({
+  index,
+  form,
+  profile,
+  row,
+  nameSuggestions,
+  categoryOptions,
+  consumableOptions,
+  nestedTypes,
+  flatTypeOptions,
+  unitOptions,
+  shapeOptions,
+  locationOptions,
+  lookups,
+  btpCatalogs,
+  onUploadingChange,
+  showLineActions,
+  onAdd,
+  onRemove,
+  removeDisabled,
+}: {
+  index: number
+  form: UseFormReturn<StockDialogValues>
+  profile: StockProfile
+  row: StockRow | null
+  nameSuggestions: string[]
+  categoryOptions: LookupItem[]
+  consumableOptions: LookupItem[]
+  nestedTypes: LookupItem[]
+  flatTypeOptions: SearchSelectOption[]
+  unitOptions: SearchSelectOption[]
+  shapeOptions: SearchSelectOption[]
+  locationOptions: SearchSelectOption[]
+  lookups: InventoryLookups | undefined
+  btpCatalogs: CatalogItem[] | undefined
+  onUploadingChange: (busy: boolean) => void
+  showLineActions: boolean
+  onAdd: () => void
+  onRemove: () => void
+  removeDisabled?: boolean
+}) {
+  const metalKind = useWatch({ control: form.control, name: `items.${index}.metalKind` })
+  const isStone = metalKind === 'STONE'
+  const openingQty = useWatch({ control: form.control, name: `items.${index}.openingQty` }) ?? '0'
+  const stockUnitPrice = useWatch({ control: form.control, name: `items.${index}.stockUnitPrice` }) ?? ''
+  const inQty = useWatch({ control: form.control, name: `items.${index}.inQty` }) ?? '0'
+  const inAmount = useWatch({ control: form.control, name: `items.${index}.inAmount` }) ?? '0'
+  const outQty = useWatch({ control: form.control, name: `items.${index}.outQty` }) ?? '0'
+  const outAmount = useWatch({ control: form.control, name: `items.${index}.outAmount` }) ?? '0'
+  const openingAmount = String(Math.round((Number(openingQty) || 0) * (Number(stockUnitPrice) || 0)))
+  const qty = String((Number(openingQty) || 0) + (Number(inQty) || 0) - (Number(outQty) || 0))
+  const amount = String(
+    Math.round((Number(openingAmount) || 0) + (Number(inAmount) || 0) - (Number(outAmount) || 0)),
+  )
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <FormTextField<StockDialogValues>
+            name={`items.${index}.name`}
             label={profile.nameLabel}
             required
-            autoFocus
+            autoFocus={index === 0}
             suggestions={nameSuggestions}
             helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
-            sx={{ mt: 1.5 }}
+            onBlur={() => {
+              const typed = String(form.getValues(`items.${index}.name`) ?? '').trim()
+              if (!typed) return
+              const names = form
+                .getValues('items')
+                .flatMap((item, i) => (String(item.name ?? '').trim() ? ([`items.${i}.name`] as const) : []))
+              void form.trigger(names)
+            }}
+            rules={{
+              validate: (value) =>
+                validateStockName(value, {
+                  existing: nameSuggestions,
+                  self: row?.name,
+                  siblings: form
+                    .getValues('items')
+                    .filter((_, i) => i !== index)
+                    .map((item) => item.name),
+                  label: profile.nameLabel,
+                }),
+            }}
           />
           <FormRow columns={3}>
             {profile.showBtpCategory ? (
-              <FormSearchSelect<StockFormValues>
-                name="bodyMetalId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.bodyMetalId`}
                 label="Chất liệu"
-                options={withFallback(
-                  lookups.data?.bodyMetals,
-                  catalogChildren(btpCatalogs.data, 'chat-lieu'),
-                )}
+                options={withFallback(lookups?.bodyMetals, catalogChildren(btpCatalogs, 'chat-lieu'))}
                 allowClear
                 placeholder="Tìm chất liệu…"
               />
             ) : profile.typeCodes ? (
-              <FormSearchSelect<StockFormValues>
-                name="materialTypeId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.materialTypeId`}
                 label="Danh mục"
                 options={consumableOptions}
                 required
@@ -1404,7 +1535,7 @@ function StockEditDialog({
               />
             ) : nestedTypes.length ? (
               <Controller
-                name="materialTypeId"
+                name={`items.${index}.materialTypeId`}
                 control={form.control}
                 rules={{ required: `Vui lòng chọn ${profile.categoryLabel}` }}
                 render={({ field, fieldState }) => (
@@ -1415,16 +1546,16 @@ function StockEditDialog({
                     required
                     errorText={fieldState.error?.message}
                     onBlur={field.onBlur}
-                    onChange={(typeId, kind) => {
+                    onChange={(typeId, nextKind) => {
                       field.onChange(typeId)
-                      form.setValue('metalKind', kind)
+                      form.setValue(`items.${index}.metalKind`, nextKind)
                     }}
                   />
                 )}
               />
             ) : (
-              <FormSearchSelect<StockFormValues>
-                name="materialTypeId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.materialTypeId`}
                 label={profile.typeLabel}
                 options={flatTypeOptions}
                 allowClear
@@ -1432,31 +1563,31 @@ function StockEditDialog({
               />
             )}
             {profile.showBtpCategory ? (
-              <FormSearchSelect<StockFormValues>
-                name="btpCategoryId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.btpCategoryId`}
                 label="Danh mục BTP"
                 options={withFallback(
-                  lookups.data?.btpCategories,
-                  catalogChildren(btpCatalogs.data, 'danh-muc-btp'),
+                  lookups?.btpCategories,
+                  catalogChildren(btpCatalogs, 'danh-muc-btp'),
                 )}
                 allowClear
                 placeholder="Tìm danh mục BTP…"
               />
             ) : null}
             {profile.showProductKind ? (
-              <FormSearchSelect<StockFormValues>
-                name="productKindId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.productKindId`}
                 label="Phân loại sản phẩm"
                 options={withFallback(
-                  lookups.data?.productKinds,
-                  catalogChildren(btpCatalogs.data, 'phan-loai-san-pham'),
+                  lookups?.productKinds,
+                  catalogChildren(btpCatalogs, 'phan-loai-san-pham'),
                 )}
                 allowClear
                 placeholder="Tìm phân loại sản phẩm…"
               />
             ) : null}
-            <FormSearchSelect<StockFormValues>
-              name="unitId"
+            <FormSearchSelect<StockDialogValues>
+              name={`items.${index}.unitId`}
               label="Đơn vị"
               options={unitOptions}
               required
@@ -1464,49 +1595,40 @@ function StockEditDialog({
             />
             {profile.showProductInfo ? (
               <>
-                <FormSearchSelect<StockFormValues>
-                  name="platingColorId"
+                <FormSearchSelect<StockDialogValues>
+                  name={`items.${index}.platingColorId`}
                   label="Màu xi"
                   options={withFallback(
-                    lookups.data?.platingColors,
-                    catalogChildren(btpCatalogs.data, 'mau-xi'),
+                    lookups?.platingColors,
+                    catalogChildren(btpCatalogs, 'mau-xi'),
                   )}
                   allowClear
                   placeholder="Tìm màu xi…"
                 />
-                <Controller
-                  name="colorId"
-                  control={form.control}
-                  render={({ field }) => (
-                    <ColorField
-                      label="Màu đá"
-                      colors={colors}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                    />
-                  )}
+                <FormTextField<StockDialogValues>
+                  name={`items.${index}.colorName`}
+                  label="Màu đá"
+                  placeholder="Nhập màu đá…"
+                  clearable
                 />
-                <FormTextField<StockFormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
+                <FormTextField<StockDialogValues>
+                  name={`items.${index}.sizeLabel`}
+                  label="Size"
+                  placeholder="7, US 10, 16cm…"
+                />
               </>
             ) : null}
             {profile.showShapeColor ? (
-              <Controller
-                name="colorId"
-                control={form.control}
-                render={({ field }) => (
-                  <ColorField
-                    colors={colors}
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                  />
-                )}
+              <FormTextField<StockDialogValues>
+                name={`items.${index}.colorName`}
+                label="Màu sắc"
+                placeholder="Nhập màu sắc…"
+                clearable
               />
             ) : null}
             {profile.showShapeColor && isStone ? (
-              <FormSearchSelect<StockFormValues>
-                name="shapeId"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.shapeId`}
                 label="Hình dạng"
                 options={shapeOptions}
                 allowClear
@@ -1514,11 +1636,15 @@ function StockEditDialog({
               />
             ) : null}
             {profile.showSize ? (
-              <FormTextField<StockFormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 0.8mm…" />
+              <FormTextField<StockDialogValues>
+                name={`items.${index}.sizeLabel`}
+                label="Size"
+                placeholder="7, US 10, 0.8mm…"
+              />
             ) : null}
             {profile.showLocation ? (
-              <FormSearchSelect<StockFormValues>
-                name="locationCode"
+              <FormSearchSelect<StockDialogValues>
+                name={`items.${index}.locationCode`}
                 label="Vị trí"
                 options={locationOptions}
                 allowClear
@@ -1526,8 +1652,8 @@ function StockEditDialog({
                 noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
               />
             ) : null}
-            <FormMoneyField<StockFormValues>
-              name="stockUnitPrice"
+            <FormMoneyField<StockDialogValues>
+              name={`items.${index}.stockUnitPrice`}
               label="Đơn giá tồn"
               slotProps={{
                 htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
@@ -1538,7 +1664,7 @@ function StockEditDialog({
           {profile.showProductInfo ? (
             <Controller
               control={form.control}
-              name="images"
+              name={`items.${index}.images`}
               render={({ field }) => (
                 <ImageUploadField
                   label="Ảnh sản phẩm"
@@ -1556,7 +1682,7 @@ function StockEditDialog({
             notes
             editableOpeningQty={{
               value: openingQty,
-              onChange: (value) => form.setValue('openingQty', value),
+              onChange: (value) => form.setValue(`items.${index}.openingQty`, value),
             }}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
@@ -1565,117 +1691,18 @@ function StockEditDialog({
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
             TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          {kind === 'view' ? (
-            <Button onClick={onClose} variant="contained">
-              Đóng
-            </Button>
-          ) : (
-            <>
-              <Button onClick={onClose} disabled={saving}>
-                Hủy
-              </Button>
-              <Button type="submit" variant="contained" loading={saving || uploading} loadingPosition="start">
-                {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
-              </Button>
-            </>
-          )}
-        </DialogActions>
-      </Form>
-    </Dialog>
-  )
-}
-
-/** Ô chọn màu kèm chấm màu — cần renderOption riêng nên không dùng SearchSelect. */
-function ColorField({
-  label = 'Màu sắc',
-  colors,
-  value,
-  onChange,
-  onBlur,
-}: {
-  label?: string
-  colors: LookupItem[]
-  value: string
-  onChange: (value: string) => void
-  onBlur: () => void
-}) {
-  const selected = colors.find((item) => item.id === value) ?? null
-  return (
-    <Autocomplete
-      sx={{ width: '100%', minWidth: 0 }}
-      options={colors}
-      value={selected}
-      onChange={(_, next) => onChange(next?.id ?? '')}
-      onBlur={onBlur}
-      getOptionLabel={(option) => option.name}
-      isOptionEqualToValue={(option, next) => option.id === next.id}
-      filterOptions={(options, state) => {
-        const q = state.inputValue.trim().toLowerCase()
-        const matched = !q
-          ? options
-          : options.filter(
-              (item) =>
-                item.name.toLowerCase().includes(q) || item.code.toLowerCase().includes(q),
-            )
-        return matched.slice(0, 50)
-      }}
-      disablePortal
-      autoHighlight
-      openOnFocus
-      size="small"
-      noOptionsText="Không có màu khớp"
-      renderOption={(props, option) => {
-        const { key, ...rest } = props
-        return (
-          <Box component="li" key={key} {...rest} sx={{ gap: 1 }}>
-            <ColorSwatch code={option.code} name={option.name} />
-            {option.name}
-          </Box>
-        )
-      }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label={label}
-          placeholder="Tìm màu…"
-          slotProps={{
-            ...params.slotProps,
-            input: {
-              ...params.slotProps.input,
-              startAdornment: (
-                <>
-                  {selected ? (
-                    <Box sx={{ display: 'flex', ml: 0.5, mr: 0.75 }}>
-                      <ColorSwatch code={selected.code} name={selected.name} />
-                    </Box>
-                  ) : null}
-                  {params.slotProps.input.startAdornment}
-                </>
-              ),
-            },
-          }}
-        />
-      )}
-    />
-  )
-}
-
-function ColorSwatch({ code, name }: { code?: string | null; name?: string | null }) {
-  return (
-    <Box
-      component="span"
-      sx={{
-        width: 16,
-        height: 16,
-        borderRadius: '50%',
-        bgcolor: colorHex(code, name),
-        border: '1px solid rgba(0,0,0,0.28)',
-        flexShrink: 0,
-        display: 'inline-block',
-      }}
-    />
+        </Box>
+        {showLineActions ? (
+          <LineActions
+            addLabel={`Thêm ${profile.noun}`}
+            removeLabel={`Xóa ${profile.noun}`}
+            onAdd={onAdd}
+            onRemove={onRemove}
+            removeDisabled={removeDisabled}
+          />
+        ) : null}
+      </Stack>
+    </Paper>
   )
 }
 
@@ -1684,4 +1711,3 @@ function moneyDigitsFromApi(value: string) {
   if (!Number.isFinite(n) || n === 0) return ''
   return String(Math.round(n))
 }
-

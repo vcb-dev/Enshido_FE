@@ -23,7 +23,7 @@ export function prefetchWarehouseStock(queryClient: QueryClient, codes: string[]
       void queryClient.prefetchQuery({
         queryKey: ['finished-goods-stock'],
         queryFn: () => getFinishedGoodsStockApi(),
-        staleTime: 15_000,
+        staleTime: 60_000,
       })
     })
   }

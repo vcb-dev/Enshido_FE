@@ -63,7 +63,7 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
   const costing = useQuery({
     queryKey: ['production-order-costing', code],
     queryFn: () => getOrderCostingApi(code),
-    staleTime: 15_000,
+    staleTime: 60_000,
     enabled: ready,
   })
 

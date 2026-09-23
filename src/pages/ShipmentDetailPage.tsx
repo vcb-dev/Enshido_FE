@@ -47,12 +47,12 @@ export function ShipmentDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
 
-  const detail = useQuery({ queryKey: ['shipment', code], queryFn: () => getShipmentApi(code), staleTime: 10_000 })
+  const detail = useQuery({ queryKey: ['shipment', code], queryFn: () => getShipmentApi(code), staleTime: 60_000 })
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
     queryFn: () => getFinishedGoodsStockApi(),
     enabled: editing,
-    staleTime: 15_000,
+    staleTime: 60_000,
   })
   const lookups = useQuery({
     queryKey: ['finished-goods-lookups'],

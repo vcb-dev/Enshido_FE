@@ -9,6 +9,9 @@ import {
   deleteProductionOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
+  listBtpOptionsApi,
+  listFinishedProductOptionsApi,
+  listNvlOptionsApi,
   listProductionOrdersApi,
   updateProductionOrderApi,
   type ProductionOrderDetail,
@@ -318,6 +321,28 @@ export function ProductionOrdersPage() {
             <Button
               variant="contained"
               onClick={() => {
+                void queryClient.prefetchQuery({
+                  queryKey: ['production-order-lookups'],
+                  queryFn: getProductionOrderLookupsApi,
+                  staleTime: 5 * 60_000,
+                })
+                void queryClient.prefetchQuery({
+                  queryKey: ['nvl-options'],
+                  queryFn: () => listNvlOptionsApi(),
+                  staleTime: 60_000,
+                })
+                void queryClient.prefetchQuery({
+                  queryKey: ['finished-product-options'],
+                  queryFn: () => listFinishedProductOptionsApi(),
+                  staleTime: 60_000,
+                })
+                if (listSource === 'BTP') {
+                  void queryClient.prefetchQuery({
+                    queryKey: ['btp-options'],
+                    queryFn: () => listBtpOptionsApi(),
+                    staleTime: 60_000,
+                  })
+                }
                 setEditing(null)
                 setFormOpen(true)
               }}
@@ -328,16 +353,20 @@ export function ProductionOrdersPage() {
         }
       />
 
-      <ProductionOrderFormDialog
-        open={formOpen}
-        order={editing}
-        initialSource={listSource}
-        lookups={lookups.data}
-        saving={editing ? update.isPending : create.isPending}
-        onClose={() => setFormOpen(false)}
-        onExited={() => setEditing(null)}
-        onSave={(payload) => (editing ? update.mutateAsync(payload) : create.mutateAsync(payload))}
-      />
+      {formOpen ? (
+        <ProductionOrderFormDialog
+          open
+          order={editing}
+          initialSource={listSource}
+          lookups={lookups.data}
+          saving={editing ? update.isPending : create.isPending}
+          onClose={() => {
+            setFormOpen(false)
+            setEditing(null)
+          }}
+          onSave={(payload) => (editing ? update.mutateAsync(payload) : create.mutateAsync(payload))}
+        />
+      ) : null}
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
         title="Xóa đơn sản xuất"
@@ -437,7 +466,13 @@ function orderColumns(
         ),
       renderSub: (sub) => (
         <>
-          <Link component={RouterLink} to={`/tickets/${sub.code}`} sx={{ fontWeight: 600 }}>
+          <Link
+            component={RouterLink}
+            to={`/tickets/${sub.code}`}
+            underline="none"
+            color="inherit"
+            sx={{ fontWeight: 600 }}
+          >
             {sub.code}
           </Link>
           {sub.workerName ? (
@@ -485,13 +520,6 @@ function orderColumns(
       ),
     },
     { key: 'returnedQty', header: 'Đã trả', width: 68, numeric: true },
-    {
-      key: 'leadTime',
-      header: 'Thời gian cần',
-      width: 104,
-      ellipsis: true,
-      render: (row) => row.leadTime ?? '—',
-    },
     {
       key: 'trackingCode',
       header: 'Mã theo dõi',

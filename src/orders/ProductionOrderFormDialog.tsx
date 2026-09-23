@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Divider } from '@mui/material'
+import { Box, Divider, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { formatQty, getInventoryLookupsApi } from '../api/inventory'
@@ -40,9 +40,10 @@ import {
   normalizePlatingColor,
   platingColorOptions,
 } from './catalog'
-import { FormFreeSoloField, FormMultiFreeSoloField } from './FreeSoloFields'
+import { FormMultiFreeSoloField } from './FreeSoloFields'
 import { ImageUploadField } from './ImageUploadField'
-import { catalogChildren, withFallback } from '../warehouses/catalog'
+import { catalogChildren, finishedGoodsQtyUnitOptions, withFallback } from '../warehouses/catalog'
+import { NvlBomCards } from '../finishedGoods/BomLinesField'
 
 type FormValues = {
   source: ProductionSource
@@ -58,6 +59,7 @@ type FormValues = {
   qty: string
   qtyUnit: string
   finishedProductQty: string
+  btpQty: string
   debtStatus: string
   description: string
   dueDate: string
@@ -82,6 +84,27 @@ type FormValues = {
   parentCode: string
   detailImages: OrderImage[]
   productImages: OrderImage[]
+  nvlLines: NvlWorkLine[]
+}
+
+type NvlWorkLine = {
+  materialId: string
+  platingColor: string
+  stoneCount: string
+  stoneWeight: string
+  laserEngraving: string
+  otherRequirements: string
+}
+
+function emptyNvlWork(materialId: string): NvlWorkLine {
+  return {
+    materialId,
+    platingColor: '',
+    stoneCount: '',
+    stoneWeight: '',
+    laserEngraving: '',
+    otherRequirements: '',
+  }
 }
 
 const EMPTY: FormValues = {
@@ -98,6 +121,7 @@ const EMPTY: FormValues = {
   qty: '1',
   qtyUnit: '',
   finishedProductQty: '',
+  btpQty: '',
   debtStatus: '',
   description: '',
   dueDate: '',
@@ -122,6 +146,7 @@ const EMPTY: FormValues = {
   parentCode: '',
   detailImages: [],
   productImages: [],
+  nvlLines: [],
 }
 
 const TITLES = { edit: 'Sửa đơn sản xuất', view: 'Đơn sản xuất' }
@@ -159,19 +184,59 @@ function asProductImages(
   }))
 }
 
+function asDetailImages(
+  images: Array<{
+    url: string
+    publicId: string
+    width?: number | null
+    height?: number | null
+    kind?: OrderImage['kind']
+  }>,
+): OrderImage[] {
+  return images
+    .filter((image) => image.kind === 'DETAIL')
+    .map((image) => ({
+      kind: 'DETAIL' as const,
+      url: image.url,
+      publicId: image.publicId,
+      width: image.width ?? null,
+      height: image.height ?? null,
+    }))
+}
+
 // `rules.validate` của react-hook-form đưa xuống giá trị kiểu hợp của cả form nên nhận unknown.
-function qtyOverStock(value: unknown, max: number | null) {
+function qtyOverStock(value: unknown, max: number | null, stockLabel = 'số lượng tồn') {
   const raw = value == null ? '' : String(value)
   const qty = Number(raw)
   if (!raw || qty < 1) return 'Số lượng phải từ 1'
-  if (max != null && qty > max) return 'Vượt quá số lượng tồn'
+  if (max != null && Number.isFinite(max) && qty > max) {
+    return `Vượt quá ${stockLabel} (${formatQty(String(max))})`
+  }
   return true
+}
+
+function nvlStockMax(stockQty: string | number | null | undefined, held = 0) {
+  const stock = Number(stockQty)
+  return (Number.isFinite(stock) ? stock : 0) + held
+}
+
+function nvlQtyExceedsStock(value: unknown, max: number | null) {
+  const qty = Number(value == null ? '' : String(value))
+  return Number.isFinite(qty) && qty >= 1 && max != null && Number.isFinite(max) && qty > max
 }
 
 function todayYmd() {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+function validateDueDate(value: unknown, receivedDate: string, allowPast: boolean) {
+  const due = String(value ?? '')
+  if (!due) return true
+  if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
+  if (receivedDate && due < receivedDate) return 'Không được trước ngày đặt đơn'
+  return true
 }
 
 function nameOptions(items: Array<{ name: string }> | undefined, current?: string) {
@@ -204,9 +269,9 @@ function finishedPickerOptions(items: FinishedProductOption[]): CatalogPickerIte
     id: item.code,
     label: `${item.code} — ${item.description}`,
     summary: [
-      item.remainingQty > 0 ? `Tồn ${item.remainingQty}` : 'Đã xuất hết',
       item.mainMaterial,
       item.sizeLabel ? `size ${item.sizeLabel}` : null,
+      item.bomLines.length ? `${item.bomLines.length} NVL` : null,
     ]
       .filter(Boolean)
       .join(' · '),
@@ -262,7 +327,8 @@ function NvlDetailFields({
           transform={digitsOnly}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           rules={{
-            validate: (value) => (allowEmptyQty && !value ? true : qtyOverStock(value, nvlMaxQty)),
+            validate: (value) =>
+              allowEmptyQty && !value ? true : qtyOverStock(value, nvlMaxQty, 'tồn NVL'),
           }}
         />
         <FormQtyField<FormValues> name="stoneWeight" label="Trọng lượng đá (g)" />
@@ -270,7 +336,7 @@ function NvlDetailFields({
 
       <FormRow columns={2}>
         <FormTextField<FormValues> name="laserEngraving" label="Nội dung khắc laser" multiline maxRows={4} />
-        <FormTextField<FormValues> name="otherRequirements" label="Yêu cầu khác" multiline maxRows={4} readOnly />
+        <FormTextField<FormValues> name="otherRequirements" label="Yêu cầu khác" multiline maxRows={4} />
       </FormRow>
     </>
   )
@@ -315,7 +381,9 @@ export function ProductionOrderFormDialog({
   const nvlPlatingColor = useWatch({ control: form.control, name: 'nvlPlatingColor' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })
   const finishedProductQty = useWatch({ control: form.control, name: 'finishedProductQty' })
+  const btpQty = useWatch({ control: form.control, name: 'btpQty' })
   const stoneCount = useWatch({ control: form.control, name: 'stoneCount' })
+  const nvlLinesWatch = useWatch({ control: form.control, name: 'nvlLines' })
   const btpCategory = useWatch({ control: form.control, name: 'btpCategory' })
   const productKind = useWatch({ control: form.control, name: 'productKind' })
   const stoneColor = useWatch({ control: form.control, name: 'stoneColor' })
@@ -333,7 +401,7 @@ export function ProductionOrderFormDialog({
   const finishedProducts = useQuery({
     queryKey: ['finished-product-options'],
     queryFn: () => listFinishedProductOptionsApi(),
-    enabled: open && isNvl,
+    enabled: open,
     staleTime: 60_000,
   })
   const nvlOptions = useQuery({
@@ -376,6 +444,7 @@ export function ProductionOrderFormDialog({
         laserEngraving: order.laserEngraving,
         otherRequirements: order.otherRequirements,
         remainingQty: 0,
+        qtyUnit: order.qtyUnit ?? null,
         images: (order.images ?? []).map((image) => ({
           kind: image.kind,
           url: image.url,
@@ -383,6 +452,7 @@ export function ProductionOrderFormDialog({
           width: image.width ?? null,
           height: image.height ?? null,
         })),
+        bomLines: [],
       } satisfies FinishedProductOption,
       ...items,
     ]
@@ -414,21 +484,29 @@ export function ProductionOrderFormDialog({
   const nvlPickerItems = useMemo(() => nvlPickerOptions(nvlItems), [nvlItems])
   const selectedBtp = btpItems.find((item) => item.id === btpMaterialId)
   const selectedFinished = finishedItems.find((item) => item.code === finishedProductCode)
-  const fgHeldQty =
-    order?.source === 'NVL' && order.sourceOrderCode === finishedProductCode
-      ? (order.finishedProductQty ?? 0)
-      : 0
-  const finishedMaxQty =
-    selectedFinished != null ? selectedFinished.remainingQty + fgHeldQty : fgHeldQty > 0 ? fgHeldQty : null
   const selectedNvl = nvlItems.find((item) => item.id === nvlMaterialId)
   const nvlHeldQty =
     order?.nvl?.id === nvlMaterialId ? (order.stoneCount ?? 0) : 0
+  const nvlStockFromBom = selectedFinished?.bomLines.find((line) => line.id === nvlMaterialId)
   const nvlMaxQty =
     selectedNvl != null
       ? Number(selectedNvl.qty) + nvlHeldQty
-      : nvlHeldQty > 0
-        ? nvlHeldQty
-        : null
+      : nvlStockFromBom != null
+        ? Number(nvlStockFromBom.qty) + nvlHeldQty
+        : nvlHeldQty > 0
+          ? nvlHeldQty
+          : null
+  const fgBomLines = selectedFinished?.bomLines ?? []
+  const hasFgBom = fgBomLines.length > 0
+  const nvlShortage =
+    isNvl && hasFgBom
+      ? fgBomLines.some((material, index) => {
+          const held =
+            order?.nvlLines?.find((line) => line.materialId === material.id)?.qty ??
+            (order?.nvl?.id === material.id ? (order.stoneCount ?? 0) : 0)
+          return nvlQtyExceedsStock(nvlLinesWatch[index]?.stoneCount, nvlStockMax(material.qty, held))
+        })
+      : nvlQtyExceedsStock(stoneCount, nvlMaxQty)
   /** SL tối đa: tồn hiện có, cộng số đơn này đang giữ nếu vẫn là mã cũ. */
   const btpMaxQty = selectedBtp
     ? Number(selectedBtp.qty) +
@@ -436,6 +514,7 @@ export function ProductionOrderFormDialog({
     : order?.btp?.id === btpMaterialId
       ? (order.finishedProductQty ?? order.qty ?? null)
       : null
+  const btpShortage = nvlQtyExceedsStock(btpQty, btpMaxQty)
 
   const btpCategoryOptions = useMemo(
     () =>
@@ -511,6 +590,10 @@ export function ProductionOrderFormDialog({
                 : order.source === 'BTP'
                   ? String(order.qty)
                   : '',
+            btpQty:
+              order.source === 'BTP'
+                ? String(order.finishedProductQty ?? order.qty)
+                : '',
             debtStatus: order.debtStatus ?? '',
             description: order.description,
             dueDate: order.dueDate ?? '',
@@ -532,6 +615,14 @@ export function ProductionOrderFormDialog({
             parentCode: order.parentCode ?? '',
             detailImages: order.images.filter((image) => image.kind === 'DETAIL'),
             productImages: order.images.filter((image) => image.kind === 'PRODUCT'),
+            nvlLines: (order.nvlLines ?? []).map((line) => ({
+              materialId: line.materialId,
+              platingColor: normalizePlatingColor(line.platingColor),
+              stoneCount: line.qty != null ? String(line.qty) : '',
+              stoneWeight: line.stoneWeight ?? '',
+              laserEngraving: line.laserEngraving ?? '',
+              otherRequirements: line.otherRequirements ?? '',
+            })),
           }
         : {
             ...EMPTY,
@@ -541,19 +632,34 @@ export function ProductionOrderFormDialog({
             qty: '',
             qtyUnit: '',
             finishedProductQty: '',
+            btpQty: '',
           },
     )
   }, [open, order, initialSource, operatorName, form])
 
   useEffect(() => {
-    if (!open || !finishedProductQty) return
-    void form.trigger('finishedProductQty')
-  }, [finishedProductQty, finishedMaxQty, btpMaxQty, form, open])
+    if (!open || !btpQty || isNvl) return
+    void form.trigger('btpQty')
+  }, [btpQty, btpMaxQty, form, open, isNvl])
 
   useEffect(() => {
     if (!open || !stoneCount) return
     void form.trigger('stoneCount')
   }, [stoneCount, nvlMaxQty, form, open])
+
+  useEffect(() => {
+    if (!open || !hasFgBom) return
+    nvlLinesWatch.forEach((line, index) => {
+      if (!line?.stoneCount) return
+      void form.trigger(`nvlLines.${index}.stoneCount`)
+    })
+  }, [nvlLinesWatch, hasFgBom, fgBomLines, form, open])
+
+  useEffect(() => {
+    if (!open) return
+    if (!finishedProductQty && !nvlShortage && !btpShortage) return
+    void form.trigger('finishedProductQty')
+  }, [nvlShortage, btpShortage, finishedProductQty, open, form])
 
   function replaceKindImages(
     field: 'detailImages' | 'productImages',
@@ -567,7 +673,6 @@ export function ProductionOrderFormDialog({
   }
 
   function applyBtpCatalog(next: BtpOption | undefined, previous: BtpOption | undefined) {
-    form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
     form.setValue('btpCategory', next?.category ?? '', { shouldDirty: true })
     form.setValue('mainMaterial', next?.bodyMetal ?? '', { shouldDirty: true })
     form.setValue('productKind', next?.productKind ?? '', { shouldDirty: true })
@@ -575,19 +680,54 @@ export function ProductionOrderFormDialog({
     form.setValue('stoneColor', next?.stoneColor ?? '', { shouldDirty: true })
     replaceKindImages(
       'productImages',
-      previous?.images.map((image) => image.publicId) ?? [],
-      asProductImages(next?.images ?? []),
+      [...(previous?.images ?? []), ...(next?.images ?? [])].map((image) => image.publicId),
+      [],
     )
   }
 
-  function applyFinishedProduct(next: FinishedProductOption | undefined, previous: FinishedProductOption | undefined) {
+  /** Đơn BTP: thành phẩm chỉ điền size / đơn vị — BTP và NVL người dùng chọn tay. */
+  function applyBtpFinishedProduct(next: FinishedProductOption | undefined) {
     form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
+    form.setValue('qtyUnit', next?.qtyUnit ?? '', { shouldDirty: true })
+  }
+
+  function applyFinishedProduct(next: FinishedProductOption | undefined, previous: FinishedProductOption | undefined) {
+    const first = next?.bomLines[0]
+    form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
+    form.setValue('size', first?.sizeLabel ?? next?.size ?? '', { shouldDirty: true })
+    form.setValue('qtyUnit', next?.qtyUnit ?? '', { shouldDirty: true })
+    form.setValue(
+      'mainMaterial',
+      next?.mainMaterial || first?.bodyMetal || first?.metalKind || '',
+      { shouldDirty: true },
+    )
+    form.setValue('stoneColor', next?.stoneColor || first?.color || '', { shouldDirty: true })
+    form.setValue(
+      'stoneTypes',
+      next?.stoneTypes?.length ? next.stoneTypes : first?.materialType ? [first.materialType] : [],
+      { shouldDirty: true },
+    )
+    form.setValue('nvlMaterialId', first?.id ?? '', { shouldDirty: true })
+    form.setValue(
+      'nvlLines',
+      (next?.bomLines ?? []).map((line) => emptyNvlWork(line.id)),
+      { shouldDirty: true },
+    )
+    form.setValue('stoneCount', '', { shouldDirty: true })
+    form.setValue('stoneWeight', '', { shouldDirty: true })
+    form.setValue('laserEngraving', '', { shouldDirty: true })
+    form.setValue('otherRequirements', '', { shouldDirty: true })
+    form.setValue('platingColor', '', { shouldDirty: true })
     replaceKindImages(
       'productImages',
       asProductImages(previous?.images ?? []).map((image) => image.publicId),
       asProductImages(next?.images ?? []),
     )
-    if (form.getValues('finishedProductQty')) void form.trigger('finishedProductQty')
+    replaceKindImages(
+      'detailImages',
+      asDetailImages(previous?.images ?? []).map((image) => image.publicId),
+      asDetailImages(next?.images ?? []),
+    )
   }
 
   function applyNvl(next: NvlOption | undefined, previous: NvlOption | undefined) {
@@ -626,10 +766,11 @@ export function ProductionOrderFormDialog({
       receivedDate: values.receivedDate,
       closedBy: values.closedBy.trim() || operatorName,
       description: values.description.trim(),
-      qty: Number(values.qty) || 1,
+      qty: Number(values.finishedProductQty) || Number(values.qty) || 1,
       qtyUnit: values.qtyUnit || null,
       finishedProductQty: values.finishedProductQty ? Number(values.finishedProductQty) : null,
-      leadTime: values.leadTime.trim(),
+      btpQty: btp && values.btpQty ? Number(values.btpQty) : null,
+      leadTime: '',
       trackingCode: values.trackingCode.trim(),
       askedUserId: null,
       debtStatus: '',
@@ -651,6 +792,19 @@ export function ProductionOrderFormDialog({
       model3dUrl: btp ? null : values.model3dUrl.trim() || null,
       parentCode: values.parentCode.trim(),
       images: [...values.detailImages, ...values.productImages],
+      nvlLines: isNvl && hasFgBom
+        ? fgBomLines.map((material, index) => {
+            const line = values.nvlLines[index]
+            return {
+              materialId: material.id,
+              platingColor: normalizePlatingColor(line?.platingColor) || null,
+              qty: Number(line?.stoneCount) || 0,
+              stoneWeight: line?.stoneWeight || null,
+              laserEngraving: line?.laserEngraving.trim() || null,
+              otherRequirements: line?.otherRequirements.trim() || null,
+            }
+          })
+        : undefined,
     })
   }
 
@@ -684,40 +838,47 @@ export function ProductionOrderFormDialog({
       {isNvl ? (
         <>
           <Box sx={{ ...SECTION_SX, mt: order ? undefined : 1 }}>
+            <Controller
+              control={form.control}
+              name="finishedProductCode"
+              rules={{
+                validate: (value, values) =>
+                  values.source !== 'NVL' || Boolean(value) || 'Chọn mã thành phẩm',
+              }}
+              render={({ field, fieldState }) => (
+                <CatalogPicker
+                  value={field.value}
+                  options={finishedPickerItems}
+                  label="Mã thành phẩm (kho thành phẩm)"
+                  placeholder="Chọn mã trong kho thành phẩm…"
+                  loadingText="Đang tải kho thành phẩm…"
+                  noOptionsText="Kho thành phẩm chưa có mã nào"
+                  required
+                  loading={finishedProducts.isFetching}
+                  autoFocus={!order}
+                  errorText={fieldState.error?.message}
+                  inputRef={field.ref}
+                  onBlur={field.onBlur}
+                  onChange={(code) => {
+                    const previous = finishedItems.find((item) => item.code === field.value)
+                    field.onChange(code)
+                    applyFinishedProduct(
+                      finishedItems.find((item) => item.code === code),
+                      previous,
+                    )
+                  }}
+                />
+              )}
+            />
             <FormRow columns={3}>
-              <Controller
-                control={form.control}
-                name="finishedProductCode"
-                rules={{
-                  validate: (value, values) =>
-                    values.source !== 'NVL' || Boolean(value) || 'Chọn mã thành phẩm',
-                }}
-                render={({ field, fieldState }) => (
-                  <CatalogPicker
-                    value={field.value}
-                    options={finishedPickerItems}
-                    label="Mã thành phẩm (kho thành phẩm)"
-                    placeholder="Chọn mã trong kho thành phẩm…"
-                    loadingText="Đang tải kho thành phẩm…"
-                    noOptionsText="Kho thành phẩm chưa có mã nào"
-                    required
-                    loading={finishedProducts.isFetching}
-                    autoFocus={!order}
-                    errorText={fieldState.error?.message}
-                    inputRef={field.ref}
-                    onBlur={field.onBlur}
-                    onChange={(code) => {
-                      const previous = finishedItems.find((item) => item.code === field.value)
-                      field.onChange(code)
-                      applyFinishedProduct(
-                        finishedItems.find((item) => item.code === code),
-                        previous,
-                      )
-                    }}
-                  />
-                )}
-              />
               <FormTextField<FormValues> name="sizeLabel" label="Size thành phẩm" readOnly />
+              <FormSelect<FormValues>
+                name="qtyUnit"
+                label="Đơn vị thành phẩm"
+                required
+                placeholder="Chọn đơn vị…"
+                options={finishedGoodsQtyUnitOptions(qtyUnit || selectedFinished?.qtyUnit)}
+              />
               <FormTextField<FormValues>
                 name="finishedProductQty"
                 label="Số lượng thành phẩm cần lên đơn"
@@ -725,44 +886,102 @@ export function ProductionOrderFormDialog({
                 transform={digitsOnly}
                 slotProps={{ htmlInput: { inputMode: 'numeric' } }}
                 rules={{
-                  validate: (value) => qtyOverStock(value, finishedMaxQty),
+                  validate: () => (nvlShortage ? 'Không đủ NVL' : true),
                 }}
               />
             </FormRow>
           </Box>
 
           <Box sx={SECTION_SX}>
-            <Controller
-              control={form.control}
-              name="nvlMaterialId"
-              rules={{
-                validate: (value, values) =>
-                  values.source !== 'NVL' || Boolean(value) || 'Chọn mã NVL',
-              }}
-              render={({ field, fieldState }) => (
-                <CatalogPicker
-                  value={field.value}
-                  options={nvlPickerItems}
-                  label="Mã NVL (kho NVL)"
-                  placeholder="Chọn mã trong kho NVL chính…"
-                  loadingText="Đang tải kho NVL…"
-                  noOptionsText="Kho NVL chính chưa có mã nào"
-                  required
-                  loading={nvlOptions.isFetching}
-                  errorText={fieldState.error?.message}
-                  inputRef={field.ref}
-                  onBlur={field.onBlur}
-                  onChange={(id) => {
-                    const previous = nvlItems.find((item) => item.id === field.value)
-                    field.onChange(id)
-                    applyNvl(
-                      nvlItems.find((item) => item.id === id),
-                      previous,
+            {hasFgBom ? (
+              <Box>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                  Mã NVL (kho NVL)
+                </Typography>
+                <NvlBomCards
+                  lines={fgBomLines}
+                  footer={(material, index) => {
+                    const held =
+                      order?.nvlLines?.find((line) => line.materialId === material.id)?.qty ??
+                      (order?.nvl?.id === material.id ? (order.stoneCount ?? 0) : 0)
+                    const maxQty = nvlStockMax(material.qty, held)
+                    return (
+                      <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <FormRow columns={3}>
+                          <FormSelect<FormValues>
+                            name={`nvlLines.${index}.platingColor`}
+                            label="Màu sắc (xi)"
+                            placeholder="Chọn màu xi…"
+                            clearable
+                            options={platingColorOptions(form.getValues(`nvlLines.${index}.platingColor`))}
+                          />
+                          <FormTextField<FormValues>
+                            name={`nvlLines.${index}.stoneCount`}
+                            label="Số lượng NVL cần lên đơn"
+                            required
+                            transform={digitsOnly}
+                            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                            rules={{
+                              validate: (value) => qtyOverStock(value, maxQty, 'tồn NVL'),
+                            }}
+                          />
+                          <FormQtyField<FormValues>
+                            name={`nvlLines.${index}.stoneWeight`}
+                            label="Trọng lượng đá (g)"
+                          />
+                        </FormRow>
+                        <FormRow columns={2}>
+                          <FormTextField<FormValues>
+                            name={`nvlLines.${index}.laserEngraving`}
+                            label="Nội dung khắc laser"
+                            multiline
+                            maxRows={4}
+                          />
+                          <FormTextField<FormValues>
+                            name={`nvlLines.${index}.otherRequirements`}
+                            label="Yêu cầu khác"
+                            multiline
+                            maxRows={4}
+                          />
+                        </FormRow>
+                      </Box>
                     )
                   }}
                 />
-              )}
-            />
+              </Box>
+            ) : (
+              <>
+              <Controller
+                control={form.control}
+                name="nvlMaterialId"
+                rules={{
+                  validate: (value, values) =>
+                    values.source !== 'NVL' || Boolean(value) || 'Chọn mã NVL',
+                }}
+                render={({ field, fieldState }) => (
+                  <CatalogPicker
+                    value={field.value}
+                    options={nvlPickerItems}
+                    label="Mã NVL (kho NVL)"
+                    placeholder="Chọn mã trong kho NVL chính…"
+                    loadingText="Đang tải kho NVL…"
+                    noOptionsText="Kho NVL chính chưa có mã nào"
+                    required
+                    loading={nvlOptions.isFetching}
+                    errorText={fieldState.error?.message}
+                    inputRef={field.ref}
+                    onBlur={field.onBlur}
+                    onChange={(id) => {
+                      const previous = nvlItems.find((item) => item.id === field.value)
+                      field.onChange(id)
+                      applyNvl(
+                        nvlItems.find((item) => item.id === id),
+                        previous,
+                      )
+                    }}
+                  />
+                )}
+              />
 
             <NvlDetailFields
               materialName="mainMaterial"
@@ -773,10 +992,12 @@ export function ProductionOrderFormDialog({
               nvlMaxQty={nvlMaxQty}
               allowEmptyQty={false}
             />
+              </>
+            )}
           </Box>
 
           <Box sx={SECTION_SX}>
-            <FormRow columns={4}>
+            <FormRow columns={3}>
               <FormSelect<FormValues>
                 name="requestType"
                 label="Yêu cầu làm hàng"
@@ -796,20 +1017,14 @@ export function ProductionOrderFormDialog({
                 type="date"
                 required
                 slotProps={{ inputLabel: { shrink: true } }}
+                onBlur={() => void form.trigger('dueDate')}
                 rules={{
-                  validate: (value, values) =>
-                    !value || !values.receivedDate || value >= values.receivedDate || 'Không được trước ngày đặt đơn',
+                  validate: (value, values) => validateDueDate(value, values.receivedDate, Boolean(order)),
                 }}
-              />
-              <FormFreeSoloField<FormValues>
-                name="leadTime"
-                label="Thời gian cần hoàn thành"
-                required
-                options={lookups?.leadTimes ?? []}
               />
             </FormRow>
 
-            <FormRow columns={order ? 3 : 2}>
+            <FormRow columns={order ? 4 : 3}>
               <FormTextField<FormValues> name="closedBy" label="Người lên đơn" readOnly />
               <FormTextField<FormValues> name="trackingCode" label="Mã theo dõi đơn" placeholder="V-9147" required />
               {order ? (
@@ -820,42 +1035,9 @@ export function ProductionOrderFormDialog({
                   helperText="Tự tính từ phiếu xuất hàng"
                 />
               ) : null}
-            </FormRow>
-
-            <FormRow columns={3}>
-              <FormSelect<FormValues>
-                name="qtyUnit"
-                label="Đơn vị"
-                required
-                placeholder="Chọn đơn vị…"
-                options={[
-                  { value: 'chiếc', label: 'Chiếc' },
-                  { value: 'đôi', label: 'Đôi' },
-                ]}
-              />
-              <FormTextField<FormValues>
-                name="qty"
-                label="Số lượng cần làm"
-                required
-                disabled={!qtyUnit}
-                transform={digitsOnly}
-                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                helperText={qtyUnit ? undefined : 'Chọn đơn vị trước'}
-                rules={{
-                  validate: (value, values) => {
-                    if (!values.qtyUnit) return 'Chọn đơn vị trước'
-                    if (Number(value) < 1) return 'Số lượng phải từ 1'
-                    if (order && Number(value) < order.subTicketTotals.qty) {
-                      return `Đã chia ${order.subTicketTotals.qty} sp cho phiếu con`
-                    }
-                    return true
-                  },
-                }}
-              />
               <FormQtyField<FormValues>
                 name="silverWeight"
                 label="Tổng TL bạc (g)"
-                helperText="Mốc chia gram cho phiếu con"
                 rules={{
                   validate: (value) => {
                     if (!order?.subTickets.length) return true
@@ -882,7 +1064,67 @@ export function ProductionOrderFormDialog({
       ) : (
         <>
           <Box sx={{ ...SECTION_SX, mt: order ? undefined : 1 }}>
+            <Controller
+              control={form.control}
+              name="finishedProductCode"
+              rules={{
+                validate: (value, values) =>
+                  values.source !== 'BTP' || Boolean(order) || Boolean(value) || 'Chọn mã thành phẩm',
+              }}
+              render={({ field, fieldState }) => (
+                <CatalogPicker
+                  value={field.value}
+                  options={finishedPickerItems}
+                  label="Mã thành phẩm (kho thành phẩm)"
+                  placeholder="Chọn mã trong kho thành phẩm…"
+                  loadingText="Đang tải kho thành phẩm…"
+                  noOptionsText="Kho thành phẩm chưa có mã nào"
+                  required={!order}
+                  loading={finishedProducts.isFetching}
+                  autoFocus={!order}
+                  errorText={fieldState.error?.message}
+                  inputRef={field.ref}
+                  onBlur={field.onBlur}
+                  onChange={(code) => {
+                    field.onChange(code)
+                    applyBtpFinishedProduct(finishedItems.find((item) => item.code === code))
+                  }}
+                />
+              )}
+            />
             <FormRow columns={3}>
+              <FormTextField<FormValues> name="sizeLabel" label="Size" readOnly />
+              <FormSelect<FormValues>
+                name="qtyUnit"
+                label="Đơn vị"
+                required
+                placeholder="Chọn đơn vị…"
+                options={finishedGoodsQtyUnitOptions(qtyUnit || selectedFinished?.qtyUnit)}
+              />
+              <FormTextField<FormValues>
+                name="finishedProductQty"
+                label="Số lượng thành phẩm cần lên đơn"
+                required
+                transform={digitsOnly}
+                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                rules={{
+                  validate: (value) => {
+                    if (!value || Number(value) < 1) return 'Số lượng phải từ 1'
+                    if (order && Number(value) < order.subTicketTotals.qty) {
+                      return `Đã chia ${order.subTicketTotals.qty} sp cho phiếu con`
+                    }
+                    if (btpShortage && nvlShortage) return 'Không đủ BTP và NVL'
+                    if (btpShortage) return 'Không đủ BTP'
+                    if (nvlShortage) return 'Không đủ NVL'
+                    return true
+                  },
+                }}
+              />
+            </FormRow>
+          </Box>
+
+          <Box sx={SECTION_SX}>
+            <FormRow columns={2}>
               <Controller
                 control={form.control}
                 name="btpMaterialId"
@@ -896,7 +1138,6 @@ export function ProductionOrderFormDialog({
                     current={order?.btp}
                     loading={btpOptions.isFetching}
                     disabled={sourceLocked}
-                    autoFocus={!order}
                     inputRef={field.ref}
                     onBlur={field.onBlur}
                     errorText={fieldState.error?.message}
@@ -907,14 +1148,13 @@ export function ProductionOrderFormDialog({
                         btpItems.find((item) => item.id === id),
                         previous,
                       )
-                      if (form.getValues('finishedProductQty')) void form.trigger('finishedProductQty')
+                      if (form.getValues('btpQty')) void form.trigger('btpQty')
                     }}
                   />
                 )}
               />
-              <FormTextField<FormValues> name="sizeLabel" label="Size" readOnly />
               <FormTextField<FormValues>
-                name="finishedProductQty"
+                name="btpQty"
                 label="Số lượng BTP cần lên đơn"
                 required
                 clearable
@@ -964,9 +1204,6 @@ export function ProductionOrderFormDialog({
                 placeholder="Tìm màu đá…"
               />
             </FormRow>
-          </Box>
-
-          <Box sx={SECTION_SX}>
             <Controller
               control={form.control}
               name="nvlMaterialId"
@@ -998,7 +1235,6 @@ export function ProductionOrderFormDialog({
                 />
               )}
             />
-
             <NvlDetailFields
               materialName="nvlMainMaterial"
               platingName="nvlPlatingColor"
@@ -1011,7 +1247,7 @@ export function ProductionOrderFormDialog({
           </Box>
 
           <Box sx={SECTION_SX}>
-            <FormRow columns={4}>
+            <FormRow columns={3}>
               <FormSelect<FormValues>
                 name="requestType"
                 label="Yêu cầu làm hàng"
@@ -1034,20 +1270,14 @@ export function ProductionOrderFormDialog({
                 required
                 clearable
                 slotProps={{ inputLabel: { shrink: true } }}
+                onBlur={() => void form.trigger('dueDate')}
                 rules={{
-                  validate: (value, values) =>
-                    !value || !values.receivedDate || value >= values.receivedDate || 'Không được trước ngày đặt đơn',
+                  validate: (value, values) => validateDueDate(value, values.receivedDate, Boolean(order)),
                 }}
-              />
-              <FormFreeSoloField<FormValues>
-                name="leadTime"
-                label="Thời gian cần hoàn thành"
-                required
-                options={lookups?.leadTimes ?? []}
               />
             </FormRow>
 
-            <FormRow columns={order ? 3 : 2}>
+            <FormRow columns={order ? 4 : 3}>
               <FormTextField<FormValues> name="closedBy" label="Người lên đơn" readOnly />
               <FormTextField<FormValues>
                 name="trackingCode"
@@ -1064,44 +1294,9 @@ export function ProductionOrderFormDialog({
                   helperText="Tự tính từ phiếu xuất hàng"
                 />
               ) : null}
-            </FormRow>
-
-            <FormRow columns={3}>
-              <FormSelect<FormValues>
-                name="qtyUnit"
-                label="Đơn vị"
-                required
-                clearable
-                placeholder="Chọn đơn vị…"
-                options={[
-                  { value: 'chiếc', label: 'Chiếc' },
-                  { value: 'đôi', label: 'Đôi' },
-                ]}
-              />
-              <FormTextField<FormValues>
-                name="qty"
-                label="Số lượng cần làm"
-                required
-                clearable
-                disabled={!qtyUnit}
-                transform={digitsOnly}
-                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                helperText={qtyUnit ? undefined : 'Chọn đơn vị trước'}
-                rules={{
-                  validate: (value, values) => {
-                    if (!values.qtyUnit) return 'Chọn đơn vị trước'
-                    if (Number(value) < 1) return 'Số lượng phải từ 1'
-                    if (order && Number(value) < order.subTicketTotals.qty) {
-                      return `Đã chia ${order.subTicketTotals.qty} sp cho phiếu con`
-                    }
-                    return true
-                  },
-                }}
-              />
               <FormQtyField<FormValues>
                 name="silverWeight"
                 label="Tổng TL bạc (g)"
-                helperText="Mốc chia gram cho phiếu con"
                 rules={{
                   validate: (value) => {
                     if (!order?.subTickets.length) return true

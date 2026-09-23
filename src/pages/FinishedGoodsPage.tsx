@@ -8,6 +8,8 @@ import {
   createShipmentApi,
   deleteFinishedGoodsReceiptApi,
   deleteShipmentApi,
+  FG_FLOW_STATUS,
+  fgFlowStatus,
   getFinishedGoodsLookupsApi,
   getFinishedGoodsStockApi,
   getShipmentApi,
@@ -15,6 +17,7 @@ import {
   listFinishedGoodsReceiptsApi,
   updateFinishedGoodsReceiptApi,
   updateShipmentApi,
+  type FgFlowStatus,
   type FinishedGoodsReceiptRow,
   type FinishedGoodsStockRow,
   type ShipmentListRow,
@@ -94,6 +97,14 @@ const STATUS_FILTERS: { value: 'ALL' | AvailabilityCode; label: string }[] = [
   { value: 'OUT_OF_STOCK', label: 'Hết hàng' },
 ]
 
+const FLOW_STATUS_FILTERS: { value: 'ALL' | FgFlowStatus; label: string }[] = [
+  { value: 'ALL', label: 'Tất cả' },
+  { value: 'WAITING_IN', label: FG_FLOW_STATUS.WAITING_IN.label },
+  { value: 'RECEIVED', label: FG_FLOW_STATUS.RECEIVED.label },
+  { value: 'WAITING_OUT', label: FG_FLOW_STATUS.WAITING_OUT.label },
+  { value: 'SHIPPED', label: FG_FLOW_STATUS.SHIPPED.label },
+]
+
 export function FinishedGoodsPage({
   section,
   hideHeader = false,
@@ -127,13 +138,13 @@ function FinishedGoodsStockTable() {
   const queryClient = useQueryClient()
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const dialog = useCrudDialog<FinishedGoodsStockRow>()
-  const table = useTableParams({ pageSize: 8, filters: { unit: '', status: 'ALL' } })
+  const table = useTableParams({ pageSize: 8, filters: { unit: '', status: 'ALL', flowStatus: 'ALL' } })
   const { params } = table
 
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
     queryFn: () => getFinishedGoodsStockApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
 
@@ -141,6 +152,16 @@ function FinishedGoodsStockTable() {
   const statusCounts = useMemo(() => {
     const counts = { IN_STOCK: 0, LOW: 0, OUT_OF_STOCK: 0 }
     for (const row of items) counts[row.availability] += 1
+    return counts
+  }, [items])
+  const flowCounts = useMemo(() => {
+    const counts: Record<FgFlowStatus, number> = {
+      WAITING_IN: 0,
+      RECEIVED: 0,
+      WAITING_OUT: 0,
+      SHIPPED: 0,
+    }
+    for (const row of items) counts[fgFlowStatus(row)] += 1
     return counts
   }, [items])
   const unitOptions = useMemo(
@@ -157,6 +178,16 @@ function FinishedGoodsStockTable() {
       })),
     [statusCounts],
   )
+  const flowFilterOptions = useMemo(
+    () =>
+      FLOW_STATUS_FILTERS.filter(
+        (option): option is { value: FgFlowStatus; label: string } => option.value !== 'ALL',
+      ).map((option) => ({
+        id: option.value,
+        name: `${option.label} (${flowCounts[option.value]})`,
+      })),
+    [flowCounts],
+  )
 
   const visible = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
@@ -164,17 +195,25 @@ function FinishedGoodsStockTable() {
       if (
         nameQuery &&
         !row.description.toLocaleLowerCase('vi').includes(nameQuery) &&
-        !row.orderCode.toLocaleLowerCase('vi').includes(nameQuery)
+        !row.orderCode.toLocaleLowerCase('vi').includes(nameQuery) &&
+        !(row.bomLines ?? []).some(
+          (line) =>
+            (line.sku ?? '').toLocaleLowerCase('vi').includes(nameQuery) ||
+            line.name.toLocaleLowerCase('vi').includes(nameQuery),
+        )
       ) {
         return false
       }
       if (params.unit && (row.qtyUnit ?? '') !== params.unit) return false
       if (params.status !== 'ALL' && row.availability !== params.status) return false
+      if (params.flowStatus !== 'ALL' && fgFlowStatus(row) !== params.flowStatus) return false
       return true
     })
-  }, [items, params.search, params.status, params.unit])
+  }, [items, params.flowStatus, params.search, params.status, params.unit])
 
-  const filtered = Boolean(params.search.trim() || params.unit || params.status !== 'ALL')
+  const filtered = Boolean(
+    params.search.trim() || params.unit || params.status !== 'ALL' || params.flowStatus !== 'ALL',
+  )
   const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
@@ -192,13 +231,18 @@ function FinishedGoodsStockTable() {
             options: statusFilterOptions,
             onChange: (id) => table.setFilter({ status: id || 'ALL' }),
           },
+          flowStatus: {
+            valueId: params.flowStatus === 'ALL' ? '' : params.flowStatus,
+            options: flowFilterOptions,
+            onChange: (id) => table.setFilter({ flowStatus: id || 'ALL' }),
+          },
         },
         {
           onView: dialog.openView,
           onEdit: dialog.openEdit,
         },
       ),
-    [dialog.openEdit, dialog.openView, params.search, params.status, params.unit, statusFilterOptions, table, totals, unitOptions],
+    [dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, params.unit, statusFilterOptions, table, totals, unitOptions],
   )
 
   const save = useMutation({
@@ -219,7 +263,7 @@ function FinishedGoodsStockTable() {
           ['finished-goods-receipts'],
           ['finished-goods-order-options'],
           ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
       )
     },
     onError: (error: Error, _input, ctx) => {
@@ -238,7 +282,7 @@ function FinishedGoodsStockTable() {
         errorText={stock.error instanceof Error ? stock.error.message : undefined}
         emptyText={filtered ? profile.emptyFiltered : profile.emptyText}
         variant="grid"
-        minWidth={1480}
+        minWidth={2520}
         cardBreakpoint="md"
         showIndex
         indexOffset={indexOffset}
@@ -294,7 +338,7 @@ function FinishedGoodsInboundTable() {
   const receipts = useQuery({
     queryKey: ['finished-goods-receipts'],
     queryFn: () => listFinishedGoodsReceiptsApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
 
@@ -378,7 +422,7 @@ function FinishedGoodsInboundTable() {
           ['finished-goods-receipts'],
           ['finished-goods-order-options'],
           ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
       )
     },
     onError: (error: Error, _input, ctx) => {
@@ -452,16 +496,18 @@ function FinishedGoodsOutboundTable() {
   const table = useTableParams({ pageSize: 8, filters: { issuedBy: '', receivedBy: '' } })
   const { params } = table
   const dialog = useCrudDialog<OutboundMoveRow>()
+  const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
 
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
     queryFn: () => getFinishedGoodsStockApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
+    enabled: Boolean(creating || dialog.open),
   })
   const shipments = useQuery({
     queryKey: ['finished-goods-shipments', ''],
     queryFn: () => listAllShipmentsApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
@@ -475,7 +521,6 @@ function FinishedGoodsOutboundTable() {
     enabled: Boolean(dialog.open && dialog.row && dialog.kind !== 'create'),
   })
 
-  const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
   const createParam = searchParams.get('create')
   useEffect(() => {
     if (!createParam) return
@@ -766,6 +811,7 @@ function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertR
     ...row,
     description: payload.description ?? row.description,
     mainMaterial: payload.mainMaterial ?? row.mainMaterial,
+    platingColor: payload.platingColor !== undefined ? payload.platingColor || null : row.platingColor,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
@@ -805,9 +851,43 @@ type HeaderFilter = {
   onChange: (id: string) => void
 }
 
+function StackedLines({
+  values,
+  strong,
+  align,
+}: {
+  values: string[]
+  strong?: boolean
+  align?: 'left' | 'right' | 'center'
+}) {
+  if (!values.length) return <>—</>
+  return (
+    <Stack spacing={0.25} sx={{ py: 0.25, alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start' }}>
+      {values.map((value, index) => (
+        <Typography
+          key={`${value}-${index}`}
+          variant="body2"
+          sx={{
+            fontWeight: strong ? 700 : 400,
+            lineHeight: 1.35,
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: align === 'right' ? 'tabular-nums' : undefined,
+          }}
+        >
+          {value || '—'}
+        </Typography>
+      ))}
+    </Stack>
+  )
+}
+
+function nvlField(row: FinishedGoodsStockRow, pick: (line: NonNullable<FinishedGoodsStockRow['bomLines']>[number]) => string) {
+  return (row.bomLines ?? []).map(pick)
+}
+
 function stockColumns(
   totals: StockTotals | undefined,
-  filters: { name: ReactNode; unit: HeaderFilter; status: HeaderFilter },
+  filters: { name: ReactNode; unit: HeaderFilter; status: HeaderFilter; flowStatus: HeaderFilter },
   actions: {
     onView: (row: FinishedGoodsStockRow) => void
     onEdit: (row: FinishedGoodsStockRow) => void
@@ -820,11 +900,7 @@ function stockColumns(
       card: 'meta',
       header: profile.skuLabel,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
-      render: (row) => (
-        <Link component={RouterLink} to={`/orders/${row.orderCode}`} sx={{ fontWeight: 700 }}>
-          {row.orderCode}
-        </Link>
-      ),
+      render: (row) => row.orderCode,
     },
     {
       key: 'name',
@@ -833,6 +909,18 @@ function stockColumns(
       cellSx: { minWidth: 220 },
       filter: filters.name,
       render: (row) => row.description,
+    },
+    {
+      key: 'nvlSku',
+      header: 'Mã NVL',
+      cellSx: { fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' },
+      render: (row) => <StackedLines values={(row.bomLines ?? []).map((line) => line.sku ?? '—')} strong />,
+    },
+    {
+      key: 'nvlName',
+      header: 'Tên NVL',
+      cellSx: { minWidth: 180, verticalAlign: 'top' },
+      render: (row) => <StackedLines values={nvlField(row, (line) => line.name)} />,
     },
     {
       key: 'unit',
@@ -922,9 +1010,21 @@ function stockColumns(
     },
     { key: 'mainMaterial', header: 'Chất liệu', render: (row) => row.mainMaterial ?? '—' },
     {
+      key: 'flowStatus',
+      header: 'Trạng thái kho',
+      filter: <ColumnHeaderFilter {...filters.flowStatus} />,
+      align: 'center',
+      render: (row) => {
+        const flow = FG_FLOW_STATUS[fgFlowStatus(row)]
+        return (
+          <Chip size="small" variant="outlined" color={flow.color} label={flow.label} />
+        )
+      },
+    },
+    {
       key: 'availability',
       card: 'meta',
-      header: 'Trạng thái',
+      header: 'Trạng thái thành phẩm',
       filter: <ColumnHeaderFilter {...filters.status} />,
       align: 'center',
       render: (row) => (
@@ -979,10 +1079,25 @@ function StockCard({
             <Chip
               size="small"
               variant="outlined"
+              color={FG_FLOW_STATUS[fgFlowStatus(row)].color}
+              label={FG_FLOW_STATUS[fgFlowStatus(row)].label}
+            />
+            <Chip
+              size="small"
+              variant="outlined"
               color={availabilityColor(row.availability)}
               label={row.availabilityLabel}
             />
           </Stack>
+          {(row.bomLines ?? []).length ? (
+            <Stack spacing={0.15} sx={{ mt: 0.75 }}>
+              {(row.bomLines ?? []).map((line) => (
+                <Typography key={line.id} variant="caption" color="text.secondary">
+                  {line.sku ? `${line.sku} — ${line.name}` : line.name}
+                </Typography>
+              ))}
+            </Stack>
+          ) : null}
         </Box>
         <Box sx={{ flexShrink: 0 }}>
           <RowActions onView={onView} onEdit={onEdit} />
