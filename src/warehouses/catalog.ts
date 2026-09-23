@@ -67,7 +67,7 @@ export type StockProfile = {
   showBodyMetal: boolean
   showProductKind: boolean
   showBtpCategory: boolean
-  /// Màu xi, màu đá, size, ảnh — thông tin sản phẩm BTP lấy sang Đơn BTP.
+  /// Màu xi, màu đá, size — thông tin sản phẩm BTP lấy sang Đơn BTP. Ảnh xem ở chi tiết.
   showProductInfo: boolean
   showNvlCategory: boolean
   showStatus: boolean

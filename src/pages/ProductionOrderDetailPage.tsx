@@ -126,12 +126,11 @@ export function ProductionOrderDetailPage() {
   const detail = useQuery({
     queryKey: ['production-order', code],
     queryFn: () => getProductionOrderApi(code),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
-    // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
-    // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
-    // giữa chừng không xoá thứ người dùng đang gõ.
-    refetchInterval: 30_000,
+    // Thợ nhận phiếu / báo xong trên điện thoại — vẫn làm mới khi tab hiện, nhưng không
+    // kéo full đơn mỗi 30s khi người dùng đang xem.
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   })
   const lookups = useQuery({
@@ -508,18 +507,20 @@ export function ProductionOrderDetailPage() {
         </Stack>
       </Box>
 
-      <ProductionOrderFormDialog
-        open={editing}
-        order={order}
-        lookups={lookups.data}
-        saving={update.isPending}
-        onClose={() => setEditing(false)}
-        onSave={async (payload) => {
-          const saved = await update.mutateAsync(payload)
-          setEditing(false)
-          afterProductionOrderSaved(queryClient, saved, order)
-        }}
-      />
+      {editing ? (
+        <ProductionOrderFormDialog
+          open
+          order={order}
+          lookups={lookups.data}
+          saving={update.isPending}
+          onClose={() => setEditing(false)}
+          onSave={async (payload) => {
+            const saved = await update.mutateAsync(payload)
+            setEditing(false)
+            afterProductionOrderSaved(queryClient, saved, order)
+          }}
+        />
+      ) : null}
 
       <CastingDialog
         open={castingOpen}

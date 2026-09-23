@@ -38,7 +38,6 @@ import {
   type UpdateStockPayload,
 } from '../api/inventory'
 import type { OrderImage } from '../api/productionOrders'
-import { cloudinaryThumb } from '../api/uploads'
 import { ImageUploadField } from '../orders/ImageUploadField'
 import { listCatalogsApi, type CatalogItem } from '../api/catalogs'
 import { getLocationsApi } from '../api/locations'
@@ -902,22 +901,6 @@ function stockColumns(
       { key: 'platingColor', header: 'Màu xi', render: (row) => row.platingColor ?? '—' },
       { key: 'color', header: 'Màu đá', render: (row) => row.color ?? '—' },
       { key: 'sizeLabel', header: 'Size', render: (row) => row.sizeLabel ?? '—' },
-      {
-        key: 'images',
-        header: 'Ảnh',
-        render: (row) =>
-          row.images?.length ? (
-            <Box
-              component="img"
-              src={cloudinaryThumb(row.images[0].url, 64)}
-              alt=""
-              loading="lazy"
-              sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid #d5dbe0' }}
-            />
-          ) : (
-            '—'
-          ),
-      },
     )
   }
   if (profile.showStatus) {

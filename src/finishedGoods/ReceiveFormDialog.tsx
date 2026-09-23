@@ -74,7 +74,7 @@ export function ReceiveFormDialog({
     queryKey: ['finished-goods-order-options'],
     queryFn: () => listFinishedGoodsOrderOptionsApi(),
     enabled: open && !row,
-    staleTime: 15_000,
+    staleTime: 60_000,
   })
   const orderCode = useWatch({ control: form.control, name: 'orderCode' })
   const qty = useWatch({ control: form.control, name: 'qty' })

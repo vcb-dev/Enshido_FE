@@ -23,7 +23,8 @@ export function validateStockName(
   if (siblings?.some((item) => foldStockName(item) === name)) {
     return `${label} trùng với dòng khác trên form`
   }
-  if (existing.some((item) => foldStockName(item) === name)) {
+  const names = new Set(existing.map(foldStockName))
+  if (names.has(name)) {
     return `${label} này đã có trên Tồn`
   }
   return true

@@ -144,7 +144,7 @@ function FinishedGoodsStockTable() {
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
     queryFn: () => getFinishedGoodsStockApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
 
@@ -263,7 +263,7 @@ function FinishedGoodsStockTable() {
           ['finished-goods-receipts'],
           ['finished-goods-order-options'],
           ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
       )
     },
     onError: (error: Error, _input, ctx) => {
@@ -338,7 +338,7 @@ function FinishedGoodsInboundTable() {
   const receipts = useQuery({
     queryKey: ['finished-goods-receipts'],
     queryFn: () => listFinishedGoodsReceiptsApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
 
@@ -422,7 +422,7 @@ function FinishedGoodsInboundTable() {
           ['finished-goods-receipts'],
           ['finished-goods-order-options'],
           ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
       )
     },
     onError: (error: Error, _input, ctx) => {
@@ -496,16 +496,18 @@ function FinishedGoodsOutboundTable() {
   const table = useTableParams({ pageSize: 8, filters: { issuedBy: '', receivedBy: '' } })
   const { params } = table
   const dialog = useCrudDialog<OutboundMoveRow>()
+  const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
 
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
     queryFn: () => getFinishedGoodsStockApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
+    enabled: Boolean(creating || dialog.open),
   })
   const shipments = useQuery({
     queryKey: ['finished-goods-shipments', ''],
     queryFn: () => listAllShipmentsApi(),
-    staleTime: 15_000,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
   const lookups = useQuery({
@@ -519,7 +521,6 @@ function FinishedGoodsOutboundTable() {
     enabled: Boolean(dialog.open && dialog.row && dialog.kind !== 'create'),
   })
 
-  const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
   const createParam = searchParams.get('create')
   useEffect(() => {
     if (!createParam) return

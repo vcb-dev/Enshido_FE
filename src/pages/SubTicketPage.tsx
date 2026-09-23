@@ -44,7 +44,7 @@ export function SubTicketPage() {
     queryKey: ['production-order', orderCode],
     queryFn: () => getSubTicketOrderApi(ticketCode),
     enabled: parsed != null,
-    staleTime: 10_000,
+    staleTime: 60_000,
   })
 
   if (!parsed) {

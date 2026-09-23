@@ -21,7 +21,7 @@ export function seedProductionOrder(queryClient: QueryClient, order: ProductionO
 }
 
 export function refreshProductionOrderLists(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+  void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
 }
 
 /**

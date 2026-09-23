@@ -1,5 +1,5 @@
 import { useMemo, type Ref } from 'react'
-import { Autocomplete, Box, Stack, TextField, Typography } from '@mui/material'
+import { Autocomplete, Box, Stack, TextField, Typography, createFilterOptions } from '@mui/material'
 import { cloudinaryThumb } from '../api/uploads'
 
 export type CatalogPickerItem = {
@@ -8,6 +8,11 @@ export type CatalogPickerItem = {
   summary: string
   thumb: string | null
 }
+
+const filterCatalogOptions = createFilterOptions<CatalogPickerItem>({
+  limit: 50,
+  stringify: (item) => `${item.label} ${item.summary}`,
+})
 
 export function CatalogPicker({
   value,
@@ -52,12 +57,7 @@ export function CatalogPicker({
       onBlur={onBlur}
       getOptionLabel={(item) => item.label}
       isOptionEqualToValue={(a, b) => a.id === b.id}
-      filterOptions={(rows, state) => {
-        const q = state.inputValue.trim().toLowerCase()
-        return q
-          ? rows.filter((item) => `${item.label} ${item.summary}`.toLowerCase().includes(q))
-          : rows
-      }}
+      filterOptions={filterCatalogOptions}
       loading={loading}
       loadingText={loadingText}
       noOptionsText={noOptionsText}

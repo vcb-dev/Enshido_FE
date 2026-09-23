@@ -1,5 +1,5 @@
 import { useMemo, type Ref } from 'react'
-import { Autocomplete, Box, Stack, TextField, Typography } from '@mui/material'
+import { Autocomplete, Box, Stack, TextField, Typography, createFilterOptions } from '@mui/material'
 import { formatQty } from '../api/inventory'
 import type { BtpOption } from '../api/productionOrders'
 import { cloudinaryThumb } from '../api/uploads'
@@ -12,6 +12,11 @@ type PickerItem = {
   /** Chuỗi gộp để lọc theo mã, tên và thuộc tính. */
   haystack: string
 }
+
+const filterBtpOptions = createFilterOptions<PickerItem>({
+  limit: 50,
+  stringify: (item) => item.haystack,
+})
 
 /**
  * Ô chọn mã BTP còn tồn cho Đơn BTP: mỗi dòng có ảnh, mã — tên và thuộc tính sản phẩm
@@ -79,10 +84,7 @@ export function BtpPicker({
       onBlur={onBlur}
       getOptionLabel={(item) => item.label}
       isOptionEqualToValue={(a, b) => a.id === b.id}
-      filterOptions={(rows, state) => {
-        const q = state.inputValue.trim().toLowerCase()
-        return q ? rows.filter((item) => item.haystack.includes(q)) : rows
-      }}
+      filterOptions={filterBtpOptions}
       disabled={disabled}
       loading={loading}
       loadingText="Đang tải kho BTP…"

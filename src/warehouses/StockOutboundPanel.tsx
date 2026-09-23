@@ -23,6 +23,7 @@ import {
   type LookupItem,
   type OutboundResponse,
   type OutboundRow,
+  type StockResponse,
   type StockRow,
 } from '../api/inventory'
 import { listCatalogsApi } from '../api/catalogs'
@@ -145,9 +146,14 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   })
   const stock = useQuery({
     queryKey: ['warehouse-stock', warehouseCode, 'layers'],
-    queryFn: () => getWarehouseStockApi(warehouseCode, { layers: true }),
+    queryFn: async () => {
+      const data = await getWarehouseStockApi(warehouseCode, { layers: true })
+      queryClient.setQueryData(['warehouse-stock', warehouseCode], data)
+      return data
+    },
     staleTime: 60_000,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous) =>
+      previous ?? queryClient.getQueryData<StockResponse>(['warehouse-stock', warehouseCode]),
     enabled: dialog.open,
   })
   const locationSlots = useQuery({
