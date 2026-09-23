@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { useAuth } from './auth/AuthContext'
 import { isWorkerOnly } from './auth/permissions'
 import { LegacyRedirect } from './components/LegacyRedirect'
+import { PrintSheetSkeleton } from './components/ui'
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
@@ -62,7 +63,7 @@ export default function App() {
         <Route
           path="/orders/:code/print"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<PrintSheetSkeleton />}>
               <ProductionTicketPrintPage />
             </Suspense>
           }
@@ -70,7 +71,7 @@ export default function App() {
         <Route
           path="/orders/:code/tickets/:no/print"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<PrintSheetSkeleton />}>
               <ProductionTicketPrintPage />
             </Suspense>
           }
@@ -78,7 +79,7 @@ export default function App() {
         <Route
           path="/finished-goods/shipments/:code/print"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<PrintSheetSkeleton />}>
               <ShipmentPrintPage />
             </Suspense>
           }

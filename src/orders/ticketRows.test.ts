@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProductionOrderDetail, StageEntry, SubTicket } from '../api/productionOrders'
-import { outcomeLines, stageColumns } from './ticketRows'
+import { outcomeLines, stageColumns, TICKET_ROWS } from './ticketRows'
 
 function entry(over: Partial<StageEntry> = {}): StageEntry {
   return {
@@ -13,6 +13,8 @@ function entry(over: Partial<StageEntry> = {}): StageEntry {
     handedAt: '2026-09-19T08:00:00.000Z',
     handedQty: 6,
     handedSilverWeight: '600',
+    handedStoneCount: null,
+    handedStoneWeight: null,
     craftsmanUserId: 'u1',
     craftsmanName: 'Thợ A',
     submittedAt: null,
@@ -21,6 +23,8 @@ function entry(over: Partial<StageEntry> = {}): StageEntry {
     returnedAt: null,
     returnedQty: null,
     returnedSilverWeight: null,
+    stoneCount: null,
+    stoneWeight: null,
     btpRecoveredWeight: null,
     silverRecoveredWeight: null,
     silverLoss: null,
@@ -197,5 +201,26 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
 
   it('đơn chưa vào kho thì cột Hoàn thiện trống', () => {
     expect(outcomeLines(order(), 'FINISH')).toEqual([])
+  })
+})
+
+describe('dòng Hao hụt số lượng', () => {
+  const row = TICKET_ROWS.find((item) => item.key === 'qtyLoss')!
+  const RETURNED = '2026-09-19T10:00:00.000Z'
+
+  it('chưa nhận lại thì để trống', () => {
+    expect(row.value(entry({ handedQty: 200 }))).toBe('')
+  })
+
+  it('nhận đủ thì ghi 0', () => {
+    expect(
+      row.value(entry({ handedQty: 200, returnedQty: 200, returnedAt: RETURNED })),
+    ).toBe('0 (0%)')
+  })
+
+  it('thiếu hàng thì ghi số thiếu kèm %', () => {
+    expect(
+      row.value(entry({ handedQty: 200, returnedQty: 190, returnedAt: RETURNED })),
+    ).toBe('10 (5%)')
   })
 })

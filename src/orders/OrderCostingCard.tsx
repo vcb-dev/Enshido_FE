@@ -33,7 +33,9 @@ import {
   FormMoneyField,
   FormTextField,
   RowActions,
+  StatRowSkeleton,
   SummaryStat,
+  TableRowsSkeleton,
 } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
@@ -116,9 +118,13 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
 
       {costing.error instanceof Error ? <Alert severity="error">{costing.error.message}</Alert> : null}
       {!data ? (
-        <Typography variant="body2" color="text.secondary">
-          Đang tính chi phí…
-        </Typography>
+        costing.error ? null : (
+          <Stack spacing={1.5}>
+            <StatRowSkeleton />
+            <TableRowsSkeleton rows={3} columns={5} />
+            <TableRowsSkeleton rows={2} columns={5} />
+          </Stack>
+        )
       ) : (
         <Stack spacing={1.5}>
           <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, minmax(0, 1fr))' } }}>

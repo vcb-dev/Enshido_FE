@@ -49,7 +49,9 @@ export function DefectDialog({
         <Button
           variant="contained"
           color="error"
-          disabled={saving || !note.trim()}
+          disabled={!note.trim()}
+          loading={saving}
+          loadingPosition="start"
           onClick={() => onSave(note.trim())}
         >
           Ghi lỗi
@@ -64,6 +66,7 @@ export function FinishDialog({
   open,
   ticketCode,
   qty,
+  scope = 'ticket',
   saving,
   onClose,
   onSave,
@@ -71,6 +74,7 @@ export function FinishDialog({
   open: boolean
   ticketCode: string
   qty: number
+  scope?: 'ticket' | 'order'
   saving: boolean
   onClose: () => void
   onSave: (note: string | undefined) => void
@@ -85,12 +89,12 @@ export function FinishDialog({
       maxWidth="xs"
       slotProps={{ transition: { onExited: () => setNote('') } }}
     >
-      <DialogTitle>Hoàn thiện — phiếu {ticketCode}</DialogTitle>
+      <DialogTitle>Hoàn thiện — {scope === 'order' ? 'đơn' : 'phiếu'} {ticketCode}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         <Typography variant="body2" color="text.secondary">
-          Hàng đạt, phiếu này kết thúc: {qty} sản phẩm vào kho thành phẩm ngay, không chờ các phiếu con
-          khác. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng
-          nhập.
+          {scope === 'order'
+            ? `Hàng đạt, đơn kết thúc: ${qty} sản phẩm vào kho thành phẩm. Người xác nhận lấy từ tài khoản đang đăng nhập.`
+            : `Hàng đạt, phiếu này kết thúc: ${qty} sản phẩm vào kho thành phẩm ngay, không chờ các phiếu con khác. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`}
         </Typography>
         <TextInput
           label="Ghi chú"
@@ -104,7 +108,12 @@ export function FinishDialog({
         <Button onClick={onClose} disabled={saving}>
           Hủy
         </Button>
-        <Button variant="contained" disabled={saving} onClick={() => onSave(note.trim() || undefined)}>
+        <Button
+          variant="contained"
+          loading={saving}
+          loadingPosition="start"
+          onClick={() => onSave(note.trim() || undefined)}
+        >
           Hoàn thiện
         </Button>
       </DialogActions>

@@ -1,10 +1,12 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Breadcrumbs,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,9 +30,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import SyncIcon from '@mui/icons-material/Sync'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
@@ -39,11 +43,16 @@ import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import {
   changeProductionStatusApi,
+  cancelOrderPendingApi,
   deleteProductionOrderApi,
+  finishOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
+  handoverOrderApi,
   handoverSubTicketApi,
   returnStageApi,
+  openOrderStageApi,
+  undoFinishOrderApi,
   undoReturnApi,
   updateCastingApi,
   updateHandoverApi,
@@ -56,19 +65,23 @@ import {
   type StageCode,
   type StageEntry,
   type SubTicket,
+  type SubTicketState,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader, SelectInput, TextInput, TrashIcon } from '../components/ui'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
+import { OrderDetailSkeleton, PageHeader, SelectInput, TextInput, TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { OrderCostingCard } from '../orders/OrderCostingCard'
 import {
   formatDateShort,
   formatDateTime,
   isInStage,
+  LAST_STAGE,
+  lastStageDone,
   MANUAL_STATUSES,
   orderTicketUrl,
+  parentWorkTicketUrl,
   SILVER_LOSS_LIMITS,
   STAGE_LABEL,
   STAGES,
@@ -78,8 +91,9 @@ import {
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved } from '../orders/orderCache'
-import { RequestTypeChip, SourceChip, StatusChip } from '../orders/OrderChips'
+import { RequestTypeChip, SourceChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
+import { FinishDialog } from '../orders/OutcomeDialogs'
 import {
   CastingDialog,
   HandoverDialog,
@@ -105,6 +119,9 @@ export function ProductionOrderDetailPage() {
   const [returning, setReturning] = useState<StageEntry | null>(null)
   const [castingOpen, setCastingOpen] = useState(false)
   const [statusDialog, setStatusDialog] = useState(false)
+  const [statusPreset, setStatusPreset] = useState<ProductionStatus | null>(null)
+  const [finishOpen, setFinishOpen] = useState(false)
+  const [parentStageDialog, setParentStageDialog] = useState(false)
   const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -131,7 +148,8 @@ export function ProductionOrderDetailPage() {
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
     // giữa chừng không xoá thứ người dùng đang gõ.
-    refetchInterval: 30_000,
+    refetchInterval: tab === 'production' ? 5_000 : 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
   const lookups = useQuery({
@@ -152,8 +170,7 @@ export function ProductionOrderDetailPage() {
     (payload: CastingPayload) => updateCastingApi(code, payload),
     'Đã lưu thông tin Đúc',
   )
-  // Giao khâu đi theo phiếu con: thợ tự nhận, người giao xác nhận. Ở đây chỉ còn xác nhận giao
-  // và sửa lại thông tin giao.
+  // Đơn không chia chạy trực tiếp trên phiếu mẹ; đơn đã chia thì thợ tự nhận từng phiếu con.
   const saveHandover = useOrderMutation(
     code,
     (payload: HandoverPayload & { stage?: StageCode }) => {
@@ -163,13 +180,29 @@ export function ProductionOrderDetailPage() {
           handedAt: payload.handedAt,
           handedQty: payload.handedQty,
           handedSilverWeight: payload.handedSilverWeight,
+          handedStoneCount: payload.handedStoneCount,
+          handedStoneWeight: payload.handedStoneWeight,
+          note: payload.note,
+        })
+      }
+      if (handover?.mode === 'confirm-order') {
+        return handoverOrderApi(code, {
+          handedAt: payload.handedAt,
+          handedQty: payload.handedQty,
+          handedSilverWeight: payload.handedSilverWeight,
+          handedStoneCount: payload.handedStoneCount,
+          handedStoneWeight: payload.handedStoneWeight,
           note: payload.note,
         })
       }
       if (handover?.mode !== 'edit') throw new Error('Không có khâu nào để lưu')
       return updateHandoverApi(code, handover.entry.id, payload)
     },
-    handover?.mode === 'confirm' ? 'Đã xác nhận giao cho thợ' : 'Đã lưu thông tin giao',
+    handover?.mode === 'confirm'
+      ? 'Đã xác nhận giao cho thợ'
+      : handover?.mode === 'confirm-order'
+        ? 'Đã xác nhận giao trên phiếu mẹ'
+        : 'Đã lưu thông tin giao',
   )
   const saveReturn = useOrderMutation(
     code,
@@ -187,6 +220,22 @@ export function ProductionOrderDetailPage() {
     (payload: { status: ProductionStatus; note?: string }) => changeProductionStatusApi(code, payload),
     'Đã đổi trạng thái',
   )
+  const finish = useOrderMutation(
+    code,
+    (note?: string) => finishOrderApi(code, { note }),
+    'Đã hoàn thiện đơn và nhập kho thành phẩm',
+  )
+  const undoFinish = useOrderMutation(code, () => undoFinishOrderApi(code), 'Đã gỡ hoàn thiện đơn')
+  const openParentStage = useOrderMutation(
+    code,
+    (stage: StageCode) => openOrderStageApi(code, stage),
+    'Đã mở khâu trên phiếu mẹ cho thợ nhận',
+  )
+  const cancelParentStage = useOrderMutation(
+    code,
+    () => cancelOrderPendingApi(code),
+    'Đã hủy mở khâu trên phiếu mẹ',
+  )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
     onSuccess: () => {
@@ -202,13 +251,7 @@ export function ProductionOrderDetailPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 6, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <OrderDetailSkeleton />
   if (!detail.data) {
     return (
       <Stack spacing={2}>
@@ -224,10 +267,23 @@ export function ProductionOrderDetailPage() {
 
   const order = detail.data
   const stages = order.stages
-  const openEntry = stages.find((entry) => !entry.returnedAt)
+  const directOnParent = order.subTickets.length === 0
+  const splitIntoTickets = order.subTickets.length >= 2
+  const parentStages = stages.filter((entry) => !entry.subTicketId)
+  const parentOpenEntry = parentStages.find((entry) => !entry.returnedAt)
+  const parentWork = order.workTicket
+  const parentLastEntry = parentStages.at(-1)
+  // Chốt Hoàn thiện phải đi hết phiếu: chưa có khâu Xi được KCS nhận lại thì chưa chốt được.
+  const parentLastStageDone = lastStageDone(parentStages)
+  const parentReworking = !isInStage(order.status)
+  const parentOpenableStages =
+    !parentLastEntry || parentReworking
+      ? STAGES
+      : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
   const canPrint = isBtp || Boolean(order.castingSentDate)
+  const castingReady = isBtp || Boolean(order.castingSentDate && order.castingReturnedDate)
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
   // Người lên đơn và admin được chia phiếu con.
   const canManageTickets = isAdmin || (user != null && order.createdByUserId === user.id)
@@ -312,6 +368,7 @@ export function ProductionOrderDetailPage() {
           disabled={locked}
           onClick={() => {
             setMoreMenu(null)
+            setStatusPreset(null)
             setStatusDialog(true)
           }}
         >
@@ -354,7 +411,7 @@ export function ProductionOrderDetailPage() {
         sx={{
           display: 'grid',
           gap: 1.5,
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 340px' },
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 300px' },
           alignItems: 'start',
         }}
       >
@@ -393,7 +450,111 @@ export function ProductionOrderDetailPage() {
           ) : null}
 
           {tab === 'production' ? (
-            <Section title="Quá trình sản xuất (theo phiếu thợ)">
+            <Section
+              title="Điều hành sản xuất"
+              action={
+                <SyncStatus
+                  fetching={detail.isFetching}
+                  updatedAt={detail.dataUpdatedAt}
+                  onRefresh={() => void detail.refetch()}
+                />
+              }
+            >
+              {splitIntoTickets ? <ProductionTicketSummary tickets={order.subTickets} /> : null}
+              {directOnParent ? (
+                <Box
+                  sx={{
+                    mb: 1.5,
+                    p: 1.25,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: '#f8fafb',
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1}
+                    sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        Quy trình trên phiếu mẹ
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Người điều hành mở khâu; thợ xem phiếu {order.code} ở “Phiếu của tôi” và tự nhận.
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                      {parentWork?.state === 'CLAIMED' ? (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => {
+                            setHandover({ mode: 'confirm-order', ticket: parentWork })
+                            setHandoverOpen(true)
+                          }}
+                        >
+                          Xác nhận giao
+                        </Button>
+                      ) : parentWork?.state === 'SUBMITTED' && parentOpenEntry ? (
+                        <Button size="small" variant="contained" onClick={() => setReturning(parentOpenEntry)}>
+                          KCS nhận lại
+                        </Button>
+                      ) : parentWork?.state === 'WORKING' ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                          Chờ thợ báo xong
+                        </Typography>
+                      ) : parentWork?.state === 'WAITING' ? (
+                        <Button
+                          size="small"
+                          color="inherit"
+                          loading={cancelParentStage.isPending}
+                          onClick={() => cancelParentStage.mutate(undefined)}
+                        >
+                          Hủy mở khâu
+                        </Button>
+                      ) : parentOpenableStages.length > 0 && !order.finishedGoods ? (
+                        <Tooltip
+                          title={castingReady ? '' : 'Ghi đủ ngày báo Đúc và ngày Đúc về trước khi giao khâu'}
+                        >
+                          <span>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={!castingReady || locked}
+                              onClick={() => setParentStageDialog(true)}
+                            >
+                              Mở khâu cho thợ nhận
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      ) : null}
+                      {parentOpenEntry ? (
+                        <Button size="small" onClick={() => openEditHandover(parentOpenEntry)}>
+                          Sửa giao
+                        </Button>
+                      ) : null}
+                    </Stack>
+                  </Stack>
+                  {parentWork && parentWork.state !== 'IDLE' ? (
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                        <SubTicketStateChip state={parentWork.state} />
+                        <Typography variant="body2">
+                          {parentWork.state === 'WAITING'
+                            ? `Khâu ${STAGE_LABEL[parentWork.pendingStage!]} đang chờ thợ nhận.`
+                            : parentWork.state === 'CLAIMED'
+                              ? `Thợ ${parentWork.claimedByName ?? '—'} đã nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} — chờ cân bạc và xác nhận giao.`
+                              : parentWork.state === 'SUBMITTED'
+                                ? `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đã báo xong — chờ KCS cân lại.`
+                                : `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đang làm khâu ${parentWork.activeStage ? STAGE_LABEL[parentWork.activeStage] : '—'}.`}
+                        </Typography>
+                      </Stack>
+                    </Alert>
+                  ) : null}
+                </Box>
+              ) : null}
               <SubTicketsPanel
                 order={order}
                 canManage={canManageTickets}
@@ -401,37 +562,132 @@ export function ProductionOrderDetailPage() {
                 locked={locked}
                 canPrint={canPrint}
                 busy={undoReturn.isPending}
+                undoingEntryId={undoReturn.isPending ? undoReturn.variables?.id : null}
                 onConfirm={openConfirmHandover}
                 onReturn={setReturning}
                 onEditHandover={openEditHandover}
                 onUndoReturn={(entry) => undoReturn.mutate(entry)}
               />
-              {openEntry && !openEntry.subTicketId ? (
-                <Alert severity="info" sx={{ mb: 1 }}>
-                  Thợ {openEntry.craftsmanName} đang làm khâu {STAGE_LABEL[openEntry.stage]} — KCS cân lại bạc khi thợ
-                  nộp lại rồi mới giao khâu sau.
-                </Alert>
-              ) : null}
-              {/* Phiếu mẹ chỉ để xem: cột khâu là số cộng của các phiếu con. */}
-              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                Cả đơn (số cộng của các phiếu con)
-              </Typography>
-              <TicketMatrix order={order} />
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
-                {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
-              </Typography>
-              <ReworkHistory stages={stages} />
-
-              {order.subTickets.length ? (
-                <Typography variant="body2" sx={{ fontWeight: 700, mt: 2 }}>
-                  Từng phiếu con — chốt Lỗi / Hoàn thiện ở đây
-                </Typography>
-              ) : null}
-              {order.subTickets.map((ticket) => (
-                <Box key={ticket.id} sx={{ mt: 1 }}>
-                  <SubTicketMatrixCard order={order} ticket={ticket} isAdmin={isAdmin} linkToTicket />
+              {directOnParent ? (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                    Phiếu sản xuất {order.code}
+                  </Typography>
+                  <TicketMatrix
+                    order={order}
+                    outcomeActions={{
+                      DEFECT:
+                        !order.finishedGoods && order.status !== 'DELIVERED' ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => {
+                              setStatusPreset('DEFECT')
+                              setStatusDialog(true)
+                            }}
+                          >
+                            Ghi lỗi
+                          </Button>
+                        ) : null,
+                      FINISH: order.finishedGoods ? (
+                        isAdmin && (order.finishedGoods.shippedQty ?? 0) === 0 ? (
+                          <Button
+                            size="small"
+                            color="inherit"
+                            loading={undoFinish.isPending}
+                            onClick={() => undoFinish.mutate(undefined)}
+                          >
+                            Gỡ hoàn thiện
+                          </Button>
+                        ) : null
+                      ) : parentWork?.state === 'IDLE' && order.status !== 'NEW' && order.status !== 'REDO_3D' ? (
+                        <Tooltip
+                          title={
+                            parentLastStageDone
+                              ? ''
+                              : `Chưa xong khâu ${STAGE_LABEL[LAST_STAGE]} — làm hết phiếu rồi mới hoàn thiện được`
+                          }
+                        >
+                          <span>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              disabled={!parentLastStageDone}
+                              onClick={() => setFinishOpen(true)}
+                            >
+                              Xác nhận hoàn thiện
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      ) : null,
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                    Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
+                    {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
+                  </Typography>
+                  <ReworkHistory stages={parentStages} />
                 </Box>
+              ) : splitIntoTickets ? (
+                /* Bảng tổng hợp rộng là dữ liệu tra cứu, mặc định thu gọn khi đơn đã chia. */
+                <Accordion disableGutters elevation={0} sx={matrixAccordionSx}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Tổng hợp cả đơn
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Số cộng từ các phiếu con · mở để xem ma trận từng khâu
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <TicketMatrix order={order} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
+                      {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
+                    </Typography>
+                    <ReworkHistory stages={stages} />
+                  </AccordionDetails>
+                </Accordion>
+              ) : null}
+
+              {order.subTickets.map((ticket) => (
+                <Accordion key={ticket.id} disableGutters elevation={0} sx={matrixAccordionSx}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      useFlexGap
+                      sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}
+                    >
+                      <Link
+                        component={RouterLink}
+                        to={`/tickets/${ticket.code}`}
+                        onClick={(event) => event.stopPropagation()}
+                        sx={{ fontWeight: 700 }}
+                      >
+                        {ticket.code}
+                      </Link>
+                      <SubTicketStateChip state={ticket.state} />
+                      <Typography variant="caption" color="text.secondary">
+                        {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'} · {ticket.qty} sp ·{' '}
+                        {formatQty(ticket.silverWeight)} g bạc
+                      </Typography>
+                    </Stack>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <SubTicketMatrixCard
+                      order={order}
+                      ticket={ticket}
+                      isAdmin={isAdmin}
+                      showHeader={false}
+                      embedded
+                    />
+                  </AccordionDetails>
+                </Accordion>
               ))}
             </Section>
           ) : null}
@@ -443,11 +699,18 @@ export function ProductionOrderDetailPage() {
           {tab === 'goods' ? <FinishedGoodsCard order={order} /> : null}
         </Stack>
 
-        <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+        <Stack
+          spacing={1.5}
+          sx={{ minWidth: 0, position: { lg: 'sticky' }, top: { lg: 12 }, alignSelf: 'start' }}
+        >
           <Section title="Mã QR">
             <Stack spacing={1} sx={{ alignItems: 'center' }}>
               <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #d5dbe0', borderRadius: 1 }}>
-                <QRCodeSVG value={orderTicketUrl(order.code)} size={148} marginSize={1} />
+                <QRCodeSVG
+                  value={directOnParent ? parentWorkTicketUrl(order.code) : orderTicketUrl(order.code)}
+                  size={112}
+                  marginSize={1}
+                />
               </Box>
               <Typography variant="h6">{order.code}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
@@ -533,8 +796,8 @@ export function ProductionOrderDetailPage() {
 
       <HandoverDialog
         open={handoverOpen}
+        order={order}
         state={handover}
-        users={lookups.data?.users ?? []}
         saving={saveHandover.isPending}
         onClose={() => setHandoverOpen(false)}
         onExited={() => setHandover(null)}
@@ -551,6 +814,16 @@ export function ProductionOrderDetailPage() {
         }
       />
 
+      <OpenOrderStageDialog
+        open={parentStageDialog}
+        stages={parentOpenableStages}
+        saving={openParentStage.isPending}
+        onClose={() => setParentStageDialog(false)}
+        onSave={(stage) =>
+          openParentStage.mutate(stage, { onSuccess: () => setParentStageDialog(false) })
+        }
+      />
+
       <KcsReturnDialog
         entry={returning}
         saving={saveReturn.isPending}
@@ -564,9 +837,30 @@ export function ProductionOrderDetailPage() {
         open={statusDialog}
         current={order.status}
         isBtp={isBtp}
+        initialTarget={statusPreset}
         saving={status.isPending}
-        onClose={() => setStatusDialog(false)}
-        onSave={(payload) => status.mutate(payload, { onSuccess: () => setStatusDialog(false) })}
+        onClose={() => {
+          setStatusDialog(false)
+          setStatusPreset(null)
+        }}
+        onSave={(payload) =>
+          status.mutate(payload, {
+            onSuccess: () => {
+              setStatusDialog(false)
+              setStatusPreset(null)
+            },
+          })
+        }
+      />
+
+      <FinishDialog
+        open={finishOpen}
+        ticketCode={order.code}
+        qty={order.qty}
+        scope="order"
+        saving={finish.isPending}
+        onClose={() => setFinishOpen(false)}
+        onSave={(note) => finish.mutate(note, { onSuccess: () => setFinishOpen(false) })}
       />
 
       <ConfirmDeleteDialog
@@ -592,6 +886,93 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
       </Stack>
       {children}
     </Paper>
+  )
+}
+
+function SyncStatus({
+  fetching,
+  updatedAt,
+  onRefresh,
+}: {
+  fetching: boolean
+  updatedAt: number
+  onRefresh: () => void
+}) {
+  const updatedLabel = updatedAt
+    ? new Date(updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '—'
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+      <Typography variant="caption" color={fetching ? 'primary.main' : 'text.secondary'}>
+        {fetching ? 'Đang đồng bộ…' : `Cập nhật ${updatedLabel}`}
+      </Typography>
+      <Tooltip title="Làm mới trạng thái">
+        <span>
+          <IconButton size="small" aria-label="Làm mới trạng thái" disabled={fetching} onClick={onRefresh}>
+            <SyncIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Stack>
+  )
+}
+
+/** Tóm tắt vận hành để người điều hành nhận ra ngay phiếu nào đang tắc ở bước nào. */
+function ProductionTicketSummary({ tickets }: { tickets: SubTicket[] }) {
+  if (tickets.length === 0) return null
+
+  const count = (state: SubTicketState) => tickets.filter((ticket) => ticket.state === state).length
+  const cards: Array<{ label: string; value: number; state?: SubTicketState; tone?: string }> = [
+    { label: 'Tổng phiếu', value: tickets.length, tone: '#eef2f6' },
+    { label: 'Chờ mở', value: count('IDLE'), state: 'IDLE' },
+    { label: 'Chờ thợ', value: count('WAITING'), state: 'WAITING' },
+    { label: 'Đã nhận', value: count('CLAIMED'), state: 'CLAIMED' },
+    { label: 'Đang làm', value: count('WORKING'), state: 'WORKING' },
+    { label: 'Chờ KCS', value: count('SUBMITTED'), state: 'SUBMITTED' },
+    {
+      label: 'Đã chốt',
+      value: count('DEFECT') + count('FINISH'),
+      tone: '#e6f4ea',
+    },
+  ]
+
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' },
+        gap: 0.75,
+        mb: 1.5,
+      }}
+    >
+      {cards.map((card) => (
+        <Box
+          key={card.label}
+          sx={{
+            minWidth: 0,
+            p: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: card.tone ?? 'background.paper',
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+            {card.value}
+          </Typography>
+          {card.state ? (
+            <Box sx={{ mt: 0.5, '& .MuiChip-root': { height: 22 } }}>
+              <SubTicketStateChip state={card.state} label={card.label} />
+            </Box>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              {card.label}
+            </Typography>
+          )}
+        </Box>
+      ))}
+    </Box>
   )
 }
 
@@ -810,7 +1191,9 @@ function FieldGroup({
   )
 }
 
+/** Ảnh nhỏ của đơn; bấm vào xem ảnh lớn ngay trên trang, không mở tab mới. */
 function Gallery({ label, images }: { label: string; images: ProductionOrderDetail['images'] }) {
+  const [viewing, setViewing] = useState<number | null>(null)
   return (
     <Box>
       <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>
@@ -822,26 +1205,23 @@ function Gallery({ label, images }: { label: string; images: ProductionOrderDeta
         </Typography>
       ) : (
         <Stack direction="row" useFlexGap spacing={1} sx={{ flexWrap: 'wrap' }}>
-          {images.map((image) => (
-            <Box
+          {images.map((image, index) => (
+            <ZoomThumb
               key={image.id}
-              component="a"
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              sx={{ display: 'block', width: 96, height: 96 }}
-            >
-              <Box
-                component="img"
-                src={cloudinaryThumb(image.url, 192)}
-                alt=""
-                loading="lazy"
-                sx={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid #d5dbe0' }}
-              />
-            </Box>
+              url={image.url}
+              label={`Xem ảnh lớn ${index + 1}/${images.length}`}
+              onClick={() => setViewing(index)}
+            />
           ))}
         </Stack>
       )}
+      <ImageLightbox
+        images={images}
+        index={viewing}
+        title={label}
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
     </Box>
   )
 }
@@ -855,6 +1235,18 @@ const TABS: Array<{ value: TabKey; label: string }> = [
   { value: 'cost', label: 'Chi phí' },
   { value: 'goods', label: 'Kho thành phẩm' },
 ]
+
+const matrixAccordionSx = {
+  mt: 1,
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: '6px !important',
+  overflow: 'hidden',
+  '&::before': { display: 'none' },
+  '& .MuiAccordionSummary-root': { minHeight: 48, bgcolor: '#f8fafb' },
+  '& .MuiAccordionSummary-content': { my: 1 },
+  '& .MuiAccordionDetails-root': { p: { xs: 1, md: 1.5 }, borderTop: '1px solid', borderColor: 'divider' },
+} as const
 
 /** Các lần làm trước của khâu đã làm lại — phiếu chỉ in lần gần nhất nên liệt kê riêng. */
 function ReworkHistory({ stages }: { stages: StageEntry[] }) {
@@ -933,10 +1325,57 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
   )
 }
 
+function OpenOrderStageDialog({
+  open,
+  stages,
+  saving,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  stages: StageCode[]
+  saving: boolean
+  onClose: () => void
+  onSave: (stage: StageCode) => void
+}) {
+  const [stage, setStage] = useState<StageCode | ''>('')
+
+  useEffect(() => {
+    if (open) setStage((current) => (current && stages.includes(current) ? current : (stages[0] ?? '')))
+  }, [open, stages])
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Mở khâu trên phiếu mẹ</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+        <Typography variant="body2" color="text.secondary">
+          Phiếu sẽ xuất hiện ở màn “Phiếu của tôi”. Thợ tự nhận trước; người giao chỉ cân bạc và xác nhận sau.
+        </Typography>
+        <SelectInput<StageCode>
+          label="Khâu"
+          value={stage}
+          onChange={setStage}
+          options={stages.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
+          required
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>
+          Hủy
+        </Button>
+        <Button variant="contained" disabled={!stage} loading={saving} onClick={() => stage && onSave(stage)}>
+          Mở khâu
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 function StatusDialog({
   open,
   current,
   isBtp,
+  initialTarget,
   saving,
   onClose,
   onSave,
@@ -944,12 +1383,17 @@ function StatusDialog({
   open: boolean
   current: ProductionStatus
   isBtp: boolean
+  initialTarget?: ProductionStatus | null
   saving: boolean
   onClose: () => void
   onSave: (payload: { status: ProductionStatus; note?: string }) => void
 }) {
   const [target, setTarget] = useState<ProductionStatus | ''>('')
   const [note, setNote] = useState('')
+
+  useEffect(() => {
+    if (open && initialTarget) setTarget(initialTarget)
+  }, [open, initialTarget])
 
   // Đơn BTP không qua 3D nên không có Sửa 3D.
   const manual = MANUAL_STATUSES.filter((item) => item !== current && !(isBtp && item === 'REDO_3D'))
@@ -1004,7 +1448,9 @@ function StatusDialog({
         </Button>
         <Button
           variant="contained"
-          disabled={saving || !target || (noteRequired && !note.trim())}
+          disabled={!target || (noteRequired && !note.trim())}
+          loading={saving}
+          loadingPosition="start"
           onClick={() => target && onSave({ status: target, note: note.trim() || undefined })}
         >
           Lưu

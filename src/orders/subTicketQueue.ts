@@ -7,8 +7,9 @@ export type SubTicketAction = 'claim' | 'unclaim' | 'submit' | 'unsubmit'
 
 export type SubTicketVars = {
   orderCode: string
-  no: number
-  /** Mã phiếu con (vd A012-1) — để đánh dấu đúng thẻ phiếu và ghi vào thông báo. */
+  /** null = phiếu mẹ; có số = phiếu con. */
+  no: number | null
+  /** Mã phiếu (vd A012 hoặc A012-1) — để đánh dấu đúng thẻ và ghi vào thông báo. */
   ticketCode: string
 }
 

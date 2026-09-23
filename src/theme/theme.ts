@@ -42,7 +42,9 @@ export const theme = createTheme({
         // nên ~60px cuối bị cắt mà không cuộn tới được. Trang đã khoá cuộn nên
         // thanh URL không bao giờ thu lại → dvh ổn định, không giật layout.
         // Cài PWA lên iPhone có tai thỏ: viewport-fit=cover cho nội dung chạm mép,
-        // padding safe-area trả lại phần bị tai thỏ / thanh home che.
+        // padding safe-area trả lại phần bị tai thỏ / thanh home che. Chỉ đẩy được phần
+        // nằm trong luồng trang — thứ gì position: fixed (AppBar, drawer, dialog toàn
+        // màn hình, toast) phải tự bù ở override riêng bên dưới.
         '#root': {
           height: '100dvh',
           paddingTop: 'env(safe-area-inset-top)',
@@ -74,6 +76,14 @@ export const theme = createTheme({
           borderBottom: '1px solid #d5dbe0',
           backgroundImage: 'none',
         },
+        // Fixed nên không ăn padding của #root: tự lùi xuống dưới thanh trạng thái. Chiều
+        // cao tăng đúng bằng phần #root đã đẩy nội dung xuống, nên Toolbar đệm trong
+        // AppShell vẫn khớp mép dưới header.
+        positionFixed: {
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingLeft: 'env(safe-area-inset-left)',
+          paddingRight: 'env(safe-area-inset-right)',
+        },
       },
     },
     MuiTableHead: {
@@ -91,6 +101,11 @@ export const theme = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: { borderRadius: 4 },
+        // Dialog toàn màn hình trên điện thoại: tiêu đề và nút cuối không bị che.
+        paperFullScreen: {
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        },
       },
     },
     MuiDrawer: {
@@ -98,6 +113,28 @@ export const theme = createTheme({
         paper: {
           border: 'none',
           borderRight: '1px solid #d5dbe0',
+          // MUI v9 không áp override anchorLeft/… (chỉ gắn class) — chia theo anchor ở đây.
+          variants: [
+            // Drawer trái/phải cao hết màn: né cả tai thỏ lẫn thanh home.
+            {
+              props: { anchor: 'left' },
+              style: {
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                paddingLeft: 'env(safe-area-inset-left)',
+              },
+            },
+            {
+              props: { anchor: 'right' },
+              style: {
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                paddingRight: 'env(safe-area-inset-right)',
+              },
+            },
+            // Bộ lọc trượt từ dưới lên (PanelToolbar): chỉ chạm thanh home.
+            { props: { anchor: 'bottom' }, style: { paddingBottom: 'env(safe-area-inset-bottom)' } },
+          ],
         },
       },
     },

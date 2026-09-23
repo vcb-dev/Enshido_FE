@@ -1,20 +1,14 @@
-import { CircularProgress, Stack, Typography } from '@mui/material'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { canAccessPath, homePathForUser } from './homePath'
+import { AppBootSkeleton } from '../components/RouteSkeleton'
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth()
   const location = useLocation()
 
-  if (loading) {
-    return (
-      <Stack spacing={1.5} sx={{ minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress size={28} />
-        <Typography color="text.secondary">Đang kiểm tra phiên đăng nhập…</Typography>
-      </Stack>
-    )
-  }
+  // Đang kiểm tra phiên: dựng sẵn khung app + khung của màn sắp mở thay cho vòng xoay.
+  if (loading) return <AppBootSkeleton />
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />

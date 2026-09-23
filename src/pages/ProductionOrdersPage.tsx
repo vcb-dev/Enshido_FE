@@ -91,6 +91,10 @@ export function ProductionOrdersPage() {
     queryFn: () => listProductionOrdersApi(listParams),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+    // Đây là màn điều hành; trạng thái phiếu có thể đổi từ điện thoại của thợ.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -166,6 +170,7 @@ export function ProductionOrdersPage() {
           onView: (row) => navigate(`/orders/${row.code}`),
           onEdit: (row) => loadEdit.mutate(row),
           onDelete: (row) => del.request(row),
+          loadingEditId: loadEdit.isPending ? (loadEdit.variables?.id ?? null) : null,
           isAdmin,
         },
         {
@@ -200,6 +205,8 @@ export function ProductionOrdersPage() {
       isAdmin,
       listSource,
       loadEdit.mutate,
+      loadEdit.isPending,
+      loadEdit.variables,
       navigate,
       params.dueDate,
       params.receivedDate,
@@ -364,6 +371,8 @@ function orderColumns(
     onView: (row: ProductionOrderRow) => void
     onEdit: (row: ProductionOrderRow) => void
     onDelete: (row: ProductionOrderRow) => void
+    /** Đơn đang được tải chi tiết để mở form sửa. */
+    loadingEditId: string | null
     isAdmin: boolean
   },
   filters: {
@@ -532,6 +541,7 @@ function orderColumns(
           <RowActions
             onView={() => actions.onView(row)}
             onEdit={() => actions.onEdit(row)}
+            editLoading={actions.loadingEditId === row.id}
             onDelete={() => actions.onDelete(row)}
             deleteDisabled={!actions.isAdmin || !(row.status === 'NEW' || (row.source === 'BTP' && row.status === 'FILING'))}
             titles={{

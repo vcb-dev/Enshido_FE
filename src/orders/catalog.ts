@@ -39,6 +39,19 @@ export const STATUS_TABS: ProductionStatus[] = [
 /** Khâu giao thợ trên phiếu (Đúc nằm ở đầu phiếu, không phải cột). */
 export const STAGES: StageCode[] = ['FILING', 'STONE_SETTING', 'ENGRAVING', 'POLISHING', 'PLATING']
 
+/** Khâu cuối trên phiếu (Xi) — chốt Hoàn thiện phải qua khâu này. */
+export const LAST_STAGE: StageCode = STAGES[STAGES.length - 1]
+
+/**
+ * Phiếu đã đi hết đến khâu cuối chưa: khâu gần nhất phải là Xi và đã được KCS nhận lại. Chưa
+ * tới thì chưa chốt Hoàn thiện được — khâu giữa bỏ qua được, nhưng sửa lại khâu nào sau khi đã
+ * xi thì phải xi lại mới chốt. Cùng luật với BE.
+ */
+export function lastStageDone(entries: Array<{ stage: StageCode; returnedAt: string | null }>) {
+  const last = entries.at(-1)
+  return last?.stage === LAST_STAGE && last.returnedAt != null
+}
+
 export const STAGE_LABEL: Record<StageCode, string> = {
   FILING: 'Nguội',
   STONE_SETTING: 'Vào đá',
@@ -218,6 +231,11 @@ export function fromDateTimeInput(value: string) {
 /** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / KCS cập nhật khâu ngay. */
 export function orderTicketUrl(code: string) {
   return `${window.location.origin}/orders/${code}?tab=production`
+}
+
+/** Phiếu mẹ không chia: dùng đúng màn tự nhận của thợ như phiếu con. */
+export function parentWorkTicketUrl(code: string) {
+  return `${window.location.origin}/tickets/${code}`
 }
 
 /** Link QR trên phiếu con: thợ quét để mở phiếu và bấm nhận. */

@@ -25,7 +25,7 @@ export function ConfirmDeleteDialog({
         <Button onClick={onClose} disabled={deleting}>
           Hủy
         </Button>
-        <Button color="error" variant="contained" onClick={onConfirm} disabled={deleting}>
+        <Button color="error" variant="contained" onClick={onConfirm} loading={deleting} loadingPosition="start">
           Xóa
         </Button>
       </DialogActions>

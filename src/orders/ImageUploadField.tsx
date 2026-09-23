@@ -11,7 +11,8 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import { toast } from 'sonner'
 import type { OrderImage, ProductionImageKind } from '../api/productionOrders'
-import { cloudinaryThumb, uploadImageToCloudinary } from '../api/uploads'
+import { uploadImageToCloudinary } from '../api/uploads'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 
 type Pending = { key: string; name: string; progress: number }
 
@@ -38,6 +39,7 @@ export function ImageUploadField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
+  const [viewing, setViewing] = useState<number | null>(null)
   // Upload chạy song song nên đọc giá trị mới nhất qua ref, tránh ghi đè lẫn nhau.
   const latest = useRef(value)
   latest.current = value
@@ -140,22 +142,14 @@ export function ImageUploadField({
             : undefined
         }
       >
-        {value.map((image) => (
+        {value.map((image, index) => (
           <Box key={image.publicId} sx={{ position: 'relative', width: THUMB, height: THUMB }}>
-            <Box
-              component="a"
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              sx={{ display: 'block', width: '100%', height: '100%' }}
-            >
-              <Box
-                component="img"
-                src={cloudinaryThumb(image.url, THUMB * 2)}
-                alt=""
-                sx={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid #d5dbe0' }}
-              />
-            </Box>
+            <ZoomThumb
+              url={image.url}
+              size={THUMB}
+              label={`Xem ảnh lớn ${index + 1}/${value.length}`}
+              onClick={() => setViewing(index)}
+            />
             {readOnly ? null : (
               <Tooltip title="Gỡ ảnh">
                 <IconButton
@@ -235,6 +229,14 @@ export function ImageUploadField({
           </Box>
         ) : null}
       </Box>
+
+      <ImageLightbox
+        images={value.map((image) => ({ id: image.publicId, url: image.url }))}
+        index={viewing}
+        title={label}
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
     </Stack>
   )
 }

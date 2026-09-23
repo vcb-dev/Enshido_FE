@@ -1576,7 +1576,7 @@ function StockEditDialog({
               <Button onClick={onClose} disabled={saving}>
                 Hủy
               </Button>
-              <Button type="submit" variant="contained" disabled={saving || uploading}>
+              <Button type="submit" variant="contained" loading={saving || uploading} loadingPosition="start">
                 {uploading ? 'Đang upload ảnh…' : row ? 'Lưu' : profile.createLabel}
               </Button>
             </>

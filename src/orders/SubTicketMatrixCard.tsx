@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   clearSubTicketOutcomeApi,
@@ -8,7 +8,7 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { STAGE_LABEL } from './catalog'
+import { LAST_STAGE, lastStageDone, STAGE_LABEL } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
 import { DefectDialog, FinishDialog } from './OutcomeDialogs'
 import { TicketMatrix } from './TicketMatrix'
@@ -24,6 +24,7 @@ export function SubTicketMatrixCard({
   isAdmin,
   linkToTicket = false,
   showHeader = true,
+  embedded = false,
 }: {
   order: ProductionOrderDetail
   ticket: SubTicket
@@ -32,6 +33,8 @@ export function SubTicketMatrixCard({
   linkToTicket?: boolean
   /** Trang phiếu con đã có tên phiếu ở đầu trang nên bỏ dòng tiêu đề này. */
   showHeader?: boolean
+  /** Dùng bên trong accordion/card cha thì bỏ nền, viền và khoảng đệm lồng nhau. */
+  embedded?: boolean
 }) {
   const [defectOpen, setDefectOpen] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
@@ -54,11 +57,16 @@ export function SubTicketMatrixCard({
   const idle = ticket.state === 'IDLE'
   const delivered = order.status === 'DELIVERED'
   const canFinish = idle && ticket.entryCount > 0 && !delivered
+  // Hoàn thiện phải đi hết phiếu: chưa có khâu Xi được KCS nhận lại thì nút còn khoá.
+  const finishReady = lastStageDone(order.stages.filter((entry) => entry.subTicketId === ticket.id))
   const canDefect = idle && !delivered
   const shipped = (order.finishedGoods?.shippedQty ?? 0) > 0
 
   return (
-    <Paper sx={{ p: { xs: 1, md: 1.5 } }}>
+    <Paper
+      elevation={embedded ? 0 : 1}
+      sx={embedded ? { p: 0, bgcolor: 'transparent' } : { p: { xs: 1, md: 1.5 } }}
+    >
       {showHeader ? (
         <Stack
           direction="row"
@@ -94,7 +102,13 @@ export function SubTicketMatrixCard({
         outcomeActions={{
           DEFECT: settled ? (
             ticket.outcome === 'DEFECT' && isAdmin && !shipped ? (
-              <Button size="small" color="inherit" disabled={busy} onClick={() => clear.mutate(undefined)}>
+              <Button
+                size="small"
+                color="inherit"
+                disabled={busy}
+                loading={clear.isPending}
+                onClick={() => clear.mutate(undefined)}
+              >
                 Gỡ ghi lỗi
               </Button>
             ) : null
@@ -105,14 +119,36 @@ export function SubTicketMatrixCard({
           ) : null,
           FINISH: settled ? (
             ticket.outcome === 'FINISH' && isAdmin && !shipped ? (
-              <Button size="small" color="inherit" disabled={busy} onClick={() => clear.mutate(undefined)}>
+              <Button
+                size="small"
+                color="inherit"
+                disabled={busy}
+                loading={clear.isPending}
+                onClick={() => clear.mutate(undefined)}
+              >
                 Gỡ hoàn thiện
               </Button>
             ) : null
           ) : canFinish ? (
-            <Button size="small" variant="contained" color="success" onClick={() => setFinishOpen(true)}>
-              Xác nhận hoàn thiện
-            </Button>
+            <Tooltip
+              title={
+                finishReady
+                  ? ''
+                  : `Chưa xong khâu ${STAGE_LABEL[LAST_STAGE]} — làm hết phiếu rồi mới hoàn thiện được`
+              }
+            >
+              <span>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="success"
+                  disabled={!finishReady}
+                  onClick={() => setFinishOpen(true)}
+                >
+                  Xác nhận hoàn thiện
+                </Button>
+              </span>
+            </Tooltip>
           ) : null,
         }}
       />

@@ -1,10 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
   Breadcrumbs,
   Chip,
-  CircularProgress,
   Link,
   Paper,
   Stack,
@@ -14,8 +13,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { getOrderReferenceApi, type OrderReference } from '../api/productionOrders'
 import { formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader } from '../components/ui'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
+import { PageHeader, TicketDetailSkeleton } from '../components/ui'
 import { STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 
@@ -31,13 +30,7 @@ export function OrderReferencePage() {
     staleTime: 30_000,
   })
 
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 6, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <TicketDetailSkeleton maxWidth={820} />
   if (!detail.data) {
     return (
       <Alert severity="error">
@@ -49,6 +42,9 @@ export function OrderReferencePage() {
 }
 
 function ReferenceView({ order }: { order: OrderReference }) {
+  // Hàng ảnh chỉ hiện 3 ảnh đầu; hộp xem ảnh lướt được hết.
+  const shown = order.images.slice(0, 3)
+  const [viewing, setViewing] = useState<number | null>(null)
   return (
     <Stack spacing={1.5} sx={{ pb: 3, maxWidth: 820 }}>
       <PageHeader
@@ -77,31 +73,24 @@ function ReferenceView({ order }: { order: OrderReference }) {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {order.images.length ? (
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap' }}>
-              {order.images.slice(0, 3).map((image) => (
-                <Box
+              {shown.map((image, index) => (
+                <ZoomThumb
                   key={image.id}
-                  component="a"
-                  href={image.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ display: 'block', width: 96, height: 96 }}
-                >
-                  <Box
-                    component="img"
-                    src={cloudinaryThumb(image.url, 192)}
-                    alt=""
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: 1,
-                      border: '1px solid #d5dbe0',
-                    }}
-                  />
-                </Box>
+                  url={image.url}
+                  label={`Xem ảnh lớn ${index + 1}/${order.images.length}`}
+                  more={index === shown.length - 1 ? order.images.length - shown.length : 0}
+                  onClick={() => setViewing(index)}
+                />
               ))}
             </Stack>
           ) : null}
+          <ImageLightbox
+            images={order.images}
+            index={viewing}
+            title="Ảnh đơn hàng"
+            onIndexChange={setViewing}
+            onClose={() => setViewing(null)}
+          />
           <Stack spacing={1} sx={{ minWidth: 0 }}>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
               {order.description}

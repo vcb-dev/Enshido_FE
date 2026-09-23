@@ -1,11 +1,10 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
   Breadcrumbs,
   Button,
   Chip,
-  CircularProgress,
   Divider,
   Link,
   Paper,
@@ -19,47 +18,44 @@ import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import {
   getSubTicketOrderApi,
   parseSubTicketCode,
+  type OrderWorkTicket,
   type ProductionOrderDetail,
   type StageEntry,
   type SubTicket,
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
-import { PageHeader } from '../components/ui'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
+import { PageHeader, TicketDetailSkeleton } from '../components/ui'
 import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
+import { TicketMatrix } from '../orders/TicketMatrix'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
-import { queuedLabel } from '../orders/subTicketQueue'
+import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 
 /** Trang phiếu con mở từ QR: thợ xem phần việc của mình và bấm nhận khâu đang mở. */
 export function SubTicketPage() {
   const { ticketCode = '' } = useParams()
   const parsed = parseSubTicketCode(ticketCode)
-  const orderCode = parsed?.orderCode ?? ''
+  const orderCode = parsed?.orderCode ?? ticketCode.trim().toUpperCase()
 
   // Đi qua đường phiếu con: tài khoản thợ bị chặn khỏi endpoint đơn mẹ. Vẫn dùng chung
   // queryKey với các mutation phiếu con để cache không bị lệch.
   const detail = useQuery({
     queryKey: ['production-order', orderCode],
     queryFn: () => getSubTicketOrderApi(ticketCode),
-    enabled: parsed != null,
+    enabled: Boolean(orderCode),
     staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
-  if (!parsed) {
-    return <Alert severity="error">Mã phiếu con không hợp lệ: {ticketCode}</Alert>
-  }
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 6, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <TicketDetailSkeleton />
   const order = detail.data
-  const ticket = order?.subTickets.find((item) => item.no === parsed.no)
-  if (!order || !ticket) {
+  const ticket = parsed ? order?.subTickets.find((item) => item.no === parsed.no) : null
+  const parentTicket = parsed ? null : order?.workTicket
+  if (!order || (!ticket && !parentTicket)) {
     // Mất mạng mà phiếu này chưa từng được tải về: nói đúng lý do, đừng để thợ tưởng là
     // quét nhầm mã. Phiếu thuộc phần việc của mình thì màn "Phiếu của tôi" đã kéo sẵn.
     if (detail.isPaused) {
@@ -71,11 +67,228 @@ export function SubTicketPage() {
     }
     return (
       <Alert severity="error">
-        {detail.error instanceof Error ? detail.error.message : `Không tìm thấy phiếu con ${ticketCode}`}
+        {detail.error instanceof Error ? detail.error.message : `Không tìm thấy phiếu ${ticketCode}`}
       </Alert>
     )
   }
-  return <TicketView order={order} ticket={ticket} />
+  return ticket ? (
+    <TicketView order={order} ticket={ticket} />
+  ) : (
+    <ParentTicketView order={order} ticket={parentTicket!} />
+  )
+}
+
+function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: OrderWorkTicket }) {
+  const { user } = useAuth()
+  const isWorker = can(user, Permission.PRODUCTION_WORKER)
+  const workerOnly = isWorkerOnly(user)
+  const claim = useSubTicketAction('claim')
+  const unclaim = useSubTicketAction('unclaim')
+  const submit = useSubTicketAction('submit')
+  const unsubmit = useSubTicketAction('unsubmit')
+  const queued = useQueuedSubTickets().get(ticket.code)
+  const sending = (action: SubTicketAction) => queued?.action === action && !queued.waiting
+  const vars = { orderCode: order.code, no: null, ticketCode: ticket.code }
+  const entries = order.stages.filter((entry) => !entry.subTicketId)
+  const openEntry = entries.find((entry) => !entry.returnedAt)
+  const last = entries.at(-1)
+  const mine = ticket.claimedByUserId != null && ticket.claimedByUserId === user?.id
+  const workingIsMine = openEntry?.craftsmanUserId != null && openEntry.craftsmanUserId === user?.id
+  const closed = order.status === 'DELIVERED' || order.finishedGoods != null
+  const images = order.images.filter((image) => image.kind === 'PRODUCT')
+  const pool = images.length ? images : order.images
+  const shown = pool.slice(0, 3)
+  const [viewing, setViewing] = useState<number | null>(null)
+
+  return (
+    <Stack spacing={1.5} sx={{ pb: 3 }}>
+      <PageHeader
+        title={`Phiếu sản xuất ${order.code}`}
+        titleAdornment={
+          <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <SubTicketStateChip state={ticket.state} />
+            {workerOnly ? null : <StatusChip status={order.status} />}
+            {queued ? <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} /> : null}
+          </Stack>
+        }
+        subtitle={`${order.qty} sp · ${order.silverWeight != null ? `${formatQty(order.silverWeight)} g bạc` : 'chưa có TL bạc'}`}
+        breadcrumbs={
+          <Breadcrumbs>
+            {isWorker ? (
+              <Link component={RouterLink} to="/my-tickets" underline="hover" color="inherit">
+                Phiếu của tôi
+              </Link>
+            ) : null}
+            {workerOnly ? null : (
+              <Link component={RouterLink} to={`/orders/${order.code}?tab=production`} underline="hover" color="inherit">
+                Đơn {order.code}
+              </Link>
+            )}
+            <Typography color="text.primary">{order.code}</Typography>
+          </Breadcrumbs>
+        }
+        actions={
+          workerOnly ? undefined : (
+            <Button variant="outlined" component={RouterLink} to={`/orders/${order.code}?tab=production`}>
+              Mở đơn {order.code}
+            </Button>
+          )
+        }
+      />
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Khâu hiện tại
+        </Typography>
+        {closed ? (
+          <Typography variant="body2">Đơn đã hoàn thiện / đã giao — không còn khâu nào để nhận.</Typography>
+        ) : ticket.state === 'WAITING' && ticket.pendingStage ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp ·{' '}
+              {ticket.availableSilver != null ? formatQty(ticket.availableSilver) : '—'} g bạc. Chưa có thợ nhận.
+            </Typography>
+            {isWorker ? (
+              <Button
+                variant="contained"
+                size="large"
+                disabled={queued != null}
+                loading={sending('claim')}
+                onClick={() => claim.mutate(vars)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Nhận phiếu — khâu {STAGE_LABEL[ticket.pendingStage]}
+              </Button>
+            ) : null}
+          </Stack>
+        ) : ticket.state === 'CLAIMED' && ticket.pendingStage ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              {mine ? 'Bạn' : `Thợ ${ticket.claimedByName ?? ''}`} đã nhận khâu{' '}
+              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người giao cân
+              bạc và xác nhận giao.
+            </Typography>
+            {mine ? (
+              <Button
+                color="inherit"
+                variant="outlined"
+                disabled={queued != null}
+                loading={sending('unclaim')}
+                onClick={() => unclaim.mutate(vars)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Huỷ nhận
+              </Button>
+            ) : null}
+          </Stack>
+        ) : (ticket.state === 'WORKING' || ticket.state === 'SUBMITTED') && openEntry ? (
+          <Stack spacing={1.25}>
+            <Typography variant="body2">
+              Thợ <b>{openEntry.craftsmanName}</b> đang làm khâu <b>{STAGE_LABEL[openEntry.stage]}</b> từ{' '}
+              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp ·{' '}
+              {openEntry.handedSilverWeight ? formatQty(openEntry.handedSilverWeight) : '—'} g bạc.
+              {ticket.state === 'SUBMITTED'
+                ? ` Đã báo xong lúc ${formatDateShort(openEntry.submittedAt)} — chờ KCS cân lại.`
+                : ' Làm xong thì bấm “Đã làm xong” rồi mang hàng tới KCS cân lại.'}
+            </Typography>
+            {workingIsMine && ticket.state === 'WORKING' ? (
+              <Button
+                variant="contained"
+                size="large"
+                disabled={queued != null}
+                loading={sending('submit')}
+                onClick={() => submit.mutate(vars)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Đã làm xong — nộp cho KCS
+              </Button>
+            ) : null}
+            {workingIsMine && ticket.state === 'SUBMITTED' ? (
+              <Button
+                color="inherit"
+                variant="outlined"
+                disabled={queued != null}
+                loading={sending('unsubmit')}
+                onClick={() => unsubmit.mutate(vars)}
+                sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
+              >
+                Bỏ báo xong
+              </Button>
+            ) : null}
+          </Stack>
+        ) : (
+          <Typography variant="body2">
+            {last ? `Đã xong khâu ${STAGE_LABEL[last.stage]} — chờ mở khâu tiếp theo.` : 'Chưa mở khâu nào.'}
+          </Typography>
+        )}
+      </Paper>
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Sản phẩm
+        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {shown.length ? (
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+              {shown.map((image, index) => (
+                <ZoomThumb
+                  key={image.id}
+                  url={image.url}
+                  label={`Xem ảnh lớn ${index + 1}/${pool.length}`}
+                  more={index === shown.length - 1 ? pool.length - shown.length : 0}
+                  onClick={() => setViewing(index)}
+                />
+              ))}
+            </Stack>
+          ) : null}
+          <ImageLightbox
+            images={pool}
+            index={viewing}
+            title={images.length ? 'Ảnh sản phẩm' : 'Ảnh đơn hàng'}
+            onIndexChange={setViewing}
+            onClose={() => setViewing(null)}
+          />
+          <Stack spacing={1} sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+              {order.description}
+            </Typography>
+            <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+              <Info label="Số lượng" value={`${order.qty} ${order.qtyUnit ?? 'sp'}`} />
+              <Info label="Hiện có" value={`${ticket.availableQty} sp · ${ticket.availableSilver != null ? formatQty(ticket.availableSilver) : '—'} g`} />
+              <Info label="Ngày cần trả" value={order.dueDate ? formatStockedDate(order.dueDate) : null} />
+              <Info label="Size" value={order.sizeLabel} />
+              <Info label="Chất liệu" value={order.mainMaterial} />
+              <Info label="Màu xi" value={order.platingColor} />
+              <Info label="Loại đá" value={order.stoneTypes.join(', ')} />
+              <Info label="Số lượng đá" value={order.stoneCount} />
+            </Box>
+            <Info label="Nội dung khắc laser" value={order.laserEngraving} />
+            <Info label="Yêu cầu khác" value={order.otherRequirements} />
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Quá trình sản xuất của phiếu
+        </Typography>
+        <TicketMatrix order={order} />
+      </Box>
+
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Các khâu của phiếu
+        </Typography>
+        {entries.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">Chưa giao khâu nào.</Typography>
+        ) : (
+          <Stack divider={<Divider flexItem />} spacing={1}>
+            {entries.map((entry) => <EntryRow key={entry.id} entry={entry} />)}
+          </Stack>
+        )}
+      </Paper>
+    </Stack>
+  )
 }
 
 function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: SubTicket }) {
@@ -91,13 +304,18 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
   const submit = useSubTicketAction('submit')
   const unsubmit = useSubTicketAction('unsubmit')
   const queued = useQueuedSubTickets().get(ticket.code)
+  // Đang gửi lên máy chủ thì nút quay; nằm chờ mạng thì chỉ khoá — chip "Chờ gửi" đã nói rõ.
+  const sending = (action: SubTicketAction) => queued?.action === action && !queued.waiting
   const vars = { orderCode: order.code, no: ticket.no, ticketCode: ticket.code }
 
   const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
   const openEntry = entries.find((entry) => !entry.returnedAt)
   const last = entries.at(-1)
   const images = order.images.filter((image) => image.kind === 'PRODUCT')
-  const shown = (images.length ? images : order.images).slice(0, 3)
+  // Hàng ảnh chỉ hiện 3 ảnh đầu; hộp xem ảnh lướt được hết.
+  const pool = images.length ? images : order.images
+  const shown = pool.slice(0, 3)
+  const [viewing, setViewing] = useState<number | null>(null)
   const mine = ticket.claimedByUserId != null && ticket.claimedByUserId === user?.id
   // Khâu đang mở là của chính mình — chỉ người đó mới báo xong được (khớp luật ở BE).
   const workingIsMine = openEntry?.craftsmanUserId != null && openEntry.craftsmanUserId === user?.id
@@ -175,6 +393,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
                 variant="contained"
                 size="large"
                 disabled={queued != null}
+                loading={sending('claim')}
                 onClick={() => claim.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
@@ -198,6 +417,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
                 color="inherit"
                 variant="outlined"
                 disabled={queued != null}
+                loading={sending('unclaim')}
                 onClick={() => unclaim.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
@@ -221,6 +441,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
                 variant="contained"
                 size="large"
                 disabled={queued != null}
+                loading={sending('submit')}
                 onClick={() => submit.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
@@ -232,6 +453,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
                 color="inherit"
                 variant="outlined"
                 disabled={queued != null}
+                loading={sending('unsubmit')}
                 onClick={() => unsubmit.mutate(vars)}
                 sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' } }}
               >
@@ -255,25 +477,24 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           {shown.length ? (
             <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-              {shown.map((image) => (
-                <Box
+              {shown.map((image, index) => (
+                <ZoomThumb
                   key={image.id}
-                  component="a"
-                  href={image.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ display: 'block', width: 96, height: 96 }}
-                >
-                  <Box
-                    component="img"
-                    src={cloudinaryThumb(image.url, 192)}
-                    alt=""
-                    sx={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 1, border: '1px solid #d5dbe0' }}
-                  />
-                </Box>
+                  url={image.url}
+                  label={`Xem ảnh lớn ${index + 1}/${pool.length}`}
+                  more={index === shown.length - 1 ? pool.length - shown.length : 0}
+                  onClick={() => setViewing(index)}
+                />
               ))}
             </Stack>
           ) : null}
+          <ImageLightbox
+            images={pool}
+            index={viewing}
+            title={images.length ? 'Ảnh sản phẩm' : 'Ảnh đơn hàng'}
+            onIndexChange={setViewing}
+            onClose={() => setViewing(null)}
+          />
           <Stack spacing={1} sx={{ minWidth: 0 }}>
             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
               {order.description}

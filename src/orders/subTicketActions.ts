@@ -8,8 +8,12 @@ import { toast } from 'sonner'
 import { isNetworkError } from '../api/auth'
 import {
   claimSubTicketApi,
+  claimOrderApi,
+  submitOrderApi,
   submitSubTicketApi,
+  unclaimOrderApi,
   unclaimSubTicketApi,
+  unsubmitOrderApi,
   unsubmitSubTicketApi,
   type ProductionOrderDetail,
 } from '../api/productionOrders'
@@ -24,30 +28,30 @@ import {
 } from './subTicketQueue'
 
 type ActionDef = {
-  run: (orderCode: string, no: number) => Promise<ProductionOrderDetail>
+  run: (orderCode: string, no: number | null) => Promise<ProductionOrderDetail>
   queued: (ticketCode: string) => string
   done: (ticketCode: string) => string
 }
 
 const ACTIONS: Record<SubTicketAction, ActionDef> = {
   claim: {
-    run: claimSubTicketApi,
+    run: (code, no) => (no == null ? claimOrderApi(code) : claimSubTicketApi(code, no)),
     queued: (code) =>
       `Đã xếp hàng nhận phiếu ${code} — gửi lên khi có mạng. Thợ khác nhận trước thì sẽ báo lại.`,
     done: (code) => `Đã nhận phiếu ${code} — chờ người giao cân bạc và xác nhận`,
   },
   unclaim: {
-    run: unclaimSubTicketApi,
+    run: (code, no) => (no == null ? unclaimOrderApi(code) : unclaimSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng huỷ nhận phiếu ${code} — gửi lên khi có mạng`,
     done: (code) => `Đã huỷ nhận phiếu ${code}`,
   },
   submit: {
-    run: submitSubTicketApi,
+    run: (code, no) => (no == null ? submitOrderApi(code) : submitSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng báo xong phiếu ${code} — gửi lên khi có mạng`,
     done: (code) => `Đã báo xong phiếu ${code} — mang hàng tới KCS cân lại`,
   },
   unsubmit: {
-    run: unsubmitSubTicketApi,
+    run: (code, no) => (no == null ? unsubmitOrderApi(code) : unsubmitSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng bỏ báo xong phiếu ${code} — gửi lên khi có mạng`,
     done: (code) => `Đã bỏ báo xong phiếu ${code}`,
   },
@@ -84,6 +88,9 @@ export function registerSubTicketActions(queryClient: QueryClient) {
             queryKey: ['production-order-costing', vars.orderCode],
           })
           void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
+          // Danh sách đơn dùng query key riêng. Nếu không làm mới, người điều hành có thể
+          // vẫn thấy số phiếu/trạng thái cũ dù thao tác của thợ đã lên máy chủ.
+          void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
           toast.success(def.done(vars.ticketCode))
         },
         onError: (error, vars) => {
@@ -92,6 +99,7 @@ export function registerSubTicketActions(queryClient: QueryClient) {
           // trạng thái thật, đừng để màn hình đứng ở trạng thái đoán.
           void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
           void queryClient.invalidateQueries({ queryKey: ['production-order', vars.orderCode] })
+          void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
         },
       },
     )

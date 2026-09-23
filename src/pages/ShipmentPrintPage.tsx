@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   FormControlLabel,
   GlobalStyles,
   Stack,
@@ -17,6 +16,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { getShipmentApi, markShipmentPrintedApi, type ShipmentDetail } from '../api/finishedGoods'
 import { formatMoney } from '../api/inventory'
+import { PrintSheetSkeleton } from '../components/ui'
 import { cloudinaryThumb } from '../api/uploads'
 import { formatDateTime } from '../orders/catalog'
 
@@ -61,13 +61,7 @@ export function ShipmentPrintPage() {
     void Promise.race([loaded, new Promise((resolve) => setTimeout(resolve, 2500))]).then(() => print())
   }, [detail.data])
 
-  if (detail.isLoading) {
-    return (
-      <Stack sx={{ py: 8, alignItems: 'center' }}>
-        <CircularProgress size={28} />
-      </Stack>
-    )
-  }
+  if (detail.isLoading) return <PrintSheetSkeleton />
   if (!detail.data) {
     return (
       <Box sx={{ p: 2 }}>

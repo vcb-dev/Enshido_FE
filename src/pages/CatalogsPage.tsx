@@ -9,6 +9,7 @@ import {
   DialogTitle,
   IconButton,
   Paper,
+  Skeleton,
   Stack,
   Tab,
   Tabs,
@@ -227,11 +228,7 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
           gap: 1.5,
         }}
       >
-        {list.isLoading
-          ? [0, 1, 2].map((key) => (
-              <Paper key={key} sx={{ height: 140, border: `1px solid ${BORDER}` }} />
-            ))
-          : null}
+        {list.isLoading ? [0, 1, 2, 3, 4, 5].map((key) => <ParentCardSkeleton key={key} />) : null}
         {visibleParents.map((row) => (
           <ParentCard
             key={row.id}
@@ -472,6 +469,25 @@ function ParentEditorDialog({
         onConfirm={delChild.confirm}
       />
     </>
+  )
+}
+
+/** Cùng khung với ParentCard: tên nhóm + 2 nút, chip số danh mục con, dòng xem trước. */
+function ParentCardSkeleton() {
+  return (
+    <Paper sx={{ p: 2, border: `1px solid ${BORDER}` }}>
+      <Stack spacing={1.25}>
+        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Skeleton variant="text" width="55%" sx={{ fontSize: 18 }} />
+          <Stack direction="row" spacing={0.5}>
+            <Skeleton variant="circular" width={28} height={28} />
+            <Skeleton variant="circular" width={28} height={28} />
+          </Stack>
+        </Stack>
+        <Skeleton variant="rounded" width={112} height={24} />
+        <Skeleton variant="text" width="80%" />
+      </Stack>
+    </Paper>
   )
 }
 

@@ -9,7 +9,6 @@ import {
   Divider,
   Drawer,
   IconButton,
-  LinearProgress,
   List,
   ListItemButton,
   ListItemIcon,
@@ -40,6 +39,8 @@ import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
 import { InstallAppButton } from './InstallAppButton'
+import { RouteSkeleton } from './RouteSkeleton'
+import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
@@ -61,6 +62,7 @@ export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const waiting = useWaitingCount()
   const canManageUsers = can(user, Permission.USERS_MANAGE)
   const canSeeConfig =
@@ -77,12 +79,18 @@ export function AppShell() {
   useEffect(() => setMobileOpen(false), [location.pathname])
 
   async function onLogout() {
-    await logout()
-    navigate('/login', { replace: true })
+    setLoggingOut(true)
+    try {
+      await logout()
+      navigate('/login', { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <ScreenLoadingBar />
       <AppBar
         position="fixed"
         sx={{
@@ -132,6 +140,7 @@ export function AppShell() {
             </Box>
             <Button
               variant="outlined"
+              loading={loggingOut}
               onClick={() => void onLogout()}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
@@ -139,6 +148,7 @@ export function AppShell() {
             </Button>
             <IconButton
               aria-label="Đăng xuất"
+              loading={loggingOut}
               onClick={() => void onLogout()}
               sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
             >
@@ -216,7 +226,7 @@ export function AppShell() {
           </Alert>
         ) : null}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          <Suspense fallback={<LinearProgress />}>
+          <Suspense fallback={<RouteSkeleton />}>
             <Outlet />
           </Suspense>
         </Box>

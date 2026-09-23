@@ -210,7 +210,7 @@ export function FinishedGoodsStockDialog({
               <Button onClick={onClose} disabled={saving}>
                 Hủy
               </Button>
-              <Button type="submit" variant="contained" disabled={saving}>
+              <Button type="submit" variant="contained" loading={saving} loadingPosition="start">
                 {row ? 'Lưu' : profile.createLabel}
               </Button>
             </>
