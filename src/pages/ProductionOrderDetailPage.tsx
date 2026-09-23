@@ -708,7 +708,6 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
   const orderFields: Array<[string, ReactNode]> = [
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
-    ['Thời gian cần', order.leadTime],
     ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Người chốt', order.closedBy],
     ['Người được hỏi', order.askedUserName],

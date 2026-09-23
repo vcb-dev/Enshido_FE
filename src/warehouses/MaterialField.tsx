@@ -12,6 +12,7 @@ import { MaterialNameField, type StockMaterialOption } from './MaterialNameField
  */
 export function MaterialField({
   control,
+  name = 'name',
   kind,
   readOnly,
   materials,
@@ -23,6 +24,8 @@ export function MaterialField({
   onSelect,
 }: {
   control: Control<any>
+  /** Đường dẫn RHF — `name` hoặc `lines.0.name` khi nhập nhiều dòng. */
+  name?: string
   kind: 'create' | 'edit' | 'view'
   readOnly: boolean
   materials: StockMaterialOption[]
@@ -34,15 +37,16 @@ export function MaterialField({
   onSelect: (material: StockMaterialOption | null) => void
 }) {
   const fieldLabel = nameLabel ?? (noun ? `Tên ${noun}` : 'Tên NVL')
+  const materialIdName = name.replace(/name$/, 'materialId')
   const { field, fieldState } = useController({
-    name: 'name',
+    name,
     control,
     rules: {
       required: allowCreate ? `${fieldLabel} không được trống` : `Chọn ${fieldLabel} từ Tồn`,
-      validate: (value, formValues: any) =>
+      validate: (value, formValues: Record<string, unknown>) =>
         allowCreate ||
         kind !== 'create' ||
-        Boolean(formValues.materialId) ||
+        Boolean(readPath(formValues, materialIdName)) ||
         String(value ?? '').trim().length === 0 ||
         `Chọn ${fieldLabel} từ danh sách, không nhập tự do`,
     },
@@ -65,4 +69,11 @@ export function MaterialField({
       onSelect={onSelect}
     />
   )
+}
+
+function readPath(values: Record<string, unknown>, path: string) {
+  return path.split('.').reduce<unknown>((current, key) => {
+    if (current == null || typeof current !== 'object') return undefined
+    return (current as Record<string, unknown>)[key]
+  }, values)
 }

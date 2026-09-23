@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 import {
@@ -7,7 +8,7 @@ import {
   type FinishedGoodsStockRow,
   type UpsertReceiptPayload,
 } from '../api/finishedGoods'
-import { formatMoney } from '../api/inventory'
+import { formatMoney, formatQty, formatStockedDate } from '../api/inventory'
 import {
   CrudDialogShell,
   FormQtyField,
@@ -17,8 +18,10 @@ import {
   FormTextField,
   TextInput,
 } from '../components/ui'
+import { useIsMobile } from '../hooks/useBreakpoint'
 import type { CrudDialogKind } from '../hooks/useCrudDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
+import { DETAIL_GRID, DetailFact, DetailSection } from '../warehouses/detailView'
 import { finishedGoodsQtyUnitOptions, stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
 
 type FormValues = {
@@ -57,6 +60,7 @@ export function ReceiveFormDialog({
 }) {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const operatorName = useOperatorName()
+  const fullScreen = useIsMobile()
   const readOnly = kind === 'view'
   const form = useForm<FormValues>({
     defaultValues: {
@@ -138,6 +142,50 @@ export function ReceiveFormDialog({
       sizeLabel: (row?.sizeLabel ?? item?.sizeLabel)?.trim() || undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
     })
+  }
+
+  if (readOnly && row) {
+    const qty = String('receivedQty' in row ? row.receivedQty : row.qty)
+    const price = unitPriceOf(row)
+    const amount = Number(qty) && Number(price) ? String(Math.round(Number(qty) * Number(price))) : row && 'amount' in row ? row.amount : ''
+    return (
+      <Dialog open={open} onClose={onClose} fullWidth fullScreen={fullScreen} maxWidth="md">
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography component="span" variant="h6" sx={{ fontWeight: 700, display: 'block' }}>
+            Chi tiết phiếu nhập
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {row.orderCode} — {row.description}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.25, pt: 0.5 }}>
+          <Paper variant="outlined" sx={{ p: 1.75 }}>
+            <DetailSection>Phiếu nhập</DetailSection>
+            <Box sx={DETAIL_GRID}>
+              <DetailFact label="Ngày nhập" value={formatStockedDate(row.receivedAt)} />
+              <DetailFact label="Người nhập" value={row.receivedByName} />
+            </Box>
+          </Paper>
+          <Paper variant="outlined" sx={{ p: 1.75 }}>
+            <DetailSection>Thành phẩm</DetailSection>
+            <Box sx={DETAIL_GRID}>
+              <DetailFact label={profile.skuLabel} value={row.orderCode} />
+              <DetailFact label={profile.nameLabel} value={row.description} />
+              <DetailFact label="Đơn vị" value={row.qtyUnit} />
+              <DetailFact label="Size" value={row.sizeLabel} />
+              <DetailFact label="Số lượng" value={formatQty(qty)} />
+              <DetailFact label="Đơn giá" value={price ? formatMoney(price) : ''} />
+              <DetailFact label="Thành tiền" value={amount ? formatMoney(amount) : ''} />
+            </Box>
+          </Paper>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} variant="contained">
+            Đóng
+          </Button>
+        </DialogActions>
+      </Dialog>
+    )
   }
 
   return (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Button, Link, Stack, Typography } from '@mui/material'
+import { Box, Button, Dialog, Link, Paper, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
 import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -41,12 +41,15 @@ import {
   RowActions,
   TextInput,
 } from '../components/ui'
+import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
+import { OutboundView } from './MovementView'
+import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
 import type { StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
@@ -311,6 +314,21 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       if (ctx?.previous) queryClient.setQueryData(outboundKey, ctx.previous)
       toast.error(error.message)
     },
+  })
+  const saveMany = useMutation({
+    mutationFn: async (payloads: CreateOutboundPayload[]) => {
+      const rows: OutboundRow[] = []
+      for (const payload of payloads) {
+        rows.push(await createWarehouseOutboundApi(warehouseCode, payload))
+      }
+      return rows
+    },
+    onSuccess: (rows) => {
+      toast.success(`Đã ghi ${rows.length} phiếu xuất`)
+      void queryClient.invalidateQueries({ queryKey: outboundKey })
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+    },
+    onError: (error: Error) => toast.error(error.message),
   })
 
   const del = useDeleteRowDialog({
@@ -616,10 +634,18 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         operatorName={operatorName}
         onClose={dialog.close}
         onExited={dialog.clear}
-        onSave={(payload) => {
+        onSave={(payloads) => {
           const id = dialog.kind === 'edit' ? dialog.row?.id : undefined
           dialog.close()
-          save.mutate({ id, payload })
+          if (id) {
+            save.mutate({ id, payload: payloads[0] })
+            return
+          }
+          if (payloads.length === 1) {
+            save.mutate({ payload: payloads[0] })
+            return
+          }
+          saveMany.mutate(payloads)
         }}
       />
       <ConfirmDeleteDialog
@@ -638,30 +664,36 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   )
 }
 
-type OutboundFormValues = {
-  issuedAt: string
+type OutboundLineValues = {
   name: string
   sku: string
   materialId: string | null
   unitId: string
   qty: string
-  inboundUnitPrice: string
+}
+
+type OutboundFormValues = {
+  issuedAt: string
   note: string
   receivedByUserId: string
   productionOrderCode: string
+  lines: OutboundLineValues[]
 }
 
-const EMPTY_OUTBOUND: OutboundFormValues = {
-  issuedAt: '',
+const EMPTY_OUTBOUND_LINE: OutboundLineValues = {
   name: '',
   sku: '',
   materialId: null,
   unitId: '',
   qty: '',
-  inboundUnitPrice: '',
+}
+
+const EMPTY_OUTBOUND: OutboundFormValues = {
+  issuedAt: '',
   note: '',
   receivedByUserId: '',
   productionOrderCode: '',
+  lines: [EMPTY_OUTBOUND_LINE],
 }
 
 function OutboundDialog({
@@ -695,10 +727,12 @@ function OutboundDialog({
   orderOptions: SearchSelectOption[]
   onClose: () => void
   onExited: () => void
-  onSave: (payload: CreateOutboundPayload) => void
+  onSave: (payloads: CreateOutboundPayload[]) => void
 }) {
   const profile = stockProfile(warehouseCode)
   const form = useForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
+  const lines = useFieldArray({ control: form.control, name: 'lines' })
+  const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
 
   useEffect(() => {
     if (!open) return
@@ -706,13 +740,6 @@ function OutboundDialog({
       row
         ? {
             issuedAt: row.issuedAt,
-            name: row.name,
-            sku: row.sku ?? '',
-            materialId: row.materialId,
-            unitId:
-              row.unitId ?? units.find((item) => item.name === row.unit)?.id ?? units[0]?.id ?? '',
-            qty: qtyFromApi(row.qty),
-            inboundUnitPrice: moneyDigitsFromApi(row.inboundUnitPrice),
             note: row.note ?? '',
             receivedByUserId:
               row.receivedByUserId ??
@@ -721,36 +748,27 @@ function OutboundDialog({
               )?.id ??
               '',
             productionOrderCode: row.productionOrderCode ?? '',
+            lines: [
+              {
+                name: row.name,
+                sku: row.sku ?? '',
+                materialId: row.materialId,
+                unitId:
+                  row.unitId ??
+                  units.find((item) => item.name === row.unit)?.id ??
+                  units[0]?.id ??
+                  '',
+                qty: qtyFromApi(row.qty),
+              },
+            ],
           }
         : {
             ...EMPTY_OUTBOUND,
             issuedAt: new Date().toISOString().slice(0, 10),
-            unitId: units[0]?.id ?? '',
+            lines: [{ ...EMPTY_OUTBOUND_LINE, unitId: units[0]?.id ?? '' }],
           },
     )
   }, [open, row, units, users, form])
-
-  const materialId = form.watch('materialId')
-  const qty = form.watch('qty')
-  const sku = form.watch('sku')
-  const inboundUnitPrice = form.watch('inboundUnitPrice')
-
-  const selected = materials.find((item) => item.id === materialId)
-  const available = useMemo(() => {
-    const onHand = Number(qtyFromApi(selected?.qty ?? '0'))
-    // Khi sửa, số đã xuất của chính dòng này được cộng lại vào tồn khả dụng.
-    if (kind !== 'create' && row && row.materialId === materialId) {
-      return onHand + Number(qtyFromApi(row.qty))
-    }
-    return onHand
-  }, [kind, materialId, row, selected?.qty])
-  const remaining = available - (Number(qty) || 0)
-  const fifo = useMemo(
-    () => takeFifoLayers(selected?.priceLayers ?? [], Number(qty) || 0),
-    [qty, selected?.priceLayers],
-  )
-  const amount =
-    kind === 'create' ? fifo.amount : row ? String(Math.round(Number(row.amount) || 0)) : ''
 
   const unitOptions: SearchSelectOption[] = units.map((unit) => ({
     id: unit.id,
@@ -761,43 +779,67 @@ function OutboundDialog({
     name: item.fullName,
     secondary: item.username,
   }))
+  const fullScreen = useIsMobile()
+
   function submit(values: OutboundFormValues) {
     if (readOnly) return
-    onSave({
-      issuedAt: values.issuedAt,
-      name: values.name.trim(),
-      sku: values.sku.trim() || undefined,
-      materialId: values.materialId,
-      unitId: values.unitId || undefined,
-      unitName: units.find((unit) => unit.id === values.unitId)?.name,
-      qty: values.qty,
-      stockUnitPrice: '0',
-      inboundUnitPrice: '0',
-      amount: '0',
-      note: values.note.trim() || undefined,
-      receivedByUserId: values.receivedByUserId || undefined,
-      applyToStock: !row,
-      productionOrderCode: values.productionOrderCode || null,
-    })
+    const payloads = values.lines
+      .filter((line) => line.name.trim())
+      .map((line) => ({
+        issuedAt: values.issuedAt,
+        name: line.name.trim(),
+        sku: line.sku.trim() || undefined,
+        materialId: line.materialId,
+        unitId: line.unitId || undefined,
+        unitName: units.find((unit) => unit.id === line.unitId)?.name,
+        qty: line.qty,
+        stockUnitPrice: '0',
+        inboundUnitPrice: '0',
+        amount: '0',
+        note: values.note.trim() || undefined,
+        receivedByUserId: values.receivedByUserId || undefined,
+        applyToStock: !row,
+        productionOrderCode: values.productionOrderCode || null,
+      }))
+    if (!payloads.length) return
+    onSave(payloads)
   }
 
-  const availableText = !materialId
-    ? 'Chọn tên hàng'
-    : available <= 0
-      ? 'Không có đủ số lượng để xuất'
-      : `${formatQty(String(available))}${selected?.unit ? ` ${selected.unit}` : ''}`
+  function lineStock(index: number) {
+    const line = watchedLines[index]
+    const selected = materials.find((item) => item.id === line?.materialId)
+    const onHand = Number(qtyFromApi(selected?.qty ?? '0'))
+    const reserved = watchedLines.reduce((sum, item, i) => {
+      if (i === index || item.materialId !== line?.materialId) return sum
+      return sum + (Number(item.qty) || 0)
+    }, 0)
+    const held =
+      kind !== 'create' && row && row.materialId === line?.materialId
+        ? Number(qtyFromApi(row.qty))
+        : 0
+    const available = onHand + held - reserved
+    const qty = Number(line?.qty) || 0
+    const remaining = available - qty
+    const fifo = takeFifoLayers(selected?.priceLayers ?? [], qty)
+    const amount =
+      kind === 'create' ? fifo.amount : row ? String(Math.round(Number(row.amount) || 0)) : ''
+    return { selected, available, remaining, qty, fifo, amount }
+  }
 
-  const availableHelper = !materialId
-    ? 'Tồn hiện tại, trừ dần khi xuất'
-    : available <= 0
-      ? 'Hàng này đã hết tồn'
-      : qty
-        ? remaining < 0
-          ? 'Vượt quá số lượng sẵn có'
-          : `Còn lại ${formatQty(String(remaining))}${selected?.unit ? ` ${selected.unit}` : ''}`
-        : 'Tồn hiện tại, trừ dần khi xuất'
-
-  const availableError = Boolean(materialId && (available <= 0 || (qty && remaining < 0)))
+  if (readOnly && row) {
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        fullWidth
+        fullScreen={fullScreen}
+        maxWidth="md"
+        slotProps={{ transition: { onExited } }}
+      >
+        <OutboundView row={row} profile={profile} onClose={onClose} />
+      </Dialog>
+    )
+  }
 
   return (
     <CrudDialogShell<OutboundFormValues>
@@ -812,11 +854,10 @@ function OutboundDialog({
       onSubmit={submit}
       saving={saving}
       submitLabel={kind === 'create' ? profile.outboundLabel : undefined}
-      submitDisabled={kind === 'create' && available <= 0}
       onClose={onClose}
       onExited={onExited}
     >
-      <FormRow columns={3} sx={{ mt: 1 }}>
+      <FormRow columns={2} sx={{ mt: 1 }}>
         <FormTextField<OutboundFormValues>
           name="issuedAt"
           label="Ngày xuất"
@@ -824,15 +865,6 @@ function OutboundDialog({
           required
           readOnly={readOnly}
           slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <FormSearchSelect<OutboundFormValues>
-          name="unitId"
-          label="Đơn vị tính"
-          options={unitOptions}
-          required
-          readOnly={readOnly}
-          displayValue={row?.unit}
-          placeholder="Tìm đơn vị…"
         />
         <FormSearchSelect<OutboundFormValues>
           name="productionOrderCode"
@@ -846,77 +878,147 @@ function OutboundDialog({
         />
       </FormRow>
 
-      <FormRow>
-        <MaterialField
-          // Control<T> của RHF không gán được giữa các T khác nhau (hạn chế
-          // variance của thư viện), nên MaterialField nhận Control<any> và ép kiểu ở đây.
-          control={form.control as unknown as Control<any>}
-          kind={kind}
-          readOnly={readOnly}
-          materials={materials}
-          loading={materialsLoading}
-          noun={profile.noun}
-          nameLabel={profile.nameLabel}
-          createLabel={profile.createLabel}
-          onSelect={(material) => {
-            if (!material) {
-              if (kind !== 'edit') form.setValue('materialId', null)
-              form.setValue('sku', '')
-              return
-            }
-            form.setValue('materialId', material.id)
-            form.setValue('sku', material.sku ?? '')
-            if (material.unitId) form.setValue('unitId', material.unitId)
-            if (Number(qtyFromApi(material.qty ?? '0')) <= 0) form.setValue('qty', '')
-          }}
-        />
-        <TextInput label={profile.skuLabel} value={sku || '—'} readOnly />
-      </FormRow>
-
-      <FormRow>
-        <TextInput
-          label="SL sẵn có"
-          value={availableText}
-          readOnly
-          helperText={availableHelper}
-          errorText={availableError ? availableHelper : undefined}
-        />
-        <FormQtyField<OutboundFormValues>
-          name="qty"
-          label="Số lượng xuất"
-          required
-          readOnly={readOnly}
-          disabled={available <= 0}
-          rules={{
-            validate: (value) => {
-              const next = Number(value) || 0
-              if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
-              if (available <= 0) return 'Không có đủ số lượng để xuất'
-              if (next > available) {
-                return `SL sẵn có ${formatQty(String(available))}, không xuất quá số này`
-              }
-              return true
-            },
-          }}
-        />
-      </FormRow>
-
-      <FormRow>
-        <TextInput
-          label="Đơn giá xuất"
-          value={
-            kind === 'create'
-              ? fifo.label
-              : formatPriceBreakdown(row?.priceBreakdown, inboundUnitPrice)
-          }
-          readOnly
-          multiline
-        />
-        <TextInput label="Thành tiền" value={amount ? formatMoney(amount) : ''} readOnly />
-      </FormRow>
-      <Typography variant="caption" color="text.secondary">
-        Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
-      </Typography>
+      <Stack spacing={1.25}>
+        {lines.fields.map((field, index) => {
+          const line = watchedLines[index]
+          const stock = lineStock(index)
+          const availableText = !line?.materialId
+            ? 'Chọn tên hàng'
+            : stock.available <= 0
+              ? 'Không có đủ số lượng để xuất'
+              : `${formatQty(String(stock.available))}${stock.selected?.unit ? ` ${stock.selected.unit}` : ''}`
+          const availableHelper = !line?.materialId
+            ? 'Tồn hiện tại, trừ dần khi xuất'
+            : stock.available <= 0
+              ? 'Hàng này đã hết tồn'
+              : line.qty
+                ? stock.remaining < 0
+                  ? 'Vượt quá số lượng sẵn có'
+                  : `Còn lại ${formatQty(String(stock.remaining))}${stock.selected?.unit ? ` ${stock.selected.unit}` : ''}`
+                : 'Tồn hiện tại, trừ dần khi xuất'
+          const availableError = Boolean(
+            line?.materialId && (stock.available <= 0 || (line.qty && stock.remaining < 0)),
+          )
+          return (
+            <Paper key={field.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <FormRow>
+                    <MaterialField
+                      control={form.control as unknown as Control<any>}
+                      name={`lines.${index}.name`}
+                      kind={kind}
+                      readOnly={readOnly}
+                      materials={materials}
+                      loading={materialsLoading}
+                      noun={profile.noun}
+                      nameLabel={profile.nameLabel}
+                      createLabel={profile.createLabel}
+                      onSelect={(material) => {
+                        if (!material) {
+                          if (kind !== 'edit') form.setValue(`lines.${index}.materialId`, null)
+                          form.setValue(`lines.${index}.sku`, '')
+                          return
+                        }
+                        form.setValue(`lines.${index}.materialId`, material.id)
+                        form.setValue(`lines.${index}.sku`, material.sku ?? '')
+                        if (material.unitId) form.setValue(`lines.${index}.unitId`, material.unitId)
+                        if (Number(qtyFromApi(material.qty ?? '0')) <= 0) {
+                          form.setValue(`lines.${index}.qty`, '')
+                        }
+                      }}
+                    />
+                    <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
+                  </FormRow>
+                  <FormRow columns={3}>
+                    <FormSearchSelect<OutboundFormValues>
+                      name={`lines.${index}.unitId`}
+                      label="Đơn vị tính"
+                      options={unitOptions}
+                      required
+                      readOnly={readOnly}
+                      displayValue={index === 0 ? row?.unit : undefined}
+                      placeholder="Tìm đơn vị…"
+                    />
+                    <TextInput
+                      label="SL sẵn có"
+                      value={availableText}
+                      readOnly
+                      helperText={availableHelper}
+                      errorText={availableError ? availableHelper : undefined}
+                    />
+                    <FormQtyField<OutboundFormValues>
+                      name={`lines.${index}.qty`}
+                      label="Số lượng xuất"
+                      required
+                      readOnly={readOnly}
+                      disabled={stock.available <= 0}
+                      rules={{
+                        validate: (value) => {
+                          const next = Number(value) || 0
+                          const current = lineStock(index)
+                          if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
+                          if (current.available <= 0) return 'Không có đủ số lượng để xuất'
+                          if (next > current.available) {
+                            return `SL sẵn có ${formatQty(String(current.available))}, không xuất quá số này`
+                          }
+                          return true
+                        },
+                      }}
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <TextInput
+                      label="Đơn giá xuất"
+                      value={
+                        kind === 'create'
+                          ? stock.fifo.label
+                          : formatPriceBreakdown(row?.priceBreakdown, row?.inboundUnitPrice)
+                      }
+                      readOnly
+                      multiline
+                    />
+                    <TextInput
+                      label="Thành tiền"
+                      value={stock.amount ? formatMoney(stock.amount) : ''}
+                      readOnly
+                    />
+                  </FormRow>
+                  <Typography variant="caption" color="text.secondary">
+                    Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
+                  </Typography>
+                </Box>
+                {kind === 'create' ? (
+                  <LineActions
+                    addLabel={`Thêm ${profile.noun}`}
+                    removeLabel={`Xóa ${profile.noun}`}
+                    onAdd={() =>
+                      lines.insert(
+                        index + 1,
+                        {
+                          ...EMPTY_OUTBOUND_LINE,
+                          unitId: form.getValues('lines.0.unitId') || units[0]?.id || '',
+                        },
+                        { shouldFocus: false },
+                      )
+                    }
+                    onRemove={() => {
+                      if (lines.fields.length <= 1) {
+                        form.setValue('lines', [
+                          { ...EMPTY_OUTBOUND_LINE, unitId: units[0]?.id ?? '' },
+                        ])
+                        return
+                      }
+                      lines.remove(index)
+                    }}
+                    removeDisabled={lines.fields.length <= 1 && !line?.name}
+                  />
+                ) : null}
+              </Stack>
+            </Paper>
+          )
+        })}
+      </Stack>
 
       <FormRow>
         <TextInput

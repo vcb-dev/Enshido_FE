@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Box,
+  Dialog,
   IconButton,
   LinearProgress,
   Stack,
@@ -11,7 +12,7 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import { toast } from 'sonner'
 import type { OrderImage, ProductionImageKind } from '../api/productionOrders'
-import { cloudinaryThumb, uploadImageToCloudinary } from '../api/uploads'
+import { cloudinaryFit, cloudinaryThumb, uploadImageToCloudinary } from '../api/uploads'
 
 type Pending = { key: string; name: string; progress: number }
 
@@ -38,6 +39,7 @@ export function ImageUploadField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
+  const [preview, setPreview] = useState<OrderImage | null>(null)
   // Upload chạy song song nên đọc giá trị mới nhất qua ref, tránh ghi đè lẫn nhau.
   const latest = useRef(value)
   latest.current = value
@@ -143,11 +145,19 @@ export function ImageUploadField({
         {value.map((image) => (
           <Box key={image.publicId} sx={{ position: 'relative', width: THUMB, height: THUMB }}>
             <Box
-              component="a"
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              sx={{ display: 'block', width: '100%', height: '100%' }}
+              component="button"
+              type="button"
+              aria-label="Xem ảnh"
+              onClick={() => setPreview(image)}
+              sx={{
+                display: 'block',
+                width: '100%',
+                height: '100%',
+                p: 0,
+                border: 0,
+                bgcolor: 'transparent',
+                cursor: 'zoom-in',
+              }}
             >
               <Box
                 component="img"
@@ -161,7 +171,10 @@ export function ImageUploadField({
                 <IconButton
                   size="small"
                   aria-label="Gỡ ảnh"
-                  onClick={() => remove(image.publicId)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    remove(image.publicId)
+                  }}
                   sx={{
                     position: 'absolute',
                     top: -8,
@@ -235,6 +248,53 @@ export function ImageUploadField({
           </Box>
         ) : null}
       </Box>
+
+      <Dialog
+        open={Boolean(preview)}
+        onClose={() => setPreview(null)}
+        maxWidth="md"
+        fullWidth
+        onClick={(event) => event.stopPropagation()}
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: '#111',
+              boxShadow: 'none',
+              overflow: 'hidden',
+            },
+          },
+        }}
+      >
+        <IconButton
+          aria-label="Đóng"
+          onClick={() => setPreview(null)}
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 1,
+            color: '#fff',
+            bgcolor: 'rgba(0,0,0,0.45)',
+            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+        {preview ? (
+          <Box
+            component="img"
+            src={cloudinaryFit(preview.url, 1400)}
+            alt="Xem trước ảnh"
+            sx={{
+              display: 'block',
+              width: '100%',
+              maxHeight: '86vh',
+              objectFit: 'contain',
+              bgcolor: '#111',
+            }}
+          />
+        ) : null}
+      </Dialog>
     </Stack>
   )
 }

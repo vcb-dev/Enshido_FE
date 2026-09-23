@@ -428,7 +428,13 @@ function orderColumns(
         ),
       renderSub: (sub) => (
         <>
-          <Link component={RouterLink} to={`/tickets/${sub.code}`} sx={{ fontWeight: 600 }}>
+          <Link
+            component={RouterLink}
+            to={`/tickets/${sub.code}`}
+            underline="none"
+            color="inherit"
+            sx={{ fontWeight: 600 }}
+          >
             {sub.code}
           </Link>
           {sub.workerName ? (
@@ -476,13 +482,6 @@ function orderColumns(
       ),
     },
     { key: 'returnedQty', header: 'Đã trả', width: 68, numeric: true },
-    {
-      key: 'leadTime',
-      header: 'Thời gian cần',
-      width: 104,
-      ellipsis: true,
-      render: (row) => row.leadTime ?? '—',
-    },
     {
       key: 'trackingCode',
       header: 'Mã theo dõi',

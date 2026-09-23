@@ -1,6 +1,6 @@
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, FocusEvent } from 'react'
 import { SuggestTextInput } from '../SuggestTextInput'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
@@ -13,6 +13,7 @@ export type FormTextFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
     transform?: (value: string) => string
     /** Tên đã có trên kho — gợi ý phần còn lại kiểu Excel khi gõ. */
     suggestions?: string[]
+    onBlur?: TextInputProps['onBlur']
   }
 
 /** Ô nhập văn bản nối với react-hook-form qua Controller. */
@@ -23,6 +24,7 @@ export function FormTextField<T extends FieldValues>({
   required,
   transform,
   suggestions,
+  onBlur: onBlurProp,
   ...props
 }: FormTextFieldProps<T>) {
   const { field, fieldState } = useController({
@@ -30,7 +32,7 @@ export function FormTextField<T extends FieldValues>({
     control,
     rules: withRequiredRule(rules, required),
   })
-  const { ref, value, onChange, ...rest } = field
+  const { ref, value, onChange, onBlur, ...rest } = field
   const shared = {
     ...props,
     ...rest,
@@ -39,6 +41,10 @@ export function FormTextField<T extends FieldValues>({
       ? (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
           onChange(transform(event.target.value))
       : onChange,
+    onBlur: (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      onBlur()
+      onBlurProp?.(event)
+    },
     inputRef: ref,
     required,
     errorText: fieldState.error?.message,

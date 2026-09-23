@@ -213,6 +213,7 @@ export type ProductionOrderDetail = Omit<ProductionOrderRow, 'images' | 'subTick
   silverWeight: string | null
   laserEngraving: string | null
   otherRequirements: string | null
+  nvlLines: ProductionNvlWorkLine[]
   castingSentDate: string | null
   castingReturnedDate: string | null
   parentCode: string | null
@@ -275,6 +276,8 @@ export type UpsertProductionOrderPayload = {
   qty: number
   qtyUnit?: string | null
   finishedProductQty?: number | null
+  /** Số lượng BTP xuất kho khi lên đơn BTP. */
+  btpQty?: number | null
   model3dCode?: string
   model3dUrl?: string | null
   leadTime: string
@@ -297,6 +300,7 @@ export type UpsertProductionOrderPayload = {
   debtStatus?: string
   parentCode?: string
   images: OrderImage[]
+  nvlLines?: ProductionNvlWorkLine[]
 }
 
 export type HandoverPayload = {
@@ -631,6 +635,7 @@ export type FinishedProductOption = {
   laserEngraving: string | null
   otherRequirements: string | null
   remainingQty: number
+  qtyUnit: string | null
   images: Array<{
     kind: ProductionImageKind
     url: string
@@ -638,6 +643,33 @@ export type FinishedProductOption = {
     width: number | null
     height: number | null
   }>
+  bomLines: FinishedProductBomLine[]
+}
+
+export type ProductionNvlWorkLine = {
+  materialId: string
+  platingColor: string | null
+  qty: number | null
+  stoneWeight: string | null
+  laserEngraving: string | null
+  otherRequirements: string | null
+}
+
+export type FinishedProductBomLine = {
+  id: string
+  sku: string | null
+  name: string
+  unit: string
+  qty: string
+  locationCode: string | null
+  shape: string | null
+  color: string | null
+  materialType: string | null
+  bodyMetal: string | null
+  metalKind: string | null
+  sizeLabel: string | null
+  note: string | null
+  imageUrl: string | null
 }
 
 export type NvlOption = {
