@@ -1277,20 +1277,25 @@ function ReworkHistory({ stages }: { stages: StageEntry[] }) {
   )
 }
 
-/** Đơn trong kho thành phẩm: vào kho khi chốt Hoàn thiện trên phiếu, xuất từng phần qua phiếu xuất hàng. */
+/** Chốt Hoàn thiện tạo phiếu chờ; kho xác nhận rồi số lượng mới được cộng vào tồn. */
 function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
   const goods = order.finishedGoods
   return (
     <Section title="Kho thành phẩm & xuất hàng">
       {!goods ? (
         <Typography variant="body2" color="text.secondary">
-          Chưa vào kho thành phẩm — đơn vào kho khi bấm “Xác nhận hoàn thiện” ở cột Hoàn thiện trên phiếu.
+          Chưa có phiếu hoàn thiện.
         </Typography>
       ) : (
         <Stack spacing={1.25}>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-            <Field label="Nhập kho" value={`${formatDateTime(goods.receivedAt)} · ${goods.receivedByName}`} />
-            <Field label="Số lượng nhập" value={goods.qty} />
+            <Field
+              label={goods.pendingQty > 0 ? 'Tạo phiếu chờ nhập' : 'Nhập kho'}
+              value={`${formatDateTime(goods.receivedAt)} · ${goods.receivedByName}`}
+            />
+            <Field label="Đã hoàn thiện" value={goods.completedQty} />
+            <Field label="Chờ vào tồn" value={goods.pendingQty} />
+            <Field label="Đã vào tồn" value={goods.qty} />
             <Field label="Đã xuất" value={`${goods.shippedQty} / ${goods.qty}`} />
             <Field label="Còn trong kho" value={goods.remainingQty} />
           </Box>

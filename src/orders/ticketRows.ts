@@ -298,7 +298,7 @@ export function outcomeLines(
     return [
       formatDateShort(goods.receivedAt),
       goods.receivedByName,
-      `Vào kho: ${goods.qty}`,
+      goods.pendingQty > 0 ? `Chờ vào tồn: ${goods.pendingQty}` : `Vào tồn: ${goods.qty}`,
     ]
   }
 

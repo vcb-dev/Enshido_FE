@@ -15,6 +15,7 @@ import {
   getShipmentApi,
   listAllShipmentsApi,
   listFinishedGoodsReceiptsApi,
+  receiveFinishedGoodsReceiptApi,
   updateFinishedGoodsReceiptApi,
   updateShipmentApi,
   type FgFlowStatus,
@@ -390,6 +391,24 @@ function FinishedGoodsInboundTable() {
     },
   })
 
+  const receive = useMutation({
+    mutationFn: (row: FinishedGoodsReceiptRow) => receiveFinishedGoodsReceiptApi(row.id),
+    onSuccess: async (_result, row) => {
+      toast.success(`Đã nhập ${formatQty(String(row.pendingQty))} ${row.qtyUnit ?? 'sản phẩm'} vào tồn`)
+      await Promise.all(
+        [
+          ['finished-goods-stock'],
+          ['finished-goods-receipts'],
+          ['finished-goods-order-options'],
+          ['finished-product-options'],
+          ['production-orders'],
+          ['production-order', row.orderCode],
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      )
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   const columns = useMemo(
     () => inboundColumns(totals, {
       search: params.search,
@@ -400,8 +419,10 @@ function FinishedGoodsInboundTable() {
       onView: dialog.openView,
       onEdit: dialog.openEdit,
       onDelete: (row) => del.request(row),
+      onReceive: (row) => receive.mutate(row),
+      receivingId: receive.isPending ? (receive.variables?.id ?? null) : null,
     }),
-    [del.request, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, table, totals],
+    [del.request, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.mutate, receive.variables, table, totals],
   )
 
   const save = useMutation({
@@ -441,7 +462,7 @@ function FinishedGoodsInboundTable() {
         errorText={receipts.error instanceof Error ? receipts.error.message : undefined}
         emptyText={filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Chưa có dòng nhập kho.'}
         variant="grid"
-        minWidth={1280}
+        minWidth={1580}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}
@@ -840,6 +861,9 @@ function patchFinishedGoodsReceiptRow(row: FinishedGoodsReceiptRow, payload: Ups
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     qty,
+    stockedQty: payload.qty,
+    pendingQty: 0,
+    status: 'RECEIVED',
     remainingQty: payload.qty - row.shippedQty,
     amount: String(Math.round(payload.qty * unitPrice)),
   }
@@ -1133,14 +1157,30 @@ function inboundColumns(
     onView: (row: FinishedGoodsReceiptRow) => void
     onEdit: (row: FinishedGoodsReceiptRow) => void
     onDelete: (row: FinishedGoodsReceiptRow) => void
+    onReceive: (row: FinishedGoodsReceiptRow) => void
+    receivingId: string | null
   },
 ): Column<FinishedGoodsReceiptRow>[] {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   return [
     {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 112,
+      align: 'center',
+      render: (row) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={row.status === 'PENDING' ? 'warning' : 'success'}
+          label={row.status === 'PENDING' ? 'Chờ vào tồn' : 'Đã vào tồn'}
+        />
+      ),
+    },
+    {
       key: 'receivedAt',
       card: 'meta',
-      header: 'Ngày nhập',
+      header: 'Ngày tạo / nhập',
       width: 108,
       sortable: true,
       render: (row) => formatStockedDate(row.receivedAt),
@@ -1167,11 +1207,25 @@ function inboundColumns(
     },
     {
       key: 'qty',
-      header: headerTotal('Số lượng', totals.qty, formatQty),
+      header: headerTotal('SL hoàn thiện', totals.qty, formatQty),
       width: 120,
       numeric: true,
       sortable: true,
       render: (row) => formatQty(row.qty),
+    },
+    {
+      key: 'pendingQty',
+      header: 'Chờ nhập',
+      width: 92,
+      numeric: true,
+      render: (row) => formatQty(String(row.pendingQty)),
+    },
+    {
+      key: 'stockedQty',
+      header: 'Đã vào tồn',
+      width: 96,
+      numeric: true,
+      render: (row) => formatQty(String(row.stockedQty)),
     },
     {
       key: 'unitPrice',
@@ -1192,7 +1246,7 @@ function inboundColumns(
     { key: 'note', header: 'Ghi chú', width: 120, ellipsis: true, render: (row) => row.note ?? '—' },
     {
       key: 'enteredBy',
-      header: 'Người nhập',
+      header: 'Người tạo / nhập',
       width: 110,
       ellipsis: true,
       sortable: true,
@@ -1209,20 +1263,38 @@ function inboundColumns(
       key: 'actions',
       card: 'actions',
       header: 'Hành động',
-      width: 120,
+      width: 210,
       align: 'center',
       render: (row) => (
-        <RowActions
-          onView={() => opts.onView(row)}
-          onEdit={() => opts.onEdit(row)}
-          onDelete={() => opts.onDelete(row)}
-          deleteDisabled={row.shippedQty > 0}
-          titles={
-            row.shippedQty > 0
-              ? { delete: `Đã xuất ${row.shippedQty} — không xóa phiếu nhập được` }
-              : undefined
-          }
-        />
+        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', alignItems: 'center' }}>
+          {row.status === 'PENDING' ? (
+            <Button
+              size="small"
+              variant="contained"
+              color="success"
+              loading={opts.receivingId === row.id}
+              onClick={() => opts.onReceive(row)}
+            >
+              Nhập kho
+            </Button>
+          ) : null}
+          <RowActions
+            onView={() => opts.onView(row)}
+            onEdit={() => opts.onEdit(row)}
+            editDisabled={row.status === 'PENDING'}
+            onDelete={() => opts.onDelete(row)}
+            deleteDisabled={row.status === 'PENDING' || row.shippedQty > 0}
+            titles={{
+              edit: row.status === 'PENDING' ? 'Nhập kho trước khi chỉnh sửa' : 'Chỉnh sửa',
+              delete:
+                row.status === 'PENDING'
+                  ? 'Gỡ Hoàn thiện từ đơn sản xuất nếu cần hủy phiếu chờ'
+                  : row.shippedQty > 0
+                    ? `Đã xuất ${row.shippedQty} — không xóa phiếu nhập được`
+                    : 'Xóa',
+            }}
+          />
+        </Stack>
       ),
     },
   ]

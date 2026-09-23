@@ -189,6 +189,8 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
     const withGoods = order({
       finishedGoods: {
         qty: 9,
+        completedQty: 9,
+        pendingQty: 0,
         receivedAt: '2026-09-19T12:00:00.000Z',
         receivedByName: 'KCS Bình',
         shippedQty: 0,
@@ -196,7 +198,7 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
         shipments: [],
       },
     })
-    expect(outcomeLines(withGoods, 'FINISH')).toContain('Vào kho: 9')
+    expect(outcomeLines(withGoods, 'FINISH')).toContain('Vào tồn: 9')
   })
 
   it('đơn chưa vào kho thì cột Hoàn thiện trống', () => {

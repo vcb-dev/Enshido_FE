@@ -254,7 +254,12 @@ export type ProductionOrderDetail = Omit<
   /** Số dòng phiếu xuất NVL đang gắn đơn. */
   linkedOutbounds: number
   finishedGoods: {
+    /** Số lượng đã được kho xác nhận vào tồn. */
     qty: number
+    /** Tổng số lượng sản xuất đã chốt hoàn thiện. */
+    completedQty: number
+    /** Số lượng đã hoàn thiện nhưng kho chưa xác nhận nhập. */
+    pendingQty: number
     receivedAt: string
     receivedByName: string
     shippedQty: number

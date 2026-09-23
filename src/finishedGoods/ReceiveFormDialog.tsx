@@ -162,8 +162,20 @@ export function ReceiveFormDialog({
           <Paper variant="outlined" sx={{ p: 1.75 }}>
             <DetailSection>Phiếu nhập</DetailSection>
             <Box sx={DETAIL_GRID}>
-              <DetailFact label="Ngày nhập" value={formatStockedDate(row.receivedAt)} />
-              <DetailFact label="Người nhập" value={row.receivedByName} />
+              <DetailFact
+                label={'status' in row && row.status === 'PENDING' ? 'Ngày tạo phiếu' : 'Ngày nhập'}
+                value={formatStockedDate(row.receivedAt)}
+              />
+              <DetailFact
+                label={'status' in row && row.status === 'PENDING' ? 'Người hoàn thiện' : 'Người nhập'}
+                value={row.receivedByName}
+              />
+              {'status' in row ? (
+                <DetailFact
+                  label="Trạng thái"
+                  value={row.status === 'PENDING' ? 'Chờ vào tồn' : 'Đã vào tồn'}
+                />
+              ) : null}
             </Box>
           </Paper>
           <Paper variant="outlined" sx={{ p: 1.75 }}>
@@ -174,6 +186,9 @@ export function ReceiveFormDialog({
               <DetailFact label="Đơn vị" value={row.qtyUnit} />
               <DetailFact label="Size" value={row.sizeLabel} />
               <DetailFact label="Số lượng" value={formatQty(qty)} />
+              {'pendingQty' in row && row.pendingQty > 0 ? (
+                <DetailFact label="Chờ vào tồn" value={formatQty(String(row.pendingQty))} />
+              ) : null}
               <DetailFact label="Đơn giá" value={price ? formatMoney(price) : ''} />
               <DetailFact label="Thành tiền" value={amount ? formatMoney(amount) : ''} />
             </Box>
