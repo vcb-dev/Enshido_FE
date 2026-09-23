@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -49,6 +49,7 @@ import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/Order
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved } from '../orders/orderCache'
+import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
@@ -570,9 +571,9 @@ function orderColumns(
     {
       key: 'dueDate',
       header: 'Ngày cần trả',
-      width: 148,
+      width: 156,
       filter: filters.dueDate,
-      render: (row) => formatStockedDate(row.dueDate),
+      render: (row) => <DeadlineCell row={row} />,
     },
     {
       key: 'actions',
@@ -670,4 +671,38 @@ function subTicketListStatus(sub: SubTicketSummary): ProductionStatus | null {
   if (sub.state === 'FINISH') return 'FINISHING'
   if (sub.state === 'DEFECT') return 'DEFECT'
   return sub.stage
+}
+
+const DEADLINE_TONE = {
+  overdue: { bg: '#fdecea', fg: '#b3261e', border: '#ef9a9a' },
+  today: { bg: '#ffebee', fg: '#b71c1c', border: '#e57373' },
+  soon: { bg: '#fff4d6', fg: '#8a6100', border: '#f0c36d' },
+} as const
+
+function DeadlineCell({ row }: { row: ProductionOrderRow }) {
+  const warning = deadlineWarning(row.dueDate, row.status)
+  if (!row.dueDate) return '—'
+  const tone = warning ? DEADLINE_TONE[warning.tone] : null
+  return (
+    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+      <Typography variant="body2" sx={{ fontWeight: warning ? 700 : 400, color: tone?.fg }}>
+        {formatStockedDate(row.dueDate)}
+      </Typography>
+      {warning && tone ? (
+        <Chip
+          size="small"
+          label={warning.label}
+          sx={{
+            height: 22,
+            bgcolor: tone.bg,
+            color: tone.fg,
+            border: '1px solid',
+            borderColor: tone.border,
+            fontWeight: 700,
+            '& .MuiChip-label': { px: 0.75 },
+          }}
+        />
+      ) : null}
+    </Stack>
+  )
 }
