@@ -119,11 +119,6 @@ function stockFacts(row: StockRow, profile: StockProfile) {
       value: row.weight ? formatQty(row.weight) : null,
       show: profile.showWeight,
     },
-    {
-      label: 'Trọng lượng đá (g)',
-      value: row.stoneWeight ? formatQty(row.stoneWeight) : null,
-      show: Boolean(row.stoneWeight) || row.metalKind === 'STONE',
-    },
     { label: 'Đơn vị', value: row.unit },
     { label: 'Đơn giá tồn', value: formatMoney(row.stockUnitPrice) },
     {
