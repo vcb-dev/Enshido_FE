@@ -461,7 +461,7 @@ function BtpDialog({
           }
         : {
             ...EMPTY_BTP,
-            receivedAt: new Date().toISOString().slice(0, 10),
+            receivedAt: todayYmd(),
             unitId: chiec?.id ?? units[0]?.id ?? '',
           },
     )
@@ -480,7 +480,7 @@ function BtpDialog({
   function submit(values: BtpFormValues) {
     if (readOnly) return
     onSave({
-      receivedAt: values.receivedAt,
+      receivedAt: todayYmd(),
       craftsmanUserId: values.craftsmanUserId,
       name: values.name.trim(),
       unitId: values.unitId,
@@ -504,15 +504,7 @@ function BtpDialog({
       onExited={onExited}
       editLog={row ? { entityType: 'btp_waiting', entityId: row.id } : undefined}
     >
-      <FormRow columns={3} sx={{ mt: 1 }}>
-        <FormTextField<BtpFormValues>
-          name="receivedAt"
-          label="Ngày nhập"
-          type="date"
-          required
-          readOnly={readOnly}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+      <FormRow columns={2} sx={{ mt: 1 }}>
         <FormSearchSelect<BtpFormValues>
           name="craftsmanUserId"
           label="Thợ nguội"
@@ -572,4 +564,10 @@ function BtpDialog({
       />
     </CrudDialogShell>
   )
+}
+
+function todayYmd() {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }

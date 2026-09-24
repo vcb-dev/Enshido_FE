@@ -15,7 +15,6 @@ import {
   FormRow,
   FormSearchSelect,
   FormSelect,
-  FormTextField,
   TextInput,
 } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
@@ -139,7 +138,7 @@ export function ReceiveFormDialog({
     onSaved({
       orderCode: values.orderCode,
       qty: Number(values.qty),
-      receivedAt: values.receivedAt,
+      receivedAt: todayYmd(),
       sizeLabel: (row?.sizeLabel ?? item?.sizeLabel)?.trim() || undefined,
       weight: row?.weight ?? item?.weight ?? undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
@@ -224,15 +223,7 @@ export function ReceiveFormDialog({
       onExited={() => undefined}
       editLog={row ? { entityType: 'fg_receipt', entityId: row.id } : undefined}
     >
-      <FormRow columns={3} sx={{ mt: 1 }}>
-        <FormTextField<FormValues>
-          name="receivedAt"
-          label="Ngày nhập"
-          type="date"
-          required
-          readOnly={readOnly}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+      <FormRow columns={2} sx={{ mt: 1 }}>
         <FormSelect<FormValues>
           name="qtyUnit"
           label="Đơn vị tính"

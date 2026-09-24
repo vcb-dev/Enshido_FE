@@ -668,7 +668,7 @@ function InboundDialog({
           }
         : {
             ...EMPTY_INBOUND,
-            receivedAt: new Date().toISOString().slice(0, 10),
+            receivedAt: todayYmd(),
             lines: [{ ...EMPTY_INBOUND_LINE, unitId: units[0]?.id ?? '' }],
           },
     )
@@ -698,7 +698,7 @@ function InboundDialog({
     const payloads = values.lines
       .filter((line) => line.name.trim())
       .map((line) => ({
-        receivedAt: values.receivedAt,
+        receivedAt: todayYmd(),
         name: line.name.trim(),
         sku: line.sku.trim() || matchStockMaterial(materials, line.name)?.sku || undefined,
         materialId: line.materialId ?? matchStockMaterial(materials, line.name)?.id ?? null,
@@ -751,15 +751,7 @@ function InboundDialog({
       onExited={onExited}
       editLog={row ? { entityType: 'inbound', entityId: row.id } : undefined}
     >
-      <FormRow columns={2} sx={{ mt: 1 }}>
-        <FormTextField<InboundFormValues>
-          name="receivedAt"
-          label="Ngày nhập"
-          type="date"
-          required
-          readOnly={readOnly}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+      <FormRow columns={1} sx={{ mt: 1 }}>
         <TextInput
           label="Người nhập"
           value={row?.enteredBy || operatorName || '—'}
@@ -928,6 +920,12 @@ function bindInboundMaterial(
   if (material.unitId) form.setValue(`lines.${index}.unitId`, material.unitId)
   form.setValue(`lines.${index}.otherClassId`, material.otherClassId ?? '')
   void form.trigger(`lines.${index}.name`)
+}
+
+function todayYmd() {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
 function inboundOptimisticAt(ymd: string) {
