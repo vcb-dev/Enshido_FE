@@ -23,6 +23,7 @@ import {
   type LocationListResponse,
   type LocationOccupant,
   type LocationSlot,
+  type UpdateLocationPayload,
 } from '../api/locations'
 import {
   CrudDialogShell,
@@ -115,7 +116,7 @@ export function LocationsPage() {
       payload,
     }: {
       id: string
-      payload: { zone: string; aisle: number; level: string; position: number }
+      payload: UpdateLocationPayload
     }) => updateLocationApi(id, payload),
     onMutate: () => {
       dialog.close()
@@ -564,7 +565,7 @@ function EditLocationDialog({
   saving: boolean
   onClose: () => void
   onExited: () => void
-  onSave: (payload: { zone: string; aisle: number; level: string; position: number }) => void
+  onSave: (payload: UpdateLocationPayload) => void
 }) {
   const form = useForm<EditFormValues>({ defaultValues: EMPTY_EDIT })
 
@@ -615,9 +616,16 @@ function EditLocationDialog({
       maxWidth="sm"
       onClose={onClose}
       onExited={onExited}
-      onSubmit={() =>
-        onSave({ zone: letter, aisle: aisleNum, level: levelLetter, position: positionNum })
+      onSubmit={(values) =>
+        onSave({
+          zone: letter,
+          aisle: aisleNum,
+          level: levelLetter,
+          position: positionNum,
+          editReason: (values as EditFormValues & { editReason?: string }).editReason,
+        })
       }
+      editLog={row ? { entityType: 'location', entityId: row.id } : undefined}
     >
       {row?.occupied ? (
         <Alert severity="warning">

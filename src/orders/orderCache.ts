@@ -130,6 +130,7 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
     mainMaterial: order.mainMaterial,
     platingColor: order.platingColor,
     btpCategory: order.btpCategory,
+    btpName: order.btpName,
     productKind: order.productKind,
     askedUserName: order.askedUserName,
     receivedDate: order.receivedDate,

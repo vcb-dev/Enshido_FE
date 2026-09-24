@@ -4,6 +4,7 @@ import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogT
 import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form'
 import { useIsMobile } from '../../../hooks/useBreakpoint'
 import type { CrudDialogKind } from '../../../hooks/useCrudDialog'
+import { EditReasonBlock, type EditLogTarget } from './EditReasonBlock'
 import { Form } from './Form'
 
 export type CrudDialogShellProps<T extends FieldValues> = {
@@ -25,6 +26,8 @@ export type CrudDialogShellProps<T extends FieldValues> = {
    * nào đổi `submitLabel` sang việc khác (giao thợ, xác nhận…) thì nên đổi cả nhãn này.
    */
   pendingLabel?: string
+  /** Sửa thông tin: bắt buộc lý do và hiện lịch sử các lần trước. */
+  editLog?: EditLogTarget
   children: ReactNode
 }
 
@@ -46,17 +49,23 @@ export function CrudDialogShell<T extends FieldValues>({
   maxWidth = 'md',
   submitLabel,
   pendingLabel,
+  editLog,
   children,
 }: CrudDialogShellProps<T>) {
   const fullScreen = useIsMobile()
   const [busy, setBusy] = useState(false)
+  const [editReason, setEditReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
   const submitted = useRef(false)
   const pending = saving || busy
+  const needsReason = Boolean(editLog && kind === 'edit')
 
   useEffect(() => {
     if (!open) {
       setBusy(false)
       submitted.current = false
+      setEditReason('')
+      setReasonError('')
     }
   }, [open])
 
@@ -89,10 +98,14 @@ export function CrudDialogShell<T extends FieldValues>({
         form={form}
         onSubmit={async (values) => {
           if (submitted.current) return
+          if (needsReason && !editReason.trim()) {
+            setReasonError('Nhập lý do chỉnh sửa')
+            return
+          }
           submitted.current = true
           setBusy(true)
           try {
-            await onSubmit(values)
+            await onSubmit({ ...values, editReason: editReason.trim() })
           } catch {
             submitted.current = false
             setBusy(false)
@@ -116,6 +129,20 @@ export function CrudDialogShell<T extends FieldValues>({
           }}
         >
           {children}
+          {editLog && (kind === 'edit' || kind === 'view') ? (
+            <EditReasonBlock
+              entityType={editLog.entityType}
+              entityId={editLog.entityId}
+              reason={editReason}
+              onReasonChange={(value) => {
+                setEditReason(value)
+                if (value.trim()) setReasonError('')
+              }}
+              required={kind === 'edit'}
+              error={kind === 'edit' ? reasonError : undefined}
+              readOnly={kind === 'view'}
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           {kind === 'view' ? (

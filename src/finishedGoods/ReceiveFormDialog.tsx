@@ -29,6 +29,7 @@ type FormValues = {
   qtyUnit: string
   qty: string
   receivedAt: string
+  editReason?: string
 }
 
 function todayYmd() {
@@ -141,6 +142,7 @@ export function ReceiveFormDialog({
       receivedAt: values.receivedAt,
       sizeLabel: (row?.sizeLabel ?? item?.sizeLabel)?.trim() || undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
+      editReason: values.editReason?.trim() || undefined,
     })
   }
 
@@ -218,6 +220,7 @@ export function ReceiveFormDialog({
       submitLabel={kind === 'create' ? profile.inboundLabel : undefined}
       onClose={onClose}
       onExited={() => undefined}
+      editLog={row ? { entityType: 'fg_receipt', entityId: row.id } : undefined}
     >
       <FormRow columns={3} sx={{ mt: 1 }}>
         <FormTextField<FormValues>

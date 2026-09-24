@@ -66,6 +66,7 @@ export type UpdateLocationPayload = {
   aisle: number
   level: string
   position: number
+  editReason?: string
 }
 
 export function updateLocationApi(id: string, payload: UpdateLocationPayload) {

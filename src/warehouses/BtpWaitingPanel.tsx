@@ -396,6 +396,7 @@ type BtpFormValues = {
   qty: string
   weight: string
   note: string
+  editReason?: string
 }
 
 const EMPTY_BTP: BtpFormValues = {
@@ -487,6 +488,7 @@ function BtpDialog({
       qty: values.qty,
       weight: values.weight,
       note: values.note.trim() || undefined,
+      editReason: values.editReason?.trim() || undefined,
     })
   }
 
@@ -500,6 +502,7 @@ function BtpDialog({
       saving={saving}
       onClose={onClose}
       onExited={onExited}
+      editLog={row ? { entityType: 'btp_waiting', entityId: row.id } : undefined}
     >
       <FormRow columns={3} sx={{ mt: 1 }}>
         <FormTextField<BtpFormValues>

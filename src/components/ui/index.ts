@@ -44,6 +44,9 @@ export type { FormProps } from './form/Form'
 export { CrudDialogShell } from './form/CrudDialogShell'
 export type { CrudDialogShellProps } from './form/CrudDialogShell'
 
+export { EditReasonBlock } from './form/EditReasonBlock'
+export type { EditLogTarget } from './form/EditReasonBlock'
+
 export { FormTextField } from './form/FormTextField'
 export type { FormTextFieldProps } from './form/FormTextField'
 

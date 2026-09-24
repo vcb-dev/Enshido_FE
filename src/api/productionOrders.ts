@@ -50,6 +50,7 @@ export type ProductionOrderRow = {
   leadTime: string | null
   trackingCode: string | null
   closedBy: string
+  customerName: string | null
   description: string
   stoneColor: string | null
   stoneTypes: string[]
@@ -58,6 +59,8 @@ export type ProductionOrderRow = {
   mainMaterial: string | null
   platingColor: string | null
   btpCategory: string | null
+  /** Tên bán thành phẩm — điền sẵn khi chọn mã. */
+  btpName: string | null
   productKind: string | null
   askedUserName: string | null
   receivedDate: string
@@ -287,6 +290,7 @@ export type ProductionOrderLookups = {
   stoneTypes: string[]
   leadTimes: string[]
   debtStatuses: string[]
+  customers?: string[]
 }
 
 export type ProductionOrderListParams = {
@@ -310,6 +314,7 @@ export type UpsertProductionOrderPayload = {
   requestType: ProductionRequestType
   receivedDate: string
   closedBy: string
+  customerName?: string | null
   description: string
   qty: number
   qtyUnit?: string | null
@@ -333,12 +338,14 @@ export type UpsertProductionOrderPayload = {
   mainMaterial?: string
   platingColor?: string
   btpCategory?: string
+  btpName?: string
   productKind?: string
   askedUserId?: string | null
   debtStatus?: string
   parentCode?: string
   images: OrderImage[]
   nvlLines?: ProductionNvlWorkLine[]
+  editReason?: string
 }
 
 export type HandoverPayload = {
@@ -424,9 +431,11 @@ export type BtpOption = {
   bodyMetal: string | null
   productKind: string | null
   category: string | null
+  categoryCode?: string | null
   platingColor: string | null
   stoneColor: string | null
   sizeLabel: string | null
+  stoneWeight?: string | null
   images: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
 }
 
@@ -474,7 +483,7 @@ export type OrderCosting = {
   warnings: string[]
 }
 
-export type OrderCostPayload = { name: string; amount: string; note?: string }
+export type OrderCostPayload = { name: string; amount: string; note?: string; editReason?: string }
 
 const BASE = '/production-orders'
 
@@ -499,12 +508,16 @@ function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
     workState: row.workState ?? null,
     workStage: row.workStage ?? null,
     subTickets: row.subTickets ?? [],
+    btpName: row.btpName ?? null,
+    customerName: row.customerName ?? null,
   }
 }
 
 function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
   return {
     ...order,
+    btpName: order.btpName ?? order.btp?.name ?? null,
+    customerName: order.customerName ?? null,
     subTickets: order.subTickets ?? [],
     // Máy chủ chưa biết phiếu con thì cũng chưa chia được gì.
     subTicketTotals: order.subTicketTotals ?? { qty: 0, silverWeight: '0' },
@@ -665,6 +678,7 @@ export function listBtpOptionsApi(search = '') {
 export type FinishedProductOption = {
   code: string
   description: string
+  btpName?: string | null
   requestType: ProductionRequestType
   qty: number
   size: string | null
@@ -711,6 +725,7 @@ export type FinishedProductBomLine = {
   bodyMetal: string | null
   metalKind: string | null
   sizeLabel: string | null
+  stoneWeight?: string | null
   note: string | null
   imageUrl: string | null
 }
@@ -727,6 +742,7 @@ export type NvlOption = {
   bodyMetal: string | null
   metalKind: string | null
   sizeLabel: string | null
+  stoneWeight?: string | null
   note: string | null
   images: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
 }
@@ -760,10 +776,15 @@ export function updateOrderCostApi(code: string, costId: string, payload: OrderC
 }
 
 /** Sửa tiền công một khâu ngay ở phần chi phí (khâu đã được KCS nhận lại). */
-export function updateStageLaborApi(code: string, stageId: string, laborCost: string | null) {
+export function updateStageLaborApi(
+  code: string,
+  stageId: string,
+  laborCost: string | null,
+  editReason?: string,
+) {
   return apiFetch<{ success: boolean }>(orderPath(code, `/stages/${stageId}/labor`), {
     method: 'PATCH',
-    body: JSON.stringify({ laborCost }),
+    body: JSON.stringify({ laborCost, editReason }),
   })
 }
 

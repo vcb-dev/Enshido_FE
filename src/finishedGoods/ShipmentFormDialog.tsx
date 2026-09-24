@@ -15,15 +15,38 @@ import { FormFreeSoloField } from '../orders/FreeSoloFields'
 
 type LineValues = { orderCode: string; qty: string; unitPrice: string; note: string }
 
+type OrderStockInfo = {
+  remaining: number
+  unitCost: string
+  description: string
+  sizeLabel: string | null
+  mainMaterial: string | null
+  qtyUnit: string | null
+}
+
 type FormValues = {
   shippedAt: string
   customerName: string
   paymentMethod: string
   note: string
   lines: LineValues[]
+  editReason?: string
 }
 
 const EMPTY_LINE: LineValues = { orderCode: '', qty: '1', unitPrice: '', note: '' }
+
+function lineFromStock(orderCode: string | null | undefined, stock: FinishedGoodsStockRow[]): LineValues {
+  const code = orderCode?.trim()
+  if (!code) return { ...EMPTY_LINE }
+  const row = stock.find((item) => item.orderCode === code)
+  if (!row) return { ...EMPTY_LINE, orderCode: code }
+  return {
+    orderCode: code,
+    qty: String(row.remainingQty >= 1 ? row.remainingQty : 1),
+    unitPrice: moneyDigitsFromApi(row.unitCost),
+    note: row.description,
+  }
+}
 
 const digitsOnly = (value: string) => value.replace(/\D/g, '')
 
@@ -85,16 +108,34 @@ export function ShipmentFormDialog({
             customerName: '',
             paymentMethod: '',
             note: '',
-            lines: [{ ...EMPTY_LINE, orderCode: initialOrderCode ?? '' }],
+            lines: [lineFromStock(initialOrderCode, stock)],
           },
     )
   }, [open, shipment, initialOrderCode, form])
 
+  useEffect(() => {
+    if (!open || shipment || !initialOrderCode) return
+    const line = form.getValues('lines.0')
+    if (line.orderCode !== initialOrderCode || line.unitPrice) return
+    const filled = lineFromStock(initialOrderCode, stock)
+    if (!filled.unitPrice && filled.qty === '1') return
+    form.setValue('lines.0.qty', filled.qty)
+    form.setValue('lines.0.unitPrice', filled.unitPrice)
+    form.setValue('lines.0.note', filled.note)
+  }, [open, shipment, initialOrderCode, stock, form])
+
   // Khi sửa, SL của chính phiếu này được cộng lại vào tồn khả dụng.
   const available = useMemo(() => {
-    const map = new Map<string, { remaining: number; unitCost: string; description: string }>()
+    const map = new Map<string, OrderStockInfo>()
     for (const row of stock) {
-      map.set(row.orderCode, { remaining: row.remainingQty, unitCost: row.unitCost, description: row.description })
+      map.set(row.orderCode, {
+        remaining: row.remainingQty,
+        unitCost: row.unitCost,
+        description: row.description,
+        sizeLabel: row.sizeLabel,
+        mainMaterial: row.mainMaterial,
+        qtyUnit: row.qtyUnit,
+      })
     }
     for (const line of shipment?.lines ?? []) {
       const current = map.get(line.orderCode)
@@ -102,6 +143,9 @@ export function ShipmentFormDialog({
         remaining: (current?.remaining ?? 0) + line.qty,
         unitCost: current?.unitCost ?? line.unitCost,
         description: current?.description ?? line.description,
+        sizeLabel: current?.sizeLabel ?? line.sizeLabel,
+        mainMaterial: current?.mainMaterial ?? line.mainMaterial,
+        qtyUnit: current?.qtyUnit ?? null,
       })
     }
     return map
@@ -111,11 +155,27 @@ export function ShipmentFormDialog({
     () =>
       Array.from(available.entries()).map(([code, item]) => ({
         id: code,
-        name: code,
-        secondary: `còn ${item.remaining} · giá vốn ${formatMoney(item.unitCost)} · ${item.description}`,
+        name: `${code}${item.description ? ` — ${item.description}` : ''}`,
+        secondary: [
+          item.sizeLabel ? `size ${item.sizeLabel}` : null,
+          item.mainMaterial,
+          `còn ${item.remaining}${item.qtyUnit ? ` ${item.qtyUnit}` : ''}`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       })),
     [available],
   )
+
+  function applyOrder(index: number, code: string) {
+    const info = available.get(code)
+    if (!info) return
+    form.setValue(`lines.${index}.qty`, String(info.remaining >= 1 ? info.remaining : 1), {
+      shouldDirty: true,
+    })
+    form.setValue(`lines.${index}.unitPrice`, moneyDigitsFromApi(info.unitCost), { shouldDirty: true })
+    form.setValue(`lines.${index}.note`, info.description, { shouldDirty: true })
+  }
 
   const watched = useWatch({ control: form.control, name: 'lines' })
   const totals = (watched ?? []).reduce(
@@ -152,6 +212,7 @@ export function ShipmentFormDialog({
         unitPrice: line.unitPrice,
         note: line.note.trim() || undefined,
       })),
+      editReason: values.editReason?.trim() || undefined,
     })
   }
 
@@ -170,6 +231,7 @@ export function ShipmentFormDialog({
       maxWidth="lg"
       onClose={onClose}
       onExited={() => undefined}
+      editLog={shipment ? { entityType: 'fg_shipment', entityId: shipment.code } : undefined}
     >
       <FormRow columns={4} sx={{ mt: 1 }}>
         <FormTextField<FormValues>
@@ -216,8 +278,9 @@ export function ShipmentFormDialog({
                   label="Mã đơn SX"
                   options={orderOptions}
                   required
-                  placeholder="Chọn đơn trong kho…"
-                  noOptionsText="Không có đơn còn hàng"
+                  placeholder="Chọn đơn sản xuất…"
+                  noOptionsText="Không có đơn còn hàng trong kho"
+                  onPicked={(code) => applyOrder(index, code)}
                 />
                 <FormTextField<FormValues>
                   name={`lines.${index}.qty`}
@@ -259,7 +322,14 @@ export function ShipmentFormDialog({
               </Box>
               {info ? (
                 <Typography variant="caption" color="text.secondary">
-                  {info.description} · còn {info.remaining} trong kho
+                  {[
+                    info.description,
+                    info.sizeLabel ? `size ${info.sizeLabel}` : null,
+                    info.mainMaterial,
+                    `còn ${info.remaining}${info.qtyUnit ? ` ${info.qtyUnit}` : ''} trong kho`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Typography>
               ) : null}
             </Paper>

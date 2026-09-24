@@ -30,7 +30,7 @@ export function createCatalogApi(payload: {
 
 export function updateCatalogApi(
   id: string,
-  payload: { name?: string; parentId?: string | null; sortOrder?: number },
+  payload: { name?: string; parentId?: string | null; sortOrder?: number; editReason?: string },
 ) {
   return apiFetch<CatalogItem>(`/catalogs/${id}`, {
     method: 'PATCH',

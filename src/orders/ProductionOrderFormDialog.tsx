@@ -40,7 +40,7 @@ import {
   normalizePlatingColor,
   platingColorOptions,
 } from './catalog'
-import { FormMultiFreeSoloField } from './FreeSoloFields'
+import { FormFreeSoloField, FormMultiFreeSoloField } from './FreeSoloFields'
 import { ImageUploadField } from './ImageUploadField'
 import { catalogChildren, finishedGoodsQtyUnitOptions, withFallback } from '../warehouses/catalog'
 import { NvlBomCards } from '../finishedGoods/BomLinesField'
@@ -56,6 +56,8 @@ type FormValues = {
   closedBy: string
   askedUserId: string
   trackingCode: string
+  customerName: string
+  editReason: string
   qty: string
   qtyUnit: string
   finishedProductQty: string
@@ -73,6 +75,7 @@ type FormValues = {
   mainMaterial: string
   platingColor: string
   btpCategory: string
+  btpName: string
   productKind: string
   stoneColor: string
   nvlMainMaterial: string
@@ -96,12 +99,12 @@ type NvlWorkLine = {
   otherRequirements: string
 }
 
-function emptyNvlWork(materialId: string): NvlWorkLine {
+function emptyNvlWork(materialId: string, stoneWeight = ''): NvlWorkLine {
   return {
     materialId,
     platingColor: '',
     stoneCount: '',
-    stoneWeight: '',
+    stoneWeight,
     laserEngraving: '',
     otherRequirements: '',
   }
@@ -118,6 +121,8 @@ const EMPTY: FormValues = {
   closedBy: '',
   askedUserId: '',
   trackingCode: '',
+  customerName: '',
+  editReason: '',
   qty: '1',
   qtyUnit: '',
   finishedProductQty: '',
@@ -135,6 +140,7 @@ const EMPTY: FormValues = {
   mainMaterial: '',
   platingColor: '',
   btpCategory: '',
+  btpName: '',
   productKind: '',
   stoneColor: '',
   nvlMainMaterial: '',
@@ -220,9 +226,28 @@ function nvlStockMax(stockQty: string | number | null | undefined, held = 0) {
   return (Number.isFinite(stock) ? stock : 0) + held
 }
 
-function nvlQtyExceedsStock(value: unknown, max: number | null) {
+function positiveQty(value: unknown) {
   const qty = Number(value == null ? '' : String(value))
-  return Number.isFinite(qty) && qty >= 1 && max != null && Number.isFinite(max) && qty > max
+  return Number.isFinite(qty) && qty >= 1 ? qty : null
+}
+
+/** Thành phẩm chỉ hợp lệ khi đúng bằng số nhỏ nhất trong các SL NVL / BTP đã nhập. */
+function fgMustEqualMinInputs(value: unknown, inputs: Array<{ qty: unknown; label: string }>) {
+  const fg = positiveQty(value)
+  if (fg == null) return 'Số lượng phải từ 1'
+  const caps = inputs
+    .map((item) => ({ qty: positiveQty(item.qty), label: item.label }))
+    .filter((item): item is { qty: number; label: string } => item.qty != null)
+  if (!caps.length) return true
+  const minQty = Math.min(...caps.map((item) => item.qty))
+  if (fg === minQty) return true
+  const names = caps.filter((item) => item.qty === minQty).map((item) => item.label)
+  if (fg > minQty) {
+    return names.length === 1
+      ? `Không đủ số lượng ${names[0]}`
+      : `Không đủ số lượng ${names.join(' và ')}`
+  }
+  return `Số lượng thành phẩm phải bằng ${minQty}`
 }
 
 function todayYmd() {
@@ -498,15 +523,10 @@ export function ProductionOrderFormDialog({
           : null
   const fgBomLines = selectedFinished?.bomLines ?? []
   const hasFgBom = fgBomLines.length > 0
-  const nvlShortage =
+  const nvlInputQtys =
     isNvl && hasFgBom
-      ? fgBomLines.some((material, index) => {
-          const held =
-            order?.nvlLines?.find((line) => line.materialId === material.id)?.qty ??
-            (order?.nvl?.id === material.id ? (order.stoneCount ?? 0) : 0)
-          return nvlQtyExceedsStock(nvlLinesWatch[index]?.stoneCount, nvlStockMax(material.qty, held))
-        })
-      : nvlQtyExceedsStock(stoneCount, nvlMaxQty)
+      ? (nvlLinesWatch ?? []).map((line) => line?.stoneCount)
+      : [stoneCount]
   /** SL tối đa: tồn hiện có, cộng số đơn này đang giữ nếu vẫn là mã cũ. */
   const btpMaxQty = selectedBtp
     ? Number(selectedBtp.qty) +
@@ -514,7 +534,6 @@ export function ProductionOrderFormDialog({
     : order?.btp?.id === btpMaterialId
       ? (order.finishedProductQty ?? order.qty ?? null)
       : null
-  const btpShortage = nvlQtyExceedsStock(btpQty, btpMaxQty)
 
   const btpCategoryOptions = useMemo(
     () =>
@@ -582,6 +601,8 @@ export function ProductionOrderFormDialog({
             closedBy: order.closedBy,
             askedUserId: order.askedUserId ?? '',
             trackingCode: order.trackingCode ?? '',
+            customerName: order.customerName ?? '',
+            editReason: '',
             qty: String(order.qty),
             qtyUnit: order.qtyUnit ?? '',
             finishedProductQty:
@@ -607,6 +628,7 @@ export function ProductionOrderFormDialog({
             mainMaterial: order.mainMaterial ?? '',
             platingColor: normalizePlatingColor(order.platingColor),
             btpCategory: order.btpCategory ?? '',
+            btpName: order.btpName ?? order.btp?.name ?? '',
             productKind: order.productKind ?? '',
             stoneColor: order.stoneColor ?? '',
             stoneTypes: order.stoneTypes,
@@ -656,10 +678,9 @@ export function ProductionOrderFormDialog({
   }, [nvlLinesWatch, hasFgBom, fgBomLines, form, open])
 
   useEffect(() => {
-    if (!open) return
-    if (!finishedProductQty && !nvlShortage && !btpShortage) return
+    if (!open || !finishedProductQty) return
     void form.trigger('finishedProductQty')
-  }, [nvlShortage, btpShortage, finishedProductQty, open, form])
+  }, [btpQty, stoneCount, nvlLinesWatch, finishedProductQty, open, form])
 
   function replaceKindImages(
     field: 'detailImages' | 'productImages',
@@ -673,6 +694,7 @@ export function ProductionOrderFormDialog({
   }
 
   function applyBtpCatalog(next: BtpOption | undefined, previous: BtpOption | undefined) {
+    form.setValue('btpName', next?.name ?? '', { shouldDirty: true })
     form.setValue('btpCategory', next?.category ?? '', { shouldDirty: true })
     form.setValue('mainMaterial', next?.bodyMetal ?? '', { shouldDirty: true })
     form.setValue('productKind', next?.productKind ?? '', { shouldDirty: true })
@@ -693,6 +715,7 @@ export function ProductionOrderFormDialog({
 
   function applyFinishedProduct(next: FinishedProductOption | undefined, previous: FinishedProductOption | undefined) {
     const first = next?.bomLines[0]
+    form.setValue('btpName', next?.btpName || next?.description || '', { shouldDirty: true })
     form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
     form.setValue('size', first?.sizeLabel ?? next?.size ?? '', { shouldDirty: true })
     form.setValue('qtyUnit', next?.qtyUnit ?? '', { shouldDirty: true })
@@ -710,11 +733,15 @@ export function ProductionOrderFormDialog({
     form.setValue('nvlMaterialId', first?.id ?? '', { shouldDirty: true })
     form.setValue(
       'nvlLines',
-      (next?.bomLines ?? []).map((line) => emptyNvlWork(line.id)),
+      (next?.bomLines ?? []).map((line) => emptyNvlWork(line.id, line.stoneWeight ?? '')),
       { shouldDirty: true },
     )
     form.setValue('stoneCount', '', { shouldDirty: true })
-    form.setValue('stoneWeight', '', { shouldDirty: true })
+    form.setValue(
+      'stoneWeight',
+      next?.bomLines.find((line) => line.stoneWeight)?.stoneWeight || next?.stoneWeight || '',
+      { shouldDirty: true },
+    )
     form.setValue('laserEngraving', '', { shouldDirty: true })
     form.setValue('otherRequirements', '', { shouldDirty: true })
     form.setValue('platingColor', '', { shouldDirty: true })
@@ -742,6 +769,11 @@ export function ProductionOrderFormDialog({
       form.setValue('stoneColor', color, { shouldDirty: true })
     }
     form.setValue('stoneTypes', next?.materialType ? [next.materialType] : [], { shouldDirty: true })
+    if (next?.stoneWeight) {
+      form.setValue('stoneWeight', next.stoneWeight, { shouldDirty: true })
+    } else if (next && next.metalKind !== 'Đá') {
+      form.setValue('stoneWeight', '', { shouldDirty: true })
+    }
     const other = form.getValues('otherRequirements').trim()
     if (!other || other === (previous?.note ?? '')) {
       form.setValue('otherRequirements', next?.note ?? '', { shouldDirty: true })
@@ -772,6 +804,8 @@ export function ProductionOrderFormDialog({
       btpQty: btp && values.btpQty ? Number(values.btpQty) : null,
       leadTime: '',
       trackingCode: values.trackingCode.trim(),
+      customerName: values.customerName.trim(),
+      editReason: values.editReason?.trim() || undefined,
       askedUserId: null,
       debtStatus: '',
       dueDate: values.dueDate,
@@ -785,6 +819,7 @@ export function ProductionOrderFormDialog({
       mainMaterial: values.mainMaterial.trim(),
       platingColor: normalizePlatingColor(values.platingColor),
       btpCategory: values.btpCategory.trim(),
+      btpName: values.btpName.trim(),
       productKind: values.productKind.trim(),
       stoneColor: values.stoneColor.trim(),
       stoneTypes: values.stoneTypes,
@@ -823,6 +858,7 @@ export function ProductionOrderFormDialog({
       submitLabel={uploading ? 'Đang upload ảnh…' : order ? 'Lưu' : 'Lên đơn'}
       onClose={onClose}
       onExited={onExited ?? (() => undefined)}
+      editLog={order ? { entityType: 'production_order', entityId: order.id } : undefined}
     >
       {order ? (
         <FormSelect<FormValues>
@@ -870,6 +906,7 @@ export function ProductionOrderFormDialog({
                 />
               )}
             />
+            <FormTextField<FormValues> name="btpName" label="Tên bán thành phẩm" />
             <FormRow columns={3}>
               <FormTextField<FormValues> name="sizeLabel" label="Size thành phẩm" readOnly />
               <FormSelect<FormValues>
@@ -886,7 +923,11 @@ export function ProductionOrderFormDialog({
                 transform={digitsOnly}
                 slotProps={{ htmlInput: { inputMode: 'numeric' } }}
                 rules={{
-                  validate: () => (nvlShortage ? 'Không đủ NVL' : true),
+                  validate: (value) =>
+                    fgMustEqualMinInputs(
+                      value,
+                      nvlInputQtys.map((qty) => ({ qty, label: 'NVL' })),
+                    ),
                 }}
               />
             </FormRow>
@@ -1052,6 +1093,12 @@ export function ProductionOrderFormDialog({
               />
             </FormRow>
 
+            <FormFreeSoloField<FormValues>
+              name="customerName"
+              label="Khách hàng"
+              options={lookups?.customers ?? []}
+            />
+
             <FormTextField<FormValues>
               name="description"
               label="Mô tả sản phẩm"
@@ -1109,14 +1156,13 @@ export function ProductionOrderFormDialog({
                 slotProps={{ htmlInput: { inputMode: 'numeric' } }}
                 rules={{
                   validate: (value) => {
-                    if (!value || Number(value) < 1) return 'Số lượng phải từ 1'
                     if (order && Number(value) < order.subTicketTotals.qty) {
                       return `Đã chia ${order.subTicketTotals.qty} sp cho phiếu con`
                     }
-                    if (btpShortage && nvlShortage) return 'Không đủ BTP và NVL'
-                    if (btpShortage) return 'Không đủ BTP'
-                    if (nvlShortage) return 'Không đủ NVL'
-                    return true
+                    return fgMustEqualMinInputs(value, [
+                      { qty: btpQty, label: 'BTP' },
+                      { qty: stoneCount, label: 'NVL' },
+                    ])
                   },
                 }}
               />
@@ -1165,6 +1211,7 @@ export function ProductionOrderFormDialog({
                 }}
               />
             </FormRow>
+            <FormTextField<FormValues> name="btpName" label="Tên bán thành phẩm" />
             <FormRow columns={3}>
               <FormSearchSelect<FormValues>
                 name="btpCategory"
@@ -1310,6 +1357,12 @@ export function ProductionOrderFormDialog({
                 }}
               />
             </FormRow>
+
+            <FormFreeSoloField<FormValues>
+              name="customerName"
+              label="Khách hàng"
+              options={lookups?.customers ?? []}
+            />
 
             <FormTextField<FormValues>
               name="description"

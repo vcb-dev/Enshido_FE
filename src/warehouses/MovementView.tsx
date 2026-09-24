@@ -3,6 +3,7 @@ import { Box, Button, Chip, DialogActions, DialogContent, DialogTitle, Paper, Ty
 import {
   formatMoney,
   formatQty,
+  formatInboundDateTime,
   formatStockedDate,
   type InboundRow,
   type OutboundRow,
@@ -28,7 +29,7 @@ export function InboundView({
       <Paper variant="outlined" sx={{ p: 1.75 }}>
         <DetailSection>Phiếu nhập</DetailSection>
         <Box sx={DETAIL_GRID}>
-          <DetailFact label="Ngày nhập" value={formatStockedDate(row.receivedAt)} />
+          <DetailFact label="Ngày nhập" value={formatInboundDateTime(row.receivedAt)} />
           <DetailFact label="Người nhập" value={row.enteredBy} />
           <DetailFact label="NCC" value={row.supplierName} />
           <DetailFact label="Mã hàng NCC" value={row.supplierSku} />

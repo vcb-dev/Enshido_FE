@@ -6,10 +6,9 @@ import type { Control } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createWarehouseInboundApi,
-  deleteWarehouseInboundApi,
   formatMoney,
   formatQty,
-  formatStockedDate,
+  formatInboundDateTime,
   getInventoryLookupsApi,
   getWarehouseInboundsApi,
   getWarehouseStockApi,
@@ -39,11 +38,9 @@ import {
 } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
-import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
-import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
+import { isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
-import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { InboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
@@ -56,7 +53,6 @@ import {
   hasActiveCatalogFilters,
   headerTotal,
   matchesCatalogFilters,
-  removeMoveList,
   replaceMoveId,
   sumMoveTotals,
   uniqueFilterOptions,
@@ -291,20 +287,6 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const del = useDeleteRowDialog({
-    mutationFn: (row: InboundRow) =>
-      deleteWhenReady(row.id, (id) => deleteWarehouseInboundApi(warehouseCode, id)),
-    successMessage: 'Đã xóa phiếu nhập',
-    queryKeys: [['warehouse-inbounds', warehouseCode]],
-    invalidateKeys: [['warehouse-stock', warehouseCode]],
-    onRemoved: (row) => {
-      queryClient.setQueryData(
-        ['warehouse-inbounds', warehouseCode],
-        (current: InboundResponse | undefined) => removeMoveList(current, row.id),
-      )
-    },
-  })
-
   const columns = useMemo(() => {
     const stockOf = (row: InboundRow) =>
       row.materialId ? stockById.get(row.materialId) : undefined
@@ -313,9 +295,9 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         key: 'receivedAt',
         card: 'meta' as const,
         header: 'Ngày nhập',
-        width: 108,
+        width: 158,
         sortable: true,
-        render: (row: InboundRow) => formatStockedDate(row.receivedAt),
+        render: (row: InboundRow) => formatInboundDateTime(row.receivedAt),
       },
       ...catalogColumnsBeforeName(inboundProfile, stockOf, (row) => row.sku ?? stockOf(row)?.sku, {
         location: inboundProfile.showLocation
@@ -456,15 +438,10 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
           <RowActions
             onView={() => openView(row)}
             onEdit={() => openEdit(row)}
-            onDelete={() => del.request(row)}
             editDisabled={Boolean(row.sourceWarehouseCode)}
-            deleteDisabled={Boolean(row.sourceWarehouseCode)}
             titles={
               row.sourceWarehouseCode
-                ? {
-                    edit: 'Phiếu chuyển kho — không sửa tại đây',
-                    delete: 'Phiếu chuyển kho — không xóa tại đây',
-                  }
+                ? { edit: 'Phiếu chuyển kho — không sửa tại đây' }
                 : undefined
             }
           />
@@ -473,7 +450,6 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     ]
   }, [
     catalogFilters,
-    del.request,
     enteredByOptions,
     locationOptions,
     openEdit,
@@ -570,18 +546,6 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
           saveMany.mutate(payloads)
         }}
       />
-      <ConfirmDeleteDialog
-        open={Boolean(del.row)}
-        title="Xóa phiếu nhập"
-        description={
-          del.row
-            ? `Xóa dòng ${del.row.name} (${formatQty(del.row.qty)} ${del.row.unit})? Tồn kho sẽ được tính lại.`
-            : ''
-        }
-        deleting={del.deleting}
-        onClose={del.cancel}
-        onConfirm={del.confirm}
-      />
     </Stack>
   )
 }
@@ -602,6 +566,7 @@ type InboundFormValues = {
   supplierSku: string
   supplierId: string
   lines: InboundLineValues[]
+  editReason?: string
 }
 
 const EMPTY_INBOUND_LINE: InboundLineValues = {
@@ -675,7 +640,7 @@ function InboundDialog({
     form.reset(
       row
         ? {
-            receivedAt: row.receivedAt,
+            receivedAt: row.receivedAt.slice(0, 10),
             note: row.note ?? '',
             supplierSku: row.supplierSku ?? '',
             supplierId: row.supplierId ?? '',
@@ -748,6 +713,7 @@ function InboundDialog({
         supplierId: values.supplierId || undefined,
         applyToStock: !row,
         otherClassId: line.otherClassId || null,
+        editReason: values.editReason?.trim() || undefined,
       }))
     if (!payloads.length) return
     onSave(payloads)
@@ -783,6 +749,7 @@ function InboundDialog({
       submitLabel={kind === 'create' ? profile.inboundLabel : undefined}
       onClose={onClose}
       onExited={onExited}
+      editLog={row ? { entityType: 'inbound', entityId: row.id } : undefined}
     >
       <FormRow columns={2} sx={{ mt: 1 }}>
         <FormTextField<InboundFormValues>
@@ -951,6 +918,13 @@ function InboundDialog({
   )
 }
 
+function inboundOptimisticAt(ymd: string) {
+  const day = ymd.slice(0, 10)
+  const now = new Date()
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${day}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
+
 function inboundOptimisticRow(
   payload: CreateInboundPayload,
   extra: {
@@ -964,7 +938,9 @@ function inboundOptimisticRow(
   return {
     id: extra.id,
     stt: extra.stt,
-    receivedAt: payload.receivedAt,
+    receivedAt: payload.receivedAt.includes('T')
+      ? payload.receivedAt
+      : inboundOptimisticAt(payload.receivedAt),
     name: payload.name,
     sku: payload.sku ?? null,
     unit: extra.unit,

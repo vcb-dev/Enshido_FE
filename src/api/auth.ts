@@ -227,6 +227,7 @@ export async function updateUserApi(
     isActive?: boolean
     password?: string
     allowedScreens?: string[]
+    editReason?: string
   },
 ) {
   return apiFetch<UserRow>(`/users/${id}`, {

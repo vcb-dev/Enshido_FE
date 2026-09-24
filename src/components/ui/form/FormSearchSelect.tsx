@@ -20,6 +20,8 @@ export type FormSearchSelectProps<T extends FieldValues> = FormFieldBaseProps<T>
   size?: 'small' | 'medium'
   /** Mặc định `false`: field form luôn nằm trong Dialog nên popper cần portal. */
   disablePortal?: boolean
+  /** Gọi sau khi đổi giá trị — dùng để điền sẵn các ô liên quan. */
+  onPicked?: (id: string) => void
   sx?: SxProps<Theme>
 }
 
@@ -37,6 +39,7 @@ export function FormSearchSelect<T extends FieldValues>({
   required,
   size = 'small',
   disablePortal = false,
+  onPicked,
   ...props
 }: FormSearchSelectProps<T>) {
   const { field, fieldState } = useController({
@@ -52,7 +55,10 @@ export function FormSearchSelect<T extends FieldValues>({
       disablePortal={disablePortal}
       required={required}
       valueId={String(field.value ?? '')}
-      onChange={field.onChange}
+      onChange={(id) => {
+        field.onChange(id)
+        onPicked?.(id)
+      }}
       onBlur={field.onBlur}
       inputRef={field.ref}
       errorText={fieldState.error?.message}

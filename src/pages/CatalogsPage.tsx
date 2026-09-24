@@ -29,6 +29,7 @@ import {
 import {
   CrudDialogShell,
   DataTable,
+  EditReasonBlock,
   Form,
   FormTextField,
   PencilIcon,
@@ -45,7 +46,7 @@ const BRAND = '#6b4513'
 const BRAND_SOFT = '#f1e6d5'
 const BORDER = '#ded3c3'
 
-type FormValues = { name: string }
+type FormValues = { name: string; editReason?: string }
 const EMPTY: FormValues = { name: '' }
 
 type Copy = {
@@ -297,6 +298,8 @@ function ParentEditorDialog({
   const childDialog = useCrudDialog<CatalogItem>()
   const childForm = useForm<FormValues>({ defaultValues: EMPTY })
   const [childSearch, setChildSearch] = useState('')
+  const [parentReason, setParentReason] = useState('')
+  const [parentReasonError, setParentReasonError] = useState('')
 
   useEffect(() => {
     if (!parent) {
@@ -304,6 +307,8 @@ function ParentEditorDialog({
       return
     }
     form.reset({ name: parent.name })
+    setParentReason('')
+    setParentReasonError('')
   }, [parent, form])
 
   useEffect(() => {
@@ -319,7 +324,8 @@ function ParentEditorDialog({
   }, [parent?.children, childSearch])
 
   const saveParent = useMutation({
-    mutationFn: (name: string) => updateCatalogApi(parent!.id, { name }),
+    mutationFn: (name: string) =>
+      updateCatalogApi(parent!.id, { name, editReason: parentReason.trim() }),
     onMutate: () => toast.success(copy.savedParent),
     onSuccess: () => {
       void onRefresh()
@@ -328,9 +334,9 @@ function ParentEditorDialog({
   })
 
   const saveChild = useMutation({
-    mutationFn: ({ id, name }: { id?: string; name: string }) =>
+    mutationFn: ({ id, name, editReason }: { id?: string; name: string; editReason?: string }) =>
       id
-        ? updateCatalogApi(id, { name })
+        ? updateCatalogApi(id, { name, editReason })
         : createCatalogApi({ name, kind: copy.kind, parentId: parent!.id }),
     onMutate: (input) => {
       childDialog.close()
@@ -394,7 +400,16 @@ function ParentEditorDialog({
             '& .MuiFormLabel-asterisk': { color: 'error.main' },
           }}
         >
-          <Form form={form} onSubmit={(values) => saveParent.mutate(values.name.trim())}>
+          <Form
+            form={form}
+            onSubmit={(values) => {
+              if (!parentReason.trim()) {
+                setParentReasonError('Nhập lý do chỉnh sửa')
+                return
+              }
+              saveParent.mutate(values.name.trim())
+            }}
+          >
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ alignItems: { sm: 'flex-start' }, mt: 1 }}>
               <FormTextField<FormValues>
                 name="name"
@@ -407,6 +422,17 @@ function ParentEditorDialog({
                 Lưu tên
               </Button>
             </Stack>
+            <EditReasonBlock
+              entityType="catalog"
+              entityId={parent?.id}
+              reason={parentReason}
+              onReasonChange={(value) => {
+                setParentReason(value)
+                if (value.trim()) setParentReasonError('')
+              }}
+              required
+              error={parentReasonError}
+            />
           </Form>
 
           <Stack spacing={1} sx={{ minHeight: 0, flex: 1 }}>
@@ -451,11 +477,18 @@ function ParentEditorDialog({
         saving={false}
         onSubmit={(values) => {
           childDialog.close()
-          saveChild.mutate({ id: childDialog.row?.id, name: values.name.trim() })
+          saveChild.mutate({
+            id: childDialog.row?.id,
+            name: values.name.trim(),
+            editReason: values.editReason,
+          })
         }}
         onClose={childDialog.close}
         onExited={childDialog.clear}
         maxWidth="xs"
+        editLog={
+          childDialog.row ? { entityType: 'catalog', entityId: childDialog.row.id } : undefined
+        }
       >
         <FormTextField<FormValues> name="name" label={copy.childName} required autoFocus sx={{ mt: 1 }} />
       </CrudDialogShell>

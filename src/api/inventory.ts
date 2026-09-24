@@ -74,6 +74,7 @@ export type StockRow = {
   materialType: string | null
   otherClassId: string | null
   otherClass: string | null
+  otherClassCode?: string | null
   otherClassParentId: string | null
   otherClassParent: string | null
   bodyMetalId: string | null
@@ -84,6 +85,7 @@ export type StockRow = {
   platingColorId?: string | null
   platingColor?: string | null
   sizeLabel?: string | null
+  stoneWeight?: string | null
   images?: MaterialImage[]
   classificationCode: ClassificationCode
   classification: string
@@ -218,9 +220,28 @@ function parseYmd(value: string) {
 
 export function formatStockedDate(value: string | null | undefined) {
   if (!value) return '—'
-  const [y, m, d] = value.split('-')
+  const day = value.slice(0, 10)
+  const [y, m, d] = day.split('-')
   if (!y || !m || !d) return value
   return `${d}/${m}/${y}`
+}
+
+/** Ngày nhập phiếu: phiếu mới hiện cả giờ; phiếu cũ chỉ có ngày thì giữ dd/mm/yyyy. */
+export function formatInboundDateTime(value: string | null | undefined) {
+  if (!value) return '—'
+  if (!value.includes('T')) return formatStockedDate(value)
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return formatStockedDate(value)
+  const utcMidnight =
+    date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0
+  if (utcMidnight) return formatStockedDate(value)
+  return date.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 /** Thời gian tồn tính từ ngày nhập đầu (hoặc ngày tạo NVL nếu chưa nhập). */
@@ -283,6 +304,7 @@ export type UpdateStockPayload = {
   btpCategoryId?: string | null
   platingColorId?: string | null
   sizeLabel?: string | null
+  stoneWeight?: string | null
   images?: MaterialImage[]
   openingQty?: string
   openingAmount?: string
@@ -291,6 +313,7 @@ export type UpdateStockPayload = {
   inAmount?: string
   outQty?: string
   outAmount?: string
+  editReason?: string
   qty?: string
   amount?: string
 }
@@ -371,6 +394,7 @@ export type CreateInboundPayload = {
   applyToStock?: boolean
   locationCode?: string | null
   otherClassId?: string | null
+  editReason?: string
 }
 
 export function getWarehouseInboundsApi(code: string) {
@@ -457,6 +481,7 @@ export type CreateOutboundPayload = {
   /** Rỗng = bỏ gắn đơn. */
   productionOrderCode?: string | null
   destWarehouseCode?: string | null
+  editReason?: string
 }
 
 export function getWarehouseOutboundsApi(code: string) {

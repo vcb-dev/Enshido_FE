@@ -7,7 +7,6 @@ import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   createWarehouseOutboundApi,
-  deleteWarehouseOutboundApi,
   formatMoney,
   formatPriceOrDash,
   formatQty,
@@ -34,6 +33,7 @@ import {
   ColumnHeaderSearch,
   CrudDialogShell,
   DataTable,
+  type Column,
   FormQtyField,
   FormRow,
   FormSearchSelect,
@@ -43,11 +43,9 @@ import {
 } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { useCrudDialog } from '../hooks/useCrudDialog'
-import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
-import { deleteWhenReady, isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
+import { isTempId, newTempId, registerTempId, rejectTempId, resolveRowId, resolveTempId } from '../hooks/pendingRowId'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
-import { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 import { OutboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
@@ -60,7 +58,6 @@ import {
   hasActiveCatalogFilters,
   headerTotal,
   matchesCatalogFilters,
-  removeMoveList,
   replaceMoveId,
   sumMoveTotals,
   uniqueFilterOptions,
@@ -225,7 +222,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       .map((name) => ({ id: name, name }))
   }, [locationSlots.data?.items, stock.data?.items])
 
-  const rows = useMemo(() => {
+  const lines = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
       const catalog = row.materialId ? stockById.get(row.materialId) : undefined
@@ -249,6 +246,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     })
   }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById])
 
+  const rows = useMemo(() => groupOutboundRows(lines), [lines])
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
@@ -261,7 +259,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         (showUnit && params.unit) ||
         (outboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
-  const totals = filtering ? sumMoveTotals(rows) : apiTotals
+  const totals = filtering ? sumMoveTotals(lines) : apiTotals
 
   const outboundKey = ['warehouse-outbounds', warehouseCode] as const
 
@@ -295,7 +293,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       queryClient.setQueryData(outboundKey, (current: OutboundResponse | undefined) =>
         upsertMoveList(current, optimistic, Boolean(input.id)),
       )
-      if (!input.id) table.setPage(Math.ceil((rows.length + 1) / params.pageSize))
+      if (!input.id) table.setPage(Math.ceil((lines.length + 1) / params.pageSize))
       return { previous, tempId }
     },
     onSuccess: (row, input, ctx) => {
@@ -336,62 +334,27 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const del = useDeleteRowDialog({
-    mutationFn: (row: OutboundRow) =>
-      deleteWhenReady(row.id, (id) => deleteWarehouseOutboundApi(warehouseCode, id)),
-    successMessage: 'Đã xóa phiếu xuất',
-    queryKeys: [['warehouse-outbounds', warehouseCode]],
-    invalidateKeys: [['warehouse-stock', warehouseCode]],
-    onRemoved: (row) => {
-      queryClient.setQueryData(
-        ['warehouse-outbounds', warehouseCode],
-        (current: OutboundResponse | undefined) => removeMoveList(current, row.id),
-      )
-      if (row.productionOrderCode) {
-        void queryClient.invalidateQueries({
-          queryKey: ['production-order-costing', row.productionOrderCode],
-        })
-      }
-    },
-  })
-
   const columns = useMemo(() => {
-    const stockOf = (row: OutboundRow) =>
+    const stockOf = (row: OutboundGroup | OutboundRow) =>
       row.materialId ? stockById.get(row.materialId) : undefined
+    const lineActions = (row: OutboundRow) => (
+      <RowActions
+        onView={() => openView(row)}
+        onEdit={() => openEdit(row)}
+        editDisabled={row.autoIssued}
+        titles={
+          row.autoIssued
+            ? { edit: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn` }
+            : undefined
+        }
+      />
+    )
     return [
       {
-        key: 'issuedAt',
-        card: 'meta' as const,
-        header: 'Ngày xuất',
-        width: 96,
-        sortable: true,
-        render: (row: OutboundRow) => formatStockedDate(row.issuedAt),
-      },
-      ...catalogColumnsBeforeName(outboundProfile, stockOf, (row) => row.sku, {
-        location: outboundProfile.showLocation
-          ? { valueId: params.location, options: locationOptions, onChange: (id) => table.setFilter({ location: id }) }
-          : undefined,
-        shape: outboundProfile.showShapeColor
-          ? { valueId: params.shape, options: catalogFilters.shapeOptions, onChange: (id) => table.setFilter({ shape: id }) }
-          : undefined,
-        color: outboundProfile.showShapeColor
-          ? { valueId: params.color, options: catalogFilters.colorOptions, onChange: (id) => table.setFilter({ color: id }) }
-          : undefined,
-      }),
-      {
-        key: 'name',
-        card: 'title' as const,
-        header: profile.nameLabel,
-        width: 220,
-        sortable: true,
-        className: 'name-cell',
-        cellSx: { overflow: 'visible', textOverflow: 'clip' },
-        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
-      },
-      {
         key: 'productionOrderCode',
+        card: 'title' as const,
         header: 'Mã đơn SX',
-        width: 100,
+        width: 120,
         sortable: true,
         filter: (
           <ColumnHeaderFilter
@@ -400,18 +363,53 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
             onChange={(id) => table.setFilter({ productionOrderCode: id })}
           />
         ),
-        render: (row: OutboundRow) =>
+        render: (row: OutboundGroup) =>
           row.productionOrderCode ? (
             <Link
               component={RouterLink}
               to={`/orders/${row.productionOrderCode}`}
               sx={{ fontWeight: 600 }}
+              onClick={(event) => event.stopPropagation()}
             >
               {row.productionOrderCode}
             </Link>
           ) : (
             '—'
           ),
+      },
+      {
+        key: 'issuedAt',
+        card: 'meta' as const,
+        header: 'Ngày xuất',
+        width: 96,
+        sortable: true,
+        render: (row: OutboundGroup) =>
+          row.lines.length > 1 ? null : formatStockedDate(row.issuedAt),
+        renderSub: (line) => formatStockedDate(line.issuedAt),
+      },
+      ...withLineSub(
+        catalogColumnsBeforeName(outboundProfile, stockOf, (row) => row.sku, {
+          location: outboundProfile.showLocation
+            ? { valueId: params.location, options: locationOptions, onChange: (id) => table.setFilter({ location: id }) }
+            : undefined,
+          shape: outboundProfile.showShapeColor
+            ? { valueId: params.shape, options: catalogFilters.shapeOptions, onChange: (id) => table.setFilter({ shape: id }) }
+            : undefined,
+          color: outboundProfile.showShapeColor
+            ? { valueId: params.color, options: catalogFilters.colorOptions, onChange: (id) => table.setFilter({ color: id }) }
+            : undefined,
+        }),
+      ),
+      {
+        key: 'name',
+        header: profile.nameLabel,
+        width: 220,
+        sortable: true,
+        className: 'name-cell',
+        cellSx: { overflow: 'visible', textOverflow: 'clip' },
+        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : row.name),
+        renderSub: (line) => line.name,
       },
       ...(showUnit
         ? [
@@ -426,7 +424,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
                   onChange={(id) => table.setFilter({ unit: id })}
                 />
               ),
-            },
+              render: (row: OutboundGroup) => (row.lines.length > 1 ? null : row.unit),
+              renderSub: (line: OutboundRow) => line.unit,
+            } satisfies Column<OutboundGroup, OutboundRow>,
           ]
         : []),
       {
@@ -435,7 +435,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         width: 120,
         numeric: true,
         sortable: true,
-        render: (row: OutboundRow) => formatQty(row.qty),
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatQty(row.qty)),
+        renderSub: (line) => formatQty(line.qty),
       },
       {
         key: 'inboundUnitPrice',
@@ -449,8 +450,12 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
           overflow: 'visible',
           textOverflow: 'clip',
         },
-        render: (row: OutboundRow) => (
-          <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
+        render: (row: OutboundGroup) =>
+          row.lines.length > 1 ? null : (
+            <PriceBreakdownView breakdown={row.priceBreakdown} fallback={row.inboundUnitPrice} />
+          ),
+        renderSub: (line) => (
+          <PriceBreakdownView breakdown={line.priceBreakdown} fallback={line.inboundUnitPrice} />
         ),
       },
       {
@@ -460,38 +465,42 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         numeric: true,
         sortable: true,
         cellSx: { fontWeight: 700 },
-        render: (row: OutboundRow) => formatMoney(row.amount),
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatMoney(row.amount)),
+        renderSub: (line) => formatMoney(line.amount),
       },
-      ...catalogColumnsAfterAmount(outboundProfile, stockOf, {
-        kind:
-          outboundProfile.showNvlCategory || outboundProfile.showBtpCategory
-            ? { valueId: params.kind, options: catalogFilters.kindFilterOptions, onChange: (id) => table.setFilter({ kind: id }) }
+      ...withLineSub(
+        catalogColumnsAfterAmount(outboundProfile, stockOf, {
+          kind:
+            outboundProfile.showNvlCategory || outboundProfile.showBtpCategory
+              ? { valueId: params.kind, options: catalogFilters.kindFilterOptions, onChange: (id) => table.setFilter({ kind: id }) }
+              : undefined,
+          type: outboundProfile.showType
+            ? { valueId: params.stone, options: catalogFilters.typeFilterOptions, onChange: (id) => table.setFilter({ stone: id }) }
             : undefined,
-        type: outboundProfile.showType
-          ? { valueId: params.stone, options: catalogFilters.typeFilterOptions, onChange: (id) => table.setFilter({ stone: id }) }
-          : undefined,
-        bodyMetal: outboundProfile.showBodyMetal
-          ? {
-              valueId: params.bodyMetal,
-              options: catalogFilters.bodyMetalOptions,
-              onChange: (id) => table.setFilter({ bodyMetal: id }),
-            }
-          : undefined,
-        productKind: outboundProfile.showProductKind
-          ? {
-              valueId: params.productKind,
-              options: catalogFilters.productKindOptions,
-              onChange: (id) => table.setFilter({ productKind: id }),
-            }
-          : undefined,
-      }),
+          bodyMetal: outboundProfile.showBodyMetal
+            ? {
+                valueId: params.bodyMetal,
+                options: catalogFilters.bodyMetalOptions,
+                onChange: (id) => table.setFilter({ bodyMetal: id }),
+              }
+            : undefined,
+          productKind: outboundProfile.showProductKind
+            ? {
+                valueId: params.productKind,
+                options: catalogFilters.productKindOptions,
+                onChange: (id) => table.setFilter({ productKind: id }),
+              }
+            : undefined,
+        }),
+      ),
       {
         key: 'note',
         header: 'Ghi chú',
         width: 108,
         ellipsis: true,
         className: 'note-cell',
-        render: (row: OutboundRow) => row.note ?? '—',
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : (row.note ?? '—')),
+        renderSub: (line) => line.note ?? '—',
       },
       {
         key: 'issuedBy',
@@ -507,7 +516,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
             onChange={(id) => table.setFilter({ issuedBy: id })}
           />
         ),
-        render: (row: OutboundRow) => row.issuedBy ?? '—',
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : (row.issuedBy ?? '—')),
+        renderSub: (line) => line.issuedBy ?? '—',
       },
       {
         key: 'receivedBy',
@@ -521,7 +531,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
             onChange={(id) => table.setFilter({ receivedBy: id })}
           />
         ),
-        render: (row: OutboundRow) => row.receivedBy ?? '—',
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : (row.receivedBy ?? '—')),
+        renderSub: (line) => line.receivedBy ?? '—',
       },
       {
         key: 'actions',
@@ -530,29 +541,13 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         width: 120,
         align: 'center' as const,
         cellSx: { overflow: 'visible' },
-        // Phiếu do lên Đơn BTP tự tạo: sửa mã BTP / số lượng trên đơn để kho và đơn luôn khớp.
-        render: (row: OutboundRow) => (
-          <RowActions
-            onView={() => openView(row)}
-            onEdit={() => openEdit(row)}
-            onDelete={() => del.request(row)}
-            editDisabled={row.autoIssued}
-            deleteDisabled={row.autoIssued}
-            titles={
-              row.autoIssued
-                ? {
-                    edit: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn`,
-                    delete: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn`,
-                  }
-                : undefined
-            }
-          />
-        ),
+        render: (row: OutboundGroup) =>
+          row.lines.length > 1 ? null : lineActions(row.lines[0]),
+        renderSub: (line) => lineActions(line),
       },
-    ]
+    ] satisfies Column<OutboundGroup, OutboundRow>[]
   }, [
     catalogFilters,
-    del.request,
     issuerOptions,
     locationOptions,
     openEdit,
@@ -593,6 +588,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         columns={columns}
         rows={pagedRows}
         rowKey={(row) => row.id}
+        subRows={{
+          get: (row) => (row.lines.length > 1 ? row.lines : []),
+          key: (line) => line.id,
+          label: (count) => `${count} dòng NVL`,
+        }}
         loading={outbounds.isLoading}
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
@@ -610,17 +610,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         sx={{ flex: { md: 1 } }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
-          <>
-            {filtering ? (
-              <Button size="small" onClick={table.reset}>
-                Xóa lọc
-              </Button>
-            ) : null}
-            <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button variant="contained" onClick={dialog.openCreate}>
-              {profile.outboundLabel}
+          filtering ? (
+            <Button size="small" onClick={table.reset}>
+              Xóa lọc
             </Button>
-          </>
+          ) : null
         }
       />
 
@@ -653,18 +647,6 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
           saveMany.mutate(payloads)
         }}
       />
-      <ConfirmDeleteDialog
-        open={Boolean(del.row)}
-        title="Xóa phiếu xuất"
-        description={
-          del.row
-            ? `Xóa dòng ${del.row.name} (${formatQty(del.row.qty)} ${del.row.unit})? Tồn kho sẽ được tính lại.`
-            : ''
-        }
-        deleting={del.deleting}
-        onClose={del.cancel}
-        onConfirm={del.confirm}
-      />
     </Stack>
   )
 }
@@ -683,6 +665,7 @@ type OutboundFormValues = {
   receivedByUserId: string
   productionOrderCode: string
   lines: OutboundLineValues[]
+  editReason?: string
 }
 
 const EMPTY_OUTBOUND_LINE: OutboundLineValues = {
@@ -805,6 +788,7 @@ function OutboundDialog({
         receivedByUserId: values.receivedByUserId || undefined,
         applyToStock: !row,
         productionOrderCode: values.productionOrderCode || null,
+        editReason: values.editReason?.trim() || undefined,
       }))
     if (!payloads.length) return
     onSave(payloads)
@@ -861,6 +845,7 @@ function OutboundDialog({
       submitLabel={kind === 'create' ? profile.outboundLabel : undefined}
       onClose={onClose}
       onExited={onExited}
+      editLog={row ? { entityType: 'outbound', entityId: row.id } : undefined}
     >
       <FormRow columns={2} sx={{ mt: 1 }}>
         <FormTextField<OutboundFormValues>
@@ -1131,6 +1116,70 @@ function takeFifoLayers(
     amount: qty > 0 && need <= 0 ? String(Math.round(amount)) : '',
     label: parts.join('\n'),
   }
+}
+
+type OutboundGroup = OutboundRow & { lines: OutboundRow[] }
+
+function sameValue(lines: OutboundRow[], pick: (row: OutboundRow) => string) {
+  const first = pick(lines[0])
+  return lines.every((row) => pick(row) === first)
+}
+
+function groupOutboundRows(items: OutboundRow[]): OutboundGroup[] {
+  const grouped = new Map<string, OutboundRow[]>()
+  const order: Array<{ code: string } | { row: OutboundRow }> = []
+  for (const row of items) {
+    const code = row.productionOrderCode?.trim()
+    if (!code) {
+      order.push({ row })
+      continue
+    }
+    const key = code.toUpperCase()
+    if (!grouped.has(key)) {
+      grouped.set(key, [])
+      order.push({ code: key })
+    }
+    grouped.get(key)!.push(row)
+  }
+  return order.map((item) =>
+    'row' in item ? asOutboundGroup([item.row]) : asOutboundGroup(grouped.get(item.code)!),
+  )
+}
+
+function asOutboundGroup(lines: OutboundRow[]): OutboundGroup {
+  const primary = lines[0]
+  const qty = lines.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)
+  const amount = lines.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
+  const issuedAt = lines.reduce((latest, row) => (row.issuedAt > latest ? row.issuedAt : latest), primary.issuedAt)
+  return {
+    ...primary,
+    id: lines.length === 1 ? primary.id : `order:${(primary.productionOrderCode ?? '').toUpperCase()}`,
+    qty: String(qty),
+    amount: String(amount),
+    issuedAt,
+    sku: lines.length === 1 ? primary.sku : null,
+    materialId: lines.length === 1 ? primary.materialId : null,
+    inboundUnitPrice: lines.length === 1 ? primary.inboundUnitPrice : '',
+    priceBreakdown: lines.length === 1 ? primary.priceBreakdown : undefined,
+    name: lines.length === 1 ? primary.name : `${lines.length} NVL`,
+    note: lines.length === 1 || sameValue(lines, (row) => row.note ?? '') ? primary.note : null,
+    unit: sameValue(lines, (row) => row.unit) ? primary.unit : '',
+    issuedBy: sameValue(lines, (row) => row.issuedBy ?? '') ? primary.issuedBy : null,
+    receivedBy: sameValue(lines, (row) => row.receivedBy ?? '') ? primary.receivedBy : null,
+    autoIssued: lines.every((row) => row.autoIssued),
+    lines,
+  }
+}
+
+function withLineSub(columns: Column<OutboundGroup>[]): Column<OutboundGroup, OutboundRow>[] {
+  return columns.map((col) => ({
+    ...col,
+    render: (row, index) => (row.lines.length > 1 ? null : col.render?.(row, index)),
+    renderSub: (line) =>
+      col.render
+        ? col.render(asOutboundGroup([line]), 0)
+        : ((line as Record<string, unknown>)[col.key] as string),
+  }))
 }
 
 function outboundOptimisticRow(

@@ -145,6 +145,7 @@ export type ShipmentPayload = {
   paymentMethod?: string
   note?: string
   lines: Array<{ orderCode: string; qty: number; unitPrice: string; note?: string }>
+  editReason?: string
 }
 
 const BASE = '/finished-goods'
@@ -213,6 +214,7 @@ export type UpsertReceiptPayload = {
   sizeLabel?: string
   qtyUnit?: string
   bomLines?: Array<{ materialId: string }>
+  editReason?: string
 }
 
 export function createFinishedGoodsReceiptApi(payload: UpsertReceiptPayload) {

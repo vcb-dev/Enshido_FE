@@ -45,8 +45,10 @@ import {
   ColumnHeaderFilter,
   ColumnHeaderSearch,
   DataTable,
+  EditReasonBlock,
   Form,
   FormMoneyField,
+  FormQtyField,
   FormRow,
   FormSearchSelect,
   FormTextField,
@@ -622,6 +624,7 @@ function StockCard({
     profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
     profile.showProductInfo ? { label: 'Màu đá', value: row.color ?? '—' } : null,
     profile.showProductInfo ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
+    row.stoneWeight ? { label: 'TL đá (g)', value: row.stoneWeight } : null,
   ].filter((item): item is { label: string; value: string } => item != null)
 
   return (
@@ -1021,6 +1024,7 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
     platingColorId: platingColorId ?? null,
     platingColor: platingColorId ? lookupName(lookups?.platingColors, platingColorId) ?? row.platingColor : null,
     sizeLabel: payload.sizeLabel !== undefined ? payload.sizeLabel || null : row.sizeLabel,
+    stoneWeight: payload.stoneWeight !== undefined ? payload.stoneWeight || null : row.stoneWeight,
     images: payload.images ?? row.images,
     metalKind: metalKind ?? null,
     metalKindLabel: metalKind
@@ -1079,6 +1083,7 @@ function blankStockRow(
       platingColorId: null,
       platingColor: null,
       sizeLabel: null,
+      stoneWeight: null,
       images: [],
       classificationCode: 'RAW_MATERIAL',
       classification: 'NVL',
@@ -1107,6 +1112,7 @@ type StockFormValues = {
   btpCategoryId: string
   platingColorId: string
   sizeLabel: string
+  stoneWeight: string
   images: OrderImage[]
   openingQty: string
   stockUnitPrice: string
@@ -1131,6 +1137,7 @@ const EMPTY_STOCK: StockFormValues = {
   btpCategoryId: '',
   platingColorId: '',
   sizeLabel: '',
+  stoneWeight: '',
   images: [],
   openingQty: '0',
   stockUnitPrice: '',
@@ -1168,6 +1175,8 @@ function StockEditDialog({
   })
   const items = useFieldArray({ control: form.control, name: 'items' })
   const [uploading, setUploading] = useState(false)
+  const [editReason, setEditReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
   const onUploadingChange = useCallback((busy: boolean) => setUploading(busy), [])
   const lookups = useQuery({
     queryKey: ['inventory-lookups'],
@@ -1197,6 +1206,8 @@ function StockEditDialog({
 
   useEffect(() => {
     if (!open) return
+    setEditReason('')
+    setReasonError('')
     form.reset({
       items: [
         row
@@ -1215,6 +1226,7 @@ function StockEditDialog({
               btpCategoryId: row.otherClassId ?? '',
               platingColorId: row.platingColorId ?? '',
               sizeLabel: row.sizeLabel ?? '',
+              stoneWeight: row.stoneWeight ? qtyFromApi(row.stoneWeight) : '',
               images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
               openingQty: qtyFromApi(row.openingQty),
               stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
@@ -1275,9 +1287,16 @@ function StockEditDialog({
 
   function submit(values: { items: StockFormValues[] }) {
     if (readOnly) return
+    if (row && !editReason.trim()) {
+      setReasonError('Nhập lý do chỉnh sửa')
+      return
+    }
     const payloads = values.items
       .filter((item) => item.name.trim())
-      .map((item) => stockPayloadFromItem(item, profile, categoryOptions))
+      .map((item) => ({
+        ...stockPayloadFromItem(item, profile, categoryOptions),
+        editReason: editReason.trim() || undefined,
+      }))
     if (!payloads.length) return
     onSave(payloads)
   }
@@ -1342,6 +1361,19 @@ function StockEditDialog({
                 />
               ))}
             </Stack>
+            {row ? (
+              <EditReasonBlock
+                entityType="stock"
+                entityId={row.id}
+                reason={editReason}
+                onReasonChange={(value) => {
+                  setEditReason(value)
+                  if (value.trim()) setReasonError('')
+                }}
+                required
+                error={reasonError}
+              />
+            ) : null}
           </DialogContent>
           <DialogActions>
             <Button onClick={onClose} disabled={saving}>
@@ -1423,6 +1455,7 @@ function stockPayloadFromItem(
           : null,
     otherClassName: isOther ? picked?.name ?? null : null,
     sizeLabel: values.sizeLabel.trim(),
+    stoneWeight: picked?.metalKind === 'STONE' || values.metalKind === 'STONE' ? values.stoneWeight || null : null,
     openingQty: values.openingQty,
     stockUnitPrice: values.stockUnitPrice || '0',
   }
@@ -1549,6 +1582,7 @@ function StockItemFields({
                     onChange={(typeId, nextKind) => {
                       field.onChange(typeId)
                       form.setValue(`items.${index}.metalKind`, nextKind)
+                      if (nextKind !== 'STONE') form.setValue(`items.${index}.stoneWeight`, '')
                     }}
                   />
                 )}
@@ -1633,6 +1667,20 @@ function StockItemFields({
                 options={shapeOptions}
                 allowClear
                 placeholder="Tìm hình dạng…"
+              />
+            ) : null}
+            {isStone ? (
+              <FormQtyField<StockDialogValues>
+                name={`items.${index}.stoneWeight`}
+                label="Trọng lượng đá (g)"
+                required
+                placeholder="Nhập trọng lượng đá…"
+                rules={{
+                  validate: (value) => {
+                    const n = Number(value)
+                    return n > 0 || 'Nhập trọng lượng đá'
+                  },
+                }}
               />
             ) : null}
             {profile.showSize ? (

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -30,6 +30,7 @@ import {
 import { formatMoney, formatQty, moneyDigitsFromApi } from '../api/inventory'
 import { cloudinaryThumb } from '../api/uploads'
 import {
+  EditReasonBlock,
   Form,
   FormMoneyField,
   FormRow,
@@ -164,6 +165,8 @@ function StockForm({
     return extra.length ? [...extra, ...items] : items
   }, [nvlOptions.data?.items, row?.bomLines])
 
+  const [editReason, setEditReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
   const openingQty = useWatch({ control: form.control, name: 'openingQty' })
   const stockUnitPrice = useWatch({ control: form.control, name: 'stockUnitPrice' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })
@@ -180,8 +183,17 @@ function StockForm({
     Math.round((Number(openingAmount) || 0) + (Number(inAmount) || 0) - (Number(outAmount) || 0)),
   )
 
+  useEffect(() => {
+    setEditReason('')
+    setReasonError('')
+  }, [row?.id, kind])
+
   function submit(values: FormValues) {
     if (readOnly) return
+    if (row && !editReason.trim()) {
+      setReasonError('Nhập lý do chỉnh sửa')
+      return
+    }
     const bomLines = values.bomLines
       .map((line) => line.materialId.trim())
       .filter(Boolean)
@@ -201,6 +213,7 @@ function StockForm({
       sizeLabel: values.sizeLabel.trim() || undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
       bomLines,
+      editReason: editReason.trim() || undefined,
     })
   }
 
@@ -295,6 +308,20 @@ function StockForm({
         <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
           TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
         </Typography>
+        {row ? (
+          <EditReasonBlock
+            entityType="fg_receipt"
+            entityId={row.id}
+            reason={editReason}
+            onReasonChange={(value) => {
+              setEditReason(value)
+              if (value.trim()) setReasonError('')
+            }}
+            required={kind === 'edit'}
+            error={kind === 'edit' ? reasonError : undefined}
+            readOnly={kind === 'view'}
+          />
+        ) : null}
       </DialogContent>
       <DialogActions>
         {kind === 'view' ? (

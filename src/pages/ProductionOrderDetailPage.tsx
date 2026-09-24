@@ -1286,12 +1286,14 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
     ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
     ['Người chốt', order.closedBy],
+    ['Khách hàng', order.customerName],
     ['Người được hỏi', order.askedUserName],
     ['Mã theo dõi đơn', order.trackingCode],
     ['Công nợ', order.debtStatus],
   ]
 
   const productFields: Array<[string, ReactNode]> = [
+    ['Tên bán thành phẩm', order.btpName ?? order.btp?.name],
     ['Size', order.sizeLabel],
     ['Kích thước', order.size],
     ['Chất liệu', order.mainMaterial],

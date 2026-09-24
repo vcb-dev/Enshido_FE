@@ -27,6 +27,7 @@ import { ALL_PERMISSIONS, ROLE_LABELS, type PermissionCode } from '../auth/permi
 import { SCREEN_GROUPS } from '../auth/screens'
 import {
   DataTable,
+  EditReasonBlock,
   Form,
   FormCheckbox,
   FormRow,
@@ -350,6 +351,8 @@ function EditUserDialog({
     defaultValues: { fullName: '', username: '', password: '', roleCode: 'USER', department: '' },
   })
   const [screens, setScreens] = useState<PermissionCode[]>([])
+  const [editReason, setEditReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -361,6 +364,8 @@ function EditUserDialog({
       department: user.department ?? '',
     })
     setScreens(isAdmin ? ALL_PERMISSIONS : ((user.allowedScreens ?? []) as PermissionCode[]))
+    setEditReason('')
+    setReasonError('')
   }, [user, isAdmin, form])
 
   const mutation = useMutation({
@@ -371,6 +376,7 @@ function EditUserDialog({
         department: values.department.trim(),
         password: values.password.trim() || undefined,
         allowedScreens: isAdmin ? undefined : screens,
+        editReason: editReason.trim(),
       }),
     onMutate: () => {
       toast.success('Đã lưu nhân sự')
@@ -388,7 +394,16 @@ function EditUserDialog({
 
   return (
     <Dialog open={Boolean(user)} onClose={onClose} fullWidth maxWidth="sm">
-      <Form form={form} onSubmit={(values) => mutation.mutate(values)}>
+      <Form
+        form={form}
+        onSubmit={(values) => {
+          if (!editReason.trim()) {
+            setReasonError('Nhập lý do chỉnh sửa')
+            return
+          }
+          mutation.mutate(values)
+        }}
+      >
         <DialogTitle>Chỉnh sửa nhân sự</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
           <Typography variant="overline" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -452,6 +467,17 @@ function EditUserDialog({
               </FormGroup>
             </Stack>
           ))}
+          <EditReasonBlock
+            entityType="user"
+            entityId={user?.id}
+            reason={editReason}
+            onReasonChange={(value) => {
+              setEditReason(value)
+              if (value.trim()) setReasonError('')
+            }}
+            required
+            error={reasonError}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>

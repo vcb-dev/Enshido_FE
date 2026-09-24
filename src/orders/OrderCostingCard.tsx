@@ -82,8 +82,15 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
     onError: (error: Error) => toast.error(error.message),
   })
   const saveLabor = useMutation({
-    mutationFn: ({ row, amount }: { row: LaborRow; amount: string | null }) =>
-      updateStageLaborApi(code, row.stageEntryId, amount),
+    mutationFn: ({
+      row,
+      amount,
+      editReason,
+    }: {
+      row: LaborRow
+      amount: string | null
+      editReason?: string
+    }) => updateStageLaborApi(code, row.stageEntryId, amount, editReason),
     onSuccess: async () => {
       toast.success('Đã lưu tiền công')
       setEditingLabor(null)
@@ -307,7 +314,9 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
         row={editingLabor}
         saving={saveLabor.isPending}
         onClose={() => setEditingLabor(null)}
-        onSave={(amount) => editingLabor && saveLabor.mutate({ row: editingLabor, amount })}
+        onSave={(amount, editReason) =>
+          editingLabor && saveLabor.mutate({ row: editingLabor, amount, editReason })
+        }
       />
 
       <OtherCostDialog
@@ -422,7 +431,7 @@ function byCraftsman(labor: LaborRow[]) {
     .map((item) => ({ ...item, amount: String(item.amount) }))
 }
 
-type LaborValues = { amount: string }
+type LaborValues = { amount: string; editReason?: string }
 
 /** Sửa tiền công một khâu sau khi KCS đã nhận lại. Để trống = bỏ tiền công khâu đó. */
 function LaborCostDialog({
@@ -434,7 +443,7 @@ function LaborCostDialog({
   row: LaborRow | null
   saving: boolean
   onClose: () => void
-  onSave: (amount: string | null) => void
+  onSave: (amount: string | null, editReason?: string) => void
 }) {
   const form = useForm<LaborValues>({ defaultValues: { amount: '' } })
 
@@ -453,11 +462,12 @@ function LaborCostDialog({
         view: 'Tiền công',
       }}
       form={form}
-      onSubmit={(values) => onSave(values.amount || null)}
+      onSubmit={(values) => onSave(values.amount || null, values.editReason)}
       saving={saving}
       maxWidth="xs"
       onClose={onClose}
       onExited={() => undefined}
+      editLog={row ? { entityType: 'stage_labor', entityId: row.stageEntryId } : undefined}
     >
       <FormMoneyField<LaborValues> name="amount" label="Tiền công khâu (đ)" sx={{ mt: 1 }} />
       <Typography variant="caption" color="text.secondary">
@@ -467,7 +477,7 @@ function LaborCostDialog({
   )
 }
 
-type CostValues = { name: string; amount: string; note: string }
+type CostValues = { name: string; amount: string; note: string; editReason?: string }
 
 function OtherCostDialog({
   cost,
@@ -499,12 +509,18 @@ function OtherCostDialog({
       titles={{ create: 'Thêm chi phí khác', edit: 'Sửa chi phí', view: 'Chi phí' }}
       form={form}
       onSubmit={(values) =>
-        onSave({ name: values.name.trim(), amount: values.amount, note: values.note.trim() || undefined })
+        onSave({
+          name: values.name.trim(),
+          amount: values.amount,
+          note: values.note.trim() || undefined,
+          editReason: values.editReason,
+        })
       }
       saving={saving}
       maxWidth="xs"
       onClose={onClose}
       onExited={() => undefined}
+      editLog={editing ? { entityType: 'order_cost', entityId: editing.id } : undefined}
     >
       <FormTextField<CostValues> name="name" label="Khoản chi phí" required placeholder="Đúc thuê, 3D…" sx={{ mt: 1 }} />
       <FormMoneyField<CostValues>

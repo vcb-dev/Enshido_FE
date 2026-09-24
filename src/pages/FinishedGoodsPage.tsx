@@ -6,8 +6,6 @@ import { toast } from 'sonner'
 import {
   createFinishedGoodsReceiptApi,
   createShipmentApi,
-  deleteFinishedGoodsReceiptApi,
-  deleteShipmentApi,
   FG_FLOW_STATUS,
   fgFlowStatus,
   getFinishedGoodsLookupsApi,
@@ -43,13 +41,11 @@ import {
   type ColumnGroup,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
-import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
 import { ReceiveFormDialog } from '../finishedGoods/ReceiveFormDialog'
 import { ReceiveStockDialog } from '../finishedGoods/ReceiveStockDialog'
 import { FinishedGoodsStockDialog } from '../finishedGoods/StockFormDialog'
-import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { THANH_PHAM_WAREHOUSE, stockProfile, warehouseByCode, type WarehouseSectionCode } from '../warehouses/catalog'
 import { headerTotal, uniqueFilterOptions } from '../warehouses/stockFilters'
@@ -255,18 +251,12 @@ function FinishedGoodsStockTable() {
     onMutate: (input) => {
       dialog.close()
       toast.success(input.id ? 'Đã cập nhật thành phẩm' : 'Đã nhập thành phẩm vào kho')
+      if (!input.id) table.setPage(1)
       const previous = patchFinishedGoodsCaches(queryClient, input)
       return { previous }
     },
-    onSuccess: () => {
-      void Promise.all(
-        [
-          ['finished-goods-stock'],
-          ['finished-goods-receipts'],
-          ['finished-goods-order-options'],
-          ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
-      )
+    onSuccess: (_data, input) => {
+      refreshFinishedGoodsQueries(queryClient, { refetch: !input.id })
     },
     onError: (error: Error, _input, ctx) => {
       ctx?.previous?.rollback()
@@ -371,27 +361,6 @@ function FinishedGoodsInboundTable() {
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
 
-  const del = useDeleteRowDialog({
-    mutationFn: (row: FinishedGoodsReceiptRow) => deleteFinishedGoodsReceiptApi(row.id),
-    successMessage: 'Đã xóa phiếu nhập',
-    queryKeys: [['finished-goods-receipts']],
-    invalidateKeys: [
-      ['finished-goods-stock'],
-      ['finished-goods-receipts'],
-      ['finished-goods-order-options'],
-      ['finished-product-options'],
-    ],
-    onRemoved: (row) => {
-      queryClient.setQueryData(
-        ['finished-goods-receipts'],
-        (current: { items: FinishedGoodsReceiptRow[] } | undefined) => {
-          if (!current) return current
-          return { ...current, items: current.items.filter((item) => item.id !== row.id) }
-        },
-      )
-    },
-  })
-
   // Kho đếm hàng rồi mới nhập, nên nút mở hộp thoại nhập số lượng thay vì nhận thẳng.
   const [receiving, setReceiving] = useState<FinishedGoodsReceiptRow | null>(null)
   const receive = useMutation({
@@ -423,11 +392,10 @@ function FinishedGoodsInboundTable() {
       onEnteredBy: (id) => table.setFilter({ enteredBy: id }),
       onView: dialog.openView,
       onEdit: dialog.openEdit,
-      onDelete: (row) => del.request(row),
       onReceive: (row) => setReceiving(row),
       receivingId: receive.isPending ? (receive.variables?.row.id ?? null) : null,
     }),
-    [del.request, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.variables, table, totals],
+    [dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.variables, table, totals],
   )
 
   const save = useMutation({
@@ -441,15 +409,8 @@ function FinishedGoodsInboundTable() {
       const previous = patchFinishedGoodsCaches(queryClient, input)
       return { previous }
     },
-    onSuccess: () => {
-      void Promise.all(
-        [
-          ['finished-goods-stock'],
-          ['finished-goods-receipts'],
-          ['finished-goods-order-options'],
-          ['finished-product-options'],
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
-      )
+    onSuccess: (_data, input) => {
+      refreshFinishedGoodsQueries(queryClient, { refetch: !input.id })
     },
     onError: (error: Error, _input, ctx) => {
       ctx?.previous?.rollback()
@@ -505,16 +466,6 @@ function FinishedGoodsInboundTable() {
         saving={receive.isPending}
         onClose={() => setReceiving(null)}
         onConfirm={(qty) => receiving && receive.mutate({ row: receiving, qty })}
-      />
-      <ConfirmDeleteDialog
-        open={Boolean(del.row)}
-        title="Xóa phiếu nhập"
-        description={
-          del.row ? `Xóa phiếu nhập ${del.row.orderCode}? Thành phẩm sẽ ra khỏi kho.` : ''
-        }
-        deleting={false}
-        onClose={del.cancel}
-        onConfirm={del.confirm}
       />
     </Stack>
   )
@@ -624,23 +575,6 @@ function FinishedGoodsOutboundTable() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const del = useDeleteRowDialog({
-    mutationFn: (row: OutboundMoveRow) => deleteShipmentApi(row.shipmentCode),
-    successMessage: 'Đã xóa phiếu xuất',
-    queryKeys: [['finished-goods-shipments', '']],
-    invalidateKeys: [['finished-goods-stock'], ['finished-goods-receipts'], ['finished-goods-shipments']],
-    onRemoved: (row) => {
-      queryClient.setQueryData(
-        ['finished-goods-shipments', ''],
-        (current: { total: number; items: ShipmentListRow[] } | undefined) => {
-          if (!current) return current
-          const items = current.items.filter((item) => item.code !== row.shipmentCode)
-          return { total: items.length, items }
-        },
-      )
-    },
-  })
-
   const columns = useMemo(
     () =>
       outboundColumns(totals, {
@@ -654,10 +588,8 @@ function FinishedGoodsOutboundTable() {
         onReceivedBy: (id) => table.setFilter({ receivedBy: id }),
         onView: (row) => navigate(`/finished-goods/shipments/${row.shipmentCode}`),
         onEdit: dialog.openEdit,
-        onDelete: del.request,
       }),
     [
-      del.request,
       dialog.openEdit,
       issuerOptions,
       navigate,
@@ -729,14 +661,6 @@ function FinishedGoodsOutboundTable() {
           })
         }
       />
-      <ConfirmDeleteDialog
-        open={Boolean(del.row)}
-        title="Xóa phiếu xuất"
-        description={del.row ? `Xóa phiếu ${del.row.shipmentCode}? Tồn thành phẩm sẽ được cộng lại.` : ''}
-        deleting={false}
-        onClose={del.cancel}
-        onConfirm={del.confirm}
-      />
     </Stack>
   )
 }
@@ -796,6 +720,18 @@ function sumMoveTotals(rows: Array<{ qty: string; amount: string }>) {
   }
 }
 
+function refreshFinishedGoodsQueries(queryClient: QueryClient, { refetch }: { refetch: boolean }) {
+  const refetchType = refetch ? 'active' : 'none'
+  void Promise.all(
+    [
+      ['finished-goods-stock'],
+      ['finished-goods-receipts'],
+      ['finished-goods-order-options'],
+      ['finished-product-options'],
+    ].map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType })),
+  )
+}
+
 function patchFinishedGoodsCaches(
   queryClient: QueryClient,
   input: { id?: string; payload: UpsertReceiptPayload },
@@ -824,13 +760,95 @@ function patchFinishedGoodsCaches(
         ),
       }
     })
+  } else if (input.payload.orderCode) {
+    queryClient.setQueryData(stockKey, (current: typeof prevStock) => {
+      if (!current) return current
+      const items = current.items.map((item) =>
+        item.orderCode === input.payload.orderCode
+          ? addFinishedGoodsInboundQty(item, input.payload)
+          : item,
+      )
+      return { ...current, items, totals: sumStockTotals(items) }
+    })
+  } else {
+    queryClient.setQueryData(stockKey, (current: typeof prevStock) => {
+      const created = createdFinishedGoodsStockRow(input.payload)
+      const items = [created, ...(current?.items ?? [])]
+      return {
+        totals: sumStockTotals(items),
+        items,
+      }
+    })
   }
 
   return {
     rollback: () => {
       if (prevStock) queryClient.setQueryData(stockKey, prevStock)
+      else queryClient.removeQueries({ queryKey: stockKey })
       if (prevReceipts) queryClient.setQueryData(receiptKey, prevReceipts)
     },
+  }
+}
+
+function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGoodsStockRow {
+  const receivedQty = payload.qty
+  const unitCost = Number(payload.stockUnitPrice) || 0
+  const amount = String(Math.round(receivedQty * unitCost))
+  const av = stockStatusFromQty(String(receivedQty))
+  return {
+    id: `tmp-${Date.now()}`,
+    orderCode: '…',
+    description: payload.description ?? '',
+    requestType: 'RETAIL',
+    qtyUnit: payload.qtyUnit ?? null,
+    sizeLabel: payload.sizeLabel ?? null,
+    mainMaterial: payload.mainMaterial ?? null,
+    platingColor: payload.platingColor || null,
+    imageUrl: null,
+    bomLines: [],
+    isOpening: true,
+    openingQty: String(receivedQty),
+    openingAmount: amount,
+    inQty: '0',
+    inAmount: '0',
+    outQty: '0',
+    outAmount: '0',
+    qty: String(receivedQty),
+    amount,
+    receivedQty,
+    shippedQty: 0,
+    remainingQty: receivedQty,
+    receivedAt: payload.receivedAt,
+    receivedByName: '',
+    unitCost: String(unitCost),
+    stockValue: amount,
+    costWarnings: 0,
+    availability: av.code,
+    availabilityLabel: av.label,
+  }
+}
+
+function addFinishedGoodsInboundQty(
+  row: FinishedGoodsStockRow,
+  payload: UpsertReceiptPayload,
+): FinishedGoodsStockRow {
+  const receivedQty = row.receivedQty + payload.qty
+  const remainingQty = receivedQty - row.shippedQty
+  const unitCost = Number(row.unitCost) || 0
+  const av = stockStatusFromQty(String(remainingQty))
+  const inQty = row.isOpening ? row.inQty : String(receivedQty)
+  return {
+    ...row,
+    receivedAt: payload.receivedAt,
+    receivedQty,
+    remainingQty,
+    inQty,
+    inAmount: row.isOpening ? row.inAmount : String(Math.round(receivedQty * unitCost)),
+    qty: String(remainingQty),
+    amount: String(Math.round(remainingQty * unitCost)),
+    stockValue: String(Math.round(remainingQty * unitCost)),
+    availability: av.code,
+    availabilityLabel: av.label,
   }
 }
 
@@ -1174,7 +1192,6 @@ function inboundColumns(
     onEnteredBy: (id: string) => void
     onView: (row: FinishedGoodsReceiptRow) => void
     onEdit: (row: FinishedGoodsReceiptRow) => void
-    onDelete: (row: FinishedGoodsReceiptRow) => void
     onReceive: (row: FinishedGoodsReceiptRow) => void
     receivingId: string | null
   },
@@ -1300,16 +1317,8 @@ function inboundColumns(
             onView={() => opts.onView(row)}
             onEdit={() => opts.onEdit(row)}
             editDisabled={row.status === 'PENDING'}
-            onDelete={() => opts.onDelete(row)}
-            deleteDisabled={row.status === 'PENDING' || row.shippedQty > 0}
             titles={{
               edit: row.status === 'PENDING' ? 'Nhập kho trước khi chỉnh sửa' : 'Chỉnh sửa',
-              delete:
-                row.status === 'PENDING'
-                  ? 'Gỡ Hoàn thiện từ đơn sản xuất nếu cần hủy phiếu chờ'
-                  : row.shippedQty > 0
-                    ? `Đã xuất ${row.shippedQty} — không xóa phiếu nhập được`
-                    : 'Xóa',
             }}
           />
         </Stack>
@@ -1331,7 +1340,6 @@ function outboundColumns(
     onReceivedBy: (id: string) => void
     onView: (row: OutboundMoveRow) => void
     onEdit: (row: OutboundMoveRow) => void
-    onDelete: (row: OutboundMoveRow) => void
   },
 ): Column<OutboundMoveRow>[] {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
@@ -1374,7 +1382,7 @@ function outboundColumns(
     },
     {
       key: 'unitPrice',
-      header: 'Đơn giá xuất',
+      header: 'Đơn giá bán',
       width: 120,
       numeric: true,
       render: (row) => formatMoney(row.unitPrice),
@@ -1433,10 +1441,9 @@ function outboundColumns(
         <RowActions
           onView={() => opts.onView(row)}
           onEdit={row.autoIssued ? undefined : () => opts.onEdit(row)}
-          onDelete={row.autoIssued ? undefined : () => opts.onDelete(row)}
           titles={
             row.autoIssued
-              ? { view: 'Xem', edit: 'Phiếu tự tạo khi lên đơn — sửa trên đơn', delete: 'Phiếu tự tạo khi lên đơn — sửa trên đơn' }
+              ? { view: 'Xem', edit: 'Phiếu tự tạo khi lên đơn — sửa trên đơn' }
               : undefined
           }
         />

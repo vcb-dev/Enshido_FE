@@ -30,6 +30,7 @@ export type UpsertBtpWaitingPayload = {
   qty: string
   weight: string
   note?: string
+  editReason?: string
 }
 
 export function getBtpWaitingApi(code: string) {
