@@ -100,6 +100,12 @@ type NvlWorkLine = {
   otherRequirements: string
 }
 
+function sumNvlWeights(values: Array<string | null | undefined>) {
+  const total = values.reduce((sum, value) => sum + (Number(value) || 0), 0)
+  if (!total) return ''
+  return String(Number(total.toFixed(4)))
+}
+
 function emptyNvlWork(materialId: string, stoneWeight = ''): NvlWorkLine {
   return {
     materialId,
@@ -339,7 +345,7 @@ function NvlDetailFields({
         />
       </FormRow>
 
-      <FormRow columns={5}>
+      <FormRow columns={4}>
         <FormMultiFreeSoloField<FormValues>
           name="stoneTypes"
           label="Loại đá"
@@ -359,8 +365,7 @@ function NvlDetailFields({
               allowEmptyQty && !value ? true : qtyOverStock(value, nvlMaxQty, 'tồn NVL'),
           }}
         />
-        <FormQtyField<FormValues> name="stoneWeight" label="Trọng lượng đá (g)" />
-        <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" />
+        <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" readOnly />
       </FormRow>
 
       <FormRow columns={2}>
@@ -530,6 +535,10 @@ export function ProductionOrderFormDialog({
           : null
   const fgBomLines = selectedFinished?.bomLines ?? []
   const hasFgBom = fgBomLines.length > 0
+  const nvlWeightSum = useMemo(() => {
+    if (hasFgBom) return sumNvlWeights(fgBomLines.map((line) => line.weight))
+    return sumNvlWeights([selectedNvl?.weight])
+  }, [fgBomLines, hasFgBom, selectedNvl?.weight])
   const nvlInputQtys =
     isNvl && hasFgBom
       ? (nvlLinesWatch ?? []).map((line) => line?.stoneCount)
@@ -668,6 +677,12 @@ export function ProductionOrderFormDialog({
   }, [open, order, initialSource, operatorName, form])
 
   useEffect(() => {
+    if (!open || order || !isNvl) return
+    if (form.getValues('silverWeight') === nvlWeightSum) return
+    form.setValue('silverWeight', nvlWeightSum, { shouldDirty: true })
+  }, [form, isNvl, nvlWeightSum, open, order])
+
+  useEffect(() => {
     if (!open || !btpQty || isNvl) return
     void form.trigger('btpQty')
   }, [btpQty, btpMaxQty, form, open, isNvl])
@@ -751,11 +766,6 @@ export function ProductionOrderFormDialog({
     )
     form.setValue('stoneCount', '', { shouldDirty: true })
     form.setValue(
-      'stoneWeight',
-      next?.bomLines.find((line) => line.stoneWeight)?.stoneWeight || next?.stoneWeight || '',
-      { shouldDirty: true },
-    )
-    form.setValue(
       'weight',
       next?.weight || next?.bomLines.find((line) => line.weight)?.weight || '',
       { shouldDirty: true },
@@ -787,11 +797,6 @@ export function ProductionOrderFormDialog({
       form.setValue('stoneColor', color, { shouldDirty: true })
     }
     form.setValue('stoneTypes', next?.materialType ? [next.materialType] : [], { shouldDirty: true })
-    if (next?.stoneWeight) {
-      form.setValue('stoneWeight', next.stoneWeight, { shouldDirty: true })
-    } else if (next && next.metalKind !== 'Đá') {
-      form.setValue('stoneWeight', '', { shouldDirty: true })
-    }
     form.setValue('weight', next?.weight ?? '', { shouldDirty: true })
     const other = form.getValues('otherRequirements').trim()
     if (!other || other === (previous?.note ?? '')) {
@@ -831,7 +836,7 @@ export function ProductionOrderFormDialog({
       size: values.size.trim(),
       sizeLabel: values.sizeLabel.trim(),
       stoneCount: values.stoneCount ? Number(values.stoneCount) : null,
-      stoneWeight: values.stoneWeight || null,
+      stoneWeight: null,
       weight: values.weight || null,
       silverWeight: values.silverWeight || null,
       laserEngraving: values.laserEngraving.trim(),
@@ -854,7 +859,7 @@ export function ProductionOrderFormDialog({
               materialId: material.id,
               platingColor: normalizePlatingColor(line?.platingColor) || null,
               qty: Number(line?.stoneCount) || 0,
-              stoneWeight: line?.stoneWeight || null,
+              stoneWeight: null,
               laserEngraving: line?.laserEngraving.trim() || null,
               otherRequirements: line?.otherRequirements.trim() || null,
             }
@@ -968,7 +973,7 @@ export function ProductionOrderFormDialog({
                     const maxQty = nvlStockMax(material.qty, held)
                     return (
                       <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        <FormRow columns={3}>
+                        <FormRow columns={2}>
                           <FormSelect<FormValues>
                             name={`nvlLines.${index}.platingColor`}
                             label="Màu sắc (xi)"
@@ -985,10 +990,6 @@ export function ProductionOrderFormDialog({
                             rules={{
                               validate: (value) => qtyOverStock(value, maxQty, 'tồn NVL'),
                             }}
-                          />
-                          <FormQtyField<FormValues>
-                            name={`nvlLines.${index}.stoneWeight`}
-                            label="Trọng lượng đá (g)"
                           />
                         </FormRow>
                         <FormRow columns={2}>
@@ -1099,6 +1100,8 @@ export function ProductionOrderFormDialog({
               <FormQtyField<FormValues>
                 name="silverWeight"
                 label="Tổng TL bạc (g)"
+                readOnly={!order}
+                helperText={!order ? 'Tổng trọng lượng các NVL đã chọn' : undefined}
                 rules={{
                   validate: (value) => {
                     if (!order?.subTickets.length) return true

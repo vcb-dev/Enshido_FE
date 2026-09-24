@@ -345,8 +345,8 @@ function Ticket({
               {subTicket ? subTicket.qty : order.qty}
               {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
             </Value>
-            <Label>Trọng lượng đá:</Label>
-            <Value colSpan={SPAN_1}>{order.stoneWeight != null ? formatQty(order.stoneWeight) : ''}</Value>
+            <Label>Trọng lượng:</Label>
+            <Value colSpan={SPAN_1}>{order.weight != null ? formatQty(order.weight) : ''}</Value>
           </tr>
           <tr>
             <Label>TL bạc (g):</Label>
