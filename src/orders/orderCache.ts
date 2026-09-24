@@ -122,6 +122,7 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
     leadTime: order.leadTime,
     trackingCode: order.trackingCode,
     closedBy: order.closedBy,
+    customerName: order.customerName ?? null,
     description: order.description,
     stoneColor: order.stoneColor,
     stoneTypes: order.stoneTypes,
