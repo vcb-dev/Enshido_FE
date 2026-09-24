@@ -728,6 +728,7 @@ function OutboundDialog({
   onSave: (payloads: CreateOutboundPayload[]) => void
 }) {
   const profile = stockProfile(warehouseCode)
+  const hideIssuedAt = warehouseCode === 'nvl-tieu-hao'
   const form = useForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
   const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
@@ -762,7 +763,7 @@ function OutboundDialog({
           }
         : {
             ...EMPTY_OUTBOUND,
-            issuedAt: new Date().toISOString().slice(0, 10),
+            issuedAt: todayYmd(),
             lines: [{ ...EMPTY_OUTBOUND_LINE, unitId: units[0]?.id ?? '' }],
           },
     )
@@ -784,7 +785,7 @@ function OutboundDialog({
     const payloads = values.lines
       .filter((line) => line.name.trim())
       .map((line) => ({
-        issuedAt: values.issuedAt,
+        issuedAt: hideIssuedAt && kind === 'create' ? todayYmd() : values.issuedAt,
         name: line.name.trim(),
         sku: line.sku.trim() || matchStockMaterial(materials, line.name)?.sku || undefined,
         materialId: line.materialId ?? matchStockMaterial(materials, line.name)?.id ?? null,
@@ -857,15 +858,17 @@ function OutboundDialog({
       onExited={onExited}
       editLog={row ? { entityType: 'outbound', entityId: row.id } : undefined}
     >
-      <FormRow columns={2} sx={{ mt: 1 }}>
-        <FormTextField<OutboundFormValues>
-          name="issuedAt"
-          label="Ngày xuất"
-          type="date"
-          required
-          readOnly={readOnly}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+      <FormRow columns={hideIssuedAt ? 1 : 2} sx={{ mt: 1 }}>
+        {hideIssuedAt ? null : (
+          <FormTextField<OutboundFormValues>
+            name="issuedAt"
+            label="Ngày xuất"
+            type="date"
+            required
+            readOnly={readOnly}
+            slotProps={{ inputLabel: { shrink: true } }}
+          />
+        )}
         <FormSearchSelect<OutboundFormValues>
           name="productionOrderCode"
           label="Mã đơn SX"
@@ -1179,6 +1182,12 @@ function asOutboundGroup(lines: OutboundRow[]): OutboundGroup {
     autoIssued: lines.every((row) => row.autoIssued),
     lines,
   }
+}
+
+function todayYmd() {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
 function withLineSub(columns: Column<OutboundGroup>[]): Column<OutboundGroup, OutboundRow>[] {
