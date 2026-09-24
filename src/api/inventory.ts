@@ -86,6 +86,7 @@ export type StockRow = {
   platingColor?: string | null
   sizeLabel?: string | null
   stoneWeight?: string | null
+  weight?: string | null
   images?: MaterialImage[]
   classificationCode: ClassificationCode
   classification: string
@@ -305,6 +306,7 @@ export type UpdateStockPayload = {
   platingColorId?: string | null
   sizeLabel?: string | null
   stoneWeight?: string | null
+  weight?: string | null
   images?: MaterialImage[]
   openingQty?: string
   openingAmount?: string

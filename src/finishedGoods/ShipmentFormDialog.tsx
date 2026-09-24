@@ -1,8 +1,10 @@
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Button, IconButton, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { FinishedGoodsStockRow, ShipmentDetail, ShipmentPayload } from '../api/finishedGoods'
 import { formatMoney, moneyDigitsFromApi } from '../api/inventory'
+import { listOrderOptionsApi } from '../api/productionOrders'
 import {
   CrudDialogShell,
   FormMoneyField,
@@ -11,6 +13,7 @@ import {
   FormTextField,
   TrashIcon,
 } from '../components/ui'
+import { STATUS_META } from '../orders/catalog'
 import { FormFreeSoloField } from '../orders/FreeSoloFields'
 
 type LineValues = { orderCode: string; qty: string; unitPrice: string; note: string }
@@ -86,6 +89,12 @@ export function ShipmentFormDialog({
     defaultValues: { shippedAt: '', customerName: '', paymentMethod: '', note: '', lines: [EMPTY_LINE] },
   })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
+  const ordersQuery = useQuery({
+    queryKey: ['production-order-options'],
+    queryFn: () => listOrderOptionsApi(),
+    staleTime: 60_000,
+    enabled: open,
+  })
 
   useEffect(() => {
     if (!open) return
@@ -151,30 +160,47 @@ export function ShipmentFormDialog({
     return map
   }, [stock, shipment])
 
-  const orderOptions = useMemo(
-    () =>
-      Array.from(available.entries()).map(([code, item]) => ({
-        id: code,
-        name: `${code}${item.description ? ` — ${item.description}` : ''}`,
-        secondary: [
-          item.sizeLabel ? `size ${item.sizeLabel}` : null,
-          item.mainMaterial,
-          `còn ${item.remaining}${item.qtyUnit ? ` ${item.qtyUnit}` : ''}`,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-      })),
-    [available],
-  )
+  const orderOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const items = (ordersQuery.data ?? []).map((order) => {
+      seen.add(order.code)
+      return {
+        id: order.code,
+        name: order.code,
+        secondary: `${STATUS_META[order.status].label} · ${order.description}`,
+      }
+    })
+    for (const line of shipment?.lines ?? []) {
+      if (seen.has(line.orderCode)) continue
+      seen.add(line.orderCode)
+      items.push({
+        id: line.orderCode,
+        name: line.orderCode,
+        secondary: line.description,
+      })
+    }
+    if (initialOrderCode && !seen.has(initialOrderCode)) {
+      items.unshift({
+        id: initialOrderCode,
+        name: initialOrderCode,
+        secondary: available.get(initialOrderCode)?.description ?? '',
+      })
+    }
+    return items
+  }, [available, initialOrderCode, ordersQuery.data, shipment])
 
   function applyOrder(index: number, code: string) {
     const info = available.get(code)
-    if (!info) return
-    form.setValue(`lines.${index}.qty`, String(info.remaining >= 1 ? info.remaining : 1), {
+    const order = ordersQuery.data?.find((item) => item.code === code)
+    form.setValue(`lines.${index}.qty`, String(info && info.remaining >= 1 ? info.remaining : 1), {
       shouldDirty: true,
     })
-    form.setValue(`lines.${index}.unitPrice`, moneyDigitsFromApi(info.unitCost), { shouldDirty: true })
-    form.setValue(`lines.${index}.note`, info.description, { shouldDirty: true })
+    form.setValue(`lines.${index}.unitPrice`, info ? moneyDigitsFromApi(info.unitCost) : '', {
+      shouldDirty: true,
+    })
+    form.setValue(`lines.${index}.note`, info?.description || order?.description || '', {
+      shouldDirty: true,
+    })
   }
 
   const watched = useWatch({ control: form.control, name: 'lines' })
@@ -202,7 +228,7 @@ export function ShipmentFormDialog({
   function submit(values: FormValues) {
     if (overStock.length) return
     onSave({
-      shippedAt: values.shippedAt,
+      shippedAt: shipment?.shippedAt ?? todayYmd(),
       customerName: values.customerName.trim(),
       paymentMethod: values.paymentMethod.trim() || undefined,
       note: values.note.trim() || undefined,
@@ -233,30 +259,9 @@ export function ShipmentFormDialog({
       onExited={() => undefined}
       editLog={shipment ? { entityType: 'fg_shipment', entityId: shipment.code } : undefined}
     >
-      <FormRow columns={4} sx={{ mt: 1 }}>
-        <FormTextField<FormValues>
-          name="shippedAt"
-          label="Ngày xuất"
-          type="date"
-          required
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <FormFreeSoloField<FormValues> name="customerName" label="Khách hàng" required options={customers} />
-        <FormFreeSoloField<FormValues>
-          name="paymentMethod"
-          label="Hình thức thanh toán"
-          options={paymentMethods}
-        />
-        <FormTextField<FormValues> name="note" label="Ghi chú phiếu" />
-      </FormRow>
-
-      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, mt: 1 }}>
         Hàng xuất
       </Typography>
-
-      {stock.length === 0 && !shipment ? (
-        <Alert severity="info">Kho thành phẩm đang trống — đơn vào kho khi chốt Hoàn thiện trên phiếu thợ.</Alert>
-      ) : null}
 
       <Stack spacing={1}>
         {lines.fields.map((field, index) => {
@@ -279,7 +284,7 @@ export function ShipmentFormDialog({
                   options={orderOptions}
                   required
                   placeholder="Chọn đơn sản xuất…"
-                  noOptionsText="Không có đơn còn hàng trong kho"
+                  noOptionsText="Không có đơn sản xuất"
                   onPicked={(code) => applyOrder(index, code)}
                 />
                 <FormTextField<FormValues>
@@ -331,6 +336,10 @@ export function ShipmentFormDialog({
                     .filter(Boolean)
                     .join(' · ')}
                 </Typography>
+              ) : line?.orderCode ? (
+                <Typography variant="caption" color="warning.main">
+                  Đơn chưa vào kho thành phẩm — không xuất được cho đến khi có tồn.
+                </Typography>
               ) : null}
             </Paper>
           )
@@ -340,6 +349,16 @@ export function ShipmentFormDialog({
       <Button size="small" onClick={() => lines.append(EMPTY_LINE)} sx={{ alignSelf: 'flex-start' }}>
         + Thêm dòng
       </Button>
+
+      <FormRow columns={3}>
+        <FormFreeSoloField<FormValues> name="customerName" label="Khách hàng" required options={customers} />
+        <FormFreeSoloField<FormValues>
+          name="paymentMethod"
+          label="Hình thức thanh toán"
+          options={paymentMethods}
+        />
+        <FormTextField<FormValues> name="note" label="Ghi chú phiếu" />
+      </FormRow>
 
       {overStock.map(([code, qty]) => (
         <Alert key={code} severity="error" sx={{ py: 0 }}>

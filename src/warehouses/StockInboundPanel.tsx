@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Box, Button, Dialog, Paper, Stack } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
-import type { Control } from 'react-hook-form'
+import type { Control, UseFormReturn } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createWarehouseInboundApi,
@@ -44,7 +44,7 @@ import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { InboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
-import type { StockMaterialOption } from './MaterialNameField'
+import { matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
 import { CONSUMABLE_CATEGORIES, stockProfile, withFallback } from './catalog'
@@ -700,8 +700,8 @@ function InboundDialog({
       .map((line) => ({
         receivedAt: values.receivedAt,
         name: line.name.trim(),
-        sku: line.sku.trim() || undefined,
-        materialId: line.materialId,
+        sku: line.sku.trim() || matchStockMaterial(materials, line.name)?.sku || undefined,
+        materialId: line.materialId ?? matchStockMaterial(materials, line.name)?.id ?? null,
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
@@ -789,17 +789,7 @@ function InboundDialog({
                       nameLabel={profile.nameLabel}
                       createLabel={profile.createLabel}
                       allowCreate={Boolean(profile.typeCodes)}
-                      onSelect={(material) => {
-                        if (!material) {
-                          if (kind !== 'edit') form.setValue(`lines.${index}.materialId`, null)
-                          form.setValue(`lines.${index}.sku`, '')
-                          return
-                        }
-                        form.setValue(`lines.${index}.materialId`, material.id)
-                        form.setValue(`lines.${index}.sku`, material.sku ?? '')
-                        if (material.unitId) form.setValue(`lines.${index}.unitId`, material.unitId)
-                        form.setValue(`lines.${index}.otherClassId`, material.otherClassId ?? '')
-                      }}
+                      onSelect={(material) => bindInboundMaterial(form, index, kind, material)}
                     />
                     <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
                   </FormRow>
@@ -916,6 +906,28 @@ function InboundDialog({
       />
     </CrudDialogShell>
   )
+}
+
+function bindInboundMaterial(
+  form: UseFormReturn<InboundFormValues>,
+  index: number,
+  kind: 'create' | 'edit' | 'view',
+  material: StockMaterialOption | null,
+) {
+  if (!material) {
+    if (kind !== 'edit') form.setValue(`lines.${index}.materialId`, null)
+    form.setValue(`lines.${index}.sku`, '')
+    void form.trigger(`lines.${index}.name`)
+    return
+  }
+  form.setValue(`lines.${index}.materialId`, material.id, {
+    shouldDirty: true,
+    shouldValidate: true,
+  })
+  form.setValue(`lines.${index}.sku`, material.sku ?? '')
+  if (material.unitId) form.setValue(`lines.${index}.unitId`, material.unitId)
+  form.setValue(`lines.${index}.otherClassId`, material.otherClassId ?? '')
+  void form.trigger(`lines.${index}.name`)
 }
 
 function inboundOptimisticAt(ymd: string) {

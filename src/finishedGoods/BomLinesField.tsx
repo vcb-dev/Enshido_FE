@@ -21,6 +21,7 @@ function pickerItems(options: FinishedGoodsNvlOption[]): CatalogPickerItem[] {
       item.shape,
       item.color,
       item.sizeLabel ? `size ${item.sizeLabel}` : null,
+      item.weight ? `${item.weight}g` : null,
       item.locationCode,
     ]
       .filter(Boolean)
@@ -180,6 +181,7 @@ export function NvlSpecGrid({ material }: { material: FinishedGoodsNvlOption }) 
         <TextInput label="Tên NVL" value={material.name} readOnly />
         <TextInput label="Đơn vị" value={dash(material.unit)} readOnly />
         <TextInput label="Size" value={dash(material.sizeLabel)} readOnly />
+        <TextInput label="Trọng lượng (g)" value={dash(material.weight)} readOnly />
         <TextInput label="Hình dạng" value={dash(material.shape)} readOnly />
         <TextInput label="Màu sắc" value={dash(material.color)} readOnly />
         <TextInput label="Chất loại" value={dash(material.materialType)} readOnly />

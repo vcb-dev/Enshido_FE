@@ -1,6 +1,10 @@
 import type { Control } from 'react-hook-form'
 import { useController } from 'react-hook-form'
-import { MaterialNameField, type StockMaterialOption } from './MaterialNameField'
+import {
+  matchStockMaterial,
+  MaterialNameField,
+  type StockMaterialOption,
+} from './MaterialNameField'
 
 /**
  * Trường "Tên hàng" nối react-hook-form, dùng chung cho phiếu nhập/xuất.
@@ -43,12 +47,14 @@ export function MaterialField({
     control,
     rules: {
       required: allowCreate ? `${fieldLabel} không được trống` : `Chọn ${fieldLabel} từ Tồn`,
-      validate: (value, formValues: Record<string, unknown>) =>
-        allowCreate ||
-        kind !== 'create' ||
-        Boolean(readPath(formValues, materialIdName)) ||
-        String(value ?? '').trim().length === 0 ||
-        `Chọn ${fieldLabel} từ danh sách, không nhập tự do`,
+      validate: (value, formValues: Record<string, unknown>) => {
+        if (allowCreate || kind !== 'create' || loading) return true
+        const name = String(value ?? '').trim()
+        if (!name) return true
+        if (readPath(formValues, materialIdName)) return true
+        if (matchStockMaterial(materials, name)) return true
+        return `Chọn ${fieldLabel} từ danh sách, không nhập tự do`
+      },
     },
   })
 

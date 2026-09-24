@@ -8,6 +8,7 @@ export type FinishedGoodsReceiptRow = {
   description: string
   qtyUnit: string | null
   sizeLabel: string | null
+  weight?: string | null
   mainMaterial: string | null
   imageUrl: string | null
   qty: string
@@ -30,6 +31,7 @@ export type FinishedGoodsStockRow = {
   requestType: ProductionRequestType
   qtyUnit: string | null
   sizeLabel: string | null
+  weight?: string | null
   mainMaterial: string | null
   platingColor: string | null
   imageUrl: string | null
@@ -170,6 +172,7 @@ export type FinishedGoodsOrderOption = {
   qty: number
   qtyUnit: string | null
   sizeLabel: string | null
+  weight?: string | null
   mainMaterial: string | null
   /** Đã có trên tab Tồn — nhập thêm cộng vào dòng đó. */
   inStock?: boolean
@@ -189,6 +192,8 @@ export type FinishedGoodsNvlOption = {
   bodyMetal: string | null
   metalKind: string | null
   sizeLabel: string | null
+  stoneWeight?: string | null
+  weight?: string | null
   note: string | null
   imageUrl: string | null
 }
@@ -212,6 +217,7 @@ export type UpsertReceiptPayload = {
   qty: number
   receivedAt: string
   sizeLabel?: string
+  weight?: string | null
   qtyUnit?: string
   bomLines?: Array<{ materialId: string }>
   editReason?: string

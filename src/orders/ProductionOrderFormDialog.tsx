@@ -69,6 +69,7 @@ type FormValues = {
   sizeLabel: string
   stoneCount: string
   stoneWeight: string
+  weight: string
   silverWeight: string
   laserEngraving: string
   otherRequirements: string
@@ -134,6 +135,7 @@ const EMPTY: FormValues = {
   sizeLabel: '',
   stoneCount: '',
   stoneWeight: '',
+  weight: '',
   silverWeight: '',
   laserEngraving: '',
   otherRequirements: '',
@@ -282,6 +284,7 @@ function nvlPickerOptions(items: NvlOption[]): CatalogPickerItem[] {
       item.shape,
       item.color,
       item.sizeLabel ? `size ${item.sizeLabel}` : null,
+      item.weight ? `${item.weight}g` : null,
     ]
       .filter(Boolean)
       .join(' · '),
@@ -336,7 +339,7 @@ function NvlDetailFields({
         />
       </FormRow>
 
-      <FormRow columns={4}>
+      <FormRow columns={5}>
         <FormMultiFreeSoloField<FormValues>
           name="stoneTypes"
           label="Loại đá"
@@ -357,6 +360,7 @@ function NvlDetailFields({
           }}
         />
         <FormQtyField<FormValues> name="stoneWeight" label="Trọng lượng đá (g)" />
+        <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" />
       </FormRow>
 
       <FormRow columns={2}>
@@ -466,6 +470,7 @@ export function ProductionOrderFormDialog({
         stoneTypes: order.stoneTypes,
         stoneCount: order.stoneCount,
         stoneWeight: order.stoneWeight,
+        weight: order.weight,
         laserEngraving: order.laserEngraving,
         otherRequirements: order.otherRequirements,
         remainingQty: 0,
@@ -499,6 +504,8 @@ export function ProductionOrderFormDialog({
         bodyMetal: null,
         metalKind: null,
         sizeLabel: null,
+        stoneWeight: null,
+        weight: null,
         note: null,
         images: [],
       } satisfies NvlOption,
@@ -622,6 +629,7 @@ export function ProductionOrderFormDialog({
             sizeLabel: order.sizeLabel ?? '',
             stoneCount: order.stoneCount != null ? String(order.stoneCount) : '',
             stoneWeight: order.stoneWeight ?? '',
+            weight: order.weight ?? '',
             silverWeight: order.silverWeight ?? '',
             laserEngraving: order.laserEngraving ?? '',
             otherRequirements: order.otherRequirements ?? '',
@@ -711,6 +719,11 @@ export function ProductionOrderFormDialog({
   function applyBtpFinishedProduct(next: FinishedProductOption | undefined) {
     form.setValue('sizeLabel', next?.sizeLabel ?? '', { shouldDirty: true })
     form.setValue('qtyUnit', next?.qtyUnit ?? '', { shouldDirty: true })
+    form.setValue(
+      'weight',
+      next?.weight || next?.bomLines.find((line) => line.weight)?.weight || '',
+      { shouldDirty: true },
+    )
   }
 
   function applyFinishedProduct(next: FinishedProductOption | undefined, previous: FinishedProductOption | undefined) {
@@ -740,6 +753,11 @@ export function ProductionOrderFormDialog({
     form.setValue(
       'stoneWeight',
       next?.bomLines.find((line) => line.stoneWeight)?.stoneWeight || next?.stoneWeight || '',
+      { shouldDirty: true },
+    )
+    form.setValue(
+      'weight',
+      next?.weight || next?.bomLines.find((line) => line.weight)?.weight || '',
       { shouldDirty: true },
     )
     form.setValue('laserEngraving', '', { shouldDirty: true })
@@ -774,6 +792,7 @@ export function ProductionOrderFormDialog({
     } else if (next && next.metalKind !== 'Đá') {
       form.setValue('stoneWeight', '', { shouldDirty: true })
     }
+    form.setValue('weight', next?.weight ?? '', { shouldDirty: true })
     const other = form.getValues('otherRequirements').trim()
     if (!other || other === (previous?.note ?? '')) {
       form.setValue('otherRequirements', next?.note ?? '', { shouldDirty: true })
@@ -813,6 +832,7 @@ export function ProductionOrderFormDialog({
       sizeLabel: values.sizeLabel.trim(),
       stoneCount: values.stoneCount ? Number(values.stoneCount) : null,
       stoneWeight: values.stoneWeight || null,
+      weight: values.weight || null,
       silverWeight: values.silverWeight || null,
       laserEngraving: values.laserEngraving.trim(),
       otherRequirements: values.otherRequirements.trim(),

@@ -73,6 +73,8 @@ export type StockProfile = {
   showStatus: boolean
   /// Size trên bảng Tồn / form nhập NVL (BTP dùng `showProductInfo`).
   showSize: boolean
+  /// Trọng lượng (g) trên Tồn / form nhập NVL.
+  showWeight: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -113,6 +115,7 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showNvlCategory: true,
   showStatus: true,
   showSize: true,
+  showWeight: true,
   typeLabel: 'Chất loại',
   ...NVL_COPY,
 }
@@ -130,6 +133,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showNvlCategory: false,
     showStatus: false,
     showSize: false,
+    showWeight: false,
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',
@@ -155,6 +159,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showNvlCategory: false,
     showStatus: true,
     showSize: false,
+    showWeight: false,
     typeLabel: 'Danh mục',
     typeCodes: CONSUMABLE_TYPE_CODES,
     ...NVL_COPY,
@@ -171,6 +176,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showNvlCategory: false,
     showStatus: true,
     showSize: false,
+    showWeight: true,
     typeLabel: 'Chất loại',
     noun: 'TP',
     nameLabel: 'Tên thành phẩm',

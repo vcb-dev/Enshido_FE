@@ -802,6 +802,7 @@ function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGo
     requestType: 'RETAIL',
     qtyUnit: payload.qtyUnit ?? null,
     sizeLabel: payload.sizeLabel ?? null,
+    weight: payload.weight ?? null,
     mainMaterial: payload.mainMaterial ?? null,
     platingColor: payload.platingColor || null,
     imageUrl: null,
@@ -863,6 +864,7 @@ function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertR
     mainMaterial: payload.mainMaterial ?? row.mainMaterial,
     platingColor: payload.platingColor !== undefined ? payload.platingColor || null : row.platingColor,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
+    weight: payload.weight !== undefined ? payload.weight || null : row.weight,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     receivedQty,
@@ -894,6 +896,7 @@ function patchFinishedGoodsReceiptRow(row: FinishedGoodsReceiptRow, payload: Ups
   return {
     ...row,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
+    weight: payload.weight !== undefined ? payload.weight || null : row.weight,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     qty,
@@ -995,6 +998,13 @@ function stockColumns(
       width: 70,
       align: 'center',
       render: (row) => row.sizeLabel ?? '—',
+    },
+    {
+      key: 'weight',
+      header: 'Trọng lượng (g)',
+      width: 110,
+      align: 'right',
+      render: (row) => (row.weight ? formatQty(row.weight) : '—'),
     },
     {
       key: 'openingQty',
@@ -1134,6 +1144,11 @@ function StockCard({
             {row.sizeLabel ? (
               <Typography variant="caption" color="text.secondary">
                 Size {row.sizeLabel}
+              </Typography>
+            ) : null}
+            {row.weight ? (
+              <Typography variant="caption" color="text.secondary">
+                {formatQty(row.weight)}g
               </Typography>
             ) : null}
             <Chip

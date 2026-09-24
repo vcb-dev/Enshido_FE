@@ -115,6 +115,11 @@ function stockFacts(row: StockRow, profile: StockProfile) {
     { label: 'Màu đá', value: row.color, show: profile.showProductInfo },
     { label: 'Size', value: row.sizeLabel, show: profile.showSize || profile.showProductInfo },
     {
+      label: 'Trọng lượng (g)',
+      value: row.weight ? formatQty(row.weight) : null,
+      show: profile.showWeight,
+    },
+    {
       label: 'Trọng lượng đá (g)',
       value: row.stoneWeight ? formatQty(row.stoneWeight) : null,
       show: Boolean(row.stoneWeight) || row.metalKind === 'STONE',

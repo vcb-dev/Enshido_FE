@@ -1302,6 +1302,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Màu đá', order.stoneColor],
     ['Số lượng đá (viên)', order.stoneCount],
     ['Trọng lượng đá (g)', order.stoneWeight != null ? formatQty(order.stoneWeight) : null],
+    ['Trọng lượng (g)', order.weight != null ? formatQty(order.weight) : null],
     ['Tổng TL bạc (g)', order.silverWeight != null ? formatQty(order.silverWeight) : null],
     ['Nội dung khắc laser', order.laserEngraving],
     ['Yêu cầu khác', order.otherRequirements],

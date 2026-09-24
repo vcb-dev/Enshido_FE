@@ -12,6 +12,17 @@ export type StockMaterialOption = {
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
 }
 
+/** Tên khớp đúng một mã trên Tồn — chọn từ list hoặc gõ đúng tên đều tính. */
+export function matchStockMaterial(
+  materials: StockMaterialOption[],
+  name: string,
+): StockMaterialOption | null {
+  const q = name.trim()
+  if (!q) return null
+  const hits = materials.filter((item) => item.name === q)
+  return hits.length === 1 ? hits[0] : hits[0] ?? null
+}
+
 export function MaterialNameField({
   value,
   materials,
@@ -79,7 +90,13 @@ export function MaterialNameField({
       }}
       onInputChange={(_, next, reason) => {
         onChange(next)
-        if (reason === 'input' && !keepMaterialOnType) onSelect(null)
+        if (reason === 'clear') {
+          onSelect(null)
+          return
+        }
+        if (reason === 'input' && !keepMaterialOnType) {
+          onSelect(matchStockMaterial(materials, next))
+        }
       }}
       onChange={(_, next) => {
         if (next) {

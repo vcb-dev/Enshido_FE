@@ -505,6 +505,7 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     (profile.showSku ? 0 : 130) -
     (profile.showShapeColor ? 0 : 250) +
     (profile.showSize ? 90 : 0) +
+    (profile.showWeight ? 110 : 0) +
     (profile.showBodyMetal ? 140 : 0) +
     (profile.showProductKind ? 160 : 0) -
     (profile.showStatus ? 0 : 110)
@@ -619,6 +620,7 @@ function StockCard({
       : null,
     profile.showType ? { label: profile.typeLabel, value: typeText(row, profile) } : null,
     profile.showSize ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
+    profile.showWeight ? { label: 'Trọng lượng (g)', value: row.weight ?? '—' } : null,
     profile.showBodyMetal ? { label: 'Chất liệu', value: row.bodyMetal ?? '—' } : null,
     profile.showProductKind ? { label: 'Phân loại sản phẩm', value: row.productKind ?? '—' } : null,
     profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
@@ -790,6 +792,14 @@ function stockColumns(
       header: 'Size',
       align: 'center',
       render: (row) => row.sizeLabel ?? '—',
+    })
+  }
+  if (profile.showWeight) {
+    columns.push({
+      key: 'weight',
+      header: 'Trọng lượng (g)',
+      align: 'right',
+      render: (row) => (row.weight ? formatQty(row.weight) : '—'),
     })
   }
   columns.push(
@@ -1025,6 +1035,7 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
     platingColor: platingColorId ? lookupName(lookups?.platingColors, platingColorId) ?? row.platingColor : null,
     sizeLabel: payload.sizeLabel !== undefined ? payload.sizeLabel || null : row.sizeLabel,
     stoneWeight: payload.stoneWeight !== undefined ? payload.stoneWeight || null : row.stoneWeight,
+    weight: payload.weight !== undefined ? payload.weight || null : row.weight,
     images: payload.images ?? row.images,
     metalKind: metalKind ?? null,
     metalKindLabel: metalKind
@@ -1084,6 +1095,7 @@ function blankStockRow(
       platingColor: null,
       sizeLabel: null,
       stoneWeight: null,
+      weight: null,
       images: [],
       classificationCode: 'RAW_MATERIAL',
       classification: 'NVL',
@@ -1113,6 +1125,7 @@ type StockFormValues = {
   platingColorId: string
   sizeLabel: string
   stoneWeight: string
+  weight: string
   images: OrderImage[]
   openingQty: string
   stockUnitPrice: string
@@ -1138,6 +1151,7 @@ const EMPTY_STOCK: StockFormValues = {
   platingColorId: '',
   sizeLabel: '',
   stoneWeight: '',
+  weight: '',
   images: [],
   openingQty: '0',
   stockUnitPrice: '',
@@ -1227,6 +1241,7 @@ function StockEditDialog({
               platingColorId: row.platingColorId ?? '',
               sizeLabel: row.sizeLabel ?? '',
               stoneWeight: row.stoneWeight ? qtyFromApi(row.stoneWeight) : '',
+              weight: row.weight ? qtyFromApi(row.weight) : '',
               images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
               openingQty: qtyFromApi(row.openingQty),
               stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
@@ -1456,6 +1471,7 @@ function stockPayloadFromItem(
     otherClassName: isOther ? picked?.name ?? null : null,
     sizeLabel: values.sizeLabel.trim(),
     stoneWeight: picked?.metalKind === 'STONE' || values.metalKind === 'STONE' ? values.stoneWeight || null : null,
+    weight: profile.showWeight ? values.weight || null : undefined,
     openingQty: values.openingQty,
     stockUnitPrice: values.stockUnitPrice || '0',
   }
@@ -1688,6 +1704,13 @@ function StockItemFields({
                 name={`items.${index}.sizeLabel`}
                 label="Size"
                 placeholder="7, US 10, 0.8mm…"
+              />
+            ) : null}
+            {profile.showWeight ? (
+              <FormQtyField<StockDialogValues>
+                name={`items.${index}.weight`}
+                label="Trọng lượng (g)"
+                placeholder="Nhập trọng lượng…"
               />
             ) : null}
             {profile.showLocation ? (

@@ -49,7 +49,7 @@ import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { OutboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
-import type { StockMaterialOption } from './MaterialNameField'
+import { matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
 import { stockProfile } from './catalog'
@@ -610,11 +610,21 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         sx={{ flex: { md: 1 } }}
         tableSx={{ '& .MuiTableCell-root.note-cell': { width: 108, maxWidth: 108 } }}
         toolbar={
-          filtering ? (
-            <Button size="small" onClick={table.reset}>
-              Xóa lọc
-            </Button>
-          ) : null
+          <>
+            {filtering ? (
+              <Button size="small" onClick={table.reset}>
+                Xóa lọc
+              </Button>
+            ) : null}
+            {warehouseCode === 'nvl-tieu-hao' ? (
+              <>
+                <Box sx={{ flex: 1, minWidth: 8 }} />
+                <Button variant="contained" onClick={dialog.openCreate}>
+                  {profile.outboundLabel}
+                </Button>
+              </>
+            ) : null}
+          </>
         }
       />
 
@@ -776,8 +786,8 @@ function OutboundDialog({
       .map((line) => ({
         issuedAt: values.issuedAt,
         name: line.name.trim(),
-        sku: line.sku.trim() || undefined,
-        materialId: line.materialId,
+        sku: line.sku.trim() || matchStockMaterial(materials, line.name)?.sku || undefined,
+        materialId: line.materialId ?? matchStockMaterial(materials, line.name)?.id ?? null,
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,

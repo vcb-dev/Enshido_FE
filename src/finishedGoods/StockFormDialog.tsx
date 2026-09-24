@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -33,6 +33,7 @@ import {
   EditReasonBlock,
   Form,
   FormMoneyField,
+  FormQtyField,
   FormRow,
   FormSelect,
   FormTextField,
@@ -50,6 +51,7 @@ type FormValues = {
   description: string
   qtyUnit: string
   sizeLabel: string
+  weight: string
   mainMaterial: string
   platingColor: string
   stockUnitPrice: string
@@ -61,6 +63,7 @@ const EMPTY: FormValues = {
   description: '',
   qtyUnit: '',
   sizeLabel: '',
+  weight: '',
   mainMaterial: '',
   platingColor: '',
   stockUnitPrice: '',
@@ -75,6 +78,7 @@ function formValuesFromRow(row: FinishedGoodsStockRow | null): FormValues {
     description: row.description,
     qtyUnit: row.qtyUnit ?? '',
     sizeLabel: row.sizeLabel ?? '',
+    weight: row.weight ?? '',
     mainMaterial: row.mainMaterial ?? '',
     platingColor: row.platingColor ?? '',
     stockUnitPrice: moneyDigitsFromApi(row.unitCost),
@@ -171,6 +175,7 @@ function StockForm({
   const stockUnitPrice = useWatch({ control: form.control, name: 'stockUnitPrice' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })
   const platingColor = useWatch({ control: form.control, name: 'platingColor' })
+  const firstNvlId = useWatch({ control: form.control, name: 'bomLines.0.materialId' })
   const showPlating = isSilverFgMaterial(mainMaterial)
 
   const inQty = row?.inQty ?? '0'
@@ -187,6 +192,25 @@ function StockForm({
     setEditReason('')
     setReasonError('')
   }, [row?.id, kind])
+
+  const filledNvlId = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (readOnly) return
+    const nvl = nvlItems.find((item) => item.id === firstNvlId)
+    if (firstNvlId && firstNvlId !== filledNvlId.current && nvl?.weight) {
+      filledNvlId.current = firstNvlId
+      form.setValue('weight', nvl.weight, { shouldDirty: true })
+      return
+    }
+    if (firstNvlId && !form.getValues('weight') && nvl?.weight) {
+      filledNvlId.current = firstNvlId
+      form.setValue('weight', nvl.weight)
+    }
+    if (!firstNvlId && !row) {
+      filledNvlId.current = undefined
+      form.setValue('weight', '')
+    }
+  }, [firstNvlId, form, nvlItems, readOnly, row])
 
   function submit(values: FormValues) {
     if (readOnly) return
@@ -211,6 +235,7 @@ function StockForm({
         : Number(values.openingQty) || 0,
       receivedAt: row ? row.receivedAt.slice(0, 10) : todayYmd(),
       sizeLabel: values.sizeLabel.trim() || undefined,
+      weight: values.weight.trim() || null,
       qtyUnit: values.qtyUnit.trim() || undefined,
       bomLines,
       editReason: editReason.trim() || undefined,
@@ -269,6 +294,7 @@ function StockForm({
             options={finishedGoodsQtyUnitOptions(row?.qtyUnit)}
           />
           <FormTextField<FormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
+          <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" placeholder="Nhập trọng lượng…" />
           <FormFgMaterialSelect name="mainMaterial" readOnly={readOnly} />
           {showPlating ? (
             <FormSelect<FormValues>
@@ -372,6 +398,7 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
             <Fact label={profile.nameLabel} value={row.description} />
             <Fact label="Đơn vị" value={row.qtyUnit} />
             <Fact label="Size" value={row.sizeLabel} />
+            <Fact label="Trọng lượng (g)" value={row.weight ? formatQty(row.weight) : null} />
             <Fact label="Chất liệu" value={row.mainMaterial} />
             {isSilverFgMaterial(row.mainMaterial) ? (
               <Fact label="Màu xi" value={row.platingColor} />

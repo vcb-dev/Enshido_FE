@@ -244,6 +244,7 @@ export type ProductionOrderDetail = Omit<
   sizeLabel: string | null
   stoneCount: number | null
   stoneWeight: string | null
+  weight: string | null
   /** Tổng TL bạc của đơn (g) — mốc chia gram cho phiếu con. */
   silverWeight: string | null
   laserEngraving: string | null
@@ -332,6 +333,7 @@ export type UpsertProductionOrderPayload = {
   sizeLabel?: string
   stoneCount?: number | null
   stoneWeight?: string | null
+  weight?: string | null
   silverWeight?: string | null
   laserEngraving?: string
   otherRequirements?: string
@@ -689,6 +691,7 @@ export type FinishedProductOption = {
   stoneTypes: string[]
   stoneCount: number | null
   stoneWeight: string | null
+  weight: string | null
   laserEngraving: string | null
   otherRequirements: string | null
   remainingQty: number
@@ -726,6 +729,7 @@ export type FinishedProductBomLine = {
   metalKind: string | null
   sizeLabel: string | null
   stoneWeight?: string | null
+  weight?: string | null
   note: string | null
   imageUrl: string | null
 }
@@ -743,6 +747,7 @@ export type NvlOption = {
   metalKind: string | null
   sizeLabel: string | null
   stoneWeight?: string | null
+  weight?: string | null
   note: string | null
   images: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
 }
