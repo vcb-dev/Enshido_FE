@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
-import { Box, Button, Dialog, Paper, Stack } from '@mui/material'
+import { Box, Button, Dialog, Paper, Stack, Autocomplete, TextField } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch, Controller } from 'react-hook-form'
 import type { Control, UseFormReturn } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
@@ -770,20 +770,51 @@ function InboundDialog({
               <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                   <FormRow>
-                    <MaterialField
-                      control={form.control as unknown as Control<any>}
-                      name={`lines.${index}.name`}
-                      kind={kind}
-                      readOnly={readOnly}
-                      materials={materials}
-                      loading={materialsLoading}
-                      noun={profile.noun}
-                      nameLabel={profile.nameLabel}
-                      createLabel={profile.createLabel}
-                      allowCreate={Boolean(profile.typeCodes)}
-                      onSelect={(material) => bindInboundMaterial(form, index, kind, material)}
-                    />
-                    <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
+                    {profile.showBtpCategory ? (
+                      <>
+                        <Controller
+                          name={`lines.${index}.materialId`}
+                          control={form.control}
+                          rules={{ required: 'Chọn mã sản phẩm từ Tồn' }}
+                          render={({ field, fieldState }) => (
+                            <ProductCodeField
+                              materials={materials}
+                              materialId={field.value}
+                              fallbackSku={line?.sku}
+                              readOnly={readOnly}
+                              loading={materialsLoading}
+                              errorText={fieldState.error?.message}
+                              onBlur={field.onBlur}
+                              onSelect={(material) => {
+                                field.onChange(material?.id ?? null)
+                                bindInboundMaterial(form, index, kind, material)
+                                form.setValue(`lines.${index}.name`, material?.name ?? '', {
+                                  shouldDirty: true,
+                                })
+                              }}
+                            />
+                          )}
+                        />
+                        <TextInput label={profile.nameLabel} value={line?.name || '—'} readOnly />
+                      </>
+                    ) : (
+                      <>
+                        <MaterialField
+                          control={form.control as unknown as Control<any>}
+                          name={`lines.${index}.name`}
+                          kind={kind}
+                          readOnly={readOnly}
+                          materials={materials}
+                          loading={materialsLoading}
+                          noun={profile.noun}
+                          nameLabel={profile.nameLabel}
+                          createLabel={profile.createLabel}
+                          allowCreate={Boolean(profile.typeCodes)}
+                          onSelect={(material) => bindInboundMaterial(form, index, kind, material)}
+                        />
+                        <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
+                      </>
+                    )}
                   </FormRow>
                   {profile.typeCodes ? (
                     <FormSearchSelect<InboundFormValues>
@@ -897,6 +928,89 @@ function InboundDialog({
         }}
       />
     </CrudDialogShell>
+  )
+}
+
+function ProductCodeField({
+  materials,
+  materialId,
+  fallbackSku,
+  readOnly,
+  loading,
+  errorText,
+  onBlur,
+  onSelect,
+}: {
+  materials: StockMaterialOption[]
+  materialId: string | null
+  fallbackSku?: string
+  readOnly: boolean
+  loading?: boolean
+  errorText?: string
+  onBlur?: () => void
+  onSelect: (material: StockMaterialOption | null) => void
+}) {
+  const current = materials.find((item) => item.id === materialId)
+  if (readOnly) {
+    return <TextInput label="Mã sản phẩm" value={current?.sku || fallbackSku || '—'} readOnly />
+  }
+  const selected =
+    current ??
+    (materialId
+      ? ({
+          id: materialId,
+          name: '',
+          sku: fallbackSku ?? '',
+          unitId: '',
+          unit: '',
+        } satisfies StockMaterialOption)
+      : null)
+
+  return (
+    <Autocomplete
+      forcePopupIcon
+      options={materials}
+      value={selected}
+      onBlur={onBlur}
+      loading={loading}
+      getOptionLabel={(option) => option.sku || option.name}
+      isOptionEqualToValue={(option, next) => option.id === next.id}
+      filterOptions={(options, state) => {
+        const q = state.inputValue.trim().toLowerCase()
+        const matched = !q
+          ? options
+          : options.filter(
+              (item) =>
+                (item.sku ?? '').toLowerCase().includes(q) ||
+                item.name.toLowerCase().includes(q),
+            )
+        return matched.slice(0, 50)
+      }}
+      onChange={(_, next) => onSelect(next)}
+      noOptionsText={loading ? 'Đang tải BTP…' : 'Chưa có mã sản phẩm. Nhập BTP ở Tồn.'}
+      renderOption={(props, option) => {
+        const { key, ...rest } = props
+        return (
+          <li key={key} {...rest}>
+            <Box component="span" sx={{ fontWeight: 700, mr: 1 }}>
+              {option.sku || '—'}
+            </Box>
+            <Box component="span" sx={{ color: 'text.secondary' }}>
+              {option.name}
+            </Box>
+          </li>
+        )
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Mã sản phẩm"
+          required
+          error={Boolean(errorText)}
+          helperText={errorText}
+        />
+      )}
+    />
   )
 }
 

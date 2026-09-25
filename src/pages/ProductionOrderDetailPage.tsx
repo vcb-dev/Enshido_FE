@@ -314,7 +314,7 @@ export function ProductionOrderDetailPage() {
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
       <PageHeader
-        title={`Đơn ${order.code}`}
+        title={`Lệnh ${order.code}`}
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
             <StatusChip status={order.status} size="medium" />
@@ -326,7 +326,7 @@ export function ProductionOrderDetailPage() {
         breadcrumbs={
           <Breadcrumbs>
             <Link component={RouterLink} to="/orders" underline="hover" color="inherit">
-              Đơn sản xuất
+              Lệnh sản xuất
             </Link>
             <Typography color="text.primary">{order.code}</Typography>
           </Breadcrumbs>
@@ -775,19 +775,20 @@ export function ProductionOrderDetailPage() {
           {isBtp ? (
             <Section title="BTP">
               <Stack spacing={1}>
-                {order.btp ? (
-                  <Field
-                    label="Mã BTP (đơn cũ)"
-                    value={
+                <Field
+                  label="Mã BTP"
+                  value={
+                    order.btp ? (
                       <Link component={RouterLink} to={`/warehouses/${BTP_WAREHOUSE_CODE}/stock`}>
                         {order.btp.sku ?? '—'} · {order.btp.name}
                       </Link>
-                    }
-                  />
-                ) : null}
+                    ) : (
+                      'BTP đã bị gỡ khỏi kho'
+                    )
+                  }
+                />
                 <Typography variant="caption" color="text.secondary">
-                  Làm từ phôi BTP có sẵn — không qua 3D và Đúc. Phôi lấy ở kho BTP khi giao khâu Nguội cho
-                  thợ.
+                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP tự tạo khi lên đơn.
                 </Typography>
               </Stack>
             </Section>
@@ -912,7 +913,7 @@ export function ProductionOrderDetailPage() {
 
       <ConfirmDeleteDialog
         open={deleting}
-        title="Xóa đơn sản xuất"
+        title="Xóa lệnh sản xuất"
         description={`Xóa đơn ${order.code}? Ảnh của đơn cũng bị xóa khỏi kho ảnh.`}
         deleting={remove.isPending}
         onClose={() => setDeleting(false)}

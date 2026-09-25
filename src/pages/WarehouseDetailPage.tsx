@@ -626,7 +626,6 @@ function StockCard({
     profile.showProductInfo ? { label: 'Màu xi', value: row.platingColor ?? '—' } : null,
     profile.showProductInfo ? { label: 'Màu đá', value: row.color ?? '—' } : null,
     profile.showProductInfo ? { label: 'Size', value: row.sizeLabel ?? '—' } : null,
-    row.stoneWeight ? { label: 'TL đá (g)', value: row.stoneWeight } : null,
   ].filter((item): item is { label: string; value: string } => item != null)
 
   return (
@@ -998,6 +997,7 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
   return {
     ...row,
     name: payload.name ?? row.name,
+    sku: payload.sku !== undefined ? payload.sku || null : row.sku,
     locationCode: payload.locationCode !== undefined ? payload.locationCode || null : row.locationCode,
     unitId,
     unit: lookupName(lookups?.units, unitId) ?? row.unit,
@@ -1124,7 +1124,6 @@ type StockFormValues = {
   btpCategoryId: string
   platingColorId: string
   sizeLabel: string
-  stoneWeight: string
   weight: string
   images: OrderImage[]
   openingQty: string
@@ -1150,7 +1149,6 @@ const EMPTY_STOCK: StockFormValues = {
   btpCategoryId: '',
   platingColorId: '',
   sizeLabel: '',
-  stoneWeight: '',
   weight: '',
   images: [],
   openingQty: '0',
@@ -1240,7 +1238,6 @@ function StockEditDialog({
               btpCategoryId: row.otherClassId ?? '',
               platingColorId: row.platingColorId ?? '',
               sizeLabel: row.sizeLabel ?? '',
-              stoneWeight: row.stoneWeight ? qtyFromApi(row.stoneWeight) : '',
               weight: row.weight ? qtyFromApi(row.weight) : '',
               images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
               openingQty: qtyFromApi(row.openingQty),
@@ -1418,6 +1415,7 @@ function stockPayloadFromItem(
 ): UpdateStockPayload {
   if (profile.showBtpCategory) {
     return {
+      sku: values.sku.trim(),
       name: values.name.trim(),
       unitId: values.unitId,
       materialTypeId: null,
@@ -1470,7 +1468,6 @@ function stockPayloadFromItem(
           : null,
     otherClassName: isOther ? picked?.name ?? null : null,
     sizeLabel: values.sizeLabel.trim(),
-    stoneWeight: picked?.metalKind === 'STONE' || values.metalKind === 'STONE' ? values.stoneWeight || null : null,
     weight: profile.showWeight ? values.weight || null : undefined,
     openingQty: values.openingQty,
     stockUnitPrice: values.stockUnitPrice || '0',
@@ -1519,7 +1516,11 @@ function StockItemFields({
   removeDisabled?: boolean
 }) {
   const metalKind = useWatch({ control: form.control, name: `items.${index}.metalKind` })
-  const isStone = metalKind === 'STONE'
+  const materialTypeId = useWatch({ control: form.control, name: `items.${index}.materialTypeId` })
+  // Dòng cũ có thể chưa lưu chất liệu, nên lấy theo nhóm của danh mục đang chọn — cùng nguồn
+  // với chất liệu gửi lên lúc lưu.
+  const pickedCategory = categoryOptions.find((item) => item.id === materialTypeId)
+  const isStone = (pickedCategory?.metalKind ?? metalKind) === 'STONE'
   const openingQty = useWatch({ control: form.control, name: `items.${index}.openingQty` }) ?? '0'
   const stockUnitPrice = useWatch({ control: form.control, name: `items.${index}.stockUnitPrice` }) ?? ''
   const inQty = useWatch({ control: form.control, name: `items.${index}.inQty` }) ?? '0'
@@ -1536,11 +1537,27 @@ function StockItemFields({
     <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {profile.showBtpCategory ? (
+            <FormTextField<StockDialogValues>
+              name={`items.${index}.sku`}
+              label="Mã sản phẩm"
+              required
+              autoFocus={index === 0}
+              placeholder="Nhập mã sản phẩm…"
+              rules={{
+                validate: (value) => {
+                  const code = String(value ?? '').trim()
+                  if (!code) return 'Nhập mã sản phẩm'
+                  return code.length <= 60 || 'Mã sản phẩm tối đa 60 ký tự'
+                },
+              }}
+            />
+          ) : null}
           <FormTextField<StockDialogValues>
             name={`items.${index}.name`}
             label={profile.nameLabel}
             required
-            autoFocus={index === 0}
+            autoFocus={index === 0 && !profile.showBtpCategory}
             suggestions={nameSuggestions}
             helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
             onBlur={() => {
@@ -1598,7 +1615,6 @@ function StockItemFields({
                     onChange={(typeId, nextKind) => {
                       field.onChange(typeId)
                       form.setValue(`items.${index}.metalKind`, nextKind)
-                      if (nextKind !== 'STONE') form.setValue(`items.${index}.stoneWeight`, '')
                     }}
                   />
                 )}
@@ -1683,20 +1699,6 @@ function StockItemFields({
                 options={shapeOptions}
                 allowClear
                 placeholder="Tìm hình dạng…"
-              />
-            ) : null}
-            {isStone ? (
-              <FormQtyField<StockDialogValues>
-                name={`items.${index}.stoneWeight`}
-                label="Trọng lượng đá (g)"
-                required
-                placeholder="Nhập trọng lượng đá…"
-                rules={{
-                  validate: (value) => {
-                    const n = Number(value)
-                    return n > 0 || 'Nhập trọng lượng đá'
-                  },
-                }}
               />
             ) : null}
             {profile.showSize ? (

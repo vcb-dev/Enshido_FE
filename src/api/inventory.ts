@@ -436,6 +436,8 @@ export type OutboundRow = {
   unit: string
   unitId: string | null
   qty: string
+  /** Số gram xuất — chỉ dùng ở Kho NVL chính. */
+  gramQty: string | null
   stockUnitPrice: string
   inboundUnitPrice: string
   amount: string
@@ -472,6 +474,7 @@ export type CreateOutboundPayload = {
   unitId?: string | null
   unitName?: string
   qty: string
+  gramQty?: string | null
   stockUnitPrice?: string
   inboundUnitPrice?: string
   amount?: string

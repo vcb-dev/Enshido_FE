@@ -33,6 +33,7 @@ export function BtpPicker({
   inputRef,
   onBlur,
   onChange,
+  label = 'Mã BTP',
 }: {
   value: string
   options: BtpOption[]
@@ -46,6 +47,8 @@ export function BtpPicker({
   inputRef?: Ref<HTMLInputElement>
   onBlur?: () => void
   onChange: (id: string) => void
+  /** Nhãn ô chọn (mặc định: Mã BTP). */
+  label?: string
 }) {
   const items = useMemo(() => {
     const rows: PickerItem[] = options.map((item) => {
@@ -112,7 +115,7 @@ export function BtpPicker({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Mã BTP"
+          label={label}
           required
           autoFocus={autoFocus}
           placeholder="Tìm mã, tên, màu, size…"

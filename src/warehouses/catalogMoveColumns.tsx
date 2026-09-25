@@ -33,7 +33,7 @@ export function catalogColumnsBeforeName<T>(
     columns.push({
       key: 'sku',
       header: profile.skuLabel,
-      width: 88,
+      width: 128,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
       render: (row) => skuOf(row) ?? '—',
     })

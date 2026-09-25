@@ -396,6 +396,9 @@ export type ProductionOrderListParams = {
 
 export type UpsertProductionOrderPayload = {
   source: ProductionSource
+  btpMaterialId?: string | null
+  nvlMaterialId?: string | null
+  finishedProductCode?: string | null
   requestType: ProductionRequestType
   receivedDate: string
   closedBy: string
@@ -403,6 +406,9 @@ export type UpsertProductionOrderPayload = {
   description: string
   qty: number
   qtyUnit?: string | null
+  finishedProductQty?: number | null
+  /** Số lượng BTP xuất kho khi lên đơn BTP. */
+  btpQty?: number | null
   model3dCode?: string
   model3dUrl?: string | null
   leadTime: string
@@ -426,6 +432,7 @@ export type UpsertProductionOrderPayload = {
   debtStatus?: string
   parentCode?: string
   images: OrderImage[]
+  nvlLines?: ProductionNvlWorkLine[]
   editReason?: string
 }
 

@@ -121,6 +121,11 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
 }
 
 const STOCK_PROFILES: Record<string, StockProfile> = {
+  'nvl-chinh': {
+    ...DEFAULT_STOCK_PROFILE,
+    showSize: false,
+    showWeight: false,
+  },
   'btp-cho-vao-da': {
     showSku: true,
     showLocation: false,
@@ -137,7 +142,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',
-    skuLabel: 'Mã BTP',
+    skuLabel: 'Mã sản phẩm',
     categoryLabel: 'Danh mục BTP',
     createLabel: 'Nhập BTP',
     inboundLabel: 'Nhập BTP',

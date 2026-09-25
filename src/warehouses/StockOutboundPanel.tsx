@@ -438,6 +438,19 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatQty(row.qty)),
         renderSub: (line) => formatQty(line.qty),
       },
+      ...(warehouseCode === 'nvl-chinh'
+        ? [
+            {
+              key: 'gramQty',
+              header: 'Số gram',
+              width: 110,
+              numeric: true,
+              render: (row: OutboundGroup) =>
+                row.lines.length > 1 ? null : row.gramQty ? formatQty(row.gramQty) : '—',
+              renderSub: (line: OutboundRow) => (line.gramQty ? formatQty(line.gramQty) : '—'),
+            } satisfies Column<OutboundGroup, OutboundRow>,
+          ]
+        : []),
       {
         key: 'inboundUnitPrice',
         header: 'Đơn giá xuất',
@@ -575,6 +588,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     totals?.amount,
     totals?.qty,
     unitOptions,
+    warehouseCode,
   ])
 
   const pagedRows = useMemo(
@@ -667,6 +681,7 @@ type OutboundLineValues = {
   materialId: string | null
   unitId: string
   qty: string
+  gramQty: string
 }
 
 type OutboundFormValues = {
@@ -684,6 +699,7 @@ const EMPTY_OUTBOUND_LINE: OutboundLineValues = {
   materialId: null,
   unitId: '',
   qty: '',
+  gramQty: '',
 }
 
 const EMPTY_OUTBOUND: OutboundFormValues = {
@@ -758,6 +774,7 @@ function OutboundDialog({
                   units[0]?.id ??
                   '',
                 qty: qtyFromApi(row.qty),
+                gramQty: row.gramQty ? qtyFromApi(row.gramQty) : '',
               },
             ],
           }
@@ -792,6 +809,7 @@ function OutboundDialog({
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
+        gramQty: warehouseCode === 'nvl-chinh' ? line.gramQty || null : undefined,
         stockUnitPrice: '0',
         inboundUnitPrice: '0',
         amount: '0',
@@ -933,7 +951,7 @@ function OutboundDialog({
                     />
                     <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
                   </FormRow>
-                  <FormRow columns={3}>
+                  <FormRow columns={warehouseCode === 'nvl-chinh' ? 4 : 3}>
                     <FormSearchSelect<OutboundFormValues>
                       name={`lines.${index}.unitId`}
                       label="Đơn vị tính"
@@ -969,6 +987,18 @@ function OutboundDialog({
                         },
                       }}
                     />
+                    {warehouseCode === 'nvl-chinh' ? (
+                      <FormQtyField<OutboundFormValues>
+                        name={`lines.${index}.gramQty`}
+                        label="Số gram"
+                        required
+                        readOnly={readOnly}
+                        placeholder="Nhập số gram…"
+                        rules={{
+                          validate: (value) => (Number(value) || 0) > 0 || 'Số gram phải lớn hơn 0',
+                        }}
+                      />
+                    ) : null}
                   </FormRow>
                   <FormRow>
                     <TextInput
@@ -1220,6 +1250,7 @@ function outboundOptimisticRow(
     unit: extra.unit,
     unitId: payload.unitId ?? null,
     qty: payload.qty,
+    gramQty: payload.gramQty ?? null,
     stockUnitPrice: payload.stockUnitPrice ?? '0',
     inboundUnitPrice: payload.inboundUnitPrice ?? '0',
     amount: payload.amount ?? '0',

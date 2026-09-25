@@ -20,7 +20,7 @@ export function canAccessPath(
   }
   // Thợ không vào màn quản lý đơn và trang in phiếu; riêng /orders/:code rơi vào bản
   // chỉ-đọc "Thông tin đơn (tham khảo)" để QR trên phiếu giấy đã in vẫn dùng được.
-  if (p === '/orders' || p.endsWith('/print')) return !isWorkerOnly(user)
+  if (p === '/orders' || p === '/casting' || p.endsWith('/print')) return !isWorkerOnly(user)
   if (p.startsWith('/orders/')) return true
   // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.
   if (p.startsWith('/tickets/')) return true
