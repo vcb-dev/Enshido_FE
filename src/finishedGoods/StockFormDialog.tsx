@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -8,32 +8,20 @@ import {
   DialogContent,
   DialogTitle,
   Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
-import { useQuery } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 import {
   FG_FLOW_STATUS,
   fgFlowStatus,
-  listFinishedGoodsNvlOptionsApi,
-  type FinishedGoodsNvlOption,
   type FinishedGoodsStockRow,
   type UpsertReceiptPayload,
 } from '../api/finishedGoods'
 import { formatMoney, formatQty, moneyDigitsFromApi } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
 import {
   EditReasonBlock,
   Form,
   FormMoneyField,
-  FormQtyField,
   FormRow,
   FormSelect,
   FormTextField,
@@ -44,46 +32,41 @@ import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { finishedGoodsQtyUnitOptions, stockProfile, THANH_PHAM_WAREHOUSE } from '../warehouses/catalog'
 import { validateStockName } from '../warehouses/stockName'
 import { platingColorOptions } from '../orders/catalog'
-import { BomLinesField } from './BomLinesField'
 import { FormFgMaterialSelect, isSilverFgMaterial } from './FgMaterialSelect'
 
 type FormValues = {
+  model3dCode: string
   description: string
   qtyUnit: string
   sizeLabel: string
-  weight: string
   mainMaterial: string
   platingColor: string
   stockUnitPrice: string
   openingQty: string
-  bomLines: Array<{ materialId: string }>
 }
 
 const EMPTY: FormValues = {
+  model3dCode: '',
   description: '',
   qtyUnit: '',
   sizeLabel: '',
-  weight: '',
   mainMaterial: '',
   platingColor: '',
   stockUnitPrice: '',
   openingQty: '0',
-  bomLines: [{ materialId: '' }],
 }
 
 function formValuesFromRow(row: FinishedGoodsStockRow | null): FormValues {
   if (!row) return EMPTY
-  const bomLines = (row.bomLines ?? []).map((item) => ({ materialId: item.id }))
   return {
+    model3dCode: row.model3dCode ?? '',
     description: row.description,
     qtyUnit: row.qtyUnit ?? '',
     sizeLabel: row.sizeLabel ?? '',
-    weight: row.weight ?? '',
     mainMaterial: row.mainMaterial ?? '',
     platingColor: row.platingColor ?? '',
     stockUnitPrice: moneyDigitsFromApi(row.unitCost),
     openingQty: row.openingQty || '0',
-    bomLines: bomLines.length ? bomLines : [{ materialId: '' }],
   }
 }
 
@@ -157,26 +140,14 @@ function StockForm({
   const readOnly = kind === 'view'
   const initial = useMemo(() => formValuesFromRow(row), [row])
   const form = useForm<FormValues>({ defaultValues: initial })
-  const nvlOptions = useQuery({
-    queryKey: ['finished-goods-nvl-options'],
-    queryFn: () => listFinishedGoodsNvlOptionsApi(),
-    staleTime: 60_000,
-  })
-
-  const nvlItems = useMemo(() => {
-    const items = nvlOptions.data?.items ?? []
-    const extra = (row?.bomLines ?? []).filter((item) => !items.some((opt) => opt.id === item.id))
-    return extra.length ? [...extra, ...items] : items
-  }, [nvlOptions.data?.items, row?.bomLines])
-
   const [editReason, setEditReason] = useState('')
   const [reasonError, setReasonError] = useState('')
   const openingQty = useWatch({ control: form.control, name: 'openingQty' })
   const stockUnitPrice = useWatch({ control: form.control, name: 'stockUnitPrice' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })
   const platingColor = useWatch({ control: form.control, name: 'platingColor' })
-  const firstNvlId = useWatch({ control: form.control, name: 'bomLines.0.materialId' })
   const showPlating = isSilverFgMaterial(mainMaterial)
+  const model3dReadOnly = Boolean(row && !row.isOpening)
 
   const inQty = row?.inQty ?? '0'
   const inAmount = row?.inAmount ?? '0'
@@ -193,37 +164,15 @@ function StockForm({
     setReasonError('')
   }, [row?.id, kind])
 
-  const filledNvlId = useRef<string | undefined>(undefined)
-  useEffect(() => {
-    if (readOnly) return
-    const nvl = nvlItems.find((item) => item.id === firstNvlId)
-    if (firstNvlId && firstNvlId !== filledNvlId.current && nvl?.weight) {
-      filledNvlId.current = firstNvlId
-      form.setValue('weight', nvl.weight, { shouldDirty: true })
-      return
-    }
-    if (firstNvlId && !form.getValues('weight') && nvl?.weight) {
-      filledNvlId.current = firstNvlId
-      form.setValue('weight', nvl.weight)
-    }
-    if (!firstNvlId && !row) {
-      filledNvlId.current = undefined
-      form.setValue('weight', '')
-    }
-  }, [firstNvlId, form, nvlItems, readOnly, row])
-
   function submit(values: FormValues) {
     if (readOnly) return
     if (row && !editReason.trim()) {
       setReasonError('Nhập lý do chỉnh sửa')
       return
     }
-    const bomLines = values.bomLines
-      .map((line) => line.materialId.trim())
-      .filter(Boolean)
-      .map((materialId) => ({ materialId }))
     onSaved({
       orderCode: row?.orderCode,
+      model3dCode: values.model3dCode.trim(),
       description: values.description.trim(),
       mainMaterial: values.mainMaterial.trim() || undefined,
       platingColor: isSilverFgMaterial(values.mainMaterial) ? values.platingColor.trim() : '',
@@ -235,9 +184,7 @@ function StockForm({
         : Number(values.openingQty) || 0,
       receivedAt: row ? row.receivedAt.slice(0, 10) : todayYmd(),
       sizeLabel: values.sizeLabel.trim() || undefined,
-      weight: values.weight.trim() || null,
       qtyUnit: values.qtyUnit.trim() || undefined,
-      bomLines,
       editReason: editReason.trim() || undefined,
     })
   }
@@ -264,10 +211,21 @@ function StockForm({
           }}
         >
           <FormTextField<FormValues>
+            name="model3dCode"
+            label={profile.skuLabel}
+            required
+            autoFocus={!row}
+            readOnly={readOnly || model3dReadOnly}
+            rules={{
+              validate: (value) =>
+                Boolean(String(value ?? '').trim()) || `Nhập ${profile.skuLabel.toLowerCase()}`,
+            }}
+          />
+          <FormTextField<FormValues>
             name="description"
             label={profile.nameLabel}
             required
-            autoFocus
+            autoFocus={Boolean(row)}
             readOnly={readOnly}
             suggestions={nameSuggestions}
             helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
@@ -294,7 +252,6 @@ function StockForm({
             options={finishedGoodsQtyUnitOptions(row?.qtyUnit)}
             />
             <FormTextField<FormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
-          <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" placeholder="Nhập trọng lượng…" />
           <FormFgMaterialSelect name="mainMaterial" readOnly={readOnly} />
           {showPlating ? (
             <FormSelect<FormValues>
@@ -313,8 +270,6 @@ function StockForm({
               }}
             />
           </FormRow>
-
-        <BomLinesField options={nvlItems} loading={nvlOptions.isFetching} readOnly={readOnly} />
 
           <StockFigureGrid
             values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
@@ -372,7 +327,6 @@ function StockForm({
 function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () => void }) {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const flow = FG_FLOW_STATUS[fgFlowStatus(row)]
-  const bom = row.bomLines ?? []
 
   return (
     <>
@@ -381,7 +335,7 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
           Chi tiết {row.description || profile.noun}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          {row.orderCode}
+          {row.model3dCode?.trim() || row.orderCode}
         </Typography>
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.25, pt: 0.5 }}>
@@ -394,11 +348,10 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
               gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, minmax(0, 1fr))' },
             }}
           >
-            <Fact label={profile.skuLabel} value={row.orderCode} />
+            <Fact label={profile.skuLabel} value={row.model3dCode} />
             <Fact label={profile.nameLabel} value={row.description} />
             <Fact label="Đơn vị" value={row.qtyUnit} />
             <Fact label="Size" value={row.sizeLabel} />
-            <Fact label="Trọng lượng (g)" value={row.weight ? formatQty(row.weight) : null} />
             <Fact label="Chất liệu" value={row.mainMaterial} />
             {isSilverFgMaterial(row.mainMaterial) ? (
               <Fact label="Màu xi" value={row.platingColor} />
@@ -419,17 +372,6 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
               }
             />
           </Box>
-        </Paper>
-
-        <Paper variant="outlined" sx={{ p: 1.75 }}>
-          <SectionTitle>NVL cấu thành</SectionTitle>
-          {bom.length ? (
-            <NvlViewTable lines={bom} />
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              Chưa gắn NVL
-            </Typography>
-          )}
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 1.75 }}>
@@ -486,72 +428,3 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function dash(value: string | null | undefined) {
-  const text = value?.trim()
-  return text ? text : '—'
-}
-
-const NVL_COLS = [
-  { key: 'sku', label: 'Mã' },
-  { key: 'name', label: 'Tên' },
-  { key: 'shape', label: 'Hình dạng' },
-  { key: 'color', label: 'Màu sắc' },
-  { key: 'type', label: 'Chất loại' },
-  { key: 'metal', label: 'Chất liệu' },
-  { key: 'qty', label: 'Tồn' },
-  { key: 'unit', label: 'Đơn vị' },
-  { key: 'size', label: 'Size' },
-] as const
-
-function NvlViewTable({ lines }: { lines: FinishedGoodsNvlOption[] }) {
-  return (
-    <TableContainer sx={{ overflowX: 'auto' }}>
-      <Table size="small" sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap', bgcolor: '#f4f6f8' } }}>
-        <TableHead>
-          <TableRow>
-            {NVL_COLS.map((col) => (
-              <TableCell key={col.key} align={col.key === 'qty' ? 'right' : 'left'}>
-                {col.label}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {lines.map((line) => (
-            <TableRow key={line.id} hover>
-              <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  {line.imageUrl ? (
-                    <Box
-                      component="img"
-                      src={cloudinaryThumb(line.imageUrl, 64)}
-                      alt=""
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        objectFit: 'cover',
-                        borderRadius: 0.5,
-                        border: '1px solid #ded3c3',
-                      }}
-                    />
-                  ) : null}
-                  <span>{dash(line.sku)}</span>
-                </Stack>
-              </TableCell>
-              <TableCell sx={{ minWidth: 160 }}>{line.name}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.shape)}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.color)}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.materialType)}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.bodyMetal || line.metalKind)}</TableCell>
-              <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {formatQty(line.qty)}
-              </TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.unit)}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{dash(line.sizeLabel)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  )
-}

@@ -140,7 +140,6 @@ export function ReceiveFormDialog({
       qty: Number(values.qty),
       receivedAt: todayYmd(),
       sizeLabel: (row?.sizeLabel ?? item?.sizeLabel)?.trim() || undefined,
-      weight: row?.weight ?? item?.weight ?? undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
       editReason: values.editReason?.trim() || undefined,
     })
@@ -187,7 +186,6 @@ export function ReceiveFormDialog({
               <DetailFact label={profile.nameLabel} value={row.description} />
               <DetailFact label="Đơn vị" value={row.qtyUnit} />
               <DetailFact label="Size" value={row.sizeLabel} />
-              <DetailFact label="Trọng lượng (g)" value={row.weight ? formatQty(row.weight) : ''} />
               <DetailFact label="Số lượng" value={formatQty(qty)} />
               {'pendingQty' in row && row.pendingQty > 0 ? (
                 <DetailFact label="Chờ vào tồn" value={formatQty(String(row.pendingQty))} />

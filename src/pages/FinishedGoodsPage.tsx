@@ -194,11 +194,7 @@ function FinishedGoodsStockTable() {
         nameQuery &&
         !row.description.toLocaleLowerCase('vi').includes(nameQuery) &&
         !row.orderCode.toLocaleLowerCase('vi').includes(nameQuery) &&
-        !(row.bomLines ?? []).some(
-          (line) =>
-            (line.sku ?? '').toLocaleLowerCase('vi').includes(nameQuery) ||
-            line.name.toLocaleLowerCase('vi').includes(nameQuery),
-        )
+        !(row.model3dCode ?? '').toLocaleLowerCase('vi').includes(nameQuery)
       ) {
         return false
       }
@@ -798,11 +794,11 @@ function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGo
   return {
     id: `tmp-${Date.now()}`,
     orderCode: '…',
+    model3dCode: payload.model3dCode?.trim() || null,
     description: payload.description ?? '',
     requestType: 'RETAIL',
     qtyUnit: payload.qtyUnit ?? null,
     sizeLabel: payload.sizeLabel ?? null,
-    weight: payload.weight ?? null,
     mainMaterial: payload.mainMaterial ?? null,
     platingColor: payload.platingColor || null,
     imageUrl: null,
@@ -864,7 +860,8 @@ function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertR
     mainMaterial: payload.mainMaterial ?? row.mainMaterial,
     platingColor: payload.platingColor !== undefined ? payload.platingColor || null : row.platingColor,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
-    weight: payload.weight !== undefined ? payload.weight || null : row.weight,
+    model3dCode:
+      payload.model3dCode !== undefined ? payload.model3dCode.trim() || null : row.model3dCode,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     receivedQty,
@@ -896,7 +893,6 @@ function patchFinishedGoodsReceiptRow(row: FinishedGoodsReceiptRow, payload: Ups
   return {
     ...row,
     sizeLabel: payload.sizeLabel ?? row.sizeLabel,
-    weight: payload.weight !== undefined ? payload.weight || null : row.weight,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
     receivedAt: payload.receivedAt,
     qty,
@@ -914,40 +910,6 @@ type HeaderFilter = {
   onChange: (id: string) => void
 }
 
-function StackedLines({
-  values,
-  strong,
-  align,
-}: {
-  values: string[]
-  strong?: boolean
-  align?: 'left' | 'right' | 'center'
-}) {
-  if (!values.length) return <>—</>
-  return (
-    <Stack spacing={0.25} sx={{ py: 0.25, alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start' }}>
-      {values.map((value, index) => (
-        <Typography
-          key={`${value}-${index}`}
-          variant="body2"
-          sx={{
-            fontWeight: strong ? 700 : 400,
-            lineHeight: 1.35,
-            whiteSpace: 'nowrap',
-            fontVariantNumeric: align === 'right' ? 'tabular-nums' : undefined,
-          }}
-        >
-          {value || '—'}
-        </Typography>
-      ))}
-    </Stack>
-  )
-}
-
-function nvlField(row: FinishedGoodsStockRow, pick: (line: NonNullable<FinishedGoodsStockRow['bomLines']>[number]) => string) {
-  return (row.bomLines ?? []).map(pick)
-}
-
 function stockColumns(
   totals: StockTotals | undefined,
   filters: { name: ReactNode; unit: HeaderFilter; status: HeaderFilter; flowStatus: HeaderFilter },
@@ -963,7 +925,7 @@ function stockColumns(
       card: 'meta',
       header: profile.skuLabel,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
-      render: (row) => row.orderCode,
+      render: (row) => row.model3dCode?.trim() || '—',
     },
     {
       key: 'name',
@@ -972,18 +934,6 @@ function stockColumns(
       cellSx: { minWidth: 220 },
       filter: filters.name,
       render: (row) => row.description,
-    },
-    {
-      key: 'nvlSku',
-      header: 'Mã NVL',
-      cellSx: { fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' },
-      render: (row) => <StackedLines values={(row.bomLines ?? []).map((line) => line.sku ?? '—')} strong />,
-    },
-    {
-      key: 'nvlName',
-      header: 'Tên NVL',
-      cellSx: { minWidth: 180, verticalAlign: 'top' },
-      render: (row) => <StackedLines values={nvlField(row, (line) => line.name)} />,
     },
     {
       key: 'unit',
@@ -998,13 +948,6 @@ function stockColumns(
       width: 70,
       align: 'center',
       render: (row) => row.sizeLabel ?? '—',
-    },
-    {
-      key: 'weight',
-      header: 'Trọng lượng (g)',
-      width: 110,
-      align: 'right',
-      render: (row) => (row.weight ? formatQty(row.weight) : '—'),
     },
     {
       key: 'openingQty',
@@ -1138,17 +1081,14 @@ function StockCard({
             {row.description}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.25, alignItems: 'center' }}>
-            <Typography variant="caption" color="text.secondary">
-              {row.orderCode}
-            </Typography>
+            {row.model3dCode ? (
+              <Typography variant="caption" color="text.secondary">
+                {row.model3dCode}
+              </Typography>
+            ) : null}
             {row.sizeLabel ? (
               <Typography variant="caption" color="text.secondary">
                 Size {row.sizeLabel}
-              </Typography>
-            ) : null}
-            {row.weight ? (
-              <Typography variant="caption" color="text.secondary">
-                {formatQty(row.weight)}g
               </Typography>
             ) : null}
             <Chip
@@ -1164,15 +1104,6 @@ function StockCard({
               label={row.availabilityLabel}
             />
           </Stack>
-          {(row.bomLines ?? []).length ? (
-            <Stack spacing={0.15} sx={{ mt: 0.75 }}>
-              {(row.bomLines ?? []).map((line) => (
-                <Typography key={line.id} variant="caption" color="text.secondary">
-                  {line.sku ? `${line.sku} — ${line.name}` : line.name}
-                </Typography>
-              ))}
-            </Stack>
-          ) : null}
         </Box>
         <Box sx={{ flexShrink: 0 }}>
           <RowActions onView={onView} onEdit={onEdit} />

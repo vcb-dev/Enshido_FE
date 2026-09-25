@@ -27,6 +27,8 @@ export type FinishedGoodsReceiptRow = {
 export type FinishedGoodsStockRow = {
   id: string
   orderCode: string
+  /** Mã sản xuất trên lệnh / tồn đầu kỳ — hiển thị trên Tồn. */
+  model3dCode: string | null
   description: string
   requestType: ProductionRequestType
   qtyUnit: string | null
@@ -217,9 +219,8 @@ export type UpsertReceiptPayload = {
   qty: number
   receivedAt: string
   sizeLabel?: string
-  weight?: string | null
   qtyUnit?: string
-  bomLines?: Array<{ materialId: string }>
+  model3dCode?: string
   editReason?: string
 }
 

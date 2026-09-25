@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Divider } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
-import { formatQty } from '../api/inventory'
 import { useOperatorName } from '../hooks/useOperatorName'
 import {
   listBtpOptionsApi,
@@ -216,14 +215,12 @@ export function ProductionOrderFormDialog({
   const onDetailUploading = useCallback((busy: boolean) => setUploadingDetail(busy), [])
   const onProductUploading = useCallback((busy: boolean) => setUploadingProduct(busy), [])
   const source = useWatch({ control: form.control, name: 'source' })
-  const btpMaterialId = useWatch({ control: form.control, name: 'btpMaterialId' })
   const finishedProductCode = useWatch({ control: form.control, name: 'finishedProductCode' })
   const qtyUnit = useWatch({ control: form.control, name: 'qtyUnit' })
   const platingColor = useWatch({ control: form.control, name: 'platingColor' })
-  const finishedProductQty = useWatch({ control: form.control, name: 'finishedProductQty' })
   const isBtp = source === 'BTP'
   const isNvl = !isBtp
-  // Đã giao khâu thì phiếu xuất BTP đã theo hàng đi — không đổi loại đơn / mã BTP nữa.
+  // Đã giao khâu thì không đổi loại đơn / mã sản phẩm nữa.
   const sourceLocked = Boolean(order && order.stages.length > 0)
 
   const btpOptions = useQuery({
@@ -275,15 +272,7 @@ export function ProductionOrderFormDialog({
     ]
   }, [finishedProducts.data, order])
   const finishedPickerItems = useMemo(() => finishedPickerOptions(finishedItems), [finishedItems])
-  const selectedBtp = btpItems.find((item) => item.id === btpMaterialId)
   const selectedFinished = finishedItems.find((item) => item.code === finishedProductCode)
-  /** SL tối đa: tồn hiện có, cộng số đơn này đang giữ nếu vẫn là mã cũ. */
-  const btpMaxQty = selectedBtp
-    ? Number(selectedBtp.qty) +
-      (order?.btp?.id === selectedBtp.id ? (order.finishedProductQty ?? order.qty) : 0)
-    : order?.btp?.id === btpMaterialId
-      ? (order.finishedProductQty ?? order.qty ?? null)
-      : null
 
   // Nạp form một lần mỗi lần mở. Trang chi tiết đơn tự làm mới định kỳ (thợ nhận phiếu ở máy
   // khác…) — nạp lại theo `order` là xoá sạch những gì người dùng đang sửa dở.
@@ -375,11 +364,6 @@ export function ProductionOrderFormDialog({
     if (match) form.setValue('btpMaterialId', match.id, { shouldDirty: false })
   }, [open, order, btpItems, form])
 
-  useEffect(() => {
-    if (!open || !finishedProductQty || isNvl) return
-    void form.trigger('finishedProductQty')
-  }, [btpMaxQty, finishedProductQty, open, form, isNvl])
-
   function replaceKindImages(
     field: 'detailImages' | 'productImages',
     previousIds: string[],
@@ -426,7 +410,6 @@ export function ProductionOrderFormDialog({
       nvl || btp
         ? (btpProduct?.sku?.trim() || values.trackingCode.trim())
         : values.trackingCode.trim()
-    const finishedQty = values.finishedProductQty ? Number(values.finishedProductQty) : null
     return onSave({
       source: values.source,
       btpMaterialId: btp || nvl ? values.btpMaterialId || null : null,
@@ -439,7 +422,7 @@ export function ProductionOrderFormDialog({
       qty: Number(values.finishedProductQty) || Number(values.qty) || 1,
       qtyUnit: values.qtyUnit || null,
       finishedProductQty: values.finishedProductQty ? Number(values.finishedProductQty) : null,
-      btpQty: btp && finishedQty ? finishedQty : null,
+      btpQty: null,
       leadTime: '',
       trackingCode,
       customerName: values.customerName.trim(),
@@ -683,9 +666,6 @@ export function ProductionOrderFormDialog({
                     }
                     const qty = positiveQty(value)
                     if (qty == null) return 'Số lượng phải từ 1'
-                    if (btpMaxQty != null && qty > btpMaxQty) {
-                      return `Vượt quá tồn BTP (${formatQty(String(btpMaxQty))})`
-                    }
                     return true
                   },
                 }}
@@ -767,7 +747,6 @@ export function ProductionOrderFormDialog({
                       )
                       const sku = btpItems.find((item) => item.id === id)?.sku?.trim()
                       if (sku) form.setValue('trackingCode', sku, { shouldDirty: true })
-                      void form.trigger('finishedProductQty')
                     }}
                   />
                 )}
