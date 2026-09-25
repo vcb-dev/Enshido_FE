@@ -27,6 +27,9 @@ const CatalogsPage = lazy(() =>
 const ProductionOrdersPage = lazy(() =>
   import('./pages/ProductionOrdersPage').then((m) => ({ default: m.ProductionOrdersPage })),
 )
+const CastingOrdersPage = lazy(() =>
+  import('./pages/CastingOrdersPage').then((m) => ({ default: m.CastingOrdersPage })),
+)
 const ProductionOrderDetailPage = lazy(() =>
   import('./pages/ProductionOrderDetailPage').then((m) => ({ default: m.ProductionOrderDetailPage })),
 )
@@ -85,6 +88,7 @@ export default function App() {
           }
         />
         <Route element={<AppShell />}>
+          <Route path="/casting" element={<CastingOrdersPage />} />
           <Route path="/orders" element={<ProductionOrdersPage />} />
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}
           <Route path="/orders/:code" element={<OrderDetailRoute />} />

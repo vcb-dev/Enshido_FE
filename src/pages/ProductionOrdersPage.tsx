@@ -234,7 +234,7 @@ export function ProductionOrdersPage() {
       sx={{ flex: { md: 1 }, minHeight: { md: 0 }, height: { md: '100%' }, overflow: { xs: 'visible', md: 'hidden' } }}
     >
       <PageHeader
-        title="Đơn sản xuất"
+        title="Lệnh sản xuất"
         subtitle="Lên đơn, theo dõi trạng thái và in phiếu cho thợ."
         compactSubtitle
       />
@@ -300,7 +300,7 @@ export function ProductionOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={listSource === 'BTP' ? 1540 : 1420}
+        minWidth={listSource === 'BTP' ? 1720 : 1600}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
         sort={table.sortState}
@@ -377,7 +377,7 @@ export function ProductionOrdersPage() {
       ) : null}
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
-        title="Xóa đơn sản xuất"
+        title="Xóa lệnh sản xuất"
         description={
           del.row
             ? `Xóa đơn ${del.row.code}? Ảnh của đơn cũng bị xóa khỏi kho ảnh.`
@@ -500,6 +500,13 @@ function orderColumns(
           ) : null}
         </>
       ),
+    },
+    {
+      key: 'btpName',
+      header: 'Tên thành phẩm',
+      width: 180,
+      ellipsis: true,
+      render: (row) => row.btpName?.trim() || '—',
     },
     ...(btpSku ? [btpSku] : []),
     {

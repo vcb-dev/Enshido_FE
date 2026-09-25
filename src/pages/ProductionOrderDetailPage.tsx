@@ -319,7 +319,7 @@ export function ProductionOrderDetailPage() {
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
       <PageHeader
-        title={`Đơn ${order.code}`}
+        title={`Lệnh ${order.code}`}
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
             <StatusChip status={order.status} size="medium" />
@@ -331,7 +331,7 @@ export function ProductionOrderDetailPage() {
         breadcrumbs={
           <Breadcrumbs>
             <Link component={RouterLink} to="/orders" underline="hover" color="inherit">
-              Đơn sản xuất
+              Lệnh sản xuất
             </Link>
             <Typography color="text.primary">{order.code}</Typography>
           </Breadcrumbs>
@@ -898,7 +898,7 @@ export function ProductionOrderDetailPage() {
 
       <ConfirmDeleteDialog
         open={deleting}
-        title="Xóa đơn sản xuất"
+        title="Xóa lệnh sản xuất"
         description={`Xóa đơn ${order.code}? Ảnh của đơn cũng bị xóa khỏi kho ảnh.`}
         deleting={remove.isPending}
         onClose={() => setDeleting(false)}

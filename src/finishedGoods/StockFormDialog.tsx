@@ -243,35 +243,35 @@ function StockForm({
   }
 
   return (
-    <Form form={form} onSubmit={submit}>
-      <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
-        {kind === 'view'
-          ? `Chi tiết ${row?.description || profile.noun}`
-          : row
-            ? `Chỉnh sửa ${row.description || profile.noun}`
-            : profile.createLabel}
-      </DialogTitle>
-      <DialogContent
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
-          pt: 1,
-          overflowX: 'hidden',
-          pointerEvents: readOnly ? 'none' : undefined,
-          '& .MuiFormLabel-asterisk':
-            kind === 'view' ? { display: 'none' } : { color: 'error.main' },
-        }}
-      >
-        <FormTextField<FormValues>
-          name="description"
-          label={profile.nameLabel}
-          required
-          autoFocus
-          readOnly={readOnly}
-          suggestions={nameSuggestions}
-          helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
-          sx={{ mt: 1.5 }}
+      <Form form={form} onSubmit={submit}>
+        <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>
+          {kind === 'view'
+            ? `Chi tiết ${row?.description || profile.noun}`
+            : row
+              ? `Chỉnh sửa ${row.description || profile.noun}`
+              : profile.createLabel}
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            pt: 1,
+            overflowX: 'hidden',
+            pointerEvents: readOnly ? 'none' : undefined,
+            '& .MuiFormLabel-asterisk':
+              kind === 'view' ? { display: 'none' } : { color: 'error.main' },
+          }}
+        >
+          <FormTextField<FormValues>
+            name="description"
+            label={profile.nameLabel}
+            required
+            autoFocus
+            readOnly={readOnly}
+            suggestions={nameSuggestions}
+            helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
+            sx={{ mt: 1.5 }}
           onBlur={() => {
             if (!String(form.getValues('description') ?? '').trim()) return
             void form.trigger('description')
@@ -284,16 +284,16 @@ function StockForm({
                 label: profile.nameLabel,
               }),
           }}
-        />
-        <FormRow columns={3}>
-          <FormSelect<FormValues>
-            name="qtyUnit"
-            label="Đơn vị"
-            required
-            placeholder="Chọn đơn vị…"
-            options={finishedGoodsQtyUnitOptions(row?.qtyUnit)}
           />
-          <FormTextField<FormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
+          <FormRow columns={3}>
+            <FormSelect<FormValues>
+              name="qtyUnit"
+              label="Đơn vị"
+              required
+              placeholder="Chọn đơn vị…"
+            options={finishedGoodsQtyUnitOptions(row?.qtyUnit)}
+            />
+            <FormTextField<FormValues> name="sizeLabel" label="Size" placeholder="7, US 10, 16cm…" />
           <FormQtyField<FormValues> name="weight" label="Trọng lượng (g)" placeholder="Nhập trọng lượng…" />
           <FormFgMaterialSelect name="mainMaterial" readOnly={readOnly} />
           {showPlating ? (
@@ -305,35 +305,35 @@ function StockForm({
               options={platingColorOptions(platingColor)}
             />
           ) : null}
-          <FormMoneyField<FormValues>
-            name="stockUnitPrice"
-            label="Đơn giá tồn"
-            slotProps={{
-              htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
-            }}
-          />
-        </FormRow>
+            <FormMoneyField<FormValues>
+              name="stockUnitPrice"
+              label="Đơn giá tồn"
+              slotProps={{
+                htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
+              }}
+            />
+          </FormRow>
 
         <BomLinesField options={nvlItems} loading={nvlOptions.isFetching} readOnly={readOnly} />
 
-        <StockFigureGrid
-          values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
-          notes
-          editableOpeningQty={
-            readOnly || (row != null && !row.isOpening)
-              ? undefined
-              : {
-                  value: openingQty,
-                  onChange: (value) => form.setValue('openingQty', value),
-                }
-          }
-        />
-        <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-          Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
-          TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
-        </Typography>
+          <StockFigureGrid
+            values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
+            notes
+            editableOpeningQty={
+              readOnly || (row != null && !row.isOpening)
+                ? undefined
+                : {
+                    value: openingQty,
+                    onChange: (value) => form.setValue('openingQty', value),
+                  }
+            }
+          />
+          <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
+            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
+            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
+          </Typography>
         {row ? (
           <EditReasonBlock
             entityType="fg_receipt"
@@ -348,24 +348,24 @@ function StockForm({
             readOnly={kind === 'view'}
           />
         ) : null}
-      </DialogContent>
-      <DialogActions>
-        {kind === 'view' ? (
-          <Button onClick={onClose} variant="contained">
-            Đóng
-          </Button>
-        ) : (
-          <>
-            <Button onClick={onClose} disabled={saving}>
-              Hủy
+        </DialogContent>
+        <DialogActions>
+          {kind === 'view' ? (
+            <Button onClick={onClose} variant="contained">
+              Đóng
             </Button>
+          ) : (
+            <>
+              <Button onClick={onClose} disabled={saving}>
+                Hủy
+              </Button>
             <Button type="submit" variant="contained" loading={saving} loadingPosition="start">
-              {row ? 'Lưu' : profile.createLabel}
-            </Button>
-          </>
-        )}
-      </DialogActions>
-    </Form>
+                {row ? 'Lưu' : profile.createLabel}
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Form>
   )
 }
 

@@ -997,6 +997,7 @@ function patchStockRow(row: StockRow, payload: UpdateStockPayload, lookups: Inve
   return {
     ...row,
     name: payload.name ?? row.name,
+    sku: payload.sku !== undefined ? payload.sku || null : row.sku,
     locationCode: payload.locationCode !== undefined ? payload.locationCode || null : row.locationCode,
     unitId,
     unit: lookupName(lookups?.units, unitId) ?? row.unit,
@@ -1414,6 +1415,7 @@ function stockPayloadFromItem(
 ): UpdateStockPayload {
   if (profile.showBtpCategory) {
     return {
+      sku: values.sku.trim(),
       name: values.name.trim(),
       unitId: values.unitId,
       materialTypeId: null,
@@ -1535,11 +1537,27 @@ function StockItemFields({
     <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {profile.showBtpCategory ? (
+            <FormTextField<StockDialogValues>
+              name={`items.${index}.sku`}
+              label="Mã sản phẩm"
+              required
+              autoFocus={index === 0}
+              placeholder="Nhập mã sản phẩm…"
+              rules={{
+                validate: (value) => {
+                  const code = String(value ?? '').trim()
+                  if (!code) return 'Nhập mã sản phẩm'
+                  return code.length <= 60 || 'Mã sản phẩm tối đa 60 ký tự'
+                },
+              }}
+            />
+          ) : null}
           <FormTextField<StockDialogValues>
             name={`items.${index}.name`}
             label={profile.nameLabel}
             required
-            autoFocus={index === 0}
+            autoFocus={index === 0 && !profile.showBtpCategory}
             suggestions={nameSuggestions}
             helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
             onBlur={() => {

@@ -29,6 +29,7 @@ import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -325,7 +326,10 @@ function DrawerNav({
           <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         ) : null}
         {workerOnly ? null : (
-          <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Đơn sản xuất" />
+          <>
+            <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
+          </>
         )}
         {isWorker ? (
           <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
