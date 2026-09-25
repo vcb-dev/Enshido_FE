@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   Alert,
+  Collapse,
   Box,
   Button,
   IconButton,
@@ -19,6 +20,7 @@ import {
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { Link as RouterLink } from 'react-router-dom'
 import {
@@ -28,7 +30,6 @@ import {
   deleteSubTicketApi,
   openSubTicketStageApi,
   splitSubTicketsApi,
-  topUpSubTicketApi,
   unclaimSubTicketApi,
   updateSubTicketApi,
   type ProductionOrderDetail,
@@ -37,7 +38,6 @@ import {
   type SubTicket,
   type SubTicketPayload,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
 import { TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { formatDateShort, STAGE_LABEL } from './catalog'
@@ -49,12 +49,13 @@ import {
   SplitSubTicketsDialog,
   SubTicketFormDialog,
 } from './SubTicketDialogs'
-import { TopUpDialog } from './TopUpDialog'
+import { TicketMaterialsCell } from './MaterialRequests'
 import { useOrderMutation } from './useOrderMutation'
+import { WorkHistoryTable } from './WorkHistory'
 
 /**
- * Phiếu con cho thợ trên tab Sản xuất: chia số lượng + gram, mở khâu cho thợ tự nhận,
- * xác nhận giao và KCS nhận lại từng phiếu.
+ * Phiếu con cho thợ trên tab Sản xuất: chia số lượng, mở khâu cho thợ tự nhận, xác nhận giao
+ * và KCS nhận lại từng phiếu. Bạc / đá thợ xin xuất dần trong lúc làm (xem MaterialRequests).
  */
 export function SubTicketsPanel({
   order,
@@ -90,7 +91,8 @@ export function SubTicketsPanel({
   const [deleting, setDeleting] = useState<SubTicket | null>(null)
   const [clearingSplit, setClearingSplit] = useState(false)
   const [openStage, setOpenStage] = useState(false)
-  const [toppingUp, setToppingUp] = useState<SubTicket | null>(null)
+  /** Phiếu con đang thả lịch sử thao tác xuống. */
+  const [historyOf, setHistoryOf] = useState<string | null>(null)
   const [actionMenu, setActionMenu] = useState<{ anchorEl: HTMLElement; ticketId: string } | null>(null)
 
   const save = useOrderMutation(
@@ -106,12 +108,6 @@ export function SubTicketsPanel({
   )
   const clearSplit = useOrderMutation(code, () => clearSubTicketsApi(code), 'Đã hủy chia, đơn quay về phiếu mẹ')
   const remove = useOrderMutation(code, (ticket: SubTicket) => deleteSubTicketApi(code, ticket.no), 'Đã xoá phiếu con')
-  const topUp = useOrderMutation(
-    code,
-    (payload: { qty?: number | null; silverWeight?: string | null; reason?: string }) =>
-      topUpSubTicketApi(code, toppingUp?.no ?? 0, payload),
-    `Đã cấp thêm cho phiếu ${toppingUp?.code ?? ''}`,
-  )
   const open = useOrderMutation(
     code,
     (payload: { stage: StageCode; nos: number[] }) => openSubTicketStageApi(code, payload),
@@ -137,7 +133,7 @@ export function SubTicketsPanel({
   const openable = openableStages(order)
   const pending = busy || cancel.isPending || unclaim.isPending
   const byId = new Map(order.stages.map((entry) => [entry.id, entry]))
-  const canCreate = active && canManage && order.silverWeight != null && remaining.qty > 0
+  const canCreate = active && canManage && remaining.qty > 0
   // Đơn đã chạy trên phiếu mẹ (đã giao khâu, hay đang mở khâu chờ thợ) thì không chia nữa —
   // các khâu đã làm thuộc cả đơn, chia lúc này phiếu con sẽ mất lịch sử. Khớp luật ở BE.
   const parentStarted =
@@ -151,7 +147,6 @@ export function SubTicketsPanel({
     tickets.every(
       (ticket) =>
         ticket.entryCount === 0 &&
-        ticket.topUps.length === 0 &&
         !ticket.outcome &&
         !ticket.pendingStage &&
         !ticket.claimedByUserId,
@@ -170,9 +165,6 @@ export function SubTicketsPanel({
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Đã chia {order.subTicketTotals.qty}/{order.qty} sp
-            {order.silverWeight != null
-              ? ` · ${formatQty(order.subTicketTotals.silverWeight)}/${formatQty(order.silverWeight)} g bạc`
-              : ''}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -193,9 +185,7 @@ export function SubTicketsPanel({
           {canManage && tickets.length === 0 ? (
             <Tooltip
               title={
-                order.silverWeight == null
-                  ? 'Nhập Tổng TL bạc của đơn trước'
-                  : order.qty < 2
+                order.qty < 2
                     ? 'Đơn chỉ có 1 sản phẩm nên làm trực tiếp trên phiếu mẹ'
                     : parentStarted
                       ? 'Đơn đã chạy trên phiếu mẹ — làm tiếp trên phiếu mẹ, không chia phiếu con nữa'
@@ -238,17 +228,10 @@ export function SubTicketsPanel({
         </Stack>
       </Stack>
 
-      {canManage && order.silverWeight == null ? (
-        <Alert severity="info" sx={{ mb: 1 }}>
-          Nhập Tổng TL bạc của đơn ({order.source === 'BTP' ? 'Sửa đơn' : 'Cập nhật Đúc hoặc Sửa đơn'}) để chia gram
-          bạc cho các phiếu con.
-        </Alert>
-      ) : null}
-
       {tickets.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           Một phần việc thì giao khâu và theo dõi ngay trên phiếu mẹ. Chỉ chia phiếu con khi có từ 2 phần việc làm
-          song song: mỗi phiếu giữ một phần số lượng và gram bạc riêng.
+          song song: mỗi phiếu giữ một phần số lượng; bạc / đá thợ xin xuất dần theo phiếu của mình.
           {parentStarted
             ? ' Đơn này đã giao khâu trên phiếu mẹ nên không chia được nữa — làm tiếp trên phiếu mẹ.'
             : ' Chia trước khi giao khâu đầu tiên; đã giao rồi thì đơn đi tiếp trên phiếu mẹ.'}
@@ -267,7 +250,7 @@ export function SubTicketsPanel({
               <TableRow>
                 <TableCell>Phiếu</TableCell>
                 <TableCell align="right">SL</TableCell>
-                <TableCell align="right">Bạc (g)</TableCell>
+                <TableCell>NVL xuất · hao hụt</TableCell>
                 <TableCell>Khâu</TableCell>
                 <TableCell>Trạng thái</TableCell>
                 <TableCell>Thợ</TableCell>
@@ -292,199 +275,222 @@ export function SubTicketsPanel({
                         ? null
                         : last?.craftsmanName
                 return (
-                  <TableRow key={ticket.id} hover>
-                    <TableCell>
-                      <Link component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ fontWeight: 700 }}>
-                        {ticket.code}
-                      </Link>
-                      {ticket.note ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          {ticket.note}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell align="right">
-                      {ticket.qty}
-                      {ticket.availableQty !== ticket.qty ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          hiện {ticket.availableQty}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell align="right">
-                      {formatQty(ticket.silverWeight)}
-                      {Number(ticket.availableSilver) !== Number(ticket.silverWeight) ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          hiện {formatQty(ticket.availableSilver)}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {stage ? STAGE_LABEL[stage] : '—'}
-                      {ticket.state === 'SUBMITTED' ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          thợ đã báo xong — chờ KCS cân lại
-                        </Typography>
-                      ) : null}
-                      {ticket.state === 'IDLE' && last ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          đã nhận lại {formatDateShort(last.returnedAt)}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <SubTicketStateChip
-                        state={ticket.state}
-                        label={ticket.state === 'IDLE' && !last ? 'Chưa giao khâu' : undefined}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {worker ?? '—'}
-                      {ticket.state === 'CLAIMED' ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          nhận lúc {formatDateShort(ticket.claimedAt)}
-                        </Typography>
-                      ) : null}
-                      {waiting && last ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                          khâu trước: {STAGE_LABEL[last.stage]} · {last.craftsmanName}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-                        {ticket.state === 'CLAIMED' && active ? (
-                          <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
-                            Xác nhận giao
-                          </Button>
-                        ) : null}
-                        {openEntry ? (
-                          <>
-                            {/* KCS chỉ nhận lại khi thợ đã báo làm xong — khớp luật ở BE. */}
-                            {ticket.state === 'SUBMITTED' ? (
-                              <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
-                                KCS nhận lại
-                              </Button>
-                            ) : (
-                              <Typography variant="caption" color="text.secondary">
-                                chờ thợ báo xong
-                              </Typography>
-                            )}
-                          </>
-                        ) : null}
-                        <Tooltip title="Thao tác khác">
+                  <Fragment key={ticket.id}>
+                    <TableRow hover sx={historyOf === ticket.id ? { '& td': { borderBottom: 'none' } } : undefined}>
+                      <TableCell>
+                        <Tooltip title={historyOf === ticket.id ? 'Ẩn lịch sử thao tác' : 'Xem lịch sử thao tác'}>
                           <IconButton
                             size="small"
-                            aria-label={`Thao tác khác cho ${ticket.code}`}
-                            onClick={(event) => setActionMenu({ anchorEl: event.currentTarget, ticketId: ticket.id })}
-                            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+                            aria-label={`Lịch sử thao tác ${ticket.code}`}
+                            onClick={() => setHistoryOf((id) => (id === ticket.id ? null : ticket.id))}
+                            sx={{ p: 0.25, mr: 0.5 }}
                           >
-                            <MoreHorizIcon fontSize="small" />
+                            <ExpandMoreIcon
+                              fontSize="small"
+                              sx={{
+                                transform: historyOf === ticket.id ? 'rotate(180deg)' : 'none',
+                                transition: 'transform 0.2s',
+                              }}
+                            />
                           </IconButton>
                         </Tooltip>
-                        <Menu
-                          anchorEl={actionMenu?.ticketId === ticket.id ? actionMenu.anchorEl : null}
-                          open={actionMenu?.ticketId === ticket.id}
-                          onClose={() => setActionMenu(null)}
-                        >
+                        <Link component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ fontWeight: 700 }}>
+                          {ticket.code}
+                        </Link>
+                        {ticket.note ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {ticket.note}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      <TableCell align="right">
+                        {ticket.qty}
+                        {ticket.availableQty !== ticket.qty ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            hiện {ticket.availableQty}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <TicketMaterialsCell materials={ticket.materials} />
+                      </TableCell>
+                      <TableCell>
+                        {stage ? STAGE_LABEL[stage] : '—'}
+                        {ticket.state === 'SUBMITTED' ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            thợ đã báo xong — chờ KCS cân lại
+                          </Typography>
+                        ) : null}
+                        {ticket.state === 'IDLE' && last ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            đã nhận lại {formatDateShort(last.returnedAt)}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <SubTicketStateChip
+                          state={ticket.state}
+                          label={ticket.state === 'IDLE' && !last ? 'Chưa giao khâu' : undefined}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {worker ?? '—'}
+                        {ticket.state === 'CLAIMED' ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            nhận lúc {formatDateShort(ticket.claimedAt)}
+                          </Typography>
+                        ) : null}
+                        {waiting && last ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            khâu trước: {STAGE_LABEL[last.stage]} · {last.craftsmanName}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+                          {ticket.state === 'CLAIMED' && active && !canManage ? (
+                            <Typography variant="caption" color="text.secondary">
+                              chờ người lên đơn chọn NVL và giao
+                            </Typography>
+                          ) : ticket.state === 'CLAIMED' && active ? (
+                            <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
+                              Xác nhận giao
+                            </Button>
+                          ) : null}
                           {openEntry ? (
-                            <MenuItem
-                              onClick={() => {
-                                setActionMenu(null)
-                                onEditHandover(openEntry)
-                              }}
-                            >
-                              <ListItemText primary="Sửa thông tin giao" />
-                            </MenuItem>
+                            <>
+                              {/* KCS chỉ nhận lại khi thợ đã báo làm xong — khớp luật ở BE. */}
+                              {ticket.state === 'SUBMITTED' && openEntry.pendingRequestCount > 0 ? (
+                                <Typography variant="caption" color="warning.main">
+                                  còn {openEntry.pendingRequestCount} yêu cầu xuất NVL chờ xử lý
+                                </Typography>
+                              ) : ticket.state === 'SUBMITTED' ? (
+                                <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
+                                  KCS nhận lại
+                                </Button>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">
+                                  chờ thợ báo xong
+                                </Typography>
+                              )}
+                            </>
                           ) : null}
-                          {ticket.state === 'CLAIMED' ? (
-                            <MenuItem
-                              disabled={pending}
-                              onClick={() => {
-                                setActionMenu(null)
-                                unclaim.mutate(ticket)
-                              }}
+                          <Tooltip title="Thao tác khác">
+                            <IconButton
+                              size="small"
+                              aria-label={`Thao tác khác cho ${ticket.code}`}
+                              onClick={(event) => setActionMenu({ anchorEl: event.currentTarget, ticketId: ticket.id })}
+                              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
                             >
-                              <ListItemText
-                                primary={unclaim.isPending && unclaim.variables?.id === ticket.id ? 'Đang gỡ thợ…' : 'Gỡ thợ nhận'}
-                              />
-                            </MenuItem>
-                          ) : null}
-                          {ticket.state === 'WAITING' || ticket.state === 'CLAIMED' ? (
-                            <MenuItem
-                              disabled={pending}
-                              onClick={() => {
-                                setActionMenu(null)
-                                cancel.mutate(ticket)
-                              }}
-                            >
-                              <ListItemText
-                                primary={cancel.isPending && cancel.variables?.id === ticket.id ? 'Đang huỷ…' : 'Huỷ mở khâu'}
-                              />
-                            </MenuItem>
-                          ) : null}
-                          {ticket.state === 'IDLE' && last?.returnedAt && isAdmin && active ? (
-                            <MenuItem
-                              disabled={pending}
-                              onClick={() => {
-                                setActionMenu(null)
-                                onUndoReturn(last)
-                              }}
-                            >
-                              <ListItemText primary={undoingEntryId === last.id ? 'Đang gỡ…' : 'Gỡ nhận lại'} />
-                            </MenuItem>
-                          ) : null}
-                          {canManage && active && !ticket.outcome ? (
-                            <MenuItem
-                              onClick={() => {
-                                setActionMenu(null)
-                                setToppingUp(ticket)
-                              }}
-                            >
-                              <ListItemText primary="Cấp thêm" />
-                            </MenuItem>
-                          ) : null}
-                          {canManage && active && ticket.entryCount === 0 && ticket.topUps.length === 0 ? (
-                            <MenuItem
-                              onClick={() => {
-                                setActionMenu(null)
-                                setEditing(ticket)
-                                setFormOpen(true)
-                              }}
-                            >
-                              <ListItemText primary="Sửa phiếu con" />
-                            </MenuItem>
-                          ) : null}
-                          {canManage && tickets.length !== 2 && ticket.entryCount === 0 && ticket.topUps.length === 0 ? (
-                            <MenuItem
-                              onClick={() => {
-                                setActionMenu(null)
-                                setDeleting(ticket)
-                              }}
-                              sx={{ color: 'error.main' }}
-                            >
-                              <TrashIcon />
-                              <ListItemText primary="Xoá phiếu con" sx={{ ml: 1 }} />
-                            </MenuItem>
-                          ) : null}
-                          <MenuItem
-                            component={RouterLink}
-                            to={`/orders/${code}/tickets/${ticket.no}/print`}
-                            target="_blank"
-                            disabled={!canPrint}
-                            onClick={() => setActionMenu(null)}
+                              <MoreHorizIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Menu
+                            anchorEl={actionMenu?.ticketId === ticket.id ? actionMenu.anchorEl : null}
+                            open={actionMenu?.ticketId === ticket.id}
+                            onClose={() => setActionMenu(null)}
                           >
-                            <PrintIcon fontSize="small" />
-                            <ListItemText
-                              primary="In phiếu con"
-                              secondary={canPrint ? undefined : 'Đơn chưa báo Đúc'}
-                              sx={{ ml: 1 }}
-                            />
-                          </MenuItem>
-                        </Menu>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
+                            {openEntry ? (
+                              <MenuItem
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  onEditHandover(openEntry)
+                                }}
+                              >
+                                <ListItemText primary="Sửa thông tin giao" />
+                              </MenuItem>
+                            ) : null}
+                            {ticket.state === 'CLAIMED' ? (
+                              <MenuItem
+                                disabled={pending}
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  unclaim.mutate(ticket)
+                                }}
+                              >
+                                <ListItemText
+                                  primary={unclaim.isPending && unclaim.variables?.id === ticket.id ? 'Đang gỡ thợ…' : 'Gỡ thợ nhận'}
+                                />
+                              </MenuItem>
+                            ) : null}
+                            {ticket.state === 'WAITING' || ticket.state === 'CLAIMED' ? (
+                              <MenuItem
+                                disabled={pending}
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  cancel.mutate(ticket)
+                                }}
+                              >
+                                <ListItemText
+                                  primary={cancel.isPending && cancel.variables?.id === ticket.id ? 'Đang huỷ…' : 'Huỷ mở khâu'}
+                                />
+                              </MenuItem>
+                            ) : null}
+                            {ticket.state === 'IDLE' && last?.returnedAt && isAdmin && active ? (
+                              <MenuItem
+                                disabled={pending}
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  onUndoReturn(last)
+                                }}
+                              >
+                                <ListItemText primary={undoingEntryId === last.id ? 'Đang gỡ…' : 'Gỡ nhận lại'} />
+                              </MenuItem>
+                            ) : null}
+                            {canManage && active && ticket.entryCount === 0 ? (
+                              <MenuItem
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  setEditing(ticket)
+                                  setFormOpen(true)
+                                }}
+                              >
+                                <ListItemText primary="Sửa phiếu con" />
+                              </MenuItem>
+                            ) : null}
+                            {canManage && tickets.length !== 2 && ticket.entryCount === 0 ? (
+                              <MenuItem
+                                onClick={() => {
+                                  setActionMenu(null)
+                                  setDeleting(ticket)
+                                }}
+                                sx={{ color: 'error.main' }}
+                              >
+                                <TrashIcon />
+                                <ListItemText primary="Xoá phiếu con" sx={{ ml: 1 }} />
+                              </MenuItem>
+                            ) : null}
+                            <MenuItem
+                              component={RouterLink}
+                              to={`/orders/${code}/tickets/${ticket.no}/print`}
+                              target="_blank"
+                              disabled={!canPrint}
+                              onClick={() => setActionMenu(null)}
+                            >
+                              <PrintIcon fontSize="small" />
+                              <ListItemText
+                                primary="In phiếu con"
+                                secondary={canPrint ? undefined : 'Đơn chưa báo Đúc'}
+                                sx={{ ml: 1 }}
+                              />
+                            </MenuItem>
+                          </Menu>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={7} sx={{ py: '0 !important', bgcolor: '#fcfaf6' }}>
+                        <Collapse in={historyOf === ticket.id} timeout="auto" unmountOnExit>
+                          <Box sx={{ py: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                              Lịch sử thao tác phiếu {ticket.code}
+                            </Typography>
+                            <WorkHistoryTable order={order} ticket={ticket} />
+                          </Box>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </Fragment>
                 )
               })}
             </TableBody>
@@ -519,14 +525,6 @@ export function SubTicketsPanel({
         onSave={(payload) => save.mutate(payload, { onSuccess: () => setFormOpen(false) })}
       />
 
-      <TopUpDialog
-        ticket={toppingUp}
-        saving={topUp.isPending}
-        onClose={() => setToppingUp(null)}
-        onExited={() => setToppingUp(null)}
-        onSave={(payload) => topUp.mutate(payload, { onSuccess: () => setToppingUp(null) })}
-      />
-
       <OpenStageDialog
         open={openStage}
         order={order}
@@ -538,7 +536,7 @@ export function SubTicketsPanel({
       <ConfirmDeleteDialog
         open={deleting != null}
         title="Xoá phiếu con"
-        description={`Xoá phiếu con ${deleting?.code ?? ''}? Số lượng và gram bạc của phiếu trả lại phần chưa chia.`}
+        description={`Xoá phiếu con ${deleting?.code ?? ''}? Số lượng của phiếu trả lại phần chưa chia.`}
         deleting={remove.isPending}
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && remove.mutate(deleting, { onSuccess: () => setDeleting(null) })}

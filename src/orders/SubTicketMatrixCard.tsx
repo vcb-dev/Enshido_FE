@@ -7,7 +7,6 @@ import {
   type ProductionOrderDetail,
   type SubTicket,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
 import { LAST_STAGE, lastStageDone, STAGE_LABEL } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
 import { DefectDialog, FinishDialog } from './OutcomeDialogs'
@@ -84,7 +83,7 @@ export function SubTicketMatrixCard({
           </Typography>
           <SubTicketStateChip state={ticket.state} />
           <Typography variant="body2" color="text.secondary">
-            {ticket.qty} sp · {formatQty(ticket.silverWeight)} g bạc
+            {ticket.qty} sp
             {ticket.note ? ` · ${ticket.note}` : ''}
           </Typography>
         </Stack>

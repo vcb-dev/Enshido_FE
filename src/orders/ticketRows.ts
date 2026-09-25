@@ -36,6 +36,19 @@ export const TICKET_HEADER_BG = '#fff34d'
 
 const weight = (value: string | null) => (value != null ? formatQty(value) : '')
 
+/** Các dòng NVL đã xuất vào khâu, vd "00001 2 chiếc (1.000 g)". */
+function issuedText(entry: StageEntry, atHandover: boolean) {
+  return (entry.issuedLines ?? [])
+    .filter((line) => line.atHandover === atHandover)
+    .map(
+      (line) =>
+        `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}` +
+        (line.weight ? ` (${formatQty(line.weight)} g)` : '') +
+        (line.stoneCount && line.unit !== 'viên' ? ` · ${line.stoneCount} viên` : ''),
+    )
+    .join('; ')
+}
+
 /**
  * Các dòng của bảng "Quá trình sản xuất" — trang chi tiết và phiếu in cùng vẽ từ danh sách
  * này nên phiếu giấy và hệ thống luôn giống nhau từng ô.
@@ -57,6 +70,23 @@ export const TICKET_ROWS: TicketRow[] = [
     value: (e) => weight(e.handedSilverWeight),
   },
   {
+    key: 'issuedAtHandover',
+    label: 'NVL xuất lúc giao',
+    value: (e) => issuedText(e, true),
+  },
+  {
+    key: 'issuedExtra',
+    label: 'NVL thợ xin thêm',
+    value: (e) => issuedText(e, false),
+  },
+  {
+    key: 'silverIn',
+    label: 'Bạc vào khâu',
+    hint: '(giao + xuất thêm)',
+    numeric: true,
+    value: (e) => weight(e.silverIn),
+  },
+  {
     key: 'handedStoneCount',
     label: 'Số viên đá giao',
     numeric: true,
@@ -70,6 +100,13 @@ export const TICKET_ROWS: TicketRow[] = [
     value: (e) => weight(e.handedStoneWeight),
   },
   {
+    key: 'issuedStones',
+    label: 'Đá đã xuất',
+    hint: '(viên)',
+    numeric: true,
+    value: (e) => (e.issuedStoneCount ? String(e.issuedStoneCount) : ''),
+  },
+  {
     key: 'stoneCount',
     label: 'Số viên đá gắn',
     numeric: true,
@@ -81,6 +118,12 @@ export const TICKET_ROWS: TicketRow[] = [
     hint: '(g)',
     numeric: true,
     value: (e) => weight(e.stoneWeight),
+  },
+  {
+    key: 'returnedStoneCount',
+    label: 'Số viên đá trả lại',
+    numeric: true,
+    value: (e) => (e.returnedStoneCount != null ? String(e.returnedStoneCount) : ''),
   },
   { key: 'craftsman', label: 'Người chế tác (Thợ)', tone: 'craftsman', value: (e) => e.craftsmanName },
   { key: 'kcs', label: 'Người KCS', tone: 'kcs', value: (e) => e.returnedByName ?? '' },
@@ -119,6 +162,16 @@ export const TICKET_ROWS: TicketRow[] = [
     value: (e) =>
       e.silverLoss != null
         ? `${formatQty(e.silverLoss)}${e.silverLossPercent != null ? ` (${formatQty(e.silverLossPercent)}%)` : ''}`
+        : '',
+  },
+  {
+    key: 'stoneLoss',
+    label: 'Hao hụt đá',
+    hint: '(viên)',
+    numeric: true,
+    value: (e) =>
+      e.stoneLoss != null
+        ? `${e.stoneLoss}${e.stoneLossPercent != null ? ` (${formatQty(e.stoneLossPercent)}%)` : ''}`
         : '',
   },
 ]
@@ -187,16 +240,19 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
   const names = (pick: (entry: StageEntry) => string | null) =>
     Array.from(new Set(entries.map(pick).filter((name): name is string => Boolean(name)))).join(', ')
   const handedSilver = sumWeights(entries.map((entry) => entry.handedSilverWeight))
+  const issuedMetal = sumWeights(entries.map((entry) => entry.issuedMetalWeight))
+  const silverIn = sumWeights(entries.map((entry) => entry.silverIn))
   const stone = sumWeights(entries.map((entry) => entry.stoneWeight))
   const returnedSilver = sumWeights(entries.map((entry) => entry.returnedSilverWeight))
   const btp = sumWeights(entries.map((entry) => entry.btpRecoveredWeight))
   const silverRecovered = sumWeights(entries.map((entry) => entry.silverRecoveredWeight))
   const handedQty = sumCounts(entries.map((entry) => entry.handedQty))
-  // Đá gắn ở khâu Vào đá nằm trong TL cân lại nên phải cộng vào vế giao, giống công thức ở BE.
+  // Mốc là bạc vào khâu (giao + xuất thêm). Đá gắn ở khâu Vào đá nằm trong TL cân lại nên
+  // phải cộng vào vế giao, giống công thức ở BE.
   const loss =
-    done && handedSilver != null && returnedSilver != null
+    done && silverIn != null && returnedSilver != null
       ? round4(
-          Number(handedSilver) +
+          Number(silverIn) +
             Number(stone ?? 0) -
             Number(returnedSilver) -
             Number(btp ?? 0) -
@@ -204,9 +260,9 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
         )
       : null
   const lossPercent =
-    loss != null && handedSilver != null && Number(handedSilver) > 0
-      ? ((loss / Number(handedSilver)) * 100).toFixed(2)
-      : null
+    loss != null && silverIn != null && Number(silverIn) > 0 ? ((loss / Number(silverIn)) * 100).toFixed(2) : null
+  const stonesIn = sumCounts(entries.map((entry) => entry.stonesIn))
+  const stoneLoss = done ? sumCounts(entries.map((entry) => entry.stoneLoss)) : null
   const handedAt = entries.reduce((min, entry) => (entry.handedAt < min ? entry.handedAt : min), entries[0].handedAt)
   const returnedAt = done
     ? entries.reduce((max, entry) => ((entry.returnedAt ?? '') > max ? (entry.returnedAt ?? '') : max), '')
@@ -224,6 +280,12 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
     handedSilverWeight: handedSilver,
     handedStoneCount: sumCounts(entries.map((entry) => entry.handedStoneCount)),
     handedStoneWeight: sumWeights(entries.map((entry) => entry.handedStoneWeight)),
+    issuedMetalWeight: issuedMetal,
+    issuedStoneCount: entries.reduce((total, entry) => total + entry.issuedStoneCount, 0),
+    issuedStoneWeight: sumWeights(entries.map((entry) => entry.issuedStoneWeight)),
+    issuedLines: entries.flatMap((entry) => entry.issuedLines ?? []),
+    pendingRequestCount: entries.reduce((total, entry) => total + entry.pendingRequestCount, 0),
+    silverIn,
     stoneCount: sumCounts(entries.map((entry) => entry.stoneCount)),
     stoneWeight: stone,
     craftsmanUserId: null,
@@ -237,8 +299,13 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
     returnedSilverWeight: done ? returnedSilver : null,
     btpRecoveredWeight: done ? btp : null,
     silverRecoveredWeight: done ? silverRecovered : null,
+    returnedStoneCount: done ? sumCounts(entries.map((entry) => entry.returnedStoneCount)) : null,
     silverLoss: loss != null ? String(loss) : null,
     silverLossPercent: lossPercent,
+    stonesIn,
+    stoneLoss,
+    stoneLossPercent:
+      stoneLoss != null && stonesIn ? ((stoneLoss / stonesIn) * 100).toFixed(2) : null,
     laborCost: sumWeights(entries.map((entry) => entry.laborCost)),
     note: null,
   }

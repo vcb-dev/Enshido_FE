@@ -23,7 +23,7 @@ import {
   type SubTicketSummary,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
-import { formatQty, formatStockedDate } from '../api/inventory'
+import { formatStockedDate } from '../api/inventory'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
@@ -531,9 +531,6 @@ function orderColumns(
         <>
           {sub.qty}
           {row.qtyUnit ? ` ${row.qtyUnit}` : ''}
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {formatQty(sub.silverWeight)} g bạc
-          </Typography>
         </>
       ),
     },

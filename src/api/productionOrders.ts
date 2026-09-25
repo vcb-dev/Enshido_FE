@@ -82,8 +82,6 @@ export type SubTicketSummary = {
   code: string
   no: number
   qty: number
-  /** Gram bạc đã chia cho phiếu (gồm cả phần cấp thêm). */
-  silverWeight: string
   note: string | null
   createdAt: string
   state: SubTicketState
@@ -115,6 +113,27 @@ export type StageEntry = {
   handedStoneCount: number | null
   /** Khâu Vào đá: TL đá phát cho thợ (g). */
   handedStoneWeight: string | null
+  /** Bạc / kim loại xuất thêm trong khâu theo yêu cầu của thợ (g, đã xuất). */
+  issuedMetalWeight: string | null
+  /** Đá xuất thêm trong khâu (viên, đã xuất). */
+  issuedStoneCount: number
+  /** TL đá xuất thêm có cân (g). */
+  issuedStoneWeight: string | null
+  /** Từng dòng NVL đã xuất vào khâu — lúc giao hoặc thợ xin thêm. */
+  issuedLines: Array<{
+    atHandover: boolean
+    sku: string | null
+    name: string
+    unit: string
+    kind: MaterialRequestKind
+    qty: string | null
+    weight: string | null
+    stoneCount: number | null
+  }>
+  /** Yêu cầu xuất NVL của khâu còn chờ kho xử lý — còn thì KCS chưa nhận lại được. */
+  pendingRequestCount: number
+  /** Bạc vào khâu = TL giao + bạc xuất thêm. */
+  silverIn: string | null
   craftsmanUserId: string | null
   craftsmanName: string
   /** Thợ bấm "Đã làm xong" lúc nào; null là chưa báo. */
@@ -131,12 +150,89 @@ export type StageEntry = {
   stoneCount: number | null
   /** Khâu Vào đá: TL đá gắn lên (g) — cộng vào TL giao khi tính hao hụt. */
   stoneWeight: string | null
+  /** Khâu Vào đá: số viên đá thợ trả lại. */
+  returnedStoneCount: number | null
   btpRecoveredWeight: string | null
   silverRecoveredWeight: string | null
   silverLoss: string | null
   silverLossPercent: string | null
+  /** Đá vào khâu = đá phát lúc giao + đá xuất thêm (viên). */
+  stonesIn: number | null
+  /** Đá mất = vào − gắn − trả lại (viên), khi KCS đã nhận lại. */
+  stoneLoss: number | null
+  stoneLossPercent: string | null
   laborCost: string | null
   note: string | null
+}
+
+export type MaterialRequestStatus = 'PENDING' | 'ISSUED' | 'REJECTED' | 'CANCELLED'
+/** Bạc / kim loại tính gram, đá tính viên, loại khác chỉ hiển thị. */
+export type MaterialRequestKind = 'METAL' | 'STONE' | 'OTHER'
+
+/** Một lần thợ xin xuất NVL trong lúc làm khâu. */
+export type MaterialRequest = {
+  id: string
+  orderCode: string
+  subTicketNo: number | null
+  /** Mã phiếu con, hoặc mã đơn nếu là phiếu mẹ. */
+  ticketCode: string
+  stageEntryId: string
+  stage: StageCode | null
+  status: MaterialRequestStatus
+  kind: MaterialRequestKind
+  /** Xuất ngay lúc giao khâu (không qua thợ xin). */
+  atHandover: boolean
+  material: {
+    id: string
+    sku: string | null
+    name: string
+    unit: string
+    warehouseCode: string
+    warehouseName: string
+  }
+  requestedQty: string
+  note: string | null
+  requestedByUserId: string | null
+  requestedByName: string
+  requestedAt: string
+  issuedQty: string | null
+  issuedWeight: string | null
+  issuedStoneCount: number | null
+  handledByName: string | null
+  handledAt: string | null
+  rejectReason: string | null
+}
+
+/** Dòng ở hàng chờ xuất của kho. */
+export type MaterialRequestQueueItem = MaterialRequest & {
+  orderDescription: string
+  craftsmanName: string
+  suggestedKind: MaterialRequestKind
+  stockQty: string
+}
+
+/** NVL đã xuất cho một phiếu và hao hụt cả phiếu (chỉ các khâu KCS đã nhận lại). */
+export type TicketMaterials = {
+  lines: Array<{
+    materialId: string
+    sku: string | null
+    name: string
+    unit: string
+    kind: MaterialRequestKind
+    qty: string
+    weight: string | null
+    stoneCount: number | null
+    times: number
+  }>
+  issuedMetalWeight: string
+  issuedStoneCount: number
+  pendingCount: number
+  silverIn: string | null
+  silverLoss: string | null
+  silverLossPercent: string | null
+  stonesIn: number | null
+  stoneLoss: number | null
+  stoneLossPercent: string | null
 }
 
 export type StatusLog = {
@@ -165,25 +261,12 @@ export type SubTicketState =
 /** Hai nhánh kết thúc một phiếu con — cùng bộ với hai cột cuối phiếu thợ. */
 export type SubTicketOutcome = 'DEFECT' | 'FINISH'
 
-/** Một lần cấp thêm SL / bạc cho phiếu con khi thợ làm giữa chừng phát hiện thiếu. */
-export type SubTicketTopUp = {
-  id: string
-  qty: number
-  silverWeight: string
-  reason: string | null
-  createdByName: string
-  createdAt: string
-  /** Đã vào một khâu rồi hay còn chờ giao khâu sau. */
-  applied: boolean
-}
-
 export type SubTicket = {
   id: string
   no: number
   /** Mã phiếu con, vd A012-1. */
   code: string
   qty: number
-  silverWeight: string
   note: string | null
   state: SubTicketState
   /** Khâu đang chờ nhận hoặc đang làm. */
@@ -199,9 +282,10 @@ export type SubTicket = {
   entryCount: number
   /** Số lượng / gram đang có để giao khâu sau (theo lần KCS nhận lại gần nhất). */
   availableQty: number
-  availableSilver: string
-  /** Lịch sử cấp thêm, cũ trước mới sau. */
-  topUps: SubTicketTopUp[]
+  /** Chưa giao khâu nào thì null — người giao cân lúc giao khâu đầu. */
+  availableSilver: string | null
+  /** NVL thợ đã xin xuất và hao hụt cả phiếu. */
+  materials: TicketMaterials
   /** Kết cục riêng của phiếu con; null là phiếu vẫn đang chạy. */
   outcome: SubTicketOutcome | null
   outcomeAt: string | null
@@ -230,6 +314,7 @@ export type OrderWorkTicket = {
   openEntryId: string | null
   availableQty: number
   availableSilver: string | null
+  materials: TicketMaterials
 }
 
 // Bản chi tiết có `subTickets` đầy đủ của riêng nó — bỏ bản tóm tắt của dòng danh sách đi.
@@ -245,8 +330,6 @@ export type ProductionOrderDetail = Omit<
   stoneCount: number | null
   stoneWeight: string | null
   weight: string | null
-  /** Tổng TL bạc của đơn (g) — mốc chia gram cho phiếu con. */
-  silverWeight: string | null
   laserEngraving: string | null
   otherRequirements: string | null
   nvlLines: ProductionNvlWorkLine[]
@@ -279,7 +362,11 @@ export type ProductionOrderDetail = Omit<
   stages: StageEntry[]
   workTicket: OrderWorkTicket | null
   subTickets: SubTicket[]
-  subTicketTotals: { qty: number; silverWeight: string }
+  subTicketTotals: { qty: number }
+  /** Mọi yêu cầu xuất NVL của đơn, cũ trước mới sau. */
+  materialRequests: MaterialRequest[]
+  /** NVL xuất thêm + hao hụt của cả đơn. */
+  materials: TicketMaterials
   statusLogs: StatusLog[]
 }
 
@@ -309,9 +396,6 @@ export type ProductionOrderListParams = {
 
 export type UpsertProductionOrderPayload = {
   source: ProductionSource
-  btpMaterialId?: string | null
-  nvlMaterialId?: string | null
-  finishedProductCode?: string | null
   requestType: ProductionRequestType
   receivedDate: string
   closedBy: string
@@ -319,9 +403,6 @@ export type UpsertProductionOrderPayload = {
   description: string
   qty: number
   qtyUnit?: string | null
-  finishedProductQty?: number | null
-  /** Số lượng BTP xuất kho khi lên đơn BTP. */
-  btpQty?: number | null
   model3dCode?: string
   model3dUrl?: string | null
   leadTime: string
@@ -334,7 +415,6 @@ export type UpsertProductionOrderPayload = {
   stoneCount?: number | null
   stoneWeight?: string | null
   weight?: string | null
-  silverWeight?: string | null
   laserEngraving?: string
   otherRequirements?: string
   mainMaterial?: string
@@ -346,7 +426,6 @@ export type UpsertProductionOrderPayload = {
   debtStatus?: string
   parentCode?: string
   images: OrderImage[]
-  nvlLines?: ProductionNvlWorkLine[]
   editReason?: string
 }
 
@@ -354,11 +433,20 @@ export type HandoverPayload = {
   craftsmanUserId: string
   handedAt: string
   handedQty?: number | null
-  handedSilverWeight: string
+  /** TL hàng từ khâu trước; khâu đầu được bỏ trống nếu hàng lấy từ NVL xuất. */
+  handedSilverWeight?: string | null
   /** Khâu Vào đá: số viên đá và TL đá (g) phát cho thợ. Khâu khác không gửi. */
   handedStoneCount?: number | null
   handedStoneWeight?: string | null
   note?: string
+  /** NVL xuất kho cho thợ lúc xác nhận giao. */
+  materials?: Array<{
+    materialId: string
+    kind: MaterialRequestKind
+    qty: string
+    weight?: string | null
+    stoneCount?: number | null
+  }>
 }
 
 export type ReturnPayload = {
@@ -370,6 +458,8 @@ export type ReturnPayload = {
   stoneCount?: number | null
   /** Khâu Vào đá: TL đá gắn lên (g). */
   stoneWeight?: string | null
+  /** Khâu Vào đá: số viên đá thợ trả lại. */
+  returnedStoneCount?: number | null
   btpRecoveredWeight?: string | null
   silverRecoveredWeight?: string | null
   note?: string
@@ -378,11 +468,9 @@ export type ReturnPayload = {
 export type CastingPayload = {
   sentDate: string
   returnedDate?: string | null
-  /** Tổng TL bạc (g); bỏ trống thì giữ số cũ. */
-  silverWeight?: string | null
 }
 
-export type SubTicketPayload = { qty: number; silverWeight: string; note?: string }
+export type SubTicketPayload = { qty: number; note?: string }
 
 export type SubTicketHandoverPayload = Omit<HandoverPayload, 'craftsmanUserId'>
 
@@ -400,6 +488,7 @@ export type MyTicketItem = {
   state: SubTicketState | null
   stage: StageCode | null
   qty: number
+  /** Chờ nhận: bạc hàng từ khâu trước. Đang làm / đã nộp: bạc vào khâu (giao + NVL xuất). */
   silverWeight: string | null
   pendingAt: string | null
   claimedAt: string | null
@@ -410,6 +499,18 @@ export type MyTicketItem = {
   returnedByName: string | null
   returnedSilverWeight: string | null
   silverLoss: string | null
+  silverLossPercent: string | null
+  /** NVL thợ đã nhận ở khâu: lúc giao hoặc xin thêm. */
+  issuedLines: Array<{
+    atHandover: boolean
+    sku: string | null
+    name: string
+    unit: string
+    qty: string | null
+    weight: string | null
+  }>
+  /** Yêu cầu xin thêm còn chờ kho xử lý. */
+  pendingRequests: number
 }
 
 export type MyTickets = {
@@ -502,7 +603,23 @@ function orderPath(code: string, suffix = '') {
 type Sparse<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
 type SparseOrderRow = Sparse<ProductionOrderRow, 'subTickets' | 'workState' | 'workStage'>
-type SparseOrderDetail = Sparse<ProductionOrderDetail, 'subTickets' | 'subTicketTotals'>
+type SparseOrderDetail = Sparse<
+  ProductionOrderDetail,
+  'subTickets' | 'subTicketTotals' | 'materialRequests' | 'materials'
+>
+
+const EMPTY_MATERIALS: TicketMaterials = {
+  lines: [],
+  issuedMetalWeight: '0',
+  issuedStoneCount: 0,
+  pendingCount: 0,
+  silverIn: null,
+  silverLoss: null,
+  silverLossPercent: null,
+  stonesIn: null,
+  stoneLoss: null,
+  stoneLossPercent: null,
+}
 
 function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
   return {
@@ -522,7 +639,9 @@ function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
     customerName: order.customerName ?? null,
     subTickets: order.subTickets ?? [],
     // Máy chủ chưa biết phiếu con thì cũng chưa chia được gì.
-    subTicketTotals: order.subTicketTotals ?? { qty: 0, silverWeight: '0' },
+    subTicketTotals: order.subTicketTotals ?? { qty: 0 },
+    materialRequests: order.materialRequests ?? [],
+    materials: order.materials ?? EMPTY_MATERIALS,
   }
 }
 
@@ -587,6 +706,23 @@ export function getSubTicketOrderApi(ticketCode: string) {
 
 export function getProductionOrderApi(code: string) {
   return orderFetch(orderPath(code))
+}
+
+/** Một dòng nhật ký thao tác trên đơn / phiếu con / khâu. `action` là mã, nhãn ở FE. */
+export type ProductionActivity = {
+  id: string
+  subTicketNo: number | null
+  stage: StageCode | null
+  action: string
+  actorName: string
+  before: unknown
+  after: unknown
+  note: string | null
+  createdAt: string
+}
+
+export function listOrderActivityApi(code: string) {
+  return apiFetch<ProductionActivity[]>(orderPath(code, '/activity'))
 }
 
 export function createProductionOrderApi(payload: UpsertProductionOrderPayload) {
@@ -708,6 +844,9 @@ export type FinishedProductOption = {
 
 export type ProductionNvlWorkLine = {
   materialId: string
+  /** Mã / tên NVL — BE trả khi đọc đơn, không gửi lên lúc lưu. */
+  sku?: string | null
+  name?: string
   platingColor: string | null
   qty: number | null
   stoneWeight: string | null
@@ -927,16 +1066,52 @@ export function unsubmitOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/submit'), { method: 'DELETE' })
 }
 
-/** Cấp thêm SL / bạc cho phiếu con. Bỏ trống một trong hai thì hiểu là 0. */
-export function topUpSubTicketApi(
-  code: string,
-  no: number,
-  payload: { qty?: number | null; silverWeight?: string | null; reason?: string },
-) {
-  return orderFetch(ticketPath(code, no, '/top-up'), {
+export type MaterialRequestPayload = {
+  /** Mã trong kho NVL chính hoặc kho BTP. */
+  materialId: string
+  /** Số xin xuất, theo đơn vị của mã. */
+  qty: string
+  note?: string
+}
+
+/** Thợ xin xuất NVL cho khâu đang làm. `no` null = phiếu mẹ. */
+export function requestMaterialApi(code: string, no: number | null, payload: MaterialRequestPayload) {
+  return orderFetch(
+    no == null ? orderPath(code, '/work/material-requests') : ticketPath(code, no, '/material-requests'),
+    { method: 'POST', body: JSON.stringify(payload) },
+  )
+}
+
+export function cancelMaterialRequestApi(id: string) {
+  return orderFetch(`${BASE}/material-requests/${id}`, { method: 'DELETE' })
+}
+
+export type IssueMaterialPayload = {
+  kind: MaterialRequestKind
+  qty: string
+  /** TL cân lúc xuất (g) — bạc bắt buộc. */
+  weight?: string | null
+  /** Đá: số viên — đơn vị không phải viên thì bắt buộc. */
+  stoneCount?: number | null
+}
+
+/** Kho / người giao cân rồi xuất theo yêu cầu — tạo phiếu xuất gắn mã đơn. */
+export function issueMaterialRequestApi(id: string, payload: IssueMaterialPayload) {
+  return orderFetch(`${BASE}/material-requests/${id}/issue`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export function rejectMaterialRequestApi(id: string, reason: string) {
+  return orderFetch(`${BASE}/material-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function listMaterialRequestsApi(status: MaterialRequestStatus = 'PENDING') {
+  return apiFetch<MaterialRequestQueueItem[]>(`${BASE}/material-requests?status=${status}`)
 }
 
 export function markSubTicketPrintedApi(code: string, no: number) {

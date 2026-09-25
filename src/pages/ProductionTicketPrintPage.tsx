@@ -222,16 +222,26 @@ function Ticket({
 }) {
   const columns = stageColumns(order.stages, subTicket?.id)
   const ticketIndex = subTicket ? order.subTickets.findIndex((ticket) => ticket.id === subTicket.id) : -1
-  const silverWeight = subTicket ? subTicket.silverWeight : order.silverWeight
+  const materials = subTicket ? subTicket.materials : order.materials
   const splitNote = subTicket
-    ? `Phiếu con của đơn ${order.code} (${order.qty} sp${
-        order.silverWeight != null ? ` · ${formatQty(order.silverWeight)} g bạc` : ''
-      })`
+    ? `Phiếu con của đơn ${order.code} (${order.qty} sp)`
     : order.subTickets.length
-      ? `Phiếu con: ${order.subTickets
-          .map((ticket) => `${ticket.code} (${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g)`)
-          .join(', ')}`
+      ? `Phiếu con: ${order.subTickets.map((ticket) => `${ticket.code} (${ticket.qty} sp)`).join(', ')}`
       : ''
+  const issuedNote = [
+    materials.lines
+      .map(
+        (line) =>
+          `${line.sku || line.name} ${formatQty(line.qty)} ${line.unit}${line.weight ? ` (${formatQty(line.weight)} g)` : ''}`,
+      )
+      .join('; '),
+    materials.silverLoss != null
+      ? `Hao hụt bạc ${formatQty(materials.silverLoss)} g${materials.silverLossPercent != null ? ` (${formatQty(materials.silverLossPercent)}%)` : ''}`
+      : '',
+    materials.stoneLoss ? `Mất ${materials.stoneLoss} viên đá` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const productImages = order.images.filter((image) => image.kind === 'PRODUCT')
   const images = (productImages.length ? productImages : order.images).slice(0, 2)
 
@@ -349,12 +359,12 @@ function Ticket({
             <Value colSpan={SPAN_1}>{order.weight != null ? formatQty(order.weight) : ''}</Value>
           </tr>
           <tr>
-            <Label>TL bạc (g):</Label>
+            <Label>Bạc xuất thêm (g):</Label>
             <td style={{ ...center, color: BLUE, fontWeight: 700 }}>
-              {silverWeight != null ? formatQty(silverWeight) : ''}
+              {Number(materials.issuedMetalWeight) ? formatQty(materials.issuedMetalWeight) : ''}
             </td>
             <td colSpan={SPAN_2} style={{ fontSize: '0.9em' }}>
-              {splitNote}
+              {[splitNote, issuedNote].filter(Boolean).join(' — ')}
             </td>
           </tr>
           <tr>

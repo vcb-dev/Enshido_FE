@@ -21,14 +21,14 @@ import type {
   SubTicketPayload,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { CrudDialogShell, FormQtyField, FormRow, FormSelect, FormTextField } from '../components/ui'
+import { CrudDialogShell, FormRow, FormSelect, FormTextField } from '../components/ui'
 import { isInStage, STAGE_LABEL, STAGES } from './catalog'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
 
-type TicketValues = { qty: string; silverWeight: string; note: string }
+type TicketValues = { qty: string; note: string }
 
-type SplitRow = { qty: string; silverWeight: string; note: string }
+type SplitRow = { qty: string; note: string }
 
 /** Chia lần đầu thành ít nhất hai phiếu; lưu nguyên khối để không bao giờ sinh một phiếu lẻ. */
 export function SplitSubTicketsDialog({
@@ -56,28 +56,17 @@ export function SplitSubTicketsDialog({
     seeded.current = true
     const firstQty = Math.floor(order.qty / 2)
     const secondQty = order.qty - firstQty
-    const totalSilver = Number(order.silverWeight ?? 0)
-    const firstSilver = round4(totalSilver / 2)
-    const secondSilver = round4(totalSilver - firstSilver)
     setRows([
-      { qty: firstQty > 0 ? String(firstQty) : '', silverWeight: firstSilver > 0 ? String(firstSilver) : '', note: '' },
-      { qty: secondQty > 0 ? String(secondQty) : '', silverWeight: secondSilver > 0 ? String(secondSilver) : '', note: '' },
+      { qty: firstQty > 0 ? String(firstQty) : '', note: '' },
+      { qty: secondQty > 0 ? String(secondQty) : '', note: '' },
     ])
-  }, [open, order.qty, order.silverWeight])
+  }, [open, order.qty])
 
   const update = (index: number, field: keyof SplitRow, value: string) =>
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)))
   const totalQty = rows.reduce((sum, row) => sum + Number(row.qty || 0), 0)
-  const totalSilver = round4(rows.reduce((sum, row) => sum + Number(row.silverWeight || 0), 0))
-  const invalidRow = rows.some(
-    (row) => !Number.isInteger(Number(row.qty)) || Number(row.qty) < 1 || !(Number(row.silverWeight) > 0),
-  )
-  // Cả hai vế làm tròn 4 số lẻ như cột Decimal(18,4) ở DB, rồi so đúng như BE so Decimal —
-  // dung sai sẽ cho qua những mức mà BE chặn, người dùng bấm Lưu mới biết.
-  const invalidTotals =
-    totalQty > order.qty ||
-    order.silverWeight == null ||
-    totalSilver > round4(Number(order.silverWeight))
+  const invalidRow = rows.some((row) => !Number.isInteger(Number(row.qty)) || Number(row.qty) < 1)
+  const invalidTotals = totalQty > order.qty
   const canSubmit = rows.length >= 2 && !invalidRow && !invalidTotals
 
   return (
@@ -86,7 +75,7 @@ export function SplitSubTicketsDialog({
       <DialogContent sx={{ pt: '8px !important' }}>
         <Alert severity="info" sx={{ mb: 1.5 }}>
           Chỉ chia khi có từ 2 phần việc trở lên. Nếu một thợ làm toàn bộ đơn, đóng hộp thoại và giao khâu trực
-          tiếp trên phiếu mẹ.
+          tiếp trên phiếu mẹ. Phiếu con chỉ chia số lượng — bạc / đá thợ xin xuất dần trong lúc làm.
         </Alert>
         <Stack spacing={1}>
           {rows.map((row, index) => (
@@ -94,7 +83,7 @@ export function SplitSubTicketsDialog({
               key={index}
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr 1fr', sm: '72px 1fr 1fr 1.5fr auto' },
+                gridTemplateColumns: { xs: '1fr 1fr', sm: '72px 1fr 1.5fr auto' },
                 gap: 1,
                 alignItems: 'start',
                 p: 1,
@@ -113,14 +102,6 @@ export function SplitSubTicketsDialog({
                 value={row.qty}
                 onChange={(event) => update(index, 'qty', event.target.value)}
                 slotProps={{ htmlInput: { min: 1 } }}
-              />
-              <TextField
-                size="small"
-                type="number"
-                label="Gram bạc"
-                value={row.silverWeight}
-                onChange={(event) => update(index, 'silverWeight', event.target.value)}
-                slotProps={{ htmlInput: { min: 0, step: 'any' } }}
               />
               <TextField
                 size="small"
@@ -144,13 +125,12 @@ export function SplitSubTicketsDialog({
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, justifyContent: 'space-between' }}>
           <Button
             size="small"
-            onClick={() => setRows((current) => [...current, { qty: '', silverWeight: '', note: '' }])}
+            onClick={() => setRows((current) => [...current, { qty: '', note: '' }])}
           >
             Thêm phiếu
           </Button>
           <Typography variant="body2" color={invalidTotals ? 'error.main' : 'text.secondary'}>
-            Đã chia {totalQty}/{order.qty} sp · {formatQty(String(totalSilver))}/
-            {formatQty(order.silverWeight ?? '0')} g bạc
+            Đã chia {totalQty}/{order.qty} sp
           </Typography>
         </Stack>
       </DialogContent>
@@ -166,7 +146,6 @@ export function SplitSubTicketsDialog({
             onSave(
               rows.map((row) => ({
                 qty: Number(row.qty),
-                silverWeight: row.silverWeight,
                 note: row.note.trim() || undefined,
               })),
             )
@@ -179,18 +158,13 @@ export function SplitSubTicketsDialog({
   )
 }
 
-/** Phần số lượng / gram còn chưa chia (không tính phiếu đang sửa). */
+/** Phần số lượng còn chưa chia (không tính phiếu đang sửa). */
 export function remainingSplit(order: ProductionOrderDetail, exceptId?: string) {
   const others = order.subTickets.filter((ticket) => ticket.id !== exceptId)
-  const qty = order.qty - others.reduce((sum, ticket) => sum + ticket.qty, 0)
-  const silver =
-    order.silverWeight != null
-      ? round4(Number(order.silverWeight) - others.reduce((sum, ticket) => sum + Number(ticket.silverWeight), 0))
-      : null
-  return { qty, silver }
+  return { qty: order.qty - others.reduce((sum, ticket) => sum + ticket.qty, 0) }
 }
 
-/** Chia một phần số lượng + gram bạc của đơn thành phiếu con cho thợ. */
+/** Chia một phần số lượng của đơn thành phiếu con cho thợ. */
 export function SubTicketFormDialog({
   open,
   order,
@@ -209,7 +183,7 @@ export function SubTicketFormDialog({
   onExited: () => void
   onSave: (payload: SubTicketPayload) => void
 }) {
-  const form = useForm<TicketValues>({ defaultValues: { qty: '', silverWeight: '', note: '' } })
+  const form = useForm<TicketValues>({ defaultValues: { qty: '', note: '' } })
   const remaining = useMemo(() => remainingSplit(order, ticket?.id), [order, ticket])
 
   // Nạp form một lần mỗi lần mở. Trang đơn tự làm mới định kỳ; `remaining` đổi theo mỗi lần
@@ -224,11 +198,10 @@ export function SubTicketFormDialog({
     seeded.current = true
     form.reset(
       ticket
-        ? { qty: String(ticket.qty), silverWeight: ticket.silverWeight, note: ticket.note ?? '' }
+        ? { qty: String(ticket.qty), note: ticket.note ?? '' }
         : {
             // Gợi ý phần còn lại — chia phiếu cuối cùng không phải tự tính.
             qty: remaining.qty > 0 ? String(remaining.qty) : '',
-            silverWeight: remaining.silver != null && remaining.silver > 0 ? String(remaining.silver) : '',
             note: '',
           },
     )
@@ -244,7 +217,7 @@ export function SubTicketFormDialog({
       titles={{ create: title, edit: title, view: title }}
       form={form}
       onSubmit={(values) =>
-        onSave({ qty: Number(values.qty), silverWeight: values.silverWeight, note: values.note.trim() })
+        onSave({ qty: Number(values.qty), note: values.note.trim() })
       }
       saving={saving}
       submitLabel={ticket ? 'Lưu' : 'Tạo phiếu'}
@@ -253,22 +226,14 @@ export function SubTicketFormDialog({
       onExited={onExited}
     >
       <Alert severity="info" sx={{ mt: 1, py: 0 }}>
-        Đơn {order.qty} sp · {order.silverWeight != null ? `${formatQty(order.silverWeight)} g bạc` : 'chưa có Tổng TL bạc'}
-        <br />
-        Còn chưa chia: <b>{remaining.qty} sp</b>
-        {remaining.silver != null ? (
-          <>
-            {' '}
-            · <b>{formatQty(String(remaining.silver))} g</b>
-          </>
-        ) : null}
+        Đơn {order.qty} sp · còn chưa chia: <b>{remaining.qty} sp</b>
       </Alert>
       {locked ? (
         <Typography variant="body2" color="text.secondary">
           Phiếu đã giao khâu nên chỉ sửa được ghi chú.
         </Typography>
       ) : null}
-      <FormRow columns={2}>
+      <FormRow columns={1}>
         <FormTextField<TicketValues>
           name="qty"
           label="Số lượng (sp)"
@@ -280,22 +245,6 @@ export function SubTicketFormDialog({
               const qty = Number(value)
               if (!Number.isInteger(qty) || qty < 1) return 'Số lượng phải từ 1'
               if (qty > remaining.qty) return `Còn ${remaining.qty} sp chưa chia`
-              return true
-            },
-          }}
-        />
-        <FormQtyField<TicketValues>
-          name="silverWeight"
-          label="Gram bạc (g)"
-          required
-          readOnly={locked}
-          rules={{
-            validate: (value) => {
-              const silver = Number(value)
-              if (!(silver > 0)) return 'Gram bạc phải lớn hơn 0'
-              if (remaining.silver != null && silver > remaining.silver) {
-                return `Còn ${formatQty(String(remaining.silver))} g chưa chia`
-              }
               return true
             },
           }}
@@ -449,7 +398,7 @@ export function OpenStageDialog({
                 }
                 label={
                   <>
-                    {`${ticket.code} · ${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g`}
+                    {`${ticket.code} · ${ticket.availableQty} sp${ticket.availableSilver != null ? ` · ${formatQty(ticket.availableSilver)} g` : ''}`}
                     {stage && skipped(ticket.no, stage).length ? (
                       <Typography component="span" variant="caption" color="warning.main" sx={{ ml: 0.75 }}>
                         bỏ qua {skipped(ticket.no, stage).map((item) => STAGE_LABEL[item]).join(', ')}
@@ -474,8 +423,4 @@ export function OpenStageDialog({
       />
     </CrudDialogShell>
   )
-}
-
-function round4(value: number) {
-  return Math.round(value * 10000) / 10000
 }

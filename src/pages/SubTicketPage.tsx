@@ -28,6 +28,7 @@ import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { PageHeader, TicketDetailSkeleton } from '../components/ui'
 import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
+import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
 import { VerticalInfoList } from '../orders/VerticalInfoList'
@@ -112,7 +113,7 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
             {queued ? <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} /> : null}
           </Stack>
         }
-        subtitle={`${order.qty} sp · ${order.silverWeight != null ? `${formatQty(order.silverWeight)} g bạc` : 'chưa có TL bạc'}`}
+        subtitle={`${order.qty} sp`}
         breadcrumbs={
           <Breadcrumbs>
             {isWorker ? (
@@ -146,8 +147,8 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
         ) : ticket.state === 'WAITING' && ticket.pendingStage ? (
           <Stack spacing={1.25}>
             <Typography variant="body2">
-              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp ·{' '}
-              {ticket.availableSilver != null ? formatQty(ticket.availableSilver) : '—'} g bạc. Chưa có thợ nhận.
+              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp
+              {ticket.availableSilver != null ? ` · ${formatQty(ticket.availableSilver)} g bạc` : ''}. Chưa có thợ nhận.
             </Typography>
             {isWorker ? (
               <Button
@@ -166,8 +167,8 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
           <Stack spacing={1.25}>
             <Typography variant="body2">
               {mine ? 'Bạn' : `Thợ ${ticket.claimedByName ?? ''}`} đã nhận khâu{' '}
-              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người giao cân
-              bạc và xác nhận giao.
+              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người lên
+              đơn {stageIssuesStock(ticket.pendingStage) ? 'xuất NVL và ' : ''}xác nhận giao.
             </Typography>
             {mine ? (
               <Button
@@ -186,8 +187,8 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
           <Stack spacing={1.25}>
             <Typography variant="body2">
               Thợ <b>{openEntry.craftsmanName}</b> đang làm khâu <b>{STAGE_LABEL[openEntry.stage]}</b> từ{' '}
-              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp ·{' '}
-              {openEntry.handedSilverWeight ? formatQty(openEntry.handedSilverWeight) : '—'} g bạc.
+              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp · bạc vào khâu{' '}
+              {openEntry.silverIn ? formatQty(openEntry.silverIn) : '—'} g.
               {ticket.state === 'SUBMITTED'
                 ? ` Đã báo xong lúc ${formatDateShort(openEntry.submittedAt)} — chờ KCS cân lại.`
                 : ' Làm xong thì bấm “Đã làm xong” rồi mang hàng tới KCS cân lại.'}
@@ -223,6 +224,15 @@ function ParentTicketView({ order, ticket }: { order: ProductionOrderDetail; tic
           </Typography>
         )}
       </Paper>
+
+      <MaterialRequestsCard
+        order={order}
+        ticketNo={null}
+        materials={ticket.materials}
+        userId={user?.id ?? null}
+        canHandle={!workerOnly}
+        isAdmin={user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))}
+      />
 
       <Paper sx={{ p: 2 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
@@ -344,11 +354,7 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
             ) : null}
           </Stack>
         }
-        subtitle={
-          workerOnly
-            ? `Chia ${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g bạc`
-            : `Đơn ${order.code} · chia ${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g bạc`
-        }
+        subtitle={workerOnly ? `Chia ${ticket.qty} sp` : `Đơn ${order.code} · chia ${ticket.qty} sp`}
         breadcrumbs={
           <Breadcrumbs>
             {isWorker ? (
@@ -393,8 +399,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
         ) : ticket.state === 'WAITING' && ticket.pendingStage ? (
           <Stack spacing={1.25}>
             <Typography variant="body2">
-              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp ·{' '}
-              {formatQty(ticket.availableSilver)} g bạc. Chưa có thợ nhận.
+              Đang mở khâu <b>{STAGE_LABEL[ticket.pendingStage]}</b> — {ticket.availableQty} sp
+              {ticket.availableSilver != null ? ` · ${formatQty(ticket.availableSilver)} g bạc` : ''}. Chưa có thợ nhận.
             </Typography>
             {isWorker ? (
               <Button
@@ -417,8 +423,9 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
           <Stack spacing={1.25}>
             <Typography variant="body2">
               {mine ? 'Bạn' : `Thợ ${ticket.claimedByName ?? ''}`} đã nhận khâu{' '}
-              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người giao cân
-              bạc và xác nhận giao ({ticket.availableQty} sp · {formatQty(ticket.availableSilver)} g).
+              <b>{STAGE_LABEL[ticket.pendingStage]}</b> lúc {formatDateShort(ticket.claimedAt)} — chờ người lên
+              đơn {stageIssuesStock(ticket.pendingStage) ? 'xuất NVL và ' : ''}xác nhận giao ({ticket.availableQty} sp
+              {ticket.availableSilver != null ? ` · ${formatQty(ticket.availableSilver)} g` : ''}).
             </Typography>
             {mine ? (
               <Button
@@ -437,9 +444,8 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
           <Stack spacing={1.25}>
             <Typography variant="body2">
               Thợ <b>{openEntry.craftsmanName}</b> đang làm khâu <b>{STAGE_LABEL[openEntry.stage]}</b> từ{' '}
-              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp ·{' '}
-              {openEntry.handedSilverWeight ? formatQty(openEntry.handedSilverWeight) : '—'} g bạc (người giao{' '}
-              {openEntry.handedByName}).
+              {formatDateShort(openEntry.handedAt)} — nhận {openEntry.handedQty ?? '—'} sp · bạc vào khâu{' '}
+              {openEntry.silverIn ? formatQty(openEntry.silverIn) : '—'} g (người giao {openEntry.handedByName}).
               {ticket.state === 'SUBMITTED'
                 ? ` Đã báo xong lúc ${formatDateShort(openEntry.submittedAt)} — chờ KCS cân lại.`
                 : ' Làm xong thì bấm "Đã làm xong" rồi mang hàng tới KCS cân lại.'}
@@ -478,6 +484,15 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
         )}
       </Paper>
 
+      <MaterialRequestsCard
+        order={order}
+        ticketNo={ticket.no}
+        materials={ticket.materials}
+        userId={user?.id ?? null}
+        canHandle={!workerOnly}
+        isAdmin={isAdmin}
+      />
+
       <Paper sx={{ p: 2 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Sản phẩm
@@ -510,8 +525,11 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
             <Box sx={{ px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
               <VerticalInfoList
                 items={[
-                  { label: 'Phiếu con', value: `${ticket.qty} sp · ${formatQty(ticket.silverWeight)} g` },
-                  { label: 'Hiện có', value: `${ticket.availableQty} sp · ${formatQty(ticket.availableSilver)} g` },
+                  { label: 'Phiếu con', value: `${ticket.qty} sp` },
+                  {
+                    label: 'Hiện có',
+                    value: `${ticket.availableQty} sp${ticket.availableSilver != null ? ` · ${formatQty(ticket.availableSilver)} g` : ''}`,
+                  },
                   { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
                   { label: 'Size', value: order.sizeLabel },
                   { label: 'Chất liệu', value: order.mainMaterial },
@@ -527,28 +545,6 @@ function TicketView({ order, ticket }: { order: ProductionOrderDetail; ticket: S
           </Stack>
         </Stack>
       </Paper>
-
-      {ticket.topUps.length ? (
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-            Đã cấp thêm
-          </Typography>
-          <Stack spacing={0.75}>
-            {ticket.topUps.map((item) => (
-              <Typography key={item.id} variant="body2">
-                <b>
-                  {item.qty ? `+${item.qty} sp` : ''}
-                  {item.qty && Number(item.silverWeight) ? ' · ' : ''}
-                  {Number(item.silverWeight) ? `+${formatQty(item.silverWeight)} g bạc` : ''}
-                </b>{' '}
-                · {formatDateShort(item.createdAt)} · {item.createdByName}
-                {item.applied ? '' : ' · chờ giao khâu sau'}
-                {item.reason ? ` — ${item.reason}` : ''}
-              </Typography>
-            ))}
-          </Stack>
-        </Paper>
-      ) : null}
 
       <Box>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
@@ -586,8 +582,8 @@ function EntryRow({ entry }: { entry: StageEntry }) {
         {entry.attempt > 1 ? ` (lần ${entry.attempt})` : ''} · thợ {entry.craftsmanName}
       </Typography>
       <Typography variant="body2">
-        Giao {formatDateShort(entry.handedAt)} · {entry.handedQty ?? '—'} sp ·{' '}
-        {entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'} g · người giao {entry.handedByName}
+        Giao {formatDateShort(entry.handedAt)} · {entry.handedQty ?? '—'} sp · bạc vào khâu{' '}
+        {entry.silverIn ? formatQty(entry.silverIn) : '—'} g · người giao {entry.handedByName}
       </Typography>
       {entry.returnedAt ? (
         <Typography variant="body2">

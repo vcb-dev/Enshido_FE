@@ -66,7 +66,7 @@ export function MyTicketsPage() {
     <Stack spacing={2} sx={{ pb: 3 }}>
       <PageHeader
         title="Phiếu của tôi"
-        subtitle="Nhận phiếu ở khâu đang mở, rồi mang hàng tới người giao cân bạc và xác nhận."
+        subtitle="Nhận phiếu ở khâu đang mở — người lên đơn xuất NVL (Nguội: phôi BTP, Vào đá: kho NVL chính) và xác nhận giao."
         actions={
           <Stack direction="row" spacing={1}>
             <ScanQrButton />
@@ -96,7 +96,7 @@ export function MyTicketsPage() {
                 queued={queued.get(item.ticketCode)}
                 status={
                   item.state === 'CLAIMED'
-                    ? `Đã nhận lúc ${formatDateShort(item.claimedAt)} — chờ người giao cân bạc và xác nhận`
+                    ? `Đã nhận lúc ${formatDateShort(item.claimedAt)} — chờ người lên đơn xuất NVL và xác nhận giao`
                     : item.state === 'SUBMITTED'
                       ? `Đã báo xong lúc ${formatDateShort(item.submittedAt)} — chờ KCS cân lại`
                       : `Đang làm từ ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
@@ -170,7 +170,11 @@ export function MyTicketsPage() {
                 item={item}
                 status={`KCS ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${
                   item.returnedSilverWeight != null ? ` · ${formatQty(item.returnedSilverWeight)} g` : ''
-                }${item.silverLoss != null ? ` · hao hụt ${formatQty(item.silverLoss)} g` : ''}`}
+                }${
+                  item.silverLoss != null
+                    ? ` · hao hụt ${formatQty(item.silverLoss)} g${item.silverLossPercent != null ? ` (${formatQty(item.silverLossPercent)}%)` : ''}`
+                    : ''
+                }`}
               />
             ))}
           </Group>
@@ -279,6 +283,16 @@ function TicketCard({
           ) : null}
           {item.dueDate ? ` · cần trả ${formatStockedDate(item.dueDate)}` : ''}
         </Typography>
+        {item.issuedLines?.length ? (
+          <Typography variant="caption" sx={{ display: 'block' }}>
+            {issuedSummary(item)}
+          </Typography>
+        ) : null}
+        {item.pendingRequests ? (
+          <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 600 }}>
+            {item.pendingRequests} yêu cầu xin thêm đang chờ kho xuất
+          </Typography>
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {status}
         </Typography>
@@ -286,4 +300,22 @@ function TicketCard({
       </Stack>
     </Paper>
   )
+}
+
+/** "Nhận: 00001 2 chiếc (1.000 g) · xin thêm: 00001 1 chiếc (500 g)". */
+function issuedSummary(item: MyTicketItem) {
+  const text = (atHandover: boolean) =>
+    item.issuedLines
+      .filter((line) => line.atHandover === atHandover)
+      .map(
+        (line) =>
+          `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}${line.weight ? ` (${formatQty(line.weight)} g)` : ''}`,
+      )
+      .join(', ')
+  return [
+    text(true) ? `Nhận: ${text(true)}` : '',
+    text(false) ? `xin thêm: ${text(false)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }

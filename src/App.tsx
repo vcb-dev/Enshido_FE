@@ -39,6 +39,9 @@ const ProductionTicketPrintPage = lazy(() =>
 const MyTicketsPage = lazy(() =>
   import('./pages/MyTicketsPage').then((m) => ({ default: m.MyTicketsPage })),
 )
+const MaterialRequestsPage = lazy(() =>
+  import('./pages/MaterialRequestsPage').then((m) => ({ default: m.MaterialRequestsPage })),
+)
 const SubTicketPage = lazy(() =>
   import('./pages/SubTicketPage').then((m) => ({ default: m.SubTicketPage })),
 )
@@ -89,6 +92,7 @@ export default function App() {
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}
           <Route path="/orders/:code" element={<OrderDetailRoute />} />
           <Route path="/my-tickets" element={<MyTicketsPage />} />
+          <Route path="/material-requests" element={<MaterialRequestsPage />} />
           <Route path="/tickets/:ticketCode" element={<SubTicketPage />} />
           <Route path="/" element={<DashboardPage />} />
           <Route path="/warehouses" element={<WarehousesPage />} />

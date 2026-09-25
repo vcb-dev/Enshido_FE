@@ -53,7 +53,6 @@ import {
   handoverSubTicketApi,
   returnStageApi,
   openOrderStageApi,
-  submitOrderApi,
   undoFinishOrderApi,
   undoReturnApi,
   updateCastingApi,
@@ -74,6 +73,7 @@ import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { OrderDetailSkeleton, PageHeader, SelectInput, TextInput, TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { WorkHistory } from '../orders/WorkHistory'
 import { OrderCostingCard } from '../orders/OrderCostingCard'
 import {
   formatDateShort,
@@ -105,6 +105,7 @@ import {
 import { SubTicketsPanel } from '../orders/SubTicketsPanel'
 import { useOrderMutation } from '../orders/useOrderMutation'
 import { stageColumns } from '../orders/ticketRows'
+import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
 import { deadlineWarning } from '../orders/deadline'
@@ -187,6 +188,7 @@ export function ProductionOrderDetailPage() {
           handedStoneCount: payload.handedStoneCount,
           handedStoneWeight: payload.handedStoneWeight,
           note: payload.note,
+          materials: payload.materials,
         })
       }
       if (handover?.mode === 'confirm-order') {
@@ -197,6 +199,7 @@ export function ProductionOrderDetailPage() {
           handedStoneCount: payload.handedStoneCount,
           handedStoneWeight: payload.handedStoneWeight,
           note: payload.note,
+          materials: payload.materials,
         })
       }
       if (handover?.mode !== 'edit') throw new Error('Không có khâu nào để lưu')
@@ -239,14 +242,6 @@ export function ProductionOrderDetailPage() {
     code,
     () => cancelOrderPendingApi(code),
     'Đã hủy mở khâu trên phiếu mẹ',
-  )
-  // Lối thoát cho khâu giao bằng luồng cũ: lúc đó chưa có bước thợ bấm "Đã làm xong", nên
-  // nếu không ghi hộ được thì KCS không bao giờ nhận lại được khâu đó. Mốc báo xong ghi tên
-  // người bấm, không mạo danh thợ.
-  const submitParentStage = useOrderMutation(
-    code,
-    () => submitOrderApi(code),
-    'Đã ghi nhận thợ báo xong — KCS nhận lại được rồi',
   )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
@@ -500,7 +495,11 @@ export function ProductionOrderDetailPage() {
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      {parentWork?.state === 'CLAIMED' ? (
+                      {parentWork?.state === 'CLAIMED' && !canManageTickets ? (
+                        <Typography variant="caption" color="text.secondary">
+                          chờ người lên đơn chọn NVL và giao
+                        </Typography>
+                      ) : parentWork?.state === 'CLAIMED' ? (
                         <Button
                           size="small"
                           variant="contained"
@@ -516,25 +515,9 @@ export function ProductionOrderDetailPage() {
                           KCS nhận lại
                         </Button>
                       ) : parentWork?.state === 'WORKING' ? (
-                        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Chờ thợ báo xong
-                          </Typography>
-                          {isAdmin ? (
-                            <Tooltip title="Thợ đã nộp hàng nhưng chưa bấm trên máy — ghi hộ để KCS nhận lại được. Mốc báo xong sẽ mang tên bạn.">
-                              <span>
-                                <Button
-                                  size="small"
-                                  color="inherit"
-                                  loading={submitParentStage.isPending}
-                                  onClick={() => submitParentStage.mutate(undefined)}
-                                >
-                                  Ghi thợ đã xong
-                                </Button>
-                              </span>
-                            </Tooltip>
-                          ) : null}
-                        </Stack>
+                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                          Chờ thợ báo xong
+                        </Typography>
                       ) : parentWork?.state === 'WAITING' ? (
                         <Button
                           size="small"
@@ -583,8 +566,16 @@ export function ProductionOrderDetailPage() {
                       </Stack>
                     </Alert>
                   ) : null}
+                  <Box sx={{ mt: 0.5 }}>
+                    <WorkHistory order={order} ticket={null} />
+                  </Box>
                 </Box>
-              ) : null}
+              ) : (
+                // Đơn đã chia phiếu con không còn khung phiếu mẹ — thao tác cấp đơn xem ở đây.
+                <Box sx={{ mb: 1 }}>
+                  <WorkHistory order={order} ticket={null} />
+                </Box>
+              )}
               <SubTicketsPanel
                 order={order}
                 canManage={canManageTickets}
@@ -659,6 +650,18 @@ export function ProductionOrderDetailPage() {
                     {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
                   </Typography>
                   <ReworkHistory stages={parentStages} />
+                  {order.workTicket ? (
+                    <Box sx={{ mt: 1.5 }}>
+                      <MaterialRequestsCard
+                        order={order}
+                        ticketNo={null}
+                        materials={order.workTicket.materials}
+                        userId={user?.id ?? null}
+                        canHandle
+                        isAdmin={isAdmin}
+                      />
+                    </Box>
+                  ) : null}
                 </Box>
               ) : splitIntoTickets ? (
                 /* Bảng tổng hợp rộng là dữ liệu tra cứu, mặc định thu gọn khi đơn đã chia. */
@@ -703,8 +706,11 @@ export function ProductionOrderDetailPage() {
                       </Link>
                       <SubTicketStateChip state={ticket.state} />
                       <Typography variant="caption" color="text.secondary">
-                        {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'} · {ticket.qty} sp ·{' '}
-                        {formatQty(ticket.silverWeight)} g bạc
+                        {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'} · {ticket.qty} sp
+                        {Number(ticket.materials.issuedMetalWeight)
+                          ? ` · xuất thêm ${formatQty(ticket.materials.issuedMetalWeight)} g bạc`
+                          : ''}
+                        {ticket.materials.pendingCount ? ` · ${ticket.materials.pendingCount} yêu cầu chờ xuất` : ''}
                       </Typography>
                     </Stack>
                   </AccordionSummary>
@@ -716,6 +722,16 @@ export function ProductionOrderDetailPage() {
                       showHeader={false}
                       embedded
                     />
+                    <Box sx={{ mt: 1.5 }}>
+                      <MaterialRequestsCard
+                        order={order}
+                        ticketNo={ticket.no}
+                        materials={ticket.materials}
+                        userId={user?.id ?? null}
+                        canHandle
+                        isAdmin={isAdmin}
+                      />
+                    </Box>
                   </AccordionDetails>
                 </Accordion>
               ))}
@@ -759,21 +775,19 @@ export function ProductionOrderDetailPage() {
           {isBtp ? (
             <Section title="BTP">
               <Stack spacing={1}>
-                <Field
-                  label="Mã BTP"
-                  value={
-                    order.btp ? (
+                {order.btp ? (
+                  <Field
+                    label="Mã BTP (đơn cũ)"
+                    value={
                       <Link component={RouterLink} to={`/warehouses/${BTP_WAREHOUSE_CODE}/stock`}>
                         {order.btp.sku ?? '—'} · {order.btp.name}
                       </Link>
-                    ) : (
-                      'BTP đã bị gỡ khỏi kho'
-                    )
-                  }
-                />
+                    }
+                  />
+                ) : null}
                 <Typography variant="caption" color="text.secondary">
-                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP và NVL tự tạo khi lên
-                  đơn; đổi mã hoặc số lượng trên đơn thì kho tự cập nhật.
+                  Làm từ phôi BTP có sẵn — không qua 3D và Đúc. Phôi lấy ở kho BTP khi giao khâu Nguội cho
+                  thợ.
                 </Typography>
               </Stack>
             </Section>
@@ -820,7 +834,6 @@ export function ProductionOrderDetailPage() {
         open={castingOpen}
         sentDate={order.castingSentDate}
         returnedDate={order.castingReturnedDate}
-        silverWeight={order.silverWeight}
         saving={casting.isPending}
         onClose={() => setCastingOpen(false)}
         onSave={(payload) => casting.mutate(payload, { onSuccess: () => setCastingOpen(false) })}
@@ -857,6 +870,7 @@ export function ProductionOrderDetailPage() {
       />
 
       <KcsReturnDialog
+        order={order}
         entry={returning}
         saving={saveReturn.isPending}
         onClose={() => setReturning(null)}
@@ -1118,6 +1132,20 @@ function StatusDot({ status }: { status: ProductionStatus }) {
   )
 }
 
+/** Tóm tắt NVL thợ đã xin xuất + hao hụt của cả đơn / phiếu. */
+function materialsSummary(materials: ProductionOrderDetail['materials']) {
+  const parts: string[] = []
+  if (Number(materials.issuedMetalWeight)) parts.push(`${formatQty(materials.issuedMetalWeight)} g bạc`)
+  if (materials.issuedStoneCount) parts.push(`${materials.issuedStoneCount} viên đá`)
+  if (materials.silverLoss != null) {
+    parts.push(
+      `hao hụt ${formatQty(materials.silverLoss)} g${materials.silverLossPercent != null ? ` (${materials.silverLossPercent}%)` : ''}`,
+    )
+  }
+  if (materials.stoneLoss) parts.push(`mất ${materials.stoneLoss} viên đá`)
+  return parts.length ? parts.join(' · ') : 'Chưa xuất thêm'
+}
+
 /** Ảnh chụp vận hành của đơn: người điều hành nhìn từ trên xuống là biết việc tiếp theo. */
 function OverviewSummary({
   order,
@@ -1132,7 +1160,6 @@ function OverviewSummary({
         activeStage: ticket.activeStage,
         pendingStage: ticket.pendingStage,
         availableQty: ticket.outcome ? 0 : ticket.availableQty,
-        availableSilver: ticket.outcome ? '0' : ticket.availableSilver,
       }))
     : order.workTicket
       ? [
@@ -1141,7 +1168,6 @@ function OverviewSummary({
             activeStage: order.workTicket.activeStage,
             pendingStage: order.workTicket.pendingStage,
             availableQty: order.finishedGoods ? 0 : order.workTicket.availableQty,
-            availableSilver: order.finishedGoods ? '0' : order.workTicket.availableSilver,
           },
         ]
       : []
@@ -1154,7 +1180,6 @@ function OverviewSummary({
     ),
   )
   const availableQty = tickets.reduce((sum, ticket) => sum + ticket.availableQty, 0)
-  const availableSilver = tickets.reduce((sum, ticket) => sum + Number(ticket.availableSilver ?? 0), 0)
   const deadline = deadlineWarning(order.dueDate, order.status)
   const waitingForStock = (order.finishedGoods?.pendingQty ?? 0) > 0
 
@@ -1163,6 +1188,9 @@ function OverviewSummary({
   if (waitingForStock) {
     actionTitle = `${order.finishedGoods!.pendingQty} ${order.qtyUnit ?? 'sản phẩm'} đang chờ vào tồn`
     actionDetail = 'Kho thành phẩm cần xác nhận phiếu nhập trước khi số lượng được tính vào tồn.'
+  } else if (order.materials.pendingCount > 0) {
+    actionTitle = `${order.materials.pendingCount} yêu cầu xuất NVL đang chờ`
+    actionDetail = 'Thợ xin thêm bạc / đá cho khâu đang làm — kho cân và xuất, hoặc từ chối kèm lý do.'
   } else if (count('SUBMITTED') > 0) {
     actionTitle = `${count('SUBMITTED')} phiếu chờ KCS nhận lại`
     actionDetail = 'Cân lại số lượng và bạc, sau đó xác nhận nhận lại cho thợ.'
@@ -1243,8 +1271,12 @@ function OverviewSummary({
             {
               label: tickets.length ? 'Đang có trên phiếu' : 'Tổng đơn',
               value: tickets.length
-                ? `${availableQty} ${order.qtyUnit ?? 'sản phẩm'} · ${formatQty(String(availableSilver))} g bạc`
-                : `${order.qty} ${order.qtyUnit ?? 'sản phẩm'} · ${order.silverWeight != null ? formatQty(order.silverWeight) : '—'} g bạc`,
+                ? `${availableQty} ${order.qtyUnit ?? 'sản phẩm'}`
+                : `${order.qty} ${order.qtyUnit ?? 'sản phẩm'}`,
+            },
+            {
+              label: 'NVL xuất thêm',
+              value: materialsSummary(order.materials),
             },
             {
               label: 'Tiến độ phiếu',
@@ -1302,7 +1334,6 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Màu đá', order.stoneColor],
     ['Số lượng đá (viên)', order.stoneCount],
     ['Trọng lượng (g)', order.weight != null ? formatQty(order.weight) : null],
-    ['Tổng TL bạc (g)', order.silverWeight != null ? formatQty(order.silverWeight) : null],
     ['Nội dung khắc laser', order.laserEngraving],
     ['Yêu cầu khác', order.otherRequirements],
   ]

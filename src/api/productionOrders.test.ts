@@ -51,7 +51,9 @@ describe('máy chủ cũ chưa trả phiếu con', () => {
     const order = await getProductionOrderApi('A001')
 
     expect(order.subTickets).toEqual([])
-    expect(order.subTicketTotals).toEqual({ qty: 0, silverWeight: '0' })
+    expect(order.subTicketTotals).toEqual({ qty: 0 })
+    expect(order.materialRequests).toEqual([])
+    expect(order.materials.lines).toEqual([])
   })
 
   it('trang tra cứu cho thợ quét QR cũng được bù', async () => {
@@ -71,13 +73,13 @@ describe('máy chủ trả đủ phiếu con', () => {
         id: 'o1',
         code: 'A001',
         subTickets: tickets,
-        subTicketTotals: { qty: 2, silverWeight: '12.5' },
+        subTicketTotals: { qty: 2 },
       }),
     )
 
     const order = await getProductionOrderApi('A001')
 
     expect(order.subTickets).toEqual(tickets)
-    expect(order.subTicketTotals).toEqual({ qty: 2, silverWeight: '12.5' })
+    expect(order.subTicketTotals).toEqual({ qty: 2 })
   })
 })
