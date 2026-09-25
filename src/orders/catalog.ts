@@ -85,8 +85,8 @@ export const SOURCE_META: Record<ProductionSource, ChipTone> = {
 
 /** Mô tả ngắn từng loại đơn — dùng trên menu "Lên đơn" và dưới ô Loại đơn. */
 export const SOURCE_HINT: Record<ProductionSource, string> = {
-  NVL: 'Làm từ NVL: 3D → Đúc → các khâu',
-  BTP: 'Lấy BTP có sẵn — tự xuất kho BTP và NVL, bỏ 3D và Đúc',
+  NVL: 'Làm từ đầu: 3D → Đúc → các khâu',
+  BTP: 'Làm từ phôi BTP có sẵn — bỏ 3D và Đúc, vào thẳng Nguội',
 }
 
 export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {

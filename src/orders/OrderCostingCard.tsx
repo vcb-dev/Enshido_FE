@@ -67,7 +67,10 @@ export function OrderCostingCard({ code, editable }: { code: string; editable: b
     enabled: ready,
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['production-order-activity', code] })
+    return queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
+  }
 
   const save = useMutation({
     mutationFn: (payload: OrderCostPayload) =>

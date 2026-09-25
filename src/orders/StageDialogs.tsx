@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Typography } from '@mui/material'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import type {
   CastingPayload,
   HandoverPayload,
@@ -22,6 +22,12 @@ import {
 } from '../components/ui'
 import { useAuth } from '../auth/AuthContext'
 import { useOperatorName } from '../hooks/useOperatorName'
+import {
+  HandoverMaterialsField,
+  handoverMetalWeight,
+  stageIssuesStock,
+  type HandoverMaterialLine,
+} from './MaterialRequests'
 import {
   formatDateShort,
   fromDateTimeInput,
@@ -62,6 +68,90 @@ export const capAt = (max: number | null) => (value: string) =>
 
 // ---------------------------------------------------------------- Giao thợ
 
+/**
+ * Tổng đá ghi lúc lên đơn (đã tự xuất khỏi kho NVL chính). Đơn nhiều mã NVL cộng từng dòng;
+ * chưa dòng nào ghi TL đá thì TL là null. Khớp `orderStoneOf` ở BE.
+ */
+export function orderStoneOf(
+  order: Pick<ProductionOrderDetail, 'stoneCount' | 'stoneWeight' | 'nvlLines'>,
+): { count: number | null; weight: number | null } {
+  const lines = order.nvlLines ?? []
+  if (!lines.length) {
+    return {
+      count: order.stoneCount,
+      weight: order.stoneWeight != null ? Number(order.stoneWeight) : null,
+    }
+  }
+  const weighed = lines.filter((line) => line.stoneWeight != null)
+  return {
+    count: lines.reduce((sum, line) => sum + (line.qty ?? 0), 0),
+    weight: weighed.length
+      ? round4(weighed.reduce((sum, line) => sum + Number(line.stoneWeight), 0))
+      : null,
+  }
+}
+
+/** "Mã · SL viên · TL g" từng mã đá trên đơn, để người giao thấy đá nào phát cho thợ. */
+function orderStoneCodes(
+  order: Pick<ProductionOrderDetail, 'nvl' | 'nvlLines' | 'stoneCount' | 'stoneWeight'>,
+) {
+  const describe = (
+    code: string | null | undefined,
+    qty: number | null,
+    weight: string | null,
+  ) =>
+    [
+      code || '—',
+      qty != null ? `${qty} viên` : null,
+      weight != null ? `${formatQty(weight)} g` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  const lines = order.nvlLines ?? []
+  if (lines.length) {
+    return lines
+      .map((line) => describe(line.sku || line.name, line.qty, line.stoneWeight))
+      .join(' | ')
+  }
+  if (!order.nvl) return ''
+  return describe(order.nvl.sku || order.nvl.name, order.stoneCount, order.stoneWeight)
+}
+
+/**
+ * Khâu Vào đá lúc xác nhận giao: điền sẵn số viên và TL đá còn lại của đơn (lấy từ mã đá lúc
+ * lên đơn). Người giao vẫn sửa được nếu chỉ phát một phần.
+ */
+function useStoneAutofill(
+  form: UseFormReturn<HandoverValues>,
+  active: boolean,
+  budget: { leftCount: number | null; leftWeight: number | null },
+) {
+  const { leftCount, leftWeight } = budget
+  useEffect(() => {
+    if (!active) return
+    form.setValue('handedStoneCount', leftCount != null ? String(leftCount) : '')
+    form.setValue('handedStoneWeight', leftWeight != null ? String(leftWeight) : '')
+  }, [active, leftCount, leftWeight, form])
+}
+
+/**
+ * Hàng của phiếu đã qua khâu Vào đá (KCS đã nhận lại) trước mốc `before` chưa. Từ đó đá và
+ * bạc đã gắn thành một BTP: các khâu sau giao, cân lại và tính hao tổn trên cả cụm BTP.
+ */
+export function carriesStone(
+  stages: readonly StageEntry[],
+  subTicketId: string | null,
+  before?: string,
+) {
+  return stages.some(
+    (item) =>
+      item.stage === 'STONE_SETTING' &&
+      item.subTicketId === subTicketId &&
+      item.returnedAt != null &&
+      (before == null || item.handedAt < before),
+  )
+}
+
 type HandoverValues = {
   stage: StageCode | ''
   craftsmanUserId: string
@@ -72,6 +162,8 @@ type HandoverValues = {
   handedStoneCount: string
   handedStoneWeight: string
   note: string
+  /** NVL xuất kho cho thợ lúc xác nhận giao. */
+  materials: HandoverMaterialLine[]
 }
 
 export type HandoverDialogState =
@@ -113,6 +205,7 @@ export function HandoverDialog({
       handedStoneCount: '',
       handedStoneWeight: '',
       note: '',
+      materials: [],
     },
   })
 
@@ -129,6 +222,7 @@ export function HandoverDialog({
         handedStoneCount: '',
         handedStoneWeight: '',
         note: '',
+        materials: [],
       })
     } else {
       const { entry } = state
@@ -141,6 +235,7 @@ export function HandoverDialog({
         handedStoneCount: entry.handedStoneCount != null ? String(entry.handedStoneCount) : '',
         handedStoneWeight: entry.handedStoneWeight ?? '',
         note: entry.note ?? '',
+        materials: [],
       })
     }
   }, [open, state, form])
@@ -167,8 +262,7 @@ export function HandoverDialog({
         }),
         { count: 0, weight: 0 },
       )
-    const totalCount = order.stoneCount
-    const totalWeight = order.stoneWeight != null ? Number(order.stoneWeight) : null
+    const { count: totalCount, weight: totalWeight } = orderStoneOf(order)
     return {
       used,
       totalCount,
@@ -176,7 +270,35 @@ export function HandoverDialog({
       leftCount: totalCount != null ? Math.max(0, totalCount - used.count) : null,
       leftWeight: totalWeight != null ? round4(totalWeight - used.weight) : null,
     }
-  }, [order.stages, order.stoneCount, order.stoneWeight, entry?.id])
+  }, [order, entry?.id])
+  /** Mã đá lấy từ đơn — cũng là các dòng phiếu xuất NVL tự tạo lúc lên đơn. */
+  const stoneCodes = useMemo(() => orderStoneCodes(order), [order])
+
+  // Đá giao luôn bằng số bạc giao: gõ SL bạc thì tự điền số viên và TL đá theo quỹ còn lại.
+  // Giao khâu mới chọn đá qua các dòng NVL xuất kho; quỹ đá theo đơn chỉ còn cho bản ghi cũ.
+  useStoneAutofill(form, open && stoneStage && !confirming, stoneBudget)
+  /** Khâu đầu của phiếu: chưa có hàng từ khâu trước, TL lấy từ NVL xuất. */
+  const firstStage = ticket
+    ? !order.stages.some((item) =>
+        state?.mode === 'confirm' ? item.subTicketId === state.ticket.id : item.subTicketId == null,
+      )
+    : false
+  const [carried, materialLines] = useWatch({
+    control: form.control,
+    name: ['handedSilverWeight', 'materials'],
+  })
+  // Khâu không xuất kho thì bỏ qua các dòng còn sót trong form.
+  const issuesStock = stageIssuesStock(stageCode)
+  const issuedMetal = issuesStock ? handoverMetalWeight(materialLines ?? []) : 0
+  const silverIn = (Number(carried) || 0) + issuedMetal
+  /** Đã qua khâu Vào đá: giao cả cụm BTP (bạc + đá), không còn là bạc trơn. */
+  const btpWeight =
+    !stoneStage &&
+    carriesStone(
+      order.stages,
+      state?.mode === 'confirm' ? state.ticket.id : (entry?.subTicketId ?? null),
+      entry?.handedAt,
+    )
   const title = ticket
       ? `Xác nhận giao ${stageLabel} — ${state?.mode === 'confirm-order' ? 'phiếu mẹ' : 'phiếu'} ${ticket.code}`
       : `Sửa thông tin giao — ${stageLabel}${entry?.subTicketNo ? ` (phiếu con ${entry.subTicketNo})` : ''}`
@@ -190,11 +312,20 @@ export function HandoverDialog({
       craftsmanUserId: values.craftsmanUserId,
       handedAt: fromDateTimeInput(values.handedAt) ?? new Date().toISOString(),
       handedQty: values.handedQty ? Number(values.handedQty) : null,
-      handedSilverWeight: values.handedSilverWeight,
+      handedSilverWeight: values.handedSilverWeight || null,
       handedStoneCount:
-        stoneStage && values.handedStoneCount !== '' ? Number(values.handedStoneCount) : null,
-      handedStoneWeight: stoneStage ? values.handedStoneWeight || null : null,
+        !confirming && stoneStage && values.handedStoneCount !== '' ? Number(values.handedStoneCount) : null,
+      handedStoneWeight: !confirming && stoneStage ? values.handedStoneWeight || null : null,
       note: values.note.trim(),
+      materials: confirming && issuesStock
+        ? values.materials.map((line) => ({
+            materialId: line.materialId,
+            kind: line.kind,
+            qty: line.qty,
+            weight: line.weight || null,
+            stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
+          }))
+        : undefined,
     })
   }
 
@@ -262,12 +393,45 @@ export function HandoverDialog({
         />
         <FormQtyField<HandoverValues>
           name="handedSilverWeight"
-          label="Trọng lượng giao — bạc (g)"
-          required
+          label={
+            confirming
+              ? btpWeight
+                ? 'TL hàng từ khâu trước — BTP (bạc + đá) (g)'
+                : 'TL hàng từ khâu trước (g)'
+              : btpWeight
+                ? 'Trọng lượng giao — BTP (bạc + đá) (g)'
+                : 'Trọng lượng giao — bạc (g)'
+          }
+          required={!confirming || !firstStage}
+          helperText={
+            confirming && firstStage
+              ? 'Khâu đầu: để trống nếu hàng lấy từ NVL xuất bên dưới'
+              : confirming
+                ? 'Tự điền theo số KCS nhận lại khâu trước'
+                : undefined
+          }
+          rules={{
+            validate: (value) =>
+              !confirming ||
+              !firstStage ||
+              Boolean(value) ||
+              issuedMetal > 0 ||
+              'Khâu đầu: chọn NVL bạc xuất cho thợ hoặc nhập TL giao',
+          }}
         />
       </FormRow>
 
-      {stoneStage ? (
+      {confirming ? (
+        <>
+          <HandoverMaterialsField form={form} stage={stageCode} />
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Bạc vào khâu: <b>{formatQty(String(round4(silverIn)))}</b> g
+            {issuedMetal ? ` (hàng ${formatQty(String(Number(carried) || 0))} g + xuất ${formatQty(String(round4(issuedMetal)))} g)` : ''}
+          </Typography>
+        </>
+      ) : null}
+
+      {stoneStage && !confirming ? (
         <>
           {stoneBudget.totalCount == null && stoneBudget.totalWeight == null ? (
             <Alert severity="warning" sx={{ mt: 1, py: 0.25 }}>
@@ -297,6 +461,11 @@ export function HandoverDialog({
               </Typography>
             </Alert>
           )}
+          {stoneCodes ? (
+            <FormRow columns={1}>
+              <TextInput label="Mã đá (theo đơn)" value={stoneCodes} readOnly />
+            </FormRow>
+          ) : null}
           <FormRow columns={2}>
             <FormTextField<HandoverValues>
               name="handedStoneCount"
@@ -352,9 +521,7 @@ type ReturnValues = {
   returnedQty: string
   laborCost: string
   returnedSilverWeight: string
-  /** Chỉ khâu Vào đá: số viên đá gắn lên và TL đá (g). */
-  stoneCount: string
-  stoneWeight: string
+  returnedStoneCount: string
   btpRecoveredWeight: string
   silverRecoveredWeight: string
   note: string
@@ -362,11 +529,14 @@ type ReturnValues = {
 
 /** KCS nhận lại hàng từ thợ và cân lại bạc. Người KCS là tài khoản đang đăng nhập. */
 export function KcsReturnDialog({
+  order,
   entry,
   saving,
   onClose,
   onSave,
 }: {
+  /** Đơn đang mở — xem phiếu đã qua khâu Vào đá chưa để cân theo BTP. */
+  order: ProductionOrderDetail
   entry: StageEntry | null
   saving: boolean
   onClose: () => void
@@ -379,8 +549,7 @@ export function KcsReturnDialog({
       returnedQty: '',
       laborCost: '',
       returnedSilverWeight: '',
-      stoneCount: '',
-      stoneWeight: '',
+      returnedStoneCount: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       note: '',
@@ -394,27 +563,34 @@ export function KcsReturnDialog({
       returnedQty: entry.handedQty != null ? String(entry.handedQty) : '',
       laborCost: '',
       returnedSilverWeight: '',
-      // Thường gắn hết số đá đã phát — điền sẵn để KCS chỉ sửa khi có đá thừa hoặc vỡ.
-      stoneCount: entry.handedStoneCount != null ? String(entry.handedStoneCount) : '',
-      stoneWeight: entry.handedStoneWeight ?? '',
+      returnedStoneCount: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       note: '',
     })
   }, [entry, form])
 
-  const [returnedQty, returnedSilver, stone, btp, silverRecovered] = useWatch({
+  const [returnedQty, returnedSilver, btp, silverRecovered] = useWatch({
     control: form.control,
-    name: [
-      'returnedQty',
-      'returnedSilverWeight',
-      'stoneWeight',
-      'btpRecoveredWeight',
-      'silverRecoveredWeight',
-    ],
+    name: ['returnedQty', 'returnedSilverWeight', 'btpRecoveredWeight', 'silverRecoveredWeight'],
   })
-  /** Khâu Vào đá gắn thêm đá vào hàng, KCS cân cả cụm bạc + đá. */
+  /**
+   * Khâu Vào đá: đá và bạc đã gắn thành một BTP nên KCS chỉ đếm và cân lại cả cụm, không tách
+   * đá riêng. Mốc so là bạc giao + đá giao (BE coi như gắn hết số đá đã giao).
+   */
   const stoneStage = entry?.stage === 'STONE_SETTING'
+  // Đá phát cho thợ = đá giao lúc nhận việc + đá xuất thêm theo yêu cầu (có cân).
+  const stone = stoneStage
+    ? Number(entry?.handedStoneWeight ?? 0) + Number(entry?.issuedStoneWeight ?? 0)
+    : 0
+  const stonesIn = stoneStage ? (entry?.handedStoneCount ?? 0) + (entry?.issuedStoneCount ?? 0) : 0
+  /** Bạc vào khâu = TL giao + bạc thợ xin xuất thêm — mốc tính hao hụt, khớp BE. */
+  const silverInText = entry?.silverIn ?? entry?.handedSilverWeight ?? null
+  const issuedMetal = Number(entry?.issuedMetalWeight ?? 0)
+  /** Khâu Vào đá hoặc các khâu sau nó: hàng là BTP bạc + đá, KCS cân và tính hao tổn cả cụm. */
+  const btpWeight =
+    stoneStage ||
+    (entry != null && carriesStone(order.stages, entry.subTicketId, entry.handedAt))
   /** Hao tổn của khâu: thiếu bao nhiêu sản phẩm và hụt bao nhiêu bạc, mỗi thứ kèm %. */
   const loss = useMemo(() => {
     if (!entry) return null
@@ -423,29 +599,27 @@ export function KcsReturnDialog({
       handedQty != null && returnedQty !== '' && Number.isFinite(Number(returnedQty))
         ? lossOf(handedQty, Number(returnedQty))
         : null
-    const handedSilver = entry.handedSilverWeight != null ? Number(entry.handedSilverWeight) : null
-    // Đá gắn thêm cộng vào vế giao vì KCS cân cả cụm; % vẫn tính trên bạc giao (đá không hao).
+    const handedSilver = silverInText != null ? Number(silverInText) : null
+    // Đá giao cộng vào vế giao vì KCS cân cả cụm; % vẫn tính trên bạc vào khâu (đá không hao).
     const back =
       Number(returnedSilver) + (Number(btp) || 0) + (Number(silverRecovered) || 0)
     const silver =
       handedSilver != null && returnedSilver
-        ? lossOf(handedSilver + (Number(stone) || 0), back, handedSilver)
+        ? lossOf(handedSilver + stone, back, handedSilver)
         : null
     // Chưa cân bạc mà hàng về đủ thì chưa có gì để cảnh báo — đừng hiện ô xanh trống rỗng.
     return silver || (qty && qty.value !== 0) ? { qty, silver } : null
-  }, [entry, returnedQty, returnedSilver, stone, btp, silverRecovered])
+  }, [entry, returnedQty, returnedSilver, stone, btp, silverRecovered, silverInText])
   // Bạc quyết định màu cảnh báo; thiếu sản phẩm thì ít nhất cũng phải vàng để KCS soi lại.
   const silverLevel = silverLossLevel(loss?.silver?.percent?.toFixed(2) ?? null) ?? 'ok'
   const lossLevel = silverLevel === 'ok' && (loss?.qty?.value ?? 0) > 0 ? 'warn' : silverLevel
 
   /**
-   * Mốc chặn số cân lại: TL bạc đã giao, cộng TL đá vừa gắn ở khâu Vào đá vì KCS cân cả cụm.
+   * Mốc chặn số cân lại: TL bạc đã giao, cộng TL đá đã giao ở khâu Vào đá vì KCS cân cả cụm.
    * Khâu cũ chưa ghi TL giao thì không chặn.
    */
-  const handedSilver = entry?.handedSilverWeight != null ? Number(entry.handedSilverWeight) : null
-  const silverLimit = handedSilver != null ? handedSilver + (Number(stone) || 0) : null
-  /** TL đá đã phát cho thợ — gắn lên nhiều nhất bằng ngần này, phần dư là đá trả lại. */
-  const handedStone = entry?.handedStoneWeight != null ? Number(entry.handedStoneWeight) : null
+  const handedSilver = silverInText != null ? Number(silverInText) : null
+  const silverLimit = handedSilver != null ? round4(handedSilver + stone) : null
 
   /**
    * Bạc còn được ghi vào một ô: TL giao trừ hai ô bạc kia. Gõ quá là bị cắt ngay tại ô,
@@ -454,7 +628,7 @@ export function KcsReturnDialog({
   function silverRoomFor(field: keyof ReturnValues) {
     if (handedSilver == null) return null
     const values = form.getValues()
-    const limit = handedSilver + (Number(values.stoneWeight) || 0)
+    const limit = handedSilver + stone
     const others = (
       ['returnedSilverWeight', 'btpRecoveredWeight', 'silverRecoveredWeight'] as const
     )
@@ -471,8 +645,7 @@ export function KcsReturnDialog({
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
       laborCost: values.laborCost || null,
       returnedSilverWeight: values.returnedSilverWeight,
-      stoneCount: stoneStage && values.stoneCount !== '' ? Number(values.stoneCount) : null,
-      stoneWeight: stoneStage ? values.stoneWeight || null : null,
+      returnedStoneCount: stoneStage && values.returnedStoneCount !== '' ? Number(values.returnedStoneCount) : null,
       btpRecoveredWeight: values.btpRecoveredWeight || null,
       silverRecoveredWeight: values.silverRecoveredWeight || null,
       note: values.note.trim(),
@@ -498,14 +671,34 @@ export function KcsReturnDialog({
             Thợ <b>{entry.craftsmanName}</b> · giao lúc {formatDateShort(entry.handedAt)} bởi {entry.handedByName}
           </Typography>
           <Typography variant="body2">
-            SL giao: <b>{entry.handedQty ?? '—'}</b> · TL bạc giao:{' '}
+            SL giao: <b>{entry.handedQty ?? '—'}</b> ·{' '}
+            {btpWeight && !stoneStage ? 'TL BTP (bạc + đá) giao' : 'TL bạc giao'}:{' '}
             <b>{entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'}</b> g
           </Typography>
-          {stoneStage ? (
+          {issuedMetal ? (
             <Typography variant="body2">
-              Đá giao: <b>{entry.handedStoneCount ?? '—'}</b> viên ·{' '}
-              <b>{entry.handedStoneWeight ? formatQty(entry.handedStoneWeight) : '—'}</b> g
+              Bạc xuất thêm theo yêu cầu: <b>{formatQty(entry.issuedMetalWeight ?? '0')}</b> g → bạc vào khâu{' '}
+              <b>{silverInText ? formatQty(silverInText) : '—'}</b> g
             </Typography>
+          ) : null}
+          {stoneStage ? (
+            <>
+              <Typography variant="body2">
+                Đá giao: <b>{entry.handedStoneCount ?? '—'}</b> viên ·{' '}
+                <b>{entry.handedStoneWeight ? formatQty(entry.handedStoneWeight) : '—'}</b> g
+                {entry.issuedStoneCount ? (
+                  <>
+                    {' '}
+                    · xuất thêm <b>{entry.issuedStoneCount}</b> viên
+                    {entry.issuedStoneWeight ? ` (${formatQty(entry.issuedStoneWeight)} g)` : ''}
+                  </>
+                ) : null}
+              </Typography>
+              <Typography variant="body2">
+                BTP giao (bạc + đá):{' '}
+                <b>{silverLimit != null ? formatQty(String(silverLimit)) : '—'}</b> g — cân lại cả cụm
+              </Typography>
+            </>
           ) : null}
         </Box>
       ) : null}
@@ -528,39 +721,11 @@ export function KcsReturnDialog({
         />
       </FormRow>
 
-      {stoneStage ? (
-        <FormRow columns={2}>
-          <FormTextField<ReturnValues>
-            name="stoneCount"
-            label="Số viên đá gắn"
-            type="number"
-            helperText={
-              entry?.handedStoneCount != null ? `Đã giao ${entry.handedStoneCount} viên` : undefined
-            }
-            slotProps={{
-              htmlInput: { min: 0, max: entry?.handedStoneCount ?? undefined, step: 1 },
-            }}
-            transform={(value) =>
-              capAt(entry?.handedStoneCount ?? null)(value.replace(/[^\d]/g, ''))
-            }
-          />
-          <FormQtyField<ReturnValues>
-            name="stoneWeight"
-            label="Trọng lượng đá gắn (g)"
-            helperText={
-              handedStone != null
-                ? `Đã giao ${formatQty(String(handedStone))} g — phần dư là đá trả lại`
-                : 'Đá không tính hao hụt, chỉ cộng vào TL giao vì cân cả cụm'
-            }
-            transform={(value) => capAt(handedStone)(value)}
-          />
-        </FormRow>
-      ) : null}
 
       <FormRow columns={2}>
         <FormTextField<ReturnValues>
           name="returnedQty"
-          label="Số lượng nhận lại"
+          label={btpWeight ? 'Số lượng nhận lại — BTP (bạc + đá)' : 'Số lượng nhận lại'}
           type="number"
           required
           helperText={entry?.handedQty != null ? `Tối đa ${entry.handedQty} sp đã giao` : undefined}
@@ -578,11 +743,11 @@ export function KcsReturnDialog({
         />
         <FormQtyField<ReturnValues>
           name="returnedSilverWeight"
-          label={stoneStage ? 'Trọng lượng nhận lại — bạc + đá (g)' : 'Trọng lượng nhận lại — bạc (g)'}
+          label={btpWeight ? 'Trọng lượng nhận lại — BTP (bạc + đá) (g)' : 'Trọng lượng nhận lại — bạc (g)'}
           required
           helperText={
             silverLimit != null
-              ? `Tối đa ${formatQty(String(silverLimit))} g${stoneStage ? ' (bạc giao + đá gắn)' : ' đã giao'}, tính cả phần thu hồi`
+              ? `Tối đa ${formatQty(String(silverLimit))} g${stoneStage ? ' (bạc vào khâu + đá)' : issuedMetal ? ' (giao + xuất thêm)' : ' đã giao'}, tính cả phần thu hồi`
               : undefined
           }
           transform={(value) => capAt(silverRoomFor('returnedSilverWeight'))(value)}
@@ -595,6 +760,31 @@ export function KcsReturnDialog({
         />
       </FormRow>
 
+
+      {entry?.pendingRequestCount ? (
+        <Alert severity="warning" sx={{ py: 0.25 }}>
+          Còn {entry.pendingRequestCount} yêu cầu xuất NVL của khâu này chưa xử lý — kho xuất hoặc từ chối trước rồi
+          KCS mới nhận lại được.
+        </Alert>
+      ) : null}
+
+      {stoneStage && stonesIn > 0 ? (
+        <FormRow columns={2}>
+          <FormTextField<ReturnValues>
+            name="returnedStoneCount"
+            label="Số viên đá thợ trả lại"
+            type="number"
+            helperText={`Đá phát ${stonesIn} viên — gắn + trả lại, phần thiếu là đá mất`}
+            slotProps={{ htmlInput: { min: 0, max: stonesIn, step: 1 } }}
+            rules={{
+              validate: (value) =>
+                value === '' ||
+                (Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= stonesIn) ||
+                `Từ 0 đến ${stonesIn} viên`,
+            }}
+          />
+        </FormRow>
+      ) : null}
 
       <FormRow columns={2}>
         <FormQtyField<ReturnValues>
@@ -620,7 +810,7 @@ export function KcsReturnDialog({
           ) : null}
           {loss.silver ? (
             <Typography variant="body2">
-              Hao hụt bạc: <b>{formatQty(loss.silver.value.toFixed(4))} g</b>
+              {btpWeight ? 'Hao hụt BTP' : 'Hao hụt bạc'}: <b>{formatQty(loss.silver.value.toFixed(4))} g</b>
               {loss.silver.percent != null ? ` (${loss.silver.percent.toFixed(2)}%)` : ''}
               {loss.silver.percent != null && loss.silver.percent > SILVER_LOSS_LIMITS.warn
                 ? ` — vượt ngưỡng ${SILVER_LOSS_LIMITS.warn}%, kiểm tra lại trước khi nhận`
@@ -641,14 +831,13 @@ export function KcsReturnDialog({
 
 // ---------------------------------------------------------------- Đúc
 
-type CastingValues = { sentDate: string; returnedDate: string; silverWeight: string }
+type CastingValues = { sentDate: string; returnedDate: string }
 
 /** Báo Đúc (đơn chuyển sang Đúc, từ đây mới in phiếu thợ) và ghi ngày Đúc về. */
 export function CastingDialog({
   open,
   sentDate,
   returnedDate,
-  silverWeight,
   saving,
   onClose,
   onSave,
@@ -656,21 +845,19 @@ export function CastingDialog({
   open: boolean
   sentDate: string | null
   returnedDate: string | null
-  silverWeight: string | null
   saving: boolean
   onClose: () => void
   onSave: (payload: CastingPayload) => void
 }) {
-  const form = useForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '', silverWeight: '' } })
+  const form = useForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '' } })
 
   useEffect(() => {
     if (!open) return
     form.reset({
       sentDate: sentDate ?? new Date().toISOString().slice(0, 10),
       returnedDate: returnedDate ?? '',
-      silverWeight: silverWeight ?? '',
     })
-  }, [open, sentDate, returnedDate, silverWeight, form])
+  }, [open, sentDate, returnedDate, form])
 
   const title = sentDate ? 'Cập nhật Đúc' : 'Báo Đúc'
 
@@ -684,7 +871,6 @@ export function CastingDialog({
         onSave({
           sentDate: values.sentDate,
           returnedDate: values.returnedDate || null,
-          silverWeight: values.silverWeight || null,
         })
       }
       saving={saving}
@@ -717,11 +903,6 @@ export function CastingDialog({
           }}
         />
       </FormRow>
-      <FormQtyField<CastingValues>
-        name="silverWeight"
-        label="Tổng TL bạc Đúc về (g)"
-        helperText="Mốc chia gram bạc cho các phiếu con"
-      />
     </CrudDialogShell>
   )
 }

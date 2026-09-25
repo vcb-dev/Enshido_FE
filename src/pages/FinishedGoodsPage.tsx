@@ -1389,7 +1389,7 @@ function outboundColumns(
           onEdit={row.autoIssued ? undefined : () => opts.onEdit(row)}
           titles={
             row.autoIssued
-              ? { view: 'Xem', edit: 'Phiếu tự tạo khi lên đơn — sửa trên đơn' }
+              ? { view: 'Xem', edit: 'Phiếu tự tạo từ đơn sản xuất — không sửa tay được' }
               : undefined
           }
         />

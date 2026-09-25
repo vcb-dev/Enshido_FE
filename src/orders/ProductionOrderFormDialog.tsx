@@ -62,7 +62,6 @@ type FormValues = {
   stoneCount: string
   stoneWeight: string
   weight: string
-  silverWeight: string
   laserEngraving: string
   otherRequirements: string
   mainMaterial: string
@@ -117,7 +116,6 @@ const EMPTY: FormValues = {
   stoneCount: '',
   stoneWeight: '',
   weight: '',
-  silverWeight: '',
   laserEngraving: '',
   otherRequirements: '',
   mainMaterial: '',
@@ -321,7 +319,6 @@ export function ProductionOrderFormDialog({
             stoneCount: order.stoneCount != null ? String(order.stoneCount) : '',
             stoneWeight: order.stoneWeight ?? '',
             weight: order.weight ?? '',
-            silverWeight: order.silverWeight ?? '',
             laserEngraving: order.laserEngraving ?? '',
             otherRequirements: order.otherRequirements ?? '',
             mainMaterial: order.mainMaterial ?? '',
@@ -438,7 +435,6 @@ export function ProductionOrderFormDialog({
       stoneCount: null,
       stoneWeight: null,
       weight: null,
-      silverWeight: nvl || btp ? (order?.silverWeight ?? null) : values.silverWeight || null,
       laserEngraving: values.laserEngraving.trim(),
       otherRequirements: values.otherRequirements.trim(),
       mainMaterial: values.mainMaterial.trim(),

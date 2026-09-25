@@ -87,7 +87,7 @@ export function OutboundView({
           {row.autoIssued ? (
             <DetailFact
               label="Loại phiếu"
-              value={<Chip size="small" variant="outlined" label="Tự tạo khi lên đơn" />}
+              value={<Chip size="small" variant="outlined" label="Tự tạo từ đơn sản xuất" />}
             />
           ) : null}
         </Box>

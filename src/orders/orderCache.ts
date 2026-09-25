@@ -164,7 +164,6 @@ export function summarizeSubTickets(order: ProductionOrderDetail): SubTicketSumm
       code: ticket.code,
       no: ticket.no,
       qty: ticket.qty,
-      silverWeight: ticket.silverWeight,
       note: ticket.note,
       createdAt: ticket.createdAt,
       state: ticket.state,
