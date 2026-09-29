@@ -18,6 +18,20 @@ type Pending = { key: string; name: string; progress: number }
 
 const THUMB = 76
 
+function filesFromClipboard(data: DataTransfer): FileList | null {
+  const files: File[] = []
+  for (const item of data.items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) files.push(file)
+    }
+  }
+  if (!files.length) return null
+  const dt = new DataTransfer()
+  for (const file of files) dt.items.add(file)
+  return dt.files
+}
+
 /**
  * Chọn nhiều ảnh, upload ngay lên Cloudinary và trả về danh sách ảnh đã lên.
  * Báo `onUploadingChange` để form khoá nút Lưu khi còn ảnh đang upload.
@@ -38,6 +52,7 @@ export function ImageUploadField({
   readOnly?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const zoneRef = useRef<HTMLDivElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
   const [viewing, setViewing] = useState<number | null>(null)
   // Upload chạy song song nên đọc giá trị mới nhất qua ref, tránh ghi đè lẫn nhau.
@@ -93,6 +108,7 @@ export function ImageUploadField({
         {label}{' '}
         <Typography component="span" variant="caption" color="text.secondary">
           ({value.length})
+          {canAdd ? ' · bấm 1 lần rồi Ctrl+V · bấm 2 lần chọn file' : ''}
         </Typography>
       </Typography>
 
@@ -109,6 +125,7 @@ export function ImageUploadField({
       />
 
       <Box
+        ref={zoneRef}
         sx={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -120,19 +137,38 @@ export function ImageUploadField({
           border: '1px dashed',
           borderColor: 'divider',
           borderRadius: 1,
-          ...(empty && canAdd
+          outline: 'none',
+          ...(canAdd
             ? {
                 cursor: 'pointer',
                 '&:hover': { borderColor: 'primary.main', bgcolor: '#fbf8f2' },
+                '&:focus-visible': { borderColor: 'primary.main', boxShadow: '0 0 0 2px rgba(107,69,19,0.25)' },
               }
             : {}),
         }}
-        onClick={empty && canAdd ? openPicker : undefined}
-        role={empty && canAdd ? 'button' : undefined}
-        tabIndex={empty && canAdd ? 0 : undefined}
-        aria-label={empty && canAdd ? `Thêm ${label}` : undefined}
+        onClick={() => {
+          if (!canAdd) return
+          zoneRef.current?.focus()
+        }}
+        onDoubleClick={(event) => {
+          if (!canAdd) return
+          event.preventDefault()
+          openPicker()
+        }}
+        tabIndex={canAdd ? 0 : undefined}
+        aria-label={canAdd ? `Dán ${label} (Ctrl+V) hoặc bấm đúp chọn file` : undefined}
+        onPaste={
+          canAdd
+            ? (event) => {
+                const files = filesFromClipboard(event.clipboardData)
+                if (!files?.length) return
+                event.preventDefault()
+                void handleFiles(files)
+              }
+            : undefined
+        }
         onKeyDown={
-          empty && canAdd
+          canAdd
             ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
@@ -143,7 +179,11 @@ export function ImageUploadField({
         }
       >
         {value.map((image, index) => (
-          <Box key={image.publicId} sx={{ position: 'relative', width: THUMB, height: THUMB }}>
+          <Box
+            key={image.publicId}
+            sx={{ position: 'relative', width: THUMB, height: THUMB }}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
             <ZoomThumb
               url={image.url}
               size={THUMB}
@@ -197,9 +237,7 @@ export function ImageUploadField({
           </Stack>
         ))}
 
-        {empty && canAdd ? (
-          <AddIcon sx={{ fontSize: 36, color: 'text.secondary' }} />
-        ) : null}
+        {empty && canAdd ? <AddIcon sx={{ fontSize: 36, color: 'text.secondary', pointerEvents: 'none' }} /> : null}
 
         {empty && !canAdd ? (
           <Typography variant="caption" color="text.secondary">
@@ -211,8 +249,16 @@ export function ImageUploadField({
           <Box
             component="button"
             type="button"
-            aria-label={`Thêm ${label}`}
-            onClick={openPicker}
+            aria-label={`Thêm ${label} — bấm đúp hoặc Enter`}
+            onClick={(event) => {
+              event.stopPropagation()
+              zoneRef.current?.focus()
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              event.preventDefault()
+              openPicker()
+            }}
             sx={{
               width: THUMB,
               height: THUMB,

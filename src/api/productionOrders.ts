@@ -21,7 +21,7 @@ export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
 /** Đơn NVL: làm từ đầu (3D → Đúc → khâu). Đơn BTP: lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
 export type ProductionSource = 'NVL' | 'BTP'
 
-export type ProductionImageKind = 'DETAIL' | 'PRODUCT'
+export type ProductionImageKind = 'DETAIL' | 'PRODUCT' | 'CASTING_TREE'
 
 export type OrderImage = {
   id?: string

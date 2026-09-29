@@ -315,8 +315,9 @@ export function DataTable<T, S = never>({
   const showPagination = page != null && pageSize != null && onPageChange != null
   const rowCount = total ?? rows.length
   const showSkeleton = loading && rows.length === 0
-  // Cột đầu: STT, và mũi tên xổ / thu nếu bảng có dòng con.
-  const leadCol = Boolean(showIndex || subRows)
+  // Cột đầu: STT (và có thể kèm mũi tên phiếu con). Nếu đã bỏ STT thì gộp mũi tên vào cột dữ liệu đầu tiên.
+  const embedSubToggle = Boolean(subRows && !showIndex)
+  const leadCol = Boolean(showIndex || (subRows && !embedSubToggle))
   // Khóa cứng: table-layout:fixed lấy độ rộng từ hàng đầu (hàng lọc), ô STT
   // hàng đó nếu không có width sẽ nuốt hết phần dư khi bảng giãn 100%.
   const leadColWidth = showIndex ? (subRows ? 72 : 44) : 44
@@ -369,9 +370,35 @@ export function DataTable<T, S = never>({
   }
   const grouped = bands.some((band) => band.group)
 
-  function headCell(column: Column<T, S>, rowSpan?: number) {
+  const subRowUnfoldAllControl =
+    embedSubToggle && expandableKeys.length ? (
+      <Tooltip title={allOpen ? 'Thu gọn tất cả' : 'Xổ tất cả'}>
+        <IconButton
+          size="small"
+          aria-label={allOpen ? 'Thu gọn tất cả' : 'Xổ tất cả'}
+          onClick={toggleAll}
+          sx={{ p: 0.25, flexShrink: 0 }}
+        >
+          {allOpen ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
+        </IconButton>
+      </Tooltip>
+    ) : null
+
+  function headCell(column: Column<T, S>, rowSpan?: number, leading?: ReactNode) {
     const sortKey = column.sortKey ?? column.key
     const active = sort?.key === sortKey
+    const label =
+      column.sortable && onSortChange ? (
+        <TableSortLabel
+          active={active}
+          direction={active ? sort.dir : 'asc'}
+          onClick={() => onSortChange(sortKey)}
+        >
+          {column.header}
+        </TableSortLabel>
+      ) : (
+        column.header
+      )
     return (
       <TableCell
         key={column.key}
@@ -387,18 +414,38 @@ export function DataTable<T, S = never>({
           ...column.headSx,
         }}
       >
-        {column.sortable && onSortChange ? (
-          <TableSortLabel
-            active={active}
-            direction={active ? sort.dir : 'asc'}
-            onClick={() => onSortChange(sortKey)}
+        {leading ? (
+          <Stack
+            direction="row"
+            spacing={0.25}
+            sx={{
+              alignItems: 'center',
+              justifyContent:
+                column.align === 'center' ? 'center' : column.numeric ? 'flex-end' : 'flex-start',
+              minWidth: 0,
+            }}
           >
-            {column.header}
-          </TableSortLabel>
+            {leading}
+            {label}
+          </Stack>
         ) : (
-          column.header
+          label
         )}
       </TableCell>
+    )
+  }
+
+  function wrapFirstColumnCell(content: ReactNode, subs: S[], open: boolean, key: string, label: string) {
+    if (!embedSubToggle) return content
+    return (
+      <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', minWidth: 0 }}>
+        {subs.length ? (
+          <ExpandButton open={open} label={label} onToggle={() => toggle(key)} />
+        ) : null}
+        <Box component="span" sx={{ minWidth: 0, flex: 1 }}>
+          {content}
+        </Box>
+      </Stack>
     )
   }
 
@@ -546,7 +593,9 @@ export function DataTable<T, S = never>({
               ) : (
                 <TableRow>
                   {indexHeadCell}
-                  {columns.map((column) => headCell(column))}
+                  {columns.map((column, colIndex) =>
+                    headCell(column, undefined, colIndex === 0 ? subRowUnfoldAllControl : undefined),
+                  )}
                 </TableRow>
               )}
             </TableHead>
@@ -611,7 +660,14 @@ export function DataTable<T, S = never>({
                             </Stack>
                           </TableCell>
                         ) : null}
-                        {columns.map((column) => bodyCell(column, cellContent(column, row, index)))}
+                        {columns.map((column, colIndex) => {
+                          const raw = cellContent(column, row, index)
+                          const content =
+                            colIndex === 0
+                              ? wrapFirstColumnCell(raw, subs, open, key, labelOf(subs.length))
+                              : raw
+                          return bodyCell(column, content)
+                        })}
                       </TableRow>
                     )
                     if (!open || !subRows) return [parent]
@@ -627,9 +683,24 @@ export function DataTable<T, S = never>({
                               />
                             </TableCell>
                           ) : null}
-                          {columns.map((column) =>
-                            bodyCell(column, column.renderSub ? column.renderSub(sub, row) : null),
-                          )}
+                          {columns.map((column, colIndex) => {
+                            const raw = column.renderSub ? column.renderSub(sub, row) : null
+                            const content =
+                              embedSubToggle && colIndex === 0 ? (
+                                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
+                                  <SubdirectoryArrowRightIcon
+                                    fontSize="small"
+                                    sx={{ color: 'text.disabled', flexShrink: 0 }}
+                                  />
+                                  <Box component="span" sx={{ minWidth: 0, flex: 1 }}>
+                                    {raw}
+                                  </Box>
+                                </Stack>
+                              ) : (
+                                raw
+                              )
+                            return bodyCell(column, content)
+                          })}
                         </TableRow>
                       )),
                     ]

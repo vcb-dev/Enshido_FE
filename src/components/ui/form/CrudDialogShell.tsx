@@ -100,6 +100,8 @@ export function CrudDialogShell<T extends FieldValues>({
           if (submitted.current) return
           if (needsReason && !editReason.trim()) {
             setReasonError('Nhập lý do chỉnh sửa')
+            submitted.current = false
+            setBusy(false)
             return
           }
           submitted.current = true
@@ -122,7 +124,8 @@ export function CrudDialogShell<T extends FieldValues>({
             display: 'flex',
             flexDirection: 'column',
             gap: 1.5,
-            pt: 1,
+            pt: 2,
+            overflow: 'visible',
             // Dấu * chỉ để báo ô phải điền — chế độ xem không điền gì nên ẩn đi.
             '& .MuiFormLabel-asterisk':
               kind === 'view' ? { display: 'none' } : { color: 'error.main' },
@@ -157,11 +160,7 @@ export function CrudDialogShell<T extends FieldValues>({
               <Button
                 type="submit"
                 variant="contained"
-                disabled={saving || submitDisabled}
-                onPointerDown={() => {
-                  if (saving || submitDisabled || submitted.current) return
-                  setBusy(true)
-                }}
+                disabled={pending || submitDisabled}
                 startIcon={pending ? <CircularProgress color="inherit" size={16} /> : undefined}
               >
                 {pending

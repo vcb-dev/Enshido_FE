@@ -2,6 +2,50 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Box, Button, Chip, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
+import {
+  approveIntakeOrderApi,
+  attachIntakeModel3dApi,
+  rejectIntakeOrderApi,
+  confirmIntakeWarehouseApi,
+  submitIntakeCastingTreeSpecsApi,
+  submitIntakeProductSpecsApi,
+  listIntakeOrdersApi,
+  type IntakeOrder,
+} from '../api/intakeOrders'
+import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
+import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
+import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
+import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
+import { IntakeCastingTreeDialog } from '../intake/IntakeCastingTreeDialog'
+import { IntakeCastingSlipDialog } from '../intake/IntakeCastingSlipDialog'
+import {
+  intakeNeedsCastingSlip,
+  intakeNeedsCastingTreeSpecs,
+  intakeNeedsModel3d,
+  intakeNeedsProductSpecs,
+} from '../intake/intakeActions'
+import {
+  createCastingSlipsFromIntakeApi,
+  type CreateCastingSlipsPayload,
+} from '../api/castingSlips'
+import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
+import { intakeProductWeightCaption, intakeShowsProductWeight } from '../intake/intakeDisplay'
+import { intakeDetailImages, intakeProductionStageColumn } from '../intake/intakeImages'
+import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
+import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
+import {
+  afterIntakeApproved,
+  afterIntakeModel3dAttached,
+  afterIntakeProductSpecsSubmitted,
+  afterIntakeWarehouseConfirmed,
+  afterIntakeCastingTreeUpdated,
+  afterIntakeCastingSlipCreated,
+  afterIntakeRejected,
+  markIntakeOrdersStale,
+  mergeIntakeQueueItems,
+} from '../intake/intakeOrderCache'
+import { IntakeStatusChip } from '../intake/IntakeStatusChip'
+import { INTAKE_PENDING_TAB } from '../orders/intakePendingTab'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -18,7 +62,6 @@ import {
   type ProductionOrderListResponse,
   type ProductionOrderRow,
   type ProductionRequestType,
-  type ProductionSource,
   type ProductionStatus,
   type SubTicketSummary,
   type UpsertProductionOrderPayload,
@@ -38,6 +81,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import {
+  formatDateShort,
   formatDateTime,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
@@ -53,6 +97,10 @@ import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
+type ProductionListRow =
+  | { kind: 'intake'; row: IntakeOrder }
+  | { kind: 'order'; row: ProductionOrderRow }
+
 export function ProductionOrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -60,45 +108,287 @@ export function ProductionOrdersPage() {
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ProductionOrderDetail | null>(null)
+  const [approveTarget, setApproveTarget] = useState<IntakeOrder | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<IntakeOrder | null>(null)
+  const [model3dTarget, setModel3dTarget] = useState<IntakeOrder | null>(null)
+  const [productSpecsTarget, setProductSpecsTarget] = useState<IntakeOrder | null>(null)
+  const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
+  const [castingSlipTarget, setCastingSlipTarget] = useState<IntakeOrder | null>(null)
+  const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
   const table = useTableParams({
     pageSize: 25,
     filters: {
       status: '',
       requestType: '',
-      source: 'NVL' as ProductionSource,
       receivedDate: '',
       dueDate: '',
     },
   })
   const { params } = table
-  const listSource: ProductionSource = params.source === 'BTP' ? 'BTP' : 'NVL'
-  const statusTab = STATUS_TABS.includes(params.status as ProductionStatus)
-    ? (params.status as ProductionStatus | '')
-    : ''
+  const isIntakePendingView = params.status === INTAKE_PENDING_TAB
+  const isAllView = !isIntakePendingView && params.status === ''
+  const statusTab: ProductionStatus | '' = isIntakePendingView
+    ? ''
+    : STATUS_TABS.includes(params.status as ProductionStatus)
+      ? (params.status as ProductionStatus)
+      : ''
   const search = useDebouncedValue(params.search, 300)
 
-  const listParams = {
+  const listBaseParams = {
     status: statusTab,
     requestType: params.requestType as ProductionRequestType | '',
-    source: listSource,
     search,
     receivedDate: params.receivedDate,
     dueDate: params.dueDate,
-    page: params.page,
-    pageSize: params.pageSize,
     sort: params.sort || undefined,
     dir: params.sort ? params.dir : undefined,
   }
 
+  const intakePendingAll = useQuery({
+    queryKey: [
+      'intake-orders',
+      'pending-for-all',
+      search,
+      params.requestType,
+    ],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'PENDING_APPROVAL',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+
+  const intakeApprovedAll = useQuery({
+    queryKey: ['intake-orders', 'approved-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'APPROVED',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeReadyAll = useQuery({
+    queryKey: ['intake-orders', 'ready-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'READY_FOR_PRODUCTION',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeWarehousePendingAll = useQuery({
+    queryKey: ['intake-orders', 'warehouse-pending-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'PENDING_WAREHOUSE_CONFIRMATION',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeWaxAll = useQuery({
+    queryKey: ['intake-orders', 'wax-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'WAX_PRINTED',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeWaxConfirmedAll = useQuery({
+    queryKey: ['intake-orders', 'wax-confirmed-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'WAX_CONFIRMED',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeWaitCastingAll = useQuery({
+    queryKey: ['intake-orders', 'wait-casting-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'WAIT_CASTING',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+
+  const pendingTotal = intakePendingAll.data?.total ?? 0
+  const pendingItems = intakePendingAll.data?.items ?? []
+  const approvedTotal = intakeApprovedAll.data?.total ?? 0
+  const approvedItems = intakeApprovedAll.data?.items ?? []
+  const readyTotal = intakeReadyAll.data?.total ?? 0
+  const readyItems = intakeReadyAll.data?.items ?? []
+  const warehousePendingTotal = intakeWarehousePendingAll.data?.total ?? 0
+  const warehousePendingItems = intakeWarehousePendingAll.data?.items ?? []
+  const waxTotal = intakeWaxAll.data?.total ?? 0
+  const waxItems = intakeWaxAll.data?.items ?? []
+  const waxConfirmedTotal = intakeWaxConfirmedAll.data?.total ?? 0
+  const waxConfirmedItems = intakeWaxConfirmedAll.data?.items ?? []
+  const waitCastingTotal = intakeWaitCastingAll.data?.total ?? 0
+  const waitCastingItems = intakeWaitCastingAll.data?.items ?? []
+  const intakeQueueItems = useMemo(
+    () =>
+      mergeIntakeQueueItems(
+        pendingItems,
+        approvedItems,
+        readyItems,
+        warehousePendingItems,
+        waxItems,
+        waxConfirmedItems,
+        waitCastingItems,
+      ),
+    [
+      pendingItems,
+      approvedItems,
+      readyItems,
+      warehousePendingItems,
+      waxItems,
+      waxConfirmedItems,
+      waitCastingItems,
+    ],
+  )
+  const intakeQueueTotal =
+    pendingTotal +
+    approvedTotal +
+    readyTotal +
+    warehousePendingTotal +
+    waxTotal +
+    waxConfirmedTotal +
+    waitCastingTotal
+  const mergeSlice = useMemo(
+    () => sliceMergedPage(params.page, params.pageSize, intakeQueueItems, intakeQueueTotal),
+    [params.page, params.pageSize, intakeQueueItems, intakeQueueTotal],
+  )
+
+  const productionListParams = useMemo(() => {
+    if (!isAllView) {
+      return {
+        ...listBaseParams,
+        page: params.page,
+        pageSize: params.pageSize,
+      }
+    }
+    if (mergeSlice.prodTake <= 0) return null
+    return {
+      ...listBaseParams,
+      page: 1,
+      pageSize: mergeSlice.prodStart + mergeSlice.prodTake,
+    }
+  }, [isAllView, listBaseParams, mergeSlice.prodStart, mergeSlice.prodTake, params.page, params.pageSize])
+
   const list = useQuery({
-    queryKey: ['production-orders', listParams],
-    queryFn: () => listProductionOrdersApi(listParams),
+    queryKey: ['production-orders', productionListParams],
+    queryFn: () => listProductionOrdersApi(productionListParams!),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
-    // Đây là màn điều hành; trạng thái phiếu có thể đổi từ điện thoại của thợ.
-    refetchInterval: 15_000,
+    enabled: !isIntakePendingView && productionListParams !== null,
+    refetchInterval: isIntakePendingView ? false : 15_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !isIntakePendingView,
+  })
+  const intakePendingCount = useQuery({
+    queryKey: ['intake-orders', 'pending-count'],
+    queryFn: () =>
+      listIntakeOrdersApi({ status: 'PENDING_APPROVAL', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeApprovedCount = useQuery({
+    queryKey: ['intake-orders', 'approved-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'APPROVED', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeReadyCount = useQuery({
+    queryKey: ['intake-orders', 'ready-count'],
+    queryFn: () =>
+      listIntakeOrdersApi({ status: 'READY_FOR_PRODUCTION', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeWarehousePendingCount = useQuery({
+    queryKey: ['intake-orders', 'warehouse-pending-count'],
+    queryFn: () =>
+      listIntakeOrdersApi({ status: 'PENDING_WAREHOUSE_CONFIRMATION', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeWaxCount = useQuery({
+    queryKey: ['intake-orders', 'wax-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'WAX_PRINTED', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeWaxConfirmedCount = useQuery({
+    queryKey: ['intake-orders', 'wax-confirmed-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'WAX_CONFIRMED', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeWaitCastingCount = useQuery({
+    queryKey: ['intake-orders', 'wait-casting-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'WAIT_CASTING', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const isIntakeWarehouseKeeper = canConfirmIntakeWarehouse(user)
+  const intakeList = useQuery({
+    queryKey: [
+      'intake-orders',
+      'pending-list',
+      params.page,
+      params.pageSize,
+      search,
+      params.requestType,
+    ],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'PENDING_APPROVAL',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: params.page,
+        pageSize: params.pageSize,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isIntakePendingView,
+    staleTime: 15_000,
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -137,6 +427,114 @@ export function ProductionOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const approveIntake = useMutation({
+    mutationFn: ({ id, hasMold }: { id: string; hasMold: boolean }) =>
+      approveIntakeOrderApi(id, { hasMold }),
+    onSuccess: (order) => {
+      setApproveTarget(null)
+      afterIntakeApproved(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(`Đã duyệt đơn ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const attachModel3d = useMutation({
+    mutationFn: ({ id, model3dUrl }: { id: string; model3dUrl: string }) =>
+      attachIntakeModel3dApi(id, { model3dUrl }),
+    onSuccess: (order) => {
+      setModel3dTarget(null)
+      afterIntakeModel3dAttached(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(`Đã cập nhật 3D — ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const rejectIntake = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      rejectIntakeOrderApi(id, { reason }),
+    onSuccess: (order) => {
+      setRejectTarget(null)
+      afterIntakeRejected(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(`Đã từ chối đơn ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const submitProductSpecs = useMutation({
+    mutationFn: ({
+      id,
+      productWeightGram,
+      images,
+    }: {
+      id: string
+      productWeightGram: number
+      images: IntakeOrder['images']
+    }) => submitIntakeProductSpecsApi(id, { productWeightGram, images }),
+    onSuccess: (order) => {
+      setProductSpecsTarget(null)
+      afterIntakeProductSpecsSubmitted(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(
+        order.status === 'PENDING_WAREHOUSE_CONFIRMATION'
+          ? `Đã gửi số liệu — chờ thủ kho (${order.code})`
+          : `Đã in sáp — ${order.code}`,
+      )
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const confirmWarehouse = useMutation({
+    mutationFn: (id: string) => confirmIntakeWarehouseApi(id),
+    onSuccess: (order) => {
+      afterIntakeWarehouseConfirmed(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(`Đã có sáp — ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const submitCastingTree = useMutation({
+    mutationFn: ({
+      id,
+      castingTreeWeightGram,
+      images,
+    }: {
+      id: string
+      castingTreeWeightGram: number
+      images: IntakeOrder['images']
+    }) => submitIntakeCastingTreeSpecsApi(id, { castingTreeWeightGram, images }),
+    onSuccess: (order) => {
+      setCastingTreeTarget(null)
+      afterIntakeCastingTreeUpdated(queryClient, order)
+      markIntakeOrdersStale(queryClient)
+      toast.success(`Đã gửi số liệu — chờ thủ kho (${order.code})`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const submitCastingSlip = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string
+      payload: CreateCastingSlipsPayload
+    }) => createCastingSlipsFromIntakeApi(id, payload),
+    onSuccess: (result) => {
+      const prev = castingSlipTarget
+      setCastingSlipTarget(null)
+      if (prev) {
+        afterIntakeCastingSlipCreated(queryClient, { ...prev, status: 'WAIT_CASTING' })
+      }
+      markIntakeOrdersStale(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
+      const codes = result.items.map((s) => s.code).join(', ')
+      toast.success(
+        result.count > 1
+          ? `Đã lên ${result.count} phiếu đúc (${codes}) — chờ đúc`
+          : `Đã lên phiếu đúc ${codes} — chờ đúc`,
+      )
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   const del = useDeleteRowDialog<ProductionOrderRow>({
     mutationFn: (row) => deleteProductionOrderApi(row.code),
     successMessage: 'Đã xóa đơn',
@@ -166,14 +564,46 @@ export function ProductionOrdersPage() {
     () => REQUEST_TYPES.map((type) => ({ id: type, name: REQUEST_TYPE_META[type].label })),
     [],
   )
+  const intakeColumns = useMemo(
+    () =>
+      intakePendingColumns({
+        onApprove: (row) => setApproveTarget(row),
+        onReject: (row) => setRejectTarget(row),
+        search: (
+          <ColumnHeaderSearch
+            value={params.search}
+            onChange={table.setSearch}
+            placeholder="Tìm mã đơn, mã SP…"
+          />
+        ),
+        requestType: {
+          valueId: params.requestType,
+          options: requestTypeOptions,
+          onChange: (id) => table.setFilter({ requestType: id }),
+        },
+      }),
+    [navigate, params.requestType, params.search, requestTypeOptions, table.setFilter, table.setSearch],
+  )
+
   const columns = useMemo(
     () =>
       orderColumns(
-        listSource,
         {
           onView: (row) => navigate(`/orders/${row.code}`),
           onEdit: (row) => loadEdit.mutate(row),
           onDelete: (row) => del.request(row),
+          onIntakeApprove: (row) => setApproveTarget(row),
+          onIntakeReject: (row) => setRejectTarget(row),
+          onIntakeUpdate: (row) => setModel3dTarget(row),
+          onIntakeProductSpecs: (row) => setProductSpecsTarget(row),
+          onIntakeCastingTree: (row) => setCastingTreeTarget(row),
+          onIntakeCastingSlip: (row) => setCastingSlipTarget(row),
+          onIntakeView: (row) => setIntakeViewTarget(row),
+          onIntakeWarehouseConfirm: (row) => confirmWarehouse.mutate(row.id),
+          warehouseConfirmLoadingId: confirmWarehouse.isPending
+            ? (confirmWarehouse.variables ?? null)
+            : null,
+          canConfirmIntakeWarehouse: isIntakeWarehouseKeeper,
           loadingEditId: loadEdit.isPending ? (loadEdit.variables?.id ?? null) : null,
           isAdmin,
         },
@@ -207,10 +637,12 @@ export function ProductionOrdersPage() {
     [
       del.request,
       isAdmin,
-      listSource,
       loadEdit.mutate,
       loadEdit.isPending,
       loadEdit.variables,
+      confirmWarehouse.isPending,
+      confirmWarehouse.variables,
+      isIntakeWarehouseKeeper,
       navigate,
       params.dueDate,
       params.receivedDate,
@@ -222,11 +654,42 @@ export function ProductionOrdersPage() {
     ],
   )
   const counts = list.data?.statusCounts
-  const items = list.data?.items ?? []
+  const intakeItems = intakeList.data?.items ?? []
+  const prodPageItems = useMemo(() => {
+    if (!isAllView) return list.data?.items ?? []
+    if (productionListParams === null || !list.data?.items) return []
+    if (mergeSlice.prodTake <= 0) return []
+    return list.data.items.slice(mergeSlice.prodStart, mergeSlice.prodStart + mergeSlice.prodTake)
+  }, [
+    isAllView,
+    list.data?.items,
+    mergeSlice.prodStart,
+    mergeSlice.prodTake,
+    productionListParams,
+  ])
+  const tableRows: ProductionListRow[] = useMemo(() => {
+    if (!isAllView) return (list.data?.items ?? []).map((row) => ({ kind: 'order', row }))
+    return [
+      ...mergeSlice.pendingOnPage.map((row) => ({ kind: 'intake' as const, row })),
+      ...prodPageItems.map((row) => ({ kind: 'order' as const, row })),
+    ]
+  }, [isAllView, list.data?.items, mergeSlice.pendingOnPage, prodPageItems])
+  const tableTotal = isAllView
+    ? intakeQueueTotal + (list.data?.total ?? 0)
+    : (list.data?.total ?? 0)
+  const allTabCount =
+    (counts?.ALL ?? 0) +
+    (intakePendingCount.data?.total ?? 0) +
+    (intakeApprovedCount.data?.total ?? 0) +
+    (intakeReadyCount.data?.total ?? 0) +
+    (intakeWarehousePendingCount.data?.total ?? 0) +
+    (intakeWaxCount.data?.total ?? 0) +
+    (intakeWaxConfirmedCount.data?.total ?? 0) +
+    (intakeWaitCastingCount.data?.total ?? 0)
   const columnFiltered = Boolean(
     params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
   )
-  const narrowed = Boolean(statusTab || columnFiltered)
+  const narrowed = Boolean(statusTab || isIntakePendingView || columnFiltered)
 
   return (
     <Stack
@@ -240,23 +703,8 @@ export function ProductionOrdersPage() {
       />
 
       <Tabs
-        value={listSource}
-        onChange={(_, value: ProductionSource) => table.setFilter({ source: value })}
-        sx={{
-          flexShrink: 0,
-          minHeight: 44,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          '& .MuiTab-root': { minHeight: 44, py: 0, fontWeight: 600 },
-        }}
-      >
-        <Tab value="NVL" label="Đơn mới" />
-        <Tab value="BTP" label="Đơn BTP" />
-      </Tabs>
-
-      <Tabs
-        value={statusTab}
-        onChange={(_, value: string) => table.setFilter({ status: value })}
+        value={isIntakePendingView ? INTAKE_PENDING_TAB : statusTab}
+        onChange={(_, value: string) => table.setFilter({ status: value, page: 1 })}
         variant="scrollable"
         scrollButtons="auto"
         sx={{
@@ -267,105 +715,172 @@ export function ProductionOrdersPage() {
           '& .MuiTab-root': { minHeight: 40, py: 0 },
         }}
       >
-        <Tab value="" label={tabLabel('Tất cả', counts?.ALL)} />
-        {STATUS_TABS.map((status) => (
-          <Tab key={status} value={status} label={<StatusTabLabel status={status} count={counts?.[status]} />} />
-        ))}
+        <Tab value="" label={tabLabel('Tất cả', allTabCount)} />
+        <Tab
+          value={INTAKE_PENDING_TAB}
+          label={tabLabel('Chờ duyệt', intakePendingCount.data?.total)}
+        />
+        {!isIntakePendingView
+          ? STATUS_TABS.map((status) => (
+              <Tab
+                key={status}
+                value={status}
+                label={<StatusTabLabel status={status} count={counts?.[status]} />}
+              />
+            ))
+          : null}
       </Tabs>
 
-      <DataTable
-        columns={columns}
-        rows={items}
-        rowKey={(row) => row.id}
-        subRows={{
-          get: (row) =>
-            statusTab
-              ? row.subTickets.filter((sub) => {
-                  const subStatus = subTicketListStatus(sub)
-                  return subStatus === statusTab || (subStatus == null && row.status === statusTab)
-                })
-              : row.subTickets,
-          key: (sub) => sub.code,
-          label: (count) => `${count} phiếu con`,
-          autoExpandKey: statusTab || undefined,
-        }}
-        loading={list.isLoading && !list.data}
-        errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText={
-          narrowed
-            ? 'Không có đơn khớp bộ lọc.'
-            : listSource === 'BTP'
-              ? 'Chưa có đơn BTP.'
-              : 'Chưa có đơn mới.'
-        }
-        variant="grid"
-        fixedLayout
-        minWidth={listSource === 'BTP' ? 1720 : 1600}
-        showIndex
-        indexOffset={(params.page - 1) * params.pageSize}
-        sort={table.sortState}
-        onSortChange={table.toggleSort}
-        page={params.page}
-        pageSize={params.pageSize}
-        total={list.data?.total ?? 0}
-        onPageChange={table.setPage}
-        onPageSizeChange={table.setPageSize}
-        rowsLabel="đơn"
-        sx={{ flex: { md: 1 } }}
-        toolbar={
-          <>
-            {columnFiltered ? (
-              <Button
-                size="small"
-                onClick={() => {
-                  table.setSearch('')
-                  table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
-                }}
-              >
-                Xóa lọc
+      {isIntakePendingView ? (
+        <DataTable
+          columns={intakeColumns}
+          rows={intakeItems}
+          rowKey={(row) => row.id}
+          loading={intakeList.isLoading && !intakeList.data}
+          errorText={intakeList.error instanceof Error ? intakeList.error.message : undefined}
+          emptyText={
+            narrowed
+              ? 'Không có đơn chờ duyệt khớp bộ lọc.'
+              : 'Chưa có đơn chờ duyệt. Tạo đơn ở mục Tạo đơn.'
+          }
+          variant="grid"
+          fixedLayout
+          minWidth={1280}
+          page={params.page}
+          pageSize={params.pageSize}
+          total={intakeList.data?.total ?? 0}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+          rowsLabel="đơn"
+          sx={{ flex: { md: 1 } }}
+          toolbar={
+            <>
+              {columnFiltered ? (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    table.setSearch('')
+                    table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
+                  }}
+                >
+                  Xóa lọc
+                </Button>
+              ) : null}
+              <Box sx={{ flex: 1, minWidth: 8 }} />
+              <Button variant="contained" onClick={() => navigate('/intake-orders')}>
+                Tạo đơn mới
               </Button>
-            ) : null}
-            <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button
-              variant="contained"
-              onClick={() => {
-                void queryClient.prefetchQuery({
-                  queryKey: ['production-order-lookups'],
-                  queryFn: getProductionOrderLookupsApi,
-                  staleTime: 5 * 60_000,
-                })
-                void queryClient.prefetchQuery({
-                  queryKey: ['nvl-options'],
-                  queryFn: () => listNvlOptionsApi(),
-                  staleTime: 60_000,
-                })
-                void queryClient.prefetchQuery({
-                  queryKey: ['finished-product-options'],
-                  queryFn: () => listFinishedProductOptionsApi(),
-                  staleTime: 60_000,
-                })
-                if (listSource === 'BTP') {
+            </>
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={tableRows}
+          rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
+          subRows={{
+            get: (row) =>
+              row.kind === 'intake'
+                ? []
+                : statusTab
+                  ? row.row.subTickets.filter((sub) => {
+                      const subStatus = subTicketListStatus(sub)
+                      return (
+                        subStatus === statusTab ||
+                        (subStatus == null && row.row.status === statusTab)
+                      )
+                    })
+                  : row.row.subTickets,
+            key: (sub) => sub.code,
+            label: (count) => `${count} phiếu con`,
+            autoExpandKey: statusTab || undefined,
+          }}
+          loading={
+            (list.isLoading && !list.data) ||
+            (isAllView &&
+              !intakePendingAll.data &&
+              !intakeApprovedAll.data &&
+              !intakeReadyAll.data &&
+              !intakeWarehousePendingAll.data &&
+              !intakeWaxAll.data &&
+              !intakeWaxConfirmedAll.data &&
+              (intakePendingAll.isLoading ||
+                intakeApprovedAll.isLoading ||
+                intakeReadyAll.isLoading ||
+                intakeWarehousePendingAll.isLoading ||
+                intakeWaxAll.isLoading ||
+                intakeWaxConfirmedAll.isLoading))
+          }
+          errorText={
+            (list.error ?? intakePendingAll.error) instanceof Error
+              ? (list.error ?? intakePendingAll.error)!.message
+              : undefined
+          }
+          emptyText={narrowed ? 'Không có đơn khớp bộ lọc.' : 'Chưa có lệnh sản xuất.'}
+          variant="grid"
+          fixedLayout
+          minWidth={1596}
+          sort={isAllView ? undefined : table.sortState}
+          onSortChange={isAllView ? undefined : table.toggleSort}
+          page={params.page}
+          pageSize={params.pageSize}
+          total={tableTotal}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+          rowsLabel="đơn"
+          sx={{ flex: { md: 1 } }}
+          toolbar={
+            <>
+              {columnFiltered ? (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    table.setSearch('')
+                    table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
+                  }}
+                >
+                  Xóa lọc
+                </Button>
+              ) : null}
+              <Box sx={{ flex: 1, minWidth: 8 }} />
+              <Button
+                variant="contained"
+                onClick={() => {
+                  void queryClient.prefetchQuery({
+                    queryKey: ['production-order-lookups'],
+                    queryFn: getProductionOrderLookupsApi,
+                    staleTime: 5 * 60_000,
+                  })
+                  void queryClient.prefetchQuery({
+                    queryKey: ['nvl-options'],
+                    queryFn: () => listNvlOptionsApi(),
+                    staleTime: 60_000,
+                  })
+                  void queryClient.prefetchQuery({
+                    queryKey: ['finished-product-options'],
+                    queryFn: () => listFinishedProductOptionsApi(),
+                    staleTime: 60_000,
+                  })
                   void queryClient.prefetchQuery({
                     queryKey: ['btp-options'],
                     queryFn: () => listBtpOptionsApi(),
                     staleTime: 60_000,
                   })
-                }
-                setEditing(null)
-                setFormOpen(true)
-              }}
-            >
-              {listSource === 'BTP' ? 'Lên đơn BTP' : 'Lên đơn mới'}
-            </Button>
-          </>
-        }
-      />
+                  setEditing(null)
+                  setFormOpen(true)
+                }}
+              >
+                Lên đơn mới
+              </Button>
+            </>
+          }
+        />
+      )}
 
       {formOpen ? (
         <ProductionOrderFormDialog
           open
           order={editing}
-          initialSource={listSource}
           lookups={lookups.data}
           saving={editing ? update.isPending : create.isPending}
           onClose={() => {
@@ -375,6 +890,65 @@ export function ProductionOrdersPage() {
           onSave={(payload) => (editing ? update.mutateAsync(payload) : create.mutateAsync(payload))}
         />
       ) : null}
+      <ApproveIntakeDialog
+        order={approveTarget}
+        saving={approveIntake.isPending}
+        onClose={() => setApproveTarget(null)}
+        onConfirm={(hasMold) => {
+          if (!approveTarget) return
+          void approveIntake.mutateAsync({ id: approveTarget.id, hasMold })
+        }}
+      />
+      <RejectIntakeDialog
+        order={rejectTarget}
+        saving={rejectIntake.isPending}
+        onClose={() => setRejectTarget(null)}
+        onConfirm={(reason) => {
+          if (!rejectTarget) return
+          void rejectIntake.mutateAsync({ id: rejectTarget.id, reason: reason || undefined })
+        }}
+      />
+      <IntakeModel3dDialog
+        order={model3dTarget}
+        saving={attachModel3d.isPending}
+        onClose={() => setModel3dTarget(null)}
+        onSave={(model3dUrl) => {
+          if (!model3dTarget) return
+          void attachModel3d.mutateAsync({ id: model3dTarget.id, model3dUrl })
+        }}
+      />
+      <IntakeProductSpecsDialog
+        order={productSpecsTarget}
+        saving={submitProductSpecs.isPending}
+        onClose={() => setProductSpecsTarget(null)}
+        onSave={(payload) => {
+          if (!productSpecsTarget) return
+          void submitProductSpecs.mutateAsync({ id: productSpecsTarget.id, ...payload })
+        }}
+      />
+      <IntakeCastingTreeDialog
+        order={castingTreeTarget}
+        saving={submitCastingTree.isPending}
+        onClose={() => setCastingTreeTarget(null)}
+        onSave={(payload) => {
+          if (!castingTreeTarget) return
+          void submitCastingTree.mutateAsync({ id: castingTreeTarget.id, ...payload })
+        }}
+      />
+      <IntakeCastingSlipDialog
+        order={castingSlipTarget}
+        saving={submitCastingSlip.isPending}
+        onClose={() => setCastingSlipTarget(null)}
+        onSave={(payload) => {
+          if (!castingSlipTarget) return
+          void submitCastingSlip.mutateAsync({ id: castingSlipTarget.id, payload })
+        }}
+      />
+      <IntakeOrderDetailDialog
+        order={intakeViewTarget}
+        onClose={() => setIntakeViewTarget(null)}
+      />
+
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
         title="Xóa lệnh sản xuất"
@@ -412,13 +986,141 @@ function deleteHint(row: ProductionOrderRow, isAdmin: boolean) {
   return 'Chỉ xóa được đơn mới tạo, chưa giao khâu'
 }
 
+function renderIntakeWorkflowAction(
+  order: IntakeOrder,
+  actions: {
+    onIntakeApprove: (row: IntakeOrder) => void
+    onIntakeReject: (row: IntakeOrder) => void
+    onIntakeUpdate: (row: IntakeOrder) => void
+    onIntakeProductSpecs: (row: IntakeOrder) => void
+    onIntakeCastingTree: (row: IntakeOrder) => void
+    onIntakeCastingSlip: (row: IntakeOrder) => void
+    onIntakeWarehouseConfirm: (row: IntakeOrder) => void
+    warehouseConfirmLoadingId: string | null
+    canConfirmIntakeWarehouse: boolean
+  },
+) {
+  if (order.status === 'PENDING_APPROVAL') {
+    return (
+      <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+        <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
+          Duyệt
+        </Button>
+        <Button size="small" variant="outlined" color="error" onClick={() => actions.onIntakeReject(order)}>
+          Từ chối
+        </Button>
+      </Stack>
+    )
+  }
+  if (intakeNeedsModel3d(order)) {
+    return (
+      <Button size="small" variant="outlined" onClick={() => actions.onIntakeUpdate(order)}>
+        Cập nhật link 3D
+      </Button>
+    )
+  }
+  if (intakeNeedsProductSpecs(order)) {
+    return (
+      <Button
+        size="small"
+        variant="outlined"
+        onClick={() => actions.onIntakeProductSpecs(order)}
+        sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5 }}
+      >
+        <Typography
+          variant="caption"
+          component="span"
+          sx={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'block', textAlign: 'center' }}
+        >
+          Cập nhật số liệu sản phẩm
+        </Typography>
+      </Button>
+    )
+  }
+  if (order.status === 'PENDING_WAREHOUSE_CONFIRMATION') {
+    if (actions.canConfirmIntakeWarehouse) {
+      return (
+        <Button
+          size="small"
+          variant="contained"
+          disabled={actions.warehouseConfirmLoadingId === order.id}
+          onClick={() => actions.onIntakeWarehouseConfirm(order)}
+          sx={{ minWidth: 0, maxWidth: '100%', width: 112, whiteSpace: 'normal', lineHeight: 1.35 }}
+        >
+          {actions.warehouseConfirmLoadingId === order.id ? 'Đang xác nhận…' : 'Xác nhận'}
+        </Button>
+      )
+    }
+    return (
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'block', maxWidth: 112, mx: 'auto', textAlign: 'center' }}
+      >
+        Chờ thủ kho xác nhận
+      </Typography>
+    )
+  }
+  if (intakeNeedsCastingTreeSpecs(order)) {
+    return (
+      <Button
+        size="small"
+        variant="outlined"
+        onClick={() => actions.onIntakeCastingTree(order)}
+        sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5 }}
+      >
+        <Typography
+          variant="caption"
+          component="span"
+          sx={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'block', textAlign: 'center' }}
+        >
+          Cập nhật số liệu cây thông
+        </Typography>
+      </Button>
+    )
+  }
+  if (intakeNeedsCastingSlip(order)) {
+    return (
+      <Button
+        size="small"
+        variant="contained"
+        onClick={() => actions.onIntakeCastingSlip(order)}
+        sx={{
+          minWidth: 0,
+          maxWidth: '100%',
+          width: 112,
+          px: 0.75,
+          py: 0.5,
+          whiteSpace: 'normal',
+          lineHeight: 1.35,
+        }}
+      >
+        Lên lệnh đúc
+      </Button>
+    )
+  }
+  return (
+    <Typography variant="caption" color="text.secondary">
+      —
+    </Typography>
+  )
+}
+
 function orderColumns(
-  source: ProductionSource,
   actions: {
     onView: (row: ProductionOrderRow) => void
     onEdit: (row: ProductionOrderRow) => void
     onDelete: (row: ProductionOrderRow) => void
-    /** Đơn đang được tải chi tiết để mở form sửa. */
+    onIntakeApprove: (row: IntakeOrder) => void
+    onIntakeReject: (row: IntakeOrder) => void
+    onIntakeUpdate: (row: IntakeOrder) => void
+    onIntakeProductSpecs: (row: IntakeOrder) => void
+    onIntakeCastingTree: (row: IntakeOrder) => void
+    onIntakeCastingSlip: (row: IntakeOrder) => void
+    onIntakeView: (row: IntakeOrder) => void
+    onIntakeWarehouseConfirm: (row: IntakeOrder) => void
+    warehouseConfirmLoadingId: string | null
+    canConfirmIntakeWarehouse: boolean
     loadingEditId: string | null
     isAdmin: boolean
   },
@@ -432,56 +1134,32 @@ function orderColumns(
     receivedDate: ReactNode
     dueDate: ReactNode
   },
-): Column<ProductionOrderRow, SubTicketSummary>[] {
-  const btpSku: Column<ProductionOrderRow, SubTicketSummary> | null =
-    source === 'BTP'
-      ? {
-          key: 'btpSku',
-          header: 'Mã BTP',
-          width: 120,
-          ellipsis: true,
-          render: (row) => row.btpSku ?? '—',
-        }
-      : null
-
+): Column<ProductionListRow, SubTicketSummary>[] {
   return [
-    {
-      key: 'createdAt',
-      header: 'Ngày tạo',
-      width: 136,
-      sortable: true,
-      card: 'meta',
-      render: (row) => formatDateTime(row.createdAt),
-      renderSub: (sub) => formatDateTime(sub.createdAt),
-    },
-    {
-      key: 'status',
-      header: 'Trạng thái',
-      width: 220,
-      sortable: true,
-      card: 'meta',
-      render: (row) => <OrderStatus row={row} />,
-      renderSub: (sub) => <SubTicketStatus sub={sub} />,
-    },
     {
       key: 'code',
       header: 'Mã SX',
-      width: 168,
+      width: 104,
       sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
       filter: filters.search,
-      render: (row) =>
-        row.subTickets.length ? (
+      render: (row) => {
+        if (row.kind === 'intake') {
+          return row.row.sxCode
+        }
+        const order = row.row
+        return order.subTickets.length ? (
           <>
-            {row.code}
+            {order.code}
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
-              {row.subTickets.length} phiếu con
+              {order.subTickets.length} phiếu con
             </Typography>
           </>
         ) : (
-          row.code
-        ),
+          order.code
+        )
+      },
       renderSub: (sub) => (
         <>
           <Link
@@ -502,70 +1180,158 @@ function orderColumns(
       ),
     },
     {
-      key: 'btpName',
-      header: 'Tên thành phẩm',
+      key: 'createdAt',
+      header: 'Ngày tạo',
+      width: 136,
+      sortable: true,
+      card: 'meta',
+      render: (row) =>
+        row.kind === 'intake'
+          ? formatDateShort(row.row.createdDate)
+          : formatDateTime(row.row.createdAt),
+      renderSub: (sub) => formatDateTime(sub.createdAt),
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 220,
+      sortable: true,
+      card: 'meta',
+      render: (row) =>
+        row.kind === 'intake' ? (
+          <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+            <IntakeStatusChip status={row.row.status} />
+            {row.row.status === 'APPROVED' && row.row.hasMold != null ? (
+              <Typography variant="caption" color="text.secondary">
+                {row.row.hasMold ? 'Đã có khuôn' : 'Cần vẽ 3D in resin'}
+              </Typography>
+            ) : null}
+            {row.row.status === 'READY_FOR_PRODUCTION' && row.row.hasMold === true ? (
+              <Typography variant="caption" color="text.secondary">
+                Đã có khuôn
+              </Typography>
+            ) : null}
+            {row.row.status === 'READY_FOR_PRODUCTION' && row.row.model3dUrl ? (
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 200, display: 'block' }}>
+                {row.row.model3dUrl}
+              </Typography>
+            ) : null}
+            {row.kind === 'intake' &&
+            intakeShowsProductWeight(row.row) &&
+            intakeProductWeightCaption(row.row) ? (
+              <Typography variant="caption" color="text.secondary">
+                {intakeProductWeightCaption(row.row)}
+              </Typography>
+            ) : null}
+          </Stack>
+        ) : (
+          <OrderStatus row={row.row} />
+        ),
+      renderSub: (sub) => <SubTicketStatus sub={sub} />,
+    },
+    {
+      key: 'productName',
+      header: 'Tên sản phẩm',
       width: 180,
       ellipsis: true,
-      render: (row) => row.btpName?.trim() || '—',
+      render: (row) =>
+        row.kind === 'intake'
+          ? row.row.productName?.trim() || '—'
+          : row.row.btpName?.trim() || '—',
     },
-    ...(btpSku ? [btpSku] : []),
     {
       key: 'requestType',
       header: 'Yêu cầu làm hàng',
       width: 148,
       filter: <ColumnHeaderFilter {...filters.requestType} />,
-      render: (row) => <RequestTypeChip type={row.requestType} />,
+      render: (row) => <RequestTypeChip type={row.row.requestType} />,
     },
-    ...(source === 'NVL'
-      ? [
-          {
-            key: 'sizeLabel',
-            header: 'Size',
-            width: 80,
-            ellipsis: true,
-            render: (row: ProductionOrderRow) => row.sizeLabel ?? '—',
-          } satisfies Column<ProductionOrderRow, SubTicketSummary>,
-        ]
-      : []),
     {
       key: 'qty',
       header: 'SL cần làm',
       width: 128,
       numeric: true,
       sortable: true,
-      render: (row) => `${row.qty}${row.qtyUnit ? ` ${row.qtyUnit}` : ''}`,
-      renderSub: (sub, row) => (
-        <>
-          {sub.qty}
-          {row.qtyUnit ? ` ${row.qtyUnit}` : ''}
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {formatQty(sub.silverWeight)} g bạc
-          </Typography>
-        </>
-      ),
+      render: (row) =>
+        row.kind === 'intake'
+          ? String(row.row.qty)
+          : `${row.row.qty}${row.row.qtyUnit ? ` ${row.row.qtyUnit}` : ''}`,
+      renderSub: (sub, row) => {
+        if (row.kind === 'intake') return null
+        const order = row.row
+        return (
+          <>
+            {sub.qty}
+            {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {formatQty(sub.silverWeight)} g bạc
+            </Typography>
+          </>
+        )
+      },
     },
-    { key: 'returnedQty', header: 'Đã trả', width: 68, numeric: true },
+    {
+      key: 'returnedQty',
+      header: 'Đã trả',
+      width: 68,
+      numeric: true,
+      render: (row) => (row.kind === 'intake' ? '—' : row.row.returnedQty),
+    },
+    {
+      key: 'intakeOrderCode',
+      header: 'Mã đơn hàng',
+      width: 100,
+      ellipsis: true,
+      render: (row) => (row.kind === 'intake' ? row.row.code : '—'),
+    },
     {
       key: 'trackingCode',
-      header: 'Mã theo dõi',
+      header: 'Mã sản phẩm',
       width: 96,
       ellipsis: true,
-      render: (row) => row.trackingCode ?? '—',
+      render: (row) => row.row.trackingCode?.trim() || '—',
     },
-    { key: 'closedBy', header: 'Người chốt', width: 120, ellipsis: true, sortable: true },
+    {
+      key: 'closedBy',
+      header: 'Người chốt',
+      width: 120,
+      ellipsis: true,
+      sortable: true,
+      render: (row) => (row.kind === 'intake' ? row.row.placedBy : row.row.closedBy),
+    },
     {
       key: 'description',
       header: 'Mô tả / Yêu cầu sản phẩm',
       width: 260,
       ellipsis: true,
+      render: (row) => row.row.description || '—',
       renderSub: (sub) => sub.note,
     },
     {
-      key: 'size',
-      header: 'Kích thước',
-      width: 120,
-      ellipsis: true,
-      render: (row) => row.size ?? '—',
+      key: 'detailImages',
+      header: 'Ảnh chi tiết',
+      width: 108,
+      render: (row) =>
+        row.kind === 'intake' ? (
+          <IntakeImageThumbs
+            label="Ảnh chi tiết"
+            images={intakeDetailImages(row.row.images)}
+          />
+        ) : (
+          '—'
+        ),
+    },
+    {
+      key: 'stageImages',
+      header: 'Ảnh công đoạn',
+      width: 108,
+      render: (row) => {
+        if (row.kind !== 'intake') return '—'
+        const stage = intakeProductionStageColumn(row.row)
+        return (
+          <IntakeImageThumbs label={stage.label} images={stage.images} />
+        )
+      },
     },
     {
       key: 'receivedDate',
@@ -573,36 +1339,69 @@ function orderColumns(
       width: 148,
       sortable: true,
       filter: filters.receivedDate,
-      render: (row) => formatStockedDate(row.receivedDate),
+      render: (row) =>
+        row.kind === 'intake' ? formatDateShort(row.row.createdDate) : formatStockedDate(row.row.receivedDate),
     },
     {
       key: 'dueDate',
       header: 'Ngày cần trả',
       width: 156,
       filter: filters.dueDate,
-      render: (row) => <DeadlineCell row={row} />,
+      render: (row) =>
+        row.kind === 'intake' ? (
+          row.row.dueDate ? formatDateShort(row.row.dueDate) : '—'
+        ) : (
+          <DeadlineCell row={row.row} />
+        ),
     },
     {
       key: 'actions',
       header: 'Hành động',
-      width: 120,
+      width: 152,
       align: 'center',
       card: 'actions',
       cellSx: { overflow: 'visible' },
       render: (row) => (
         <Box onClick={(event) => event.stopPropagation()}>
-          <RowActions
-            onView={() => actions.onView(row)}
-            onEdit={() => actions.onEdit(row)}
-            editLoading={actions.loadingEditId === row.id}
-            onDelete={() => actions.onDelete(row)}
-            deleteDisabled={!actions.isAdmin || !(row.status === 'NEW' || (row.source === 'BTP' && row.status === 'FILING'))}
-            titles={{
-              view: 'Xem chi tiết',
-              edit: 'Chỉnh sửa',
-              delete: deleteHint(row, actions.isAdmin),
-            }}
-          />
+          {row.kind === 'intake' ? (
+            <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+              {renderIntakeWorkflowAction(row.row, actions)}
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => actions.onIntakeView(row.row)}
+                sx={{
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  width: 112,
+                  px: 0.5,
+                  py: 0.25,
+                  fontSize: '0.75rem',
+                  lineHeight: 1.35,
+                  whiteSpace: 'normal',
+                  textTransform: 'none',
+                }}
+              >
+                Xem chi tiết
+              </Button>
+            </Stack>
+          ) : (
+            <RowActions
+              onView={() => actions.onView(row.row)}
+              onEdit={() => actions.onEdit(row.row)}
+              editLoading={actions.loadingEditId === row.row.id}
+              onDelete={() => actions.onDelete(row.row)}
+              deleteDisabled={
+                !actions.isAdmin ||
+                !(row.row.status === 'NEW' || (row.row.source === 'BTP' && row.row.status === 'FILING'))
+              }
+              titles={{
+                view: 'Xem chi tiết',
+                edit: 'Chỉnh sửa',
+                delete: deleteHint(row.row, actions.isAdmin),
+              }}
+            />
+          )}
         </Box>
       ),
       renderSub: (sub) => (
@@ -616,6 +1415,22 @@ function orderColumns(
       ),
     },
   ]
+}
+
+function sliceMergedPage(
+  page: number,
+  pageSize: number,
+  pendingItems: IntakeOrder[],
+  pendingTotal: number,
+): { pendingOnPage: IntakeOrder[]; prodStart: number; prodTake: number } {
+  const slotStart = (page - 1) * pageSize
+  const slotEnd = page * pageSize
+  const pendingStart = Math.min(slotStart, pendingTotal)
+  const pendingEnd = Math.min(slotEnd, pendingTotal)
+  const pendingOnPage = pendingItems.slice(pendingStart, pendingEnd)
+  const prodTake = pageSize - pendingOnPage.length
+  const prodStart = Math.max(0, slotStart - pendingTotal)
+  return { pendingOnPage, prodStart, prodTake }
 }
 
 /**
@@ -685,6 +1500,111 @@ const DEADLINE_TONE = {
   today: { bg: '#ffebee', fg: '#b71c1c', border: '#e57373' },
   soon: { bg: '#fff4d6', fg: '#8a6100', border: '#f0c36d' },
 } as const
+
+function intakePendingColumns({
+  onApprove,
+  onReject,
+  search,
+  requestType,
+}: {
+  onApprove: (row: IntakeOrder) => void
+  onReject: (row: IntakeOrder) => void
+  search: ReactNode
+  requestType: {
+    valueId: string
+    options: Array<{ id: string; name: string }>
+    onChange: (id: string) => void
+  }
+}): Column<IntakeOrder>[] {
+  return [
+    {
+      key: 'sxCode',
+      header: 'Mã SX',
+      width: 92,
+      cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
+      filter: search,
+      render: (row) => row.sxCode,
+    },
+    {
+      key: 'createdDate',
+      header: 'Ngày tạo',
+      width: 110,
+      render: (row) => formatDateShort(row.createdDate),
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 130,
+      render: (row) => <IntakeStatusChip status={row.status} />,
+    },
+    {
+      key: 'code',
+      header: 'Mã đơn hàng',
+      width: 100,
+      cellSx: { fontWeight: 700 },
+      render: (row) => row.code,
+    },
+    {
+      key: 'productName',
+      header: 'Tên sản phẩm',
+      width: 160,
+      ellipsis: true,
+      render: (row) => row.productName?.trim() || '—',
+    },
+    {
+      key: 'requestType',
+      header: 'Yêu cầu làm hàng',
+      width: 140,
+      filter: <ColumnHeaderFilter {...requestType} />,
+      render: (row) => <RequestTypeChip type={row.requestType} />,
+    },
+    { key: 'qty', header: 'SL lên đơn', width: 100, align: 'right', render: (row) => row.qty },
+    {
+      key: 'dueDate',
+      header: 'Thời gian trả hàng',
+      width: 130,
+      render: (row) => (row.dueDate ? formatDateShort(row.dueDate) : '—'),
+    },
+    {
+      key: 'trackingCode',
+      header: 'Mã sản phẩm',
+      width: 120,
+      ellipsis: true,
+      render: (row) => row.trackingCode?.trim() || '—',
+    },
+    {
+      key: 'placedBy',
+      header: 'Người đặt đơn',
+      width: 120,
+      ellipsis: true,
+      render: (row) => row.placedBy,
+    },
+    {
+      key: 'description',
+      header: 'Mô tả / Yêu cầu',
+      width: 220,
+      ellipsis: true,
+      render: (row) => row.description || '—',
+    },
+    {
+      key: 'actions',
+      header: 'Hành động',
+      width: 180,
+      align: 'center',
+      card: 'actions',
+      render: (row) => (
+        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
+          <Button size="small" variant="contained" onClick={() => onApprove(row)}>
+            Duyệt
+          </Button>
+          <Button size="small" variant="outlined" color="error" onClick={() => onReject(row)}>
+            Từ chối
+          </Button>
+        </Stack>
+      ),
+    },
+  ]
+}
 
 function DeadlineCell({ row }: { row: ProductionOrderRow }) {
   const warning = deadlineWarning(row.dueDate, row.status)

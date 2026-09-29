@@ -29,6 +29,7 @@ import WarehouseIcon from '@mui/icons-material/Warehouse'
 import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import NoteAddIcon from '@mui/icons-material/NoteAdd'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
@@ -327,8 +328,9 @@ function DrawerNav({
         ) : null}
         {workerOnly ? null : (
           <>
-            <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
             <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
+            <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
           </>
         )}
         {isWorker ? (
