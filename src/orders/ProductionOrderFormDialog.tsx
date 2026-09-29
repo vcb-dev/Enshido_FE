@@ -197,7 +197,7 @@ export function ProductionOrderFormDialog({
   open: boolean
   /** `null` = lên đơn mới. */
   order: ProductionOrderDetail | null
-  /** Loại đơn theo tab Đơn mới / Đơn BTP — chỉ dùng khi lên đơn. */
+  /** Mặc định loại đơn khi lên đơn mới (form vẫn đổi được trước khi lưu). */
   initialSource?: ProductionSource
   lookups: ProductionOrderLookups | undefined
   saving: boolean
@@ -469,12 +469,12 @@ export function ProductionOrderFormDialog({
       onExited={onExited ?? (() => undefined)}
       editLog={order ? { entityType: 'production_order', entityId: order.id } : undefined}
     >
-      {order ? (
+      {!sourceLocked ? (
         <FormSelect<FormValues>
           name="source"
           label="Loại đơn"
           required
-          disabled={sourceLocked || Boolean(order.castingSentDate && order.source === 'NVL')}
+          disabled={Boolean(order?.castingSentDate && order.source === 'NVL')}
           options={SOURCES.map((item) => ({ value: item, label: SOURCE_META[item].label }))}
           helperText={sourceLocked ? 'Đơn đã giao khâu, không đổi loại đơn được' : SOURCE_HINT[source]}
         />
@@ -482,7 +482,7 @@ export function ProductionOrderFormDialog({
 
       {isNvl ? (
         <>
-          <Box sx={{ ...SECTION_SX, mt: order ? undefined : 1 }}>
+          <Box sx={{ ...SECTION_SX, mt: !sourceLocked ? undefined : 1 }}>
             <FormTextField<FormValues>
               name="model3dCode"
               label="Mã sản xuất"

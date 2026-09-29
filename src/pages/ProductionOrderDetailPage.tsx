@@ -1321,7 +1321,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
     ['Người chốt', order.closedBy],
     ['Khách hàng', order.customerName],
     ['Người được hỏi', order.askedUserName],
-    ['Mã theo dõi đơn', order.trackingCode],
+    ['Mã sản phẩm', order.trackingCode],
     ['Công nợ', order.debtStatus],
   ]
 

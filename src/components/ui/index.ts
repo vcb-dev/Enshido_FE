@@ -68,6 +68,9 @@ export type { FormMoneyFieldProps } from './form/FormMoneyField'
 export { FormQtyField } from './form/FormQtyField'
 export type { FormQtyFieldProps } from './form/FormQtyField'
 
+export { QtyTextField } from './QtyTextField'
+export type { QtyTextFieldProps } from './QtyTextField'
+
 export { REQUIRED_MESSAGE, withRequiredRule } from './form/field'
 export type { FieldRules, FormFieldBaseProps } from './form/field'
 
