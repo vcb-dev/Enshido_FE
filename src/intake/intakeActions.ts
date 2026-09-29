@@ -5,7 +5,7 @@ export function intakeNeedsModel3d(row: IntakeOrder) {
   return row.status === 'APPROVED' && row.hasMold === false
 }
 
-/** Chờ SX · Đã có 3D — nhập cân nặng + ảnh (in sáp hoặc có khuôn). */
+/** Chờ SX · Đã có 3D / khuôn (C) — nhập cân nặng + ảnh (in sáp hoặc bơm sáp). */
 export function intakeNeedsProductSpecs(row: IntakeOrder) {
   return row.status === 'READY_FOR_PRODUCTION'
 }

@@ -1,3 +1,4 @@
+import { confirmWeights, ratioWarning } from './weightSanity'
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Typography } from '@mui/material'
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
@@ -291,6 +292,9 @@ export function HandoverDialog({
   const issuesStock = stageIssuesStock(stageCode)
   const issuedMetal = issuesStock ? handoverMetalWeight(materialLines ?? []) : 0
   const silverIn = (Number(carried) || 0) + issuedMetal
+  /** Mốc TL giao tối đa do BE tính (cùng công thức với chỗ chặn ở BE). */
+  const limitText = ticket ? ticket.handoverSilverLimit : (entry?.handedSilverLimit ?? null)
+  const silverLimit = limitText != null ? Number(limitText) : null
   /** Đã qua khâu Vào đá: giao cả cụm BTP (bạc + đá), không còn là bạc trơn. */
   const btpWeight =
     !stoneStage &&
@@ -403,27 +407,49 @@ export function HandoverDialog({
                 : 'Trọng lượng giao — bạc (g)'
           }
           required={!confirming || !firstStage}
-          helperText={
+          helperText={[
             confirming && firstStage
               ? 'Khâu đầu: để trống nếu hàng lấy từ NVL xuất bên dưới'
               : confirming
                 ? 'Tự điền theo số KCS nhận lại khâu trước'
-                : undefined
-          }
+                : '',
+            silverLimit != null ? `tối đa ${formatQty(String(silverLimit))} g` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined}
           rules={{
-            validate: (value) =>
-              !confirming ||
-              !firstStage ||
-              Boolean(value) ||
-              issuedMetal > 0 ||
-              'Khâu đầu: chọn NVL bạc xuất cho thợ hoặc nhập TL giao',
+            validate: (value) => {
+              // Không giao vượt hàng đang có (KCS nhận lại khâu trước / phôi cắt cây) — khớp BE.
+              if (silverLimit != null && value !== '' && Number(value) > silverLimit) {
+                return `Không vượt số hàng đang có (${formatQty(String(silverLimit))} g)`
+              }
+              return (
+                !confirming ||
+                !firstStage ||
+                Boolean(value) ||
+                issuedMetal > 0 ||
+                'Khâu đầu: chọn NVL bạc xuất cho thợ hoặc nhập TL giao'
+              )
+            },
           }}
         />
       </FormRow>
 
       {confirming ? (
         <>
-          <HandoverMaterialsField form={form} stage={stageCode} />
+          <HandoverMaterialsField
+            form={form}
+            stage={stageCode}
+            blank={
+              order.cut?.btpMaterialId && order.cut.leftQty != null && order.cut.leftWeight != null
+                ? {
+                    materialId: order.cut.btpMaterialId,
+                    leftQty: Number(order.cut.leftQty),
+                    leftWeight: Number(order.cut.leftWeight),
+                  }
+                : null
+            }
+          />
           <Typography variant="body2" sx={{ mt: 1 }}>
             Bạc vào khâu: <b>{formatQty(String(round4(silverIn)))}</b> g
             {issuedMetal ? ` (hàng ${formatQty(String(Number(carried) || 0))} g + xuất ${formatQty(String(round4(issuedMetal)))} g)` : ''}
@@ -580,10 +606,16 @@ export function KcsReturnDialog({
    */
   const stoneStage = entry?.stage === 'STONE_SETTING'
   // Đá phát cho thợ = đá giao lúc nhận việc + đá xuất thêm theo yêu cầu (có cân).
-  const stone = stoneStage
+  const stonesIn = stoneStage ? (entry?.handedStoneCount ?? 0) + (entry?.issuedStoneCount ?? 0) : 0
+  const stoneHandedWeight = stoneStage
     ? Number(entry?.handedStoneWeight ?? 0) + Number(entry?.issuedStoneWeight ?? 0)
     : 0
-  const stonesIn = stoneStage ? (entry?.handedStoneCount ?? 0) + (entry?.issuedStoneCount ?? 0) : 0
+  const returnedStones = useWatch({ control: form.control, name: 'returnedStoneCount' })
+  // Chỉ đá đã gắn nằm trong cụm KCS cân — chia TL đá phát theo số viên gắn (khớp BE).
+  const stone =
+    stonesIn > 0
+      ? round4((stoneHandedWeight * Math.max(0, stonesIn - (Number(returnedStones) || 0))) / stonesIn)
+      : stoneHandedWeight
   /** Bạc vào khâu = TL giao + bạc thợ xin xuất thêm — mốc tính hao hụt, khớp BE. */
   const silverInText = entry?.silverIn ?? entry?.handedSilverWeight ?? null
   const issuedMetal = Number(entry?.issuedMetalWeight ?? 0)
@@ -640,6 +672,22 @@ export function KcsReturnDialog({
   const title = `KCS nhận lại — ${entry ? STAGE_LABEL[entry.stage] : ''}`
 
   function submit(values: ReturnValues) {
+    const back =
+      Number(values.returnedSilverWeight || 0) +
+      Number(values.btpRecoveredWeight || 0) +
+      Number(values.silverRecoveredWeight || 0)
+    if (
+      silverLimit != null &&
+      !confirmWeights([
+        ratioWarning(back, 'Nhận lại + thu hồi', silverLimit, 'bạc vào khâu', {
+          min: 0.5,
+          max: 1,
+          note: 'hao hụt khâu trên 50%',
+        }),
+      ])
+    ) {
+      return
+    }
     onSave({
       returnedAt: fromDateTimeInput(values.returnedAt) ?? new Date().toISOString(),
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,

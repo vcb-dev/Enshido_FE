@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import {
   issueMaterialRequestApi,
   listMaterialRequestsApi,
@@ -49,6 +50,8 @@ const TABS: Array<{ value: MaterialRequestStatus; label: string }> = [
 export function MaterialRequestsPage() {
   const { user } = useAuth()
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
+  // Xuất / từ chối là việc của thủ kho (khớp BE).
+  const isKeeper = can(user, Permission.WAREHOUSE_KEEPER)
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<MaterialRequestStatus>('PENDING')
   const [issuing, setIssuing] = useState<MaterialRequestQueueItem | null>(null)
@@ -181,7 +184,11 @@ export function MaterialRequestsPage() {
                       </TableCell>
                       <TableCell>
                         {status === 'PENDING' ? (
-                          own && !isAdmin ? (
+                          !isKeeper ? (
+                            <Typography variant="caption" color="text.secondary">
+                              Chờ thủ kho xuất
+                            </Typography>
+                          ) : own && !isAdmin ? (
                             <Typography variant="caption" color="text.secondary">
                               Yêu cầu của chính bạn — nhờ người khác xuất
                             </Typography>

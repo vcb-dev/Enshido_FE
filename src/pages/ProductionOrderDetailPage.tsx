@@ -42,6 +42,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import {
   changeProductionStatusApi,
   cancelOrderPendingApi,
@@ -289,11 +290,17 @@ export function ProductionOrderDetailPage() {
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
-  const canPrint = isBtp || Boolean(order.castingSentDate)
-  const castingReady = isBtp || Boolean(order.castingSentDate && order.castingReturnedDate)
+  // Đơn NVL vào Nguội khi đã cắt cây chia phôi; đơn cũ trước khi có phiếu cắt đi theo ngày Đúc.
+  const canPrint = isBtp || Boolean(order.castingSentDate || order.cutAt)
+  const castingReady = isBtp || Boolean(order.cutAt || (order.castingSentDate && order.castingReturnedDate))
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
-  // Người lên đơn và admin được chia phiếu con.
-  const canManageTickets = isAdmin || (user != null && order.createdByUserId === user.id)
+  // Người lên đơn, thủ kho và admin được chia phiếu con (khớp `canManage` phía BE).
+  const canManageTickets =
+    isAdmin ||
+    can(user, Permission.WAREHOUSE_KEEPER) ||
+    (user != null && order.createdByUserId === user.id)
+  // KCS nhận lại hàng và chốt Lỗi / Hoàn thiện.
+  const canQc = can(user, Permission.PRODUCTION_QC)
   const canDelete =
     isAdmin &&
     stages.length === 0 &&
@@ -402,10 +409,12 @@ export function ProductionOrderDetailPage() {
       </Menu>
 
       {!canPrint ? (
-        <Alert severity="info">Đơn chưa báo Đúc — báo Đúc thì mới in được phiếu và giao khâu cho thợ.</Alert>
+        <Alert severity="info">
+          Đơn chưa cắt cây chia phôi — thủ kho cắt cây ở màn Cắt cây thông thì mới in được phiếu và giao khâu cho thợ.
+        </Alert>
       ) : order.lastPrintedAt == null ? (
         <Alert severity="info">
-          {isBtp ? 'Đơn BTP chưa in phiếu cho thợ.' : 'Đơn đã báo Đúc nhưng chưa in phiếu cho thợ.'}
+          {isBtp ? 'Đơn BTP chưa in phiếu cho thợ.' : 'Đơn đã sẵn sàng vào Nguội nhưng chưa in phiếu cho thợ.'}
         </Alert>
       ) : ticketStale ? (
         <Alert severity="warning">
@@ -511,9 +520,15 @@ export function ProductionOrderDetailPage() {
                           Xác nhận giao
                         </Button>
                       ) : parentWork?.state === 'SUBMITTED' && parentOpenEntry ? (
-                        <Button size="small" variant="contained" onClick={() => setReturning(parentOpenEntry)}>
-                          KCS nhận lại
-                        </Button>
+                        canQc ? (
+                          <Button size="small" variant="contained" onClick={() => setReturning(parentOpenEntry)}>
+                            KCS nhận lại
+                          </Button>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                            Chờ KCS nhận lại
+                          </Typography>
+                        )
                       ) : parentWork?.state === 'WORKING' ? (
                         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
                           Chờ thợ báo xong
@@ -529,7 +544,7 @@ export function ProductionOrderDetailPage() {
                         </Button>
                       ) : parentOpenableStages.length > 0 && !order.finishedGoods ? (
                         <Tooltip
-                          title={castingReady ? '' : 'Ghi đủ ngày báo Đúc và ngày Đúc về trước khi giao khâu'}
+                          title={castingReady ? '' : 'Cắt cây chia phôi cho đơn trước khi giao khâu'}
                         >
                           <span>
                             <Button
@@ -598,7 +613,7 @@ export function ProductionOrderDetailPage() {
                     order={order}
                     outcomeActions={{
                       DEFECT:
-                        !order.finishedGoods && order.status !== 'DELIVERED' ? (
+                        canQc && !order.finishedGoods && order.status !== 'DELIVERED' ? (
                           <Button
                             size="small"
                             variant="outlined"
@@ -622,7 +637,7 @@ export function ProductionOrderDetailPage() {
                             Gỡ hoàn thiện
                           </Button>
                         ) : null
-                      ) : parentWork?.state === 'IDLE' && order.status !== 'NEW' && order.status !== 'REDO_3D' ? (
+                      ) : canQc && parentWork?.state === 'IDLE' && order.status !== 'NEW' && order.status !== 'REDO_3D' ? (
                         <Tooltip
                           title={
                             parentLastStageDone
@@ -657,7 +672,7 @@ export function ProductionOrderDetailPage() {
                         ticketNo={null}
                         materials={order.workTicket.materials}
                         userId={user?.id ?? null}
-                        canHandle
+                        canHandle={can(user, Permission.WAREHOUSE_KEEPER)}
                         isAdmin={isAdmin}
                       />
                     </Box>
@@ -728,7 +743,7 @@ export function ProductionOrderDetailPage() {
                         ticketNo={ticket.no}
                         materials={ticket.materials}
                         userId={user?.id ?? null}
-                        canHandle
+                        canHandle={can(user, Permission.WAREHOUSE_KEEPER)}
                         isAdmin={isAdmin}
                       />
                     </Box>
@@ -809,6 +824,22 @@ export function ProductionOrderDetailPage() {
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
                 <Field label="Ngày báo Đúc" value={formatStockedDate(order.castingSentDate)} />
                 <Field label="Ngày Đúc về" value={formatStockedDate(order.castingReturnedDate)} />
+                <Field
+                  label="Cắt cây chia phôi"
+                  value={
+                    order.cut ? (
+                      <Link component={RouterLink} to="/casting-cuts">
+                        {order.cut.code} · {formatDateTime(order.cut.cutAt)}
+                      </Link>
+                    ) : (
+                      'Chưa cắt'
+                    )
+                  }
+                />
+                <Field
+                  label="Phôi nhận"
+                  value={order.cut ? `${order.cut.qty} sp · ${formatQty(order.cut.weight)} g` : '—'}
+                />
               </Box>
             </Section>
           )}

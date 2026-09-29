@@ -7,6 +7,8 @@ export const ACTION_LABEL: Record<string, string> = {
   ORDER_DELETE: 'Xoá đơn',
   ORDER_STATUS: 'Đổi trạng thái',
   ORDER_CASTING: 'Báo Đúc / Đúc về',
+  ORDER_CUT: 'Cắt cây chia phôi',
+  ORDER_UNDO_CUT: 'Xoá phiếu cắt cây',
   ORDER_FINISH: 'Hoàn thiện đơn',
   ORDER_UNDO_FINISH: 'Gỡ hoàn thiện',
   ORDER_PRINT: 'In phiếu mẹ',
@@ -78,6 +80,9 @@ const FIELD_LABEL: Record<string, string> = {
   unit: 'Đơn vị',
   castingSentDate: 'Ngày báo Đúc',
   castingReturnedDate: 'Ngày Đúc về',
+  cutCode: 'Phiếu cắt',
+  cutAt: 'Giờ cắt',
+  weight: 'TL (g)',
   finishedAt: 'Giờ hoàn thiện',
 }
 

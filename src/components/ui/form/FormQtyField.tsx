@@ -1,6 +1,13 @@
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
-import { formatQtyInput, parseQtyInput, typedDecimalAsComma } from '../../../api/inventory'
+import {
+  formatQtyInput,
+  gramReadout,
+  isGramLabel,
+  parseQtyInput,
+  pasteIntoQty,
+  typedDecimalAsComma,
+} from '../../../api/inventory'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
 import { withRequiredRule } from './field'
@@ -30,12 +37,21 @@ export function FormQtyField<T extends FieldValues>({
     rules: withRequiredRule(rules, required),
   })
   const { ref, value, onChange, ...rest } = field
+  const readout = isGramLabel(props.label) ? gramReadout(String(value ?? '')) : ''
+  const { helperText, ...inputProps } = props
 
   return (
     <TextInput
       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-      {...props}
+      {...inputProps}
       {...rest}
+      helperText={readout ? (helperText ? <>{helperText} · {readout}</> : readout) : helperText}
+      onPaste={(event) => {
+        event.preventDefault()
+        const input = (event.target as HTMLInputElement)
+        const next = pasteIntoQty(input, event.clipboardData.getData('text'))
+        onChange(transform ? transform(next) : next)
+      }}
       value={formatQtyInput(String(value ?? ''))}
       onChange={(event) => {
         const next = parseQtyInput(

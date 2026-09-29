@@ -64,19 +64,22 @@ export function IntakeProductSpecsDialog({
 
   return (
     <Dialog open={Boolean(order)} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Cập nhật số liệu sản phẩm — {order?.code ?? ''}</DialogTitle>
+      <DialogTitle>
+        {order?.hasMold ? 'Bơm sáp & cấy cây thông' : 'In sáp'} — {order?.code ?? ''}
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
             {order?.hasMold ? (
               <>
-                Đơn đã có khuôn — nhập cân nặng và ảnh sản phẩm. Khi lưu, đơn chuyển sang{' '}
-                <strong>Chờ thủ kho xác nhận</strong>.
+                Đơn có khuôn: tìm khuôn theo mã sản phẩm, bơm sáp, cấy cây thông rồi chụp ảnh cân nặng. Lưu xong
+                mang cây sáp cho thủ kho <strong>xác nhận và cân kiểm</strong>.
               </>
             ) : (
               <>
-                Nhập cân nặng và ảnh sau in sáp. Khi lưu, đơn chuyển sang{' '}
-                <strong>Chờ sản xuất · Đã in sáp</strong>.
+                Chụp ảnh cân nặng sáp vừa in và điền lên hệ thống. Lưu xong đơn sang{' '}
+                <strong>Chờ SX · Đã in sáp (D)</strong>. In nhiều đơn một khay thì dùng nút{' '}
+                <strong>In sáp nhiều đơn</strong>.
               </>
             )}
           </Typography>

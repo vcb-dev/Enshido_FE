@@ -23,6 +23,8 @@ import PrintIcon from '@mui/icons-material/Print'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { Link as RouterLink } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import {
   cancelSubTicketPendingApi,
   clearSubTicketsApi,
@@ -85,6 +87,8 @@ export function SubTicketsPanel({
   onUndoReturn: (entry: StageEntry) => void
 }) {
   const code = order.code
+  const { user } = useAuth()
+  const canQc = can(user, Permission.PRODUCTION_QC)
   const [formOpen, setFormOpen] = useState(false)
   const [splitOpen, setSplitOpen] = useState(false)
   const [editing, setEditing] = useState<SubTicket | null>(null)
@@ -365,9 +369,15 @@ export function SubTicketsPanel({
                                   còn {openEntry.pendingRequestCount} yêu cầu xuất NVL chờ xử lý
                                 </Typography>
                               ) : ticket.state === 'SUBMITTED' ? (
-                                <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
-                                  KCS nhận lại
-                                </Button>
+                                canQc ? (
+                                  <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
+                                    KCS nhận lại
+                                  </Button>
+                                ) : (
+                                  <Typography variant="caption" color="text.secondary">
+                                    chờ KCS nhận lại
+                                  </Typography>
+                                )
                               ) : (
                                 <Typography variant="caption" color="text.secondary">
                                   chờ thợ báo xong

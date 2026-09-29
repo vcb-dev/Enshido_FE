@@ -25,6 +25,8 @@ import {
 import { useAuth } from '../auth/AuthContext'
 import { ALL_PERMISSIONS, ROLE_LABELS, type PermissionCode } from '../auth/permissions'
 import { SCREEN_GROUPS } from '../auth/screens'
+import type { StageCode } from '../api/productionOrders'
+import { STAGE_LABEL, STAGES } from '../orders/catalog'
 import {
   DataTable,
   EditReasonBlock,
@@ -96,6 +98,12 @@ export function UsersPage() {
         render: (row) => ROLE_LABELS[row.roleCode] ?? row.roleCode,
       },
       { key: 'department', header: 'Bộ phận', sortable: true },
+      {
+        key: 'workerStages',
+        header: 'Khâu thợ',
+        render: (row) =>
+          row.workerStages?.length ? row.workerStages.map((stage) => STAGE_LABEL[stage]).join(', ') : '—',
+      },
       {
         key: 'isActive',
         header: 'Trạng thái',
@@ -217,11 +225,15 @@ function CreateUserDialog({
   // Admin xem hết; thợ đã có quyền kèm role nên không cần tick màn hình nào.
   const roleCode = useWatch({ control: form.control, name: 'roleCode' })
   const presetRole = roleCode === 'ADMIN' || roleCode === 'WORKER'
+  const [stages, setStages] = useState<StageCode[]>([])
+  const [stagesError, setStagesError] = useState('')
 
   useEffect(() => {
     if (open) {
       form.reset(EMPTY_USER)
       setScreens([])
+      setStages([])
+      setStagesError('')
     }
   }, [open, form])
 
@@ -237,11 +249,14 @@ function CreateUserDialog({
         roleCode: values.roleCode,
         department: values.department.trim() || undefined,
         allowedScreens: presetRole ? [] : screens,
+        workerStages: values.roleCode === 'WORKER' ? stages : [],
       }),
     onMutate: (values) => {
       toast.success('Đã tạo nhân sự')
-      if (values.keepOpen) form.reset({ ...EMPTY_USER, keepOpen: true })
-      else onClose()
+      if (values.keepOpen) {
+        form.reset({ ...EMPTY_USER, keepOpen: true })
+        setStages([])
+      } else onClose()
     },
     onSuccess: () => onCreated(),
     onError: (error: Error) => toast.error(error.message),
@@ -249,7 +264,16 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <Form form={form} onSubmit={(values) => mutation.mutate(values)}>
+      <Form
+        form={form}
+        onSubmit={(values) => {
+          if (values.roleCode === 'WORKER' && stages.length === 0) {
+            setStagesError('Chọn ít nhất một khâu thợ được nhận')
+            return
+          }
+          mutation.mutate(values)
+        }}
+      >
         <DialogTitle>Thêm nhân sự</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
           <FormTextField<UserFormValues>
@@ -289,10 +313,21 @@ function CreateUserDialog({
                 ? 'Tài khoản Admin luôn xem được mọi màn hình.'
                 : 'Tài khoản Thợ chỉ dùng màn Phiếu của tôi — quyền đã kèm theo vai trò.'}
             </Typography>
-          ) : (
+          ) : null}
+          {roleCode === 'WORKER' ? (
+            <WorkerStagesField
+              value={stages}
+              error={stagesError}
+              onChange={(next) => {
+                setStages(next)
+                if (next.length) setStagesError('')
+              }}
+            />
+          ) : null}
+          {presetRole ? null : (
             <>
               <Typography variant="body2" color="text.secondary">
-                Tích màn hình được xem. Bỏ tích thì người này không vào được màn đó.
+                Tích màn hình được xem và việc được làm. Bỏ tích thì người này không vào được màn / không làm được việc đó.
               </Typography>
               {SCREEN_GROUPS.map((group) => (
                 <Stack key={group.label} spacing={0.25}>
@@ -353,9 +388,14 @@ function EditUserDialog({
   const [screens, setScreens] = useState<PermissionCode[]>([])
   const [editReason, setEditReason] = useState('')
   const [reasonError, setReasonError] = useState('')
+  const [stages, setStages] = useState<StageCode[]>([])
+  const [stagesError, setStagesError] = useState('')
+  const roleCode = useWatch({ control: form.control, name: 'roleCode' })
 
   useEffect(() => {
     if (!user) return
+    setStages(user.workerStages ?? [])
+    setStagesError('')
     form.reset({
       fullName: user.fullName,
       username: user.username,
@@ -376,6 +416,7 @@ function EditUserDialog({
         department: values.department.trim(),
         password: values.password.trim() || undefined,
         allowedScreens: isAdmin ? undefined : screens,
+        workerStages: values.roleCode === 'WORKER' ? stages : [],
         editReason: editReason.trim(),
       }),
     onMutate: () => {
@@ -397,6 +438,10 @@ function EditUserDialog({
       <Form
         form={form}
         onSubmit={(values) => {
+          if (values.roleCode === 'WORKER' && stages.length === 0) {
+            setStagesError('Chọn ít nhất một khâu thợ được nhận')
+            return
+          }
           if (!editReason.trim()) {
             setReasonError('Nhập lý do chỉnh sửa')
             return
@@ -433,6 +478,16 @@ function EditUserDialog({
             />
             <FormTextField<EditUserFormValues> name="department" label="Bộ phận" />
           </FormRow>
+          {roleCode === 'WORKER' ? (
+            <WorkerStagesField
+              value={stages}
+              error={stagesError}
+              onChange={(next) => {
+                setStages(next)
+                if (next.length) setStagesError('')
+              }}
+            />
+          ) : null}
 
           <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
             Màn hình được xem
@@ -443,7 +498,7 @@ function EditUserDialog({
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              Tích màn hình được xem. Bỏ tích thì người này không vào được màn đó.
+              Tích màn hình được xem và việc được làm. Bỏ tích thì người này không vào được màn / không làm được việc đó.
             </Typography>
           )}
           {SCREEN_GROUPS.map((group) => (
@@ -533,5 +588,46 @@ function LockUserDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  )
+}
+
+/** Khâu thợ được tự nhận trên phiếu — mỗi công đoạn một nhóm thợ riêng, một người làm được nhiều khâu. */
+function WorkerStagesField({
+  value,
+  error,
+  onChange,
+}: {
+  value: StageCode[]
+  error?: string
+  onChange: (stages: StageCode[]) => void
+}) {
+  return (
+    <Stack spacing={0.25}>
+      <Typography variant="subtitle2">Khâu thợ được nhận *</Typography>
+      <FormGroup row>
+        {STAGES.map((stage) => (
+          <FormControlLabel
+            key={stage}
+            control={
+              <Checkbox
+                size="small"
+                checked={value.includes(stage)}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? STAGES.filter((item) => item === stage || value.includes(item))
+                      : value.filter((item) => item !== stage),
+                  )
+                }
+              />
+            }
+            label={STAGE_LABEL[stage]}
+          />
+        ))}
+      </FormGroup>
+      <Typography variant="caption" color={error ? 'error' : 'text.secondary'}>
+        {error || 'Thợ chỉ thấy và nhận được phiếu đang mở ở các khâu đã tích.'}
+      </Typography>
+    </Stack>
   )
 }

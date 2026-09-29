@@ -74,7 +74,9 @@ export function ProductionTicketPrintPage() {
   const subTicket = ticketNo != null ? detail.data?.subTickets.find((ticket) => ticket.no === ticketNo) : undefined
   const missingTicket = ticketNo != null && detail.data != null && !subTicket
   // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
-  const canPrint = !missingTicket && (detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate))
+  const canPrint =
+    !missingTicket &&
+    (detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate || detail.data?.cutAt))
 
   async function print() {
     window.print()
@@ -183,7 +185,7 @@ export function ProductionTicketPrintPage() {
 
       {canPrint ? null : (
         <Alert className="ticket-toolbar" severity="warning" sx={{ maxWidth: 720, mx: 'auto', mb: 1.5 }}>
-          Đơn {order.code} chưa báo Đúc — chỉ in phiếu cho thợ từ bước Đúc. Báo Đúc trên trang chi tiết đơn trước.
+          Đơn {order.code} chưa báo Đúc hoặc cắt cây — chỉ in phiếu cho thợ từ bước Đúc.
         </Alert>
       )}
 

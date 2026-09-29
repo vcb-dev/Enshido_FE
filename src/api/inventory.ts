@@ -172,6 +172,40 @@ export function typedDecimalAsComma(input: HTMLInputElement | HTMLTextAreaElemen
   return `${before},${after}`
 }
 
+/**
+ * Chuỗi dán vào ô số (Ctrl+V, tự điền): chỉ có đúng một dấu chấm và không có dấu phẩy thì
+ * chấm là thập phân ("12.5", "100.000" → 100) — giống lúc gõ phím ".". Có dấu phẩy, hoặc
+ * nhiều dấu chấm ("1.250.000"), thì giữ cách hiểu vi-VN (chấm ngăn nghìn).
+ */
+export function pastedQtyText(text: string) {
+  const compact = text.trim().replace(/\s/g, '')
+  if (compact.includes(',')) return compact
+  const dots = compact.split('.').length - 1
+  return dots === 1 ? compact.replace('.', ',') : compact
+}
+
+/** Dán vào ô số tại vị trí con trỏ; trả chuỗi số chuẩn mới cho state của ô. */
+export function pasteIntoQty(input: HTMLInputElement | HTMLTextAreaElement, text: string) {
+  const start = input.selectionStart ?? input.value.length
+  const end = input.selectionEnd ?? start
+  return parseQtyInput(input.value.slice(0, start) + pastedQtyText(text) + input.value.slice(end))
+}
+
+/** Ô nhập gram: nhận biết qua nhãn có "(g)" để hiện số quy đổi kg. */
+export function isGramLabel(label: unknown) {
+  return typeof label === 'string' && /\(g\)/.test(label)
+}
+
+/**
+ * Đọc lại số đã hiểu dưới ô gram: ≥ 1.000 g thì kèm kg để thấy ngay khi nhầm chấm/phẩy
+ * ("100.000" là một trăm nghìn gam = 100 kg, không phải 100 g).
+ */
+export function gramReadout(canonical: string) {
+  const n = Number(canonical)
+  if (!canonical || !Number.isFinite(n) || n < 1000) return ''
+  return `= ${formatQty(canonical)} g (${formatQty(String(n / 1000))} kg)`
+}
+
 export function formatQtyInput(raw: string) {
   if (!raw) return ''
   const hasDot = raw.includes('.')

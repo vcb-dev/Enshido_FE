@@ -99,6 +99,8 @@ export type ProductionOrderListResponse = {
 
 export type StageEntry = {
   id: string
+  /** TL giao tối đa khi sửa thông tin giao của khâu này; null = không chặn. */
+  handedSilverLimit?: string | null
   /** Phiếu con của thợ; null = khâu giao cho cả đơn. */
   subTicketId: string | null
   subTicketNo: number | null
@@ -172,6 +174,8 @@ export type MaterialRequestKind = 'METAL' | 'STONE' | 'OTHER'
 /** Một lần thợ xin xuất NVL trong lúc làm khâu. */
 export type MaterialRequest = {
   id: string
+  /** Mã là phôi cắt cây của đơn: phần phôi chưa xuất — không xuất vượt (khớp BE). */
+  blankLeft?: { qty: string | null; weight: string | null } | null
   orderCode: string
   subTicketNo: number | null
   /** Mã phiếu con, hoặc mã đơn nếu là phiếu mẹ. */
@@ -284,6 +288,8 @@ export type SubTicket = {
   availableQty: number
   /** Chưa giao khâu nào thì null — người giao cân lúc giao khâu đầu. */
   availableSilver: string | null
+  /** TL tối đa được giao vào khâu kế (hàng đang có / phôi còn lại); null = không chặn. */
+  handoverSilverLimit: string | null
   /** NVL thợ đã xin xuất và hao hụt cả phiếu. */
   materials: TicketMaterials
   /** Kết cục riêng của phiếu con; null là phiếu vẫn đang chạy. */
@@ -314,6 +320,7 @@ export type OrderWorkTicket = {
   openEntryId: string | null
   availableQty: number
   availableSilver: string | null
+  handoverSilverLimit: string | null
   materials: TicketMaterials
 }
 
@@ -335,6 +342,19 @@ export type ProductionOrderDetail = Omit<
   nvlLines: ProductionNvlWorkLine[]
   castingSentDate: string | null
   castingReturnedDate: string | null
+  /** Lúc thủ kho cắt cây chia phôi — có mốc này đơn NVL vào Nguội. */
+  cutAt: string | null
+  /** Phôi nhận ở phiếu cắt cây gần nhất. */
+  cut: {
+    code: string
+    cutAt: string
+    qty: number
+    weight: string
+    /** Mã phôi trên kho BTP và phần phôi của đơn chưa xuất cho thợ. */
+    btpMaterialId: string | null
+    leftQty: string | null
+    leftWeight: string | null
+  } | null
   parentCode: string | null
   split: { no: number; total: number }
   children: Array<{ code: string; status: ProductionStatus }>
@@ -521,6 +541,8 @@ export type MyTicketItem = {
 }
 
 export type MyTickets = {
+  /** Khâu tài khoản được nhận (admin: mọi khâu). */
+  stages?: StageCode[]
   /** Khâu đang mở, chưa ai nhận. */
   available: MyTicketItem[]
   /** Mình đã nhận (chờ giao) hoặc đang làm. */

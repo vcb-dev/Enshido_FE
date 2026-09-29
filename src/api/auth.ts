@@ -1,3 +1,4 @@
+import type { StageCode } from './productionOrders'
 import { reportNetworkFailure } from '../auth/connectivity'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
@@ -196,6 +197,8 @@ export type UserRow = {
   extraRoles?: RoleCode[]
   allowedScreens?: string[]
   department: string | null
+  /** Khâu thợ được nhận trên phiếu (Nguội, Vào đá…). */
+  workerStages?: StageCode[]
   isActive: boolean
   createdAt: string
 }
@@ -211,6 +214,7 @@ export async function createUserApi(payload: {
   roleCode: RoleCode
   department?: string
   allowedScreens?: string[]
+  workerStages?: StageCode[]
 }) {
   return apiFetch<UserRow>('/users', {
     method: 'POST',
@@ -227,6 +231,7 @@ export async function updateUserApi(
     isActive?: boolean
     password?: string
     allowedScreens?: string[]
+    workerStages?: StageCode[]
     editReason?: string
   },
 ) {

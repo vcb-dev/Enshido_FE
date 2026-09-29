@@ -53,7 +53,7 @@ export function ApproveIntakeDialog({ order, saving, onClose, onConfirm }: Appro
           />
           <Typography variant="body2" color="text.secondary">
             {hasMold
-              ? 'Có khuôn — bỏ qua bước vẽ 3D in resin khi lên lệnh sản xuất.'
+              ? 'Có khuôn — bỏ qua bước vẽ 3D, đơn sang thẳng Chờ SX · Đã có 3D / khuôn (C) để thợ sáp bơm sáp.'
               : 'Chưa có khuôn (mặc định) — cần vẽ 3D để in resin trước khi đúc.'}
           </Typography>
         </Stack>

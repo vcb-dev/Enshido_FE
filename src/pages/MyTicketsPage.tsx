@@ -1,23 +1,52 @@
-import { useEffect, type ReactNode } from 'react'
-import { Alert, Box, Button, Chip, Link, Paper, Stack, Typography } from '@mui/material'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  IconButton,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import AccessTimeIcon from '@mui/icons-material/AccessTime'
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import EventIcon from '@mui/icons-material/Event'
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined'
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
+import InboxIcon from '@mui/icons-material/Inbox'
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
+import RefreshIcon from '@mui/icons-material/Refresh'
+import ScaleIcon from '@mui/icons-material/Scale'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import {
   getMyTicketsApi,
   getSubTicketOrderApi,
   type MyTicketItem,
+  type SubTicketState,
 } from '../api/productionOrders'
-import { formatQty, formatStockedDate } from '../api/inventory'
-import { cloudinaryThumb } from '../api/uploads'
-import { CardGroupSkeleton, PageHeader } from '../components/ui'
-import { ScanQrButton } from '../components/ScanQrButton'
+import { formatQty } from '../api/inventory'
+import { CardGroupSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '../orders/subTicketQueue'
+import { dueInfo, EmptyState, MetaItem, TicketThumb } from '../worker/WorkerUi'
 
-/** Màn của thợ: nhận phiếu mẹ hoặc phiếu con đang mở, theo dõi việc đang giữ và vừa nộp. */
+type TabKey = 'mine' | 'available' | 'recent'
+
+/** Thứ tự việc đang giữ: đang làm lên đầu, rồi chờ giao, cuối cùng là đã báo xong. */
+const MINE_ORDER: Partial<Record<SubTicketState, number>> = { WORKING: 0, CLAIMED: 1, SUBMITTED: 2 }
+
+/** Màn của thợ: nhận phiếu đang mở ở khâu của mình, theo dõi việc đang giữ và vừa nộp. */
 export function MyTicketsPage() {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const tickets = useQuery({
     queryKey: ['my-tickets'],
@@ -50,173 +79,336 @@ export function MyTicketsPage() {
   // vẫn phải bấm được phiếu khác. Bảng này còn nguyên sau khi tắt mở lại app.
   const queued = useQueuedSubTickets()
 
-  // Đang gửi lên máy chủ thì nút quay; nằm chờ mạng thì chỉ khoá — chip "Chờ gửi" đã nói rõ.
+  const data = tickets.data
+  const mine = useMemo(
+    () =>
+      [...(data?.mine ?? [])].sort(
+        (a, b) => (MINE_ORDER[a.state ?? 'IDLE'] ?? 9) - (MINE_ORDER[b.state ?? 'IDLE'] ?? 9),
+      ),
+    [data?.mine],
+  )
+  // Phiếu sắp tới hạn lên trước để thợ nhận đúng việc gấp.
+  const available = useMemo(
+    () =>
+      [...(data?.available ?? [])].sort(
+        (a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || (a.pendingAt ?? '').localeCompare(b.pendingAt ?? ''),
+      ),
+    [data?.available],
+  )
+  const recent = data?.recent ?? []
+
+  const [tab, setTab] = useState<TabKey | null>(null)
+  // Lần đầu vào: đang giữ việc thì mở tab việc của tôi, chưa có thì mở tab chờ nhận.
+  const activeTab: TabKey = tab ?? (data && mine.length === 0 && available.length > 0 ? 'available' : 'mine')
+
+  const count = (state: SubTicketState) => mine.filter((item) => item.state === state).length
+
   const sending = (item: MyTicketItem, action: SubTicketAction) => {
     const entry = queued.get(item.ticketCode)
     return entry?.action === action && !entry.waiting
   }
+  const vars = (item: MyTicketItem) => ({ orderCode: item.orderCode, no: item.no, ticketCode: item.ticketCode })
 
-  const vars = (item: MyTicketItem) => ({
-    orderCode: item.orderCode,
-    no: item.no,
-    ticketCode: item.ticketCode,
-  })
+  const actionFor = (item: MyTicketItem): ReactNode => {
+    const busy = queued.has(item.ticketCode)
+    if (activeTab === 'available') {
+      return (
+        <Button
+          variant="contained"
+          disabled={busy}
+          loading={sending(item, 'claim')}
+          onClick={() => claim.mutate(vars(item))}
+          sx={{ minWidth: 132 }}
+        >
+          Nhận phiếu
+        </Button>
+      )
+    }
+    if (item.state === 'WORKING') {
+      return (
+        <Button
+          variant="contained"
+          disabled={busy}
+          loading={sending(item, 'submit')}
+          onClick={() => submit.mutate(vars(item))}
+          sx={{ minWidth: 132 }}
+        >
+          Đã làm xong
+        </Button>
+      )
+    }
+    if (item.state === 'CLAIMED') {
+      return (
+        <Button
+          variant="outlined"
+          color="inherit"
+          disabled={busy}
+          loading={sending(item, 'unclaim')}
+          onClick={() => unclaim.mutate(vars(item))}
+        >
+          Huỷ nhận
+        </Button>
+      )
+    }
+    if (item.state === 'SUBMITTED') {
+      return (
+        <Button
+          variant="outlined"
+          color="inherit"
+          disabled={busy}
+          loading={sending(item, 'unsubmit')}
+          onClick={() => unsubmit.mutate(vars(item))}
+        >
+          Bỏ báo xong
+        </Button>
+      )
+    }
+    return null
+  }
+
+  const list = activeTab === 'mine' ? mine : activeTab === 'available' ? available : recent
 
   return (
-    <Stack spacing={2} sx={{ pb: 3 }}>
-      <PageHeader
-        title="Phiếu của tôi"
-        subtitle="Nhận phiếu ở khâu đang mở — người lên đơn xuất NVL (Nguội: phôi BTP, Vào đá: kho NVL chính) và xác nhận giao."
-        actions={
-          <Stack direction="row" spacing={1}>
-            <ScanQrButton />
-            <Button variant="outlined" onClick={() => void tickets.refetch()} loading={tickets.isFetching}>
-              Làm mới
-            </Button>
+    <Stack spacing={{ xs: 2, md: 2.5 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, fontSize: { xs: '1.35rem', md: '1.6rem' } }}>
+            Phiếu của tôi
+          </Typography>
+          <Stack direction="row" spacing={0.75} useFlexGap sx={{ mt: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="body2" color="text.secondary">
+              {user?.fullName ? `${user.fullName} · ` : ''}Khâu của bạn:
+            </Typography>
+            {(data?.stages ?? []).map((stage) => (
+              <Chip
+                key={stage}
+                size="small"
+                label={STAGE_LABEL[stage]}
+                sx={{ borderRadius: 1, bgcolor: 'action.selected', color: 'primary.dark', fontWeight: 600 }}
+              />
+            ))}
           </Stack>
-        }
-      />
+        </Box>
+        <Tooltip title={tickets.dataUpdatedAt ? `Cập nhật lúc ${formatDateShort(new Date(tickets.dataUpdatedAt).toISOString())}` : 'Làm mới'}>
+          <IconButton
+            aria-label="Làm mới"
+            onClick={() => void tickets.refetch()}
+            loading={tickets.isFetching}
+            sx={{ border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
+          >
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
+      </Stack>
 
       {tickets.isLoading ? (
-        <>
-          <CardGroupSkeleton count={2} media />
-          <CardGroupSkeleton count={2} media />
-        </>
-      ) : !tickets.data ? (
-        <Alert severity="error">
-          {tickets.error instanceof Error ? tickets.error.message : 'Không tải được phiếu'}
-        </Alert>
+        <CardGroupSkeleton count={3} media />
+      ) : !data ? (
+        <Alert severity="error">{tickets.error instanceof Error ? tickets.error.message : 'Không tải được phiếu'}</Alert>
       ) : (
         <>
-          <Group title="Đang giữ" empty="Chưa nhận phiếu nào." count={tickets.data.mine.length}>
-            {tickets.data.mine.map((item) => (
-              <TicketCard
-                key={`${item.ticketCode}-${item.state}`}
-                item={item}
-                queued={queued.get(item.ticketCode)}
-                status={
-                  item.state === 'CLAIMED'
-                    ? `Đã nhận lúc ${formatDateShort(item.claimedAt)} — chờ người lên đơn xuất NVL và xác nhận giao`
-                    : item.state === 'SUBMITTED'
-                      ? `Đã báo xong lúc ${formatDateShort(item.submittedAt)} — chờ KCS cân lại`
-                      : `Đang làm từ ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
-                }
-                action={
-                  item.state === 'CLAIMED' ? (
-                    <Button
-                      size="small"
-                      color="inherit"
-                      disabled={queued.has(item.ticketCode)}
-                      loading={sending(item, 'unclaim')}
-                      onClick={() => unclaim.mutate(vars(item))}
-                    >
-                      Huỷ nhận
-                    </Button>
-                  ) : item.state === 'WORKING' ? (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={queued.has(item.ticketCode)}
-                      loading={sending(item, 'submit')}
-                      onClick={() => submit.mutate(vars(item))}
-                    >
-                      Đã làm xong
-                    </Button>
-                  ) : item.state === 'SUBMITTED' ? (
-                    <Button
-                      size="small"
-                      color="inherit"
-                      disabled={queued.has(item.ticketCode)}
-                      loading={sending(item, 'unsubmit')}
-                      onClick={() => unsubmit.mutate(vars(item))}
-                    >
-                      Bỏ báo xong
-                    </Button>
-                  ) : null
-                }
-              />
-            ))}
-          </Group>
+          <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
+            <StatTile
+              label="Đang làm"
+              value={count('WORKING')}
+              icon={<AccessTimeIcon />}
+              accent="#6c5ce7"
+              onClick={() => setTab('mine')}
+            />
+            <StatTile
+              label="Chờ giao bạc"
+              value={count('CLAIMED')}
+              icon={<HourglassEmptyIcon />}
+              accent="#1565c0"
+              onClick={() => setTab('mine')}
+            />
+            <StatTile
+              label="Chờ KCS cân"
+              value={count('SUBMITTED')}
+              icon={<AssignmentTurnedInIcon />}
+              accent="#8a6100"
+              onClick={() => setTab('mine')}
+            />
+            <StatTile
+              label="Phiếu chờ nhận"
+              value={available.length}
+              icon={<InboxIcon />}
+              accent="#6b4513"
+              highlight={available.length > 0}
+              onClick={() => setTab('available')}
+            />
+          </Box>
 
-          <Group
-            title="Chờ nhận"
-            empty="Chưa có phiếu nào đang mở khâu."
-            count={tickets.data.available.length}
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 3,
+              bgcolor: 'background.default',
+              mx: { xs: -2, md: 0 },
+              px: { xs: 2, md: 0 },
+              pt: { xs: 0.5, md: 0 },
+            }}
           >
-            {tickets.data.available.map((item) => (
-              <TicketCard
-                key={item.ticketCode}
-                item={item}
-                queued={queued.get(item.ticketCode)}
-                status={`Mở khâu lúc ${formatDateShort(item.pendingAt)}`}
-                action={
-                  <Button
-                    variant="contained"
-                    disabled={queued.has(item.ticketCode)}
-                    loading={sending(item, 'claim')}
-                    onClick={() => claim.mutate(vars(item))}
-                  >
-                    Nhận phiếu
-                  </Button>
+            <Tabs
+              value={activeTab}
+              onChange={(_, value: TabKey) => setTab(value)}
+              variant="fullWidth"
+              sx={{
+                minHeight: 44,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                maxWidth: { md: 560 },
+                '& .MuiTab-root': { minHeight: 44, fontWeight: 600, textTransform: 'none', px: 1 },
+              }}
+            >
+              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mine.length} />} />
+              <Tab value="available" label={<TabLabel text="Chờ nhận" count={available.length} />} />
+              <Tab value="recent" label={<TabLabel text="Đã nộp" count={recent.length} />} />
+            </Tabs>
+          </Box>
+
+          {list.length === 0 ? (
+            activeTab === 'mine' ? (
+              <EmptyState
+                icon={<AssignmentTurnedInIcon />}
+                title="Bạn chưa giữ phiếu nào"
+                description={
+                  available.length
+                    ? `Có ${available.length} phiếu đang chờ nhận ở khâu của bạn.`
+                    : 'Khi người giao mở khâu của bạn, phiếu sẽ hiện ở tab Chờ nhận.'
                 }
               />
-            ))}
-          </Group>
-
-          <Group title="Đã nộp gần đây" empty="Chưa có phiếu nào được KCS nhận lại." count={tickets.data.recent.length}>
-            {tickets.data.recent.map((item) => (
-              <TicketCard
-                key={`${item.ticketCode}-${item.stage}-${item.returnedAt}`}
-                item={item}
-                status={`KCS ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${
-                  item.returnedSilverWeight != null ? ` · ${formatQty(item.returnedSilverWeight)} g` : ''
-                }${
-                  item.silverLoss != null
-                    ? ` · hao hụt ${formatQty(item.silverLoss)} g${item.silverLossPercent != null ? ` (${formatQty(item.silverLossPercent)}%)` : ''}`
-                    : ''
-                }`}
+            ) : activeTab === 'available' ? (
+              <EmptyState
+                icon={<InboxIcon />}
+                title="Chưa có phiếu nào chờ nhận"
+                description="Chỉ hiện phiếu đang mở ở khâu của bạn. Màn tự làm mới mỗi 10 giây."
               />
-            ))}
-          </Group>
+            ) : (
+              <EmptyState icon={<HistoryOutlinedIcon />} title="Chưa có phiếu nào được KCS nhận lại" />
+            )
+          ) : (
+            <Box
+              sx={{
+                display: 'grid',
+                gap: { xs: 1.25, md: 1.5 },
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(3, minmax(0, 1fr))' },
+              }}
+            >
+              {list.map((item) => (
+                <TicketCard
+                  key={`${item.ticketCode}-${item.stage}-${item.state}-${item.returnedAt ?? ''}`}
+                  item={item}
+                  queued={queued.get(item.ticketCode)}
+                  status={statusLine(item, activeTab)}
+                  action={activeTab === 'recent' ? null : actionFor(item)}
+                />
+              ))}
+            </Box>
+          )}
         </>
       )}
     </Stack>
   )
 }
 
-function Group({
-  title,
-  count,
-  empty,
-  children,
+function TabLabel({ text, count }: { text: string; count: number }) {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+      <span>{text}</span>
+      <Box
+        component="span"
+        sx={{
+          minWidth: 22,
+          px: 0.75,
+          borderRadius: 99,
+          fontSize: 12,
+          lineHeight: '20px',
+          bgcolor: count ? 'primary.main' : 'action.selected',
+          color: count ? 'primary.contrastText' : 'text.secondary',
+        }}
+      >
+        {count}
+      </Box>
+    </Stack>
+  )
+}
+
+function StatTile({
+  label,
+  value,
+  icon,
+  accent,
+  highlight,
+  onClick,
 }: {
-  title: string
-  count: number
-  empty: string
-  children: ReactNode
+  label: string
+  value: number
+  icon: ReactNode
+  accent: string
+  highlight?: boolean
+  onClick: () => void
 }) {
   return (
-    <Box>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-        {title} ({count})
-      </Typography>
-      {count === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {empty}
+    <Paper
+      component="button"
+      type="button"
+      onClick={onClick}
+      variant="outlined"
+      sx={{
+        textAlign: 'left',
+        font: 'inherit',
+        cursor: 'pointer',
+        borderRadius: 2,
+        p: { xs: 1, md: 1.75 },
+        display: 'flex',
+        gap: 1.25,
+        alignItems: 'center',
+        borderColor: highlight ? accent : 'divider',
+        bgcolor: 'background.paper',
+        transition: 'border-color .15s, box-shadow .15s',
+        '&:hover': { borderColor: accent, boxShadow: '0 2px 10px rgba(62,42,14,.08)' },
+        '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
+      }}
+    >
+      <Box
+        sx={{
+          width: { xs: 30, md: 36 },
+          height: { xs: 30, md: 36 },
+          flexShrink: 0,
+          borderRadius: 1.5,
+          display: 'grid',
+          placeItems: 'center',
+          color: accent,
+          bgcolor: `${accent}14`,
+          '& svg': { fontSize: 20 },
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.25rem', md: '1.45rem' }, lineHeight: 1.1 }}>{value}</Typography>
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+          {label}
         </Typography>
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 1.5,
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(3, minmax(0, 1fr))' },
-          }}
-        >
-          {children}
-        </Box>
-      )}
-    </Box>
+      </Box>
+    </Paper>
   )
+}
+
+function statusLine(item: MyTicketItem, tab: TabKey) {
+  if (tab === 'recent') {
+    const loss =
+      item.silverLoss != null
+        ? ` · hao hụt ${formatQty(item.silverLoss)} g${item.silverLossPercent != null ? ` (${formatQty(item.silverLossPercent)}%)` : ''}`
+        : ''
+    return `KCS ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${loss}`
+  }
+  if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
+  if (item.state === 'CLAIMED') return `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
+  if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới KCS cân lại`
+  return `Bắt đầu ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
 }
 
 function TicketCard({
@@ -227,76 +419,105 @@ function TicketCard({
 }: {
   item: MyTicketItem
   status: string
-  action?: ReactNode
+  action: ReactNode
   /** Thao tác thợ đã bấm nhưng chưa chốt được với máy chủ. */
   queued?: QueuedSubTicketAction
 }) {
+  const due = dueInfo(item.dueDate)
+  const weight = item.returnedSilverWeight ?? item.silverWeight
   return (
-    <Paper sx={{ p: 1.5, display: 'flex', gap: 1.5, minWidth: 0 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 2,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        borderColor: due?.tone === 'error' ? 'error.light' : 'divider',
+        transition: 'box-shadow .15s',
+        '&:hover': { boxShadow: '0 4px 16px rgba(62,42,14,.08)' },
+      }}
+    >
       <Box
+        component={RouterLink}
+        to={`/tickets/${item.ticketCode}`}
         sx={{
-          width: 72,
-          height: 72,
-          flexShrink: 0,
-          borderRadius: 1,
-          border: '1px solid #ded3c3',
-          bgcolor: '#f8f3eb',
-          overflow: 'hidden',
+          display: 'flex',
+          gap: 1.5,
+          p: 1.5,
+          color: 'inherit',
+          textDecoration: 'none',
+          flex: 1,
+          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
         }}
       >
-        {item.imageUrl ? (
-          <Box
-            component="img"
-            src={cloudinaryThumb(item.imageUrl, 144)}
-            alt=""
-            loading="lazy"
-            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : null}
-      </Box>
-      <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-        <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link component={RouterLink} to={`/tickets/${item.ticketCode}`} sx={{ fontWeight: 700 }}>
-            {item.ticketCode}
-          </Link>
-          {item.stage ? <Chip size="small" label={STAGE_LABEL[item.stage]} sx={{ borderRadius: 1 }} /> : null}
-          {item.state ? <SubTicketStateChip state={item.state} /> : null}
-          {/* Trạng thái bên trên vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
-              của thợ chưa lên tới nơi, không được hiểu là đã nhận / đã xong. */}
-          {queued ? (
-            <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} />
+        <TicketThumb url={item.imageUrl} size={64} />
+        <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+          <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography sx={{ fontWeight: 800, letterSpacing: '.01em' }}>{item.ticketCode}</Typography>
+            {item.stage ? (
+              <Chip
+                size="small"
+                label={STAGE_LABEL[item.stage]}
+                sx={{ height: 22, borderRadius: 1, bgcolor: 'action.selected', color: 'primary.dark', fontWeight: 600 }}
+              />
+            ) : null}
+            <Box sx={{ flex: 1 }} />
+            {item.state ? <SubTicketStateChip state={item.state} /> : null}
+          </Stack>
+          <Typography
+            variant="body2"
+            sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+          >
+            {item.description}
+          </Typography>
+          <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap', pt: 0.25 }}>
+            <MetaItem icon={<Inventory2OutlinedIcon />}>{item.qty} sp</MetaItem>
+            {weight != null ? <MetaItem icon={<ScaleIcon />}>{formatQty(weight)} g</MetaItem> : null}
+            {due ? (
+              <MetaItem icon={<EventIcon />} tone={due.tone}>
+                {due.label}
+              </MetaItem>
+            ) : null}
+          </Stack>
+          {item.issuedLines?.length ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {issuedSummary(item)}
+            </Typography>
+          ) : null}
+          {item.pendingRequests ? (
+            <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 600 }}>
+              {item.pendingRequests} yêu cầu xin thêm đang chờ kho xuất
+            </Typography>
           ) : null}
         </Stack>
-        <Typography
-          variant="body2"
-          sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-        >
-          {item.description}
-        </Typography>
-        <Typography variant="body2">
-          <b>{item.qty}</b> sp
-          {item.silverWeight != null ? (
-            <>
-              {' '}
-              · <b>{formatQty(item.silverWeight)}</b> g bạc
-            </>
+        <ChevronRightIcon sx={{ color: 'text.disabled', alignSelf: 'center', display: { xs: 'none', sm: 'block' } }} />
+      </Box>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: 'center',
+          px: 1.5,
+          py: 1,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.default',
+          minHeight: 52,
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Trạng thái trên thẻ vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
+              của thợ chưa lên tới nơi, không được hiểu là đã nhận / đã xong. */}
+          {queued ? (
+            <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1, mb: 0.25 }} />
           ) : null}
-          {item.dueDate ? ` · cần trả ${formatStockedDate(item.dueDate)}` : ''}
-        </Typography>
-        {item.issuedLines?.length ? (
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            {issuedSummary(item)}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            {status}
           </Typography>
-        ) : null}
-        {item.pendingRequests ? (
-          <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 600 }}>
-            {item.pendingRequests} yêu cầu xin thêm đang chờ kho xuất
-          </Typography>
-        ) : null}
-        <Typography variant="caption" color="text.secondary">
-          {status}
-        </Typography>
-        {action ? <Box sx={{ pt: 0.5 }}>{action}</Box> : null}
+        </Box>
+        {action}
       </Stack>
     </Paper>
   )
@@ -312,10 +533,7 @@ function issuedSummary(item: MyTicketItem) {
           `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}${line.weight ? ` (${formatQty(line.weight)} g)` : ''}`,
       )
       .join(', ')
-  return [
-    text(true) ? `Nhận: ${text(true)}` : '',
-    text(false) ? `xin thêm: ${text(false)}` : '',
-  ]
+  return [text(true) ? `Nhận: ${text(true)}` : '', text(false) ? `xin thêm: ${text(false)}` : '']
     .filter(Boolean)
     .join(' · ')
 }

@@ -11,6 +11,7 @@ import {
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty, parseQtyInput, qtyFromApi } from '../api/inventory'
+import { confirmWeights, ratioWarning } from '../orders/weightSanity'
 import { QtyTextField } from '../components/ui/QtyTextField'
 import { ImageUploadField } from '../orders/ImageUploadField'
 
@@ -59,6 +60,15 @@ export function IntakeCastingTreeDialog({
     }
     setWeightError('')
     setImagesError('')
+    // Cây thông = mẫu sáp in ở bước 4 + ống rót: nặng hơn mẫu nhưng không lệch cả trăm lần.
+    const printed = Number(order?.productWeightGram ?? 0)
+    if (
+      !confirmWeights([
+        ratioWarning(grams, 'Cây thông', printed, 'mẫu sáp đã in', { min: 0.5, max: 100 }),
+      ])
+    ) {
+      return
+    }
     onSave({ castingTreeWeightGram: grams, images })
   }
 

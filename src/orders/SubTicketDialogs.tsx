@@ -23,6 +23,7 @@ import type {
 import { formatQty } from '../api/inventory'
 import { CrudDialogShell, FormRow, FormSelect, FormTextField } from '../components/ui'
 import { isInStage, STAGE_LABEL, STAGES } from './catalog'
+import { evenSplit } from './evenSplit'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
 
@@ -54,13 +55,15 @@ export function SplitSubTicketsDialog({
     }
     if (seeded.current) return
     seeded.current = true
-    const firstQty = Math.floor(order.qty / 2)
-    const secondQty = order.qty - firstQty
-    setRows([
-      { qty: firstQty > 0 ? String(firstQty) : '', note: '' },
-      { qty: secondQty > 0 ? String(secondQty) : '', note: '' },
-    ])
+    setRows(evenSplit(order.qty, 2).map((qty) => ({ qty: qty > 0 ? String(qty) : '', note: '' })))
   }, [open, order.qty])
+
+  /** Thêm / xoá phiếu thì chia đều lại số lượng cho mọi phiếu (giữ ghi chú); người dùng chỉnh sau. */
+  const resplit = (next: SplitRow[]) =>
+    evenSplit(order.qty, next.length).map((qty, index) => ({
+      note: next[index].note,
+      qty: qty > 0 ? String(qty) : '',
+    }))
 
   const update = (index: number, field: keyof SplitRow, value: string) =>
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)))
@@ -114,7 +117,7 @@ export function SplitSubTicketsDialog({
                 size="small"
                 color="error"
                 disabled={rows.length <= 2}
-                onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                onClick={() => setRows((current) => resplit(current.filter((_, rowIndex) => rowIndex !== index)))}
                 sx={{ mt: 0.5 }}
               >
                 Xóa
@@ -125,7 +128,9 @@ export function SplitSubTicketsDialog({
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, justifyContent: 'space-between' }}>
           <Button
             size="small"
-            onClick={() => setRows((current) => [...current, { qty: '', note: '' }])}
+            // Mỗi phiếu ít nhất 1 sp nên không thêm quá số lượng đơn.
+            disabled={rows.length >= order.qty}
+            onClick={() => setRows((current) => resplit([...current, { qty: '', note: '' }]))}
           >
             Thêm phiếu
           </Button>

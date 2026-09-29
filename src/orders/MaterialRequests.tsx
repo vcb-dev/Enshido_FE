@@ -31,7 +31,14 @@ import {
   type StageCode,
   type TicketMaterials,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import {
+  formatQty,
+  formatQtyInput,
+  gramReadout,
+  parseQtyInput,
+  pasteIntoQty,
+  typedDecimalAsComma,
+} from '../api/inventory'
 import {
   CrudDialogShell,
   FormQtyField,
@@ -288,6 +295,8 @@ export function IssueMaterialDialog({
   const qty = useWatch({ control: form.control, name: 'qty' })
   const unit = request?.material.unit ?? ''
   const countUnit = COUNT_UNITS.has(unit.trim().toLowerCase())
+  const blankQty = request?.blankLeft?.qty != null ? Number(request.blankLeft.qty) : null
+  const blankWeight = request?.blankLeft?.weight != null ? Number(request.blankLeft.weight) : null
 
   useEffect(() => {
     if (!request) return
@@ -347,7 +356,16 @@ export function IssueMaterialDialog({
           name="qty"
           label={`Số lượng xuất (${unit})`}
           required
-          rules={{ validate: (value) => Number(value) > 0 || 'Số lượng phải lớn hơn 0' }}
+          helperText={blankQty != null ? `Phôi của đơn còn ${formatQty(String(blankQty))} ${unit}` : undefined}
+          rules={{
+            validate: (value) => {
+              if (!(Number(value) > 0)) return 'Số lượng phải lớn hơn 0'
+              if (blankQty != null && Number(value) > blankQty) {
+                return `Phôi của đơn chỉ còn ${formatQty(String(blankQty))} ${unit}`
+              }
+              return true
+            },
+          }}
         />
       </FormRow>
       <FormRow columns={2}>
@@ -355,9 +373,21 @@ export function IssueMaterialDialog({
           name="weight"
           label="TL cân lúc xuất (g)"
           required={kind === 'METAL'}
-          helperText={kind === 'METAL' ? 'Cộng vào bạc vào khâu' : 'Không bắt buộc'}
+          helperText={
+            blankWeight != null
+              ? `Phôi của đơn còn ${formatQty(String(blankWeight))} g`
+              : kind === 'METAL'
+                ? 'Cộng vào bạc vào khâu'
+                : 'Không bắt buộc'
+          }
           rules={{
-            validate: (value) => kind !== 'METAL' || Number(value) > 0 || 'Bạc phải cân TL xuất',
+            validate: (value) => {
+              if (kind === 'METAL' && !(Number(value) > 0)) return 'Bạc phải cân TL xuất'
+              if (blankWeight != null && Number(value) > blankWeight) {
+                return `Phôi của đơn chỉ còn ${formatQty(String(blankWeight))} g`
+              }
+              return true
+            },
           }}
         />
         {kind === 'STONE' ? (
@@ -763,9 +793,12 @@ export function handoverMetalWeight(lines: readonly HandoverMaterialLine[]) {
 export function HandoverMaterialsField<T extends { materials: HandoverMaterialLine[] }>({
   form,
   stage,
+  blank,
 }: {
   form: UseFormReturn<T>
   stage: StageCode | null
+  /** Phôi cắt cây của đơn còn chưa xuất — tổng xuất mã phôi không được vượt (khớp BE). */
+  blank?: { materialId: string; leftQty: number; leftWeight: number } | null
 }) {
   const stoneStage = stage === 'STONE_SETTING'
   const sources = stageSources(stage)
@@ -776,10 +809,23 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   const values = useWatch({ control, name: 'materials' }) ?? []
   // Nguội / Vào đá bắt buộc xuất kho lúc giao: luôn giữ ít nhất một dòng.
   const required = sources.length > 0
+  // Cộng mọi dòng cùng mã phôi: tách hai dòng cũng không lách được mốc.
+  const blankTotals = values.reduce(
+    (sum, item) =>
+      blank && item?.materialId === blank.materialId
+        ? { qty: sum.qty + (Number(item.qty) || 0), weight: sum.weight + (Number(item.weight) || 0) }
+        : sum,
+    { qty: 0, weight: 0 },
+  )
   const { fields, append } = lines
+  // Mở hộp thoại chỉ có sẵn một dòng; muốn thêm thì bấm "Thêm NVL". Đọc số dòng từ form (cập nhật
+  // ngay khi append) thay vì `fields` — StrictMode chạy effect hai lần sẽ không thêm trùng dòng.
   useEffect(() => {
-    if (required && fields.length === 0) append({ ...EMPTY_HANDOVER_LINE })
-  }, [required, fields.length, append])
+    const current = (form.getValues as unknown as () => { materials?: HandoverMaterialLine[] })().materials
+    if (required && (current?.length ?? 0) === 0) {
+      append({ ...EMPTY_HANDOVER_LINE })
+    }
+  }, [required, fields.length, append, form])
 
   const nvlOptions = useQuery({
     queryKey: ['nvl-options'],
@@ -912,19 +958,38 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                 <Controller
                   control={control}
                   name={name('qty')}
-                  rules={{ validate: (value) => Number(value) > 0 || 'SL phải lớn hơn 0' }}
+                  rules={{
+                    validate: (value) => {
+                      if (!(Number(value) > 0)) return 'SL phải lớn hơn 0'
+                      if (blank && line.materialId === blank.materialId && blankTotals.qty > blank.leftQty) {
+                        return `Phôi của đơn chỉ còn ${formatQty(String(blank.leftQty))} ${unit || 'chiếc'}`
+                      }
+                      return true
+                    },
+                  }}
                   render={({ field: input, fieldState }) => (
                     <TextInput
                       label={`SL xuất${unit ? ` (${unit})` : ''}`}
                       required
-                      value={input.value}
+                      value={formatQtyInput(String(input.value ?? ''))}
                       inputRef={input.ref}
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
                       onChange={(event) => {
-                        input.onChange(event.target.value)
+                        const next = parseQtyInput(
+                          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
+                        )
+                        input.onChange(next)
                         if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
-                          setValue(name('weight'), event.target.value)
+                          setValue(name('weight'), next)
+                        }
+                      }}
+                      onPaste={(event) => {
+                        event.preventDefault()
+                        const next = pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text'))
+                        input.onChange(next)
+                        if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
+                          setValue(name('weight'), next)
                         }
                       }}
                     />
@@ -934,17 +999,32 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   control={control}
                   name={name('weight')}
                   rules={{
-                    validate: (value) => line.kind !== 'METAL' || Number(value) > 0 || 'Bạc phải cân TL',
+                    validate: (value) => {
+                      if (line.kind === 'METAL' && !(Number(value) > 0)) return 'Bạc phải cân TL'
+                      if (blank && line.materialId === blank.materialId && blankTotals.weight > blank.leftWeight) {
+                        return `Phôi của đơn chỉ còn ${formatQty(String(blank.leftWeight))} g`
+                      }
+                      return true
+                    },
                   }}
                   render={({ field: input, fieldState }) => (
                     <TextInput
                       label="TL cân (g)"
                       required={line.kind === 'METAL'}
-                      value={input.value}
+                      value={formatQtyInput(String(input.value ?? ''))}
                       inputRef={input.ref}
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
-                      onChange={(event) => input.onChange(event.target.value)}
+                      helperText={gramReadout(String(input.value ?? '')) || undefined}
+                      onChange={(event) =>
+                        input.onChange(
+                          parseQtyInput(typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data)),
+                        )
+                      }
+                      onPaste={(event) => {
+                        event.preventDefault()
+                        input.onChange(pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text')))
+                      }}
                     />
                   )}
                 />

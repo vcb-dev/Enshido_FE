@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Box,
+  Button,
   IconButton,
   LinearProgress,
   Stack,
@@ -17,6 +18,10 @@ import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 type Pending = { key: string; name: string; progress: number }
 
 const THUMB = 76
+
+// Liệt kê định dạng cụ thể thay vì `image/*`: trên macOS `image/*` bắt trình duyệt dò toàn bộ
+// kiểu ảnh của hệ điều hành trước khi mở hộp thoại nên bấm chọn file bị trễ vài giây.
+const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif'
 
 function filesFromClipboard(data: DataTransfer): FileList | null {
   const files: File[] = []
@@ -108,14 +113,14 @@ export function ImageUploadField({
         {label}{' '}
         <Typography component="span" variant="caption" color="text.secondary">
           ({value.length})
-          {canAdd ? ' · bấm 1 lần rồi Ctrl+V · bấm 2 lần chọn file' : ''}
+          {canAdd ? ' · bấm 1 lần rồi Ctrl+V để dán · nút Chọn file hoặc bấm đúp để chọn file' : ''}
         </Typography>
       </Typography>
 
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={ACCEPT}
         multiple
         hidden
         onChange={(event) => {
@@ -237,7 +242,22 @@ export function ImageUploadField({
           </Stack>
         ))}
 
-        {empty && canAdd ? <AddIcon sx={{ fontSize: 36, color: 'text.secondary', pointerEvents: 'none' }} /> : null}
+        {empty && canAdd ? (
+          <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+            <AddIcon sx={{ fontSize: 36, color: 'text.secondary', pointerEvents: 'none' }} />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={(event) => {
+                event.stopPropagation()
+                openPicker()
+              }}
+              onDoubleClick={(event) => event.stopPropagation()}
+            >
+              Chọn file
+            </Button>
+          </Stack>
+        ) : null}
 
         {empty && !canAdd ? (
           <Typography variant="caption" color="text.secondary">
@@ -249,10 +269,11 @@ export function ImageUploadField({
           <Box
             component="button"
             type="button"
-            aria-label={`Thêm ${label} — bấm đúp hoặc Enter`}
+            aria-label={`Thêm ${label} — chọn file`}
+            title="Chọn file"
             onClick={(event) => {
               event.stopPropagation()
-              zoneRef.current?.focus()
+              openPicker()
             }}
             onDoubleClick={(event) => {
               event.stopPropagation()

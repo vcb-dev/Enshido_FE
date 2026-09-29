@@ -33,6 +33,7 @@ import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
@@ -47,7 +48,7 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, canAny, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
@@ -349,6 +350,7 @@ function DrawerNav({
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
+  const { user } = useAuth()
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box
@@ -370,9 +372,16 @@ function DrawerNav({
         ) : null}
         {workerOnly ? null : (
           <>
-            <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
+            {canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE) ? (
+              <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
+            ) : null}
             <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
-            <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            {canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER) ? (
+              <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            ) : null}
+            {canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC) ? (
+              <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
+            ) : null}
           </>
         )}
         {isWorker ? (
