@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Button, Stack } from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -33,6 +33,8 @@ import {
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { useTableParams } from '../hooks/useTableParams'
@@ -96,6 +98,9 @@ export function IntakeOrdersPage() {
   const dialog = useCrudDialog<IntakeOrder>()
   const openedFromLink = useRef(false)
   const operatorName = useOperatorName()
+  const { user } = useAuth()
+  const canCreate = can(user, Permission.INTAKE_CREATE)
+  const canApprove = can(user, Permission.INTAKE_APPROVE)
   const table = useTableParams({
     pageSize: 25,
     filters: { status: '' as IntakeOrderStatus | '', search: '' },
@@ -272,8 +277,8 @@ export function IntakeOrdersPage() {
                 row.status === 'PENDING_APPROVAL' ? 'Xóa' : 'Chỉ xóa được đơn chờ duyệt',
             }}
             onView={() => setViewTarget(row)}
-            onEdit={() => dialog.openEdit(row)}
-            onDelete={() => setDeleteTarget(row)}
+            onEdit={canCreate || canApprove ? () => dialog.openEdit(row) : undefined}
+            onDelete={canApprove ? () => setDeleteTarget(row) : undefined}
             deleteDisabled={row.status !== 'PENDING_APPROVAL'}
           />
         ),
@@ -318,9 +323,11 @@ export function IntakeOrdersPage() {
         rowsLabel="đơn"
         sx={{ flex: { md: 1 } }}
         toolbar={
-          <Button variant="contained" sx={{ ml: 'auto' }} onClick={() => dialog.openCreate()}>
-            Tạo đơn mới
-          </Button>
+          canCreate ? (
+            <Button variant="contained" sx={{ ml: 'auto' }} onClick={() => dialog.openCreate()}>
+              Tạo đơn mới
+            </Button>
+          ) : undefined
         }
       />
 
@@ -411,7 +418,6 @@ function IntakeOrderFormDialog({
       description: values.description.trim(),
       createdDate: values.createdDate,
       dueDate: values.dueDate.trim() || null,
-      status: row ? values.status : undefined,
       images: imagesForSave(row, values.detailImages),
       editReason: values.editReason?.trim() || undefined,
     })
@@ -444,15 +450,13 @@ function IntakeOrderFormDialog({
           slotProps={{ inputLabel: { shrink: true } }}
         />
         {row ? (
-          <FormSelect<FormValues>
-            name="status"
-            label="Trạng thái"
-            required
-            options={INTAKE_STATUSES.map((status) => ({
-              value: status,
-              label: INTAKE_STATUS_META[status].label,
-            }))}
-          />
+          // Trạng thái chỉ đổi qua nút thao tác của từng bước, form sửa không nhảy bước được.
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Trạng thái:
+            </Typography>
+            <IntakeStatusChip status={row.status} />
+          </Stack>
         ) : null}
         <FormSelect<FormValues>
           name="requestType"

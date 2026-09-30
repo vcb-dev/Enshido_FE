@@ -15,6 +15,7 @@ export function useOrderMutation<V>(
     onSuccess: (order) => {
       seedProductionOrder(queryClient, order)
       void queryClient.invalidateQueries({ queryKey: ['production-order-costing', code] })
+      void queryClient.invalidateQueries({ queryKey: ['production-order-activity', code] })
       void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
       toast.success(success)
       const idle = typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn: () => void) => window.setTimeout(fn, 0)

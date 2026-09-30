@@ -1,4 +1,4 @@
-import { can, isWorkerOnly, Permission } from './permissions'
+import { can, canAny, isWorkerOnly, Permission } from './permissions'
 import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
 
 export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
@@ -20,8 +20,20 @@ export function canAccessPath(
   }
   // Thợ không vào màn quản lý đơn và trang in phiếu; riêng /orders/:code rơi vào bản
   // chỉ-đọc "Thông tin đơn (tham khảo)" để QR trên phiếu giấy đã in vẫn dùng được.
-  if (p === '/orders' || p === '/casting' || p === '/intake-orders' || p.endsWith('/print')) {
-    return !isWorkerOnly(user)
+  // In phiếu đúc là việc của thủ kho (bước 7).
+  if (p.startsWith('/casting/') && p.endsWith('/print')) {
+    return !isWorkerOnly(user) && can(user, Permission.WAREHOUSE_KEEPER)
+  }
+  if (p === '/orders' || p.endsWith('/print')) return !isWorkerOnly(user)
+  // Các màn thao tác theo quy trình: cần quyền của việc tương ứng.
+  if (p === '/intake-orders') {
+    return !isWorkerOnly(user) && canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE)
+  }
+  if (p === '/casting' || p.startsWith('/casting/')) {
+    return !isWorkerOnly(user) && canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER)
+  }
+  if (p === '/casting-cuts') {
+    return !isWorkerOnly(user) && canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
   }
   if (p.startsWith('/orders/')) return true
   // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.

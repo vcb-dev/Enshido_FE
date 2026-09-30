@@ -46,7 +46,7 @@ export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeMo
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
             Dán link file 3D. Khi lưu, đơn chuyển sang{' '}
-            <strong>Chờ sản xuất · Đã có 3D</strong>.
+            <strong>Chờ SX · Đã có 3D / khuôn (C)</strong>.
           </Typography>
           {order ? (
             <Typography variant="body2">

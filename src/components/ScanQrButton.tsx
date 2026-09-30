@@ -12,19 +12,11 @@ import { QrScannerDialog } from './QrScannerDialog'
  * màn nào, không phải quay về "Phiếu của tôi" trước.
  */
 export function ScanQrButton({ compact = false }: { compact?: boolean }) {
-  const { user } = useAuth()
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-
+  const openScanned = useOpenScannedPath()
   const onResult = (path: string) => {
     setOpen(false)
-    // ProtectedRoute đá về trang chủ không kèm lý do — nói thẳng ra ở đây, vì thợ đang
-    // cầm tờ phiếu trên tay và cần biết là do quyền chứ không phải quét sai.
-    if (user && !canAccessPath(user, path)) {
-      toast.error('Tài khoản của bạn không mở được phiếu vừa quét.')
-      return
-    }
-    navigate(path)
+    openScanned(path)
   }
 
   return (
@@ -47,4 +39,19 @@ export function ScanQrButton({ compact = false }: { compact?: boolean }) {
       <QrScannerDialog open={open} onClose={() => setOpen(false)} onResult={onResult} />
     </>
   )
+}
+
+/** Mở đường dẫn đọc được từ QR; tài khoản không có quyền thì báo rõ thay vì bị đá về trang chủ. */
+export function useOpenScannedPath() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  return (path: string) => {
+    // ProtectedRoute đá về trang chủ không kèm lý do — nói thẳng ra ở đây, vì thợ đang
+    // cầm tờ phiếu trên tay và cần biết là do quyền chứ không phải quét sai.
+    if (user && !canAccessPath(user, path)) {
+      toast.error('Tài khoản của bạn không mở được phiếu vừa quét.')
+      return
+    }
+    navigate(path)
+  }
 }

@@ -30,8 +30,27 @@ vi.mock('../auth/connectivity', () => ({
 
 const VARS: SubTicketVars = { orderCode: 'A012', no: 1, ticketCode: 'A012-1' }
 const ORDER = { code: 'A012' } as ProductionOrderDetail
-/** Tầng API bù phiếu con cho máy chủ cũ chưa trả trường này, nên bản vào cache có thêm hai khoá. */
-const CACHED_ORDER = { ...ORDER, subTickets: [], subTicketTotals: { qty: 0, silverWeight: '0' } }
+/** Tầng API bù phiếu con / NVL cho máy chủ cũ chưa trả các trường này, nên bản vào cache có thêm khoá. */
+const CACHED_ORDER = {
+  ...ORDER,
+  btpName: null,
+  customerName: null,
+  subTickets: [],
+  subTicketTotals: { qty: 0 },
+  materialRequests: [],
+  materials: {
+    lines: [],
+    issuedMetalWeight: '0',
+    issuedStoneCount: 0,
+    pendingCount: 0,
+    silverIn: null,
+    silverLoss: null,
+    silverLossPercent: null,
+    stonesIn: null,
+    stoneLoss: null,
+    stoneLossPercent: null,
+  },
+}
 
 const fetchMock = vi.fn()
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))

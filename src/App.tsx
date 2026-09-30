@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './components/AppShell'
+import { WorkerShell } from './worker/WorkerShell'
 import { LoginPage } from './pages/LoginPage'
 import { useAuth } from './auth/AuthContext'
 import { isWorkerOnly } from './auth/permissions'
@@ -33,6 +34,15 @@ const CastingOrdersPage = lazy(() =>
 const IntakeOrdersPage = lazy(() =>
   import('./pages/IntakeOrdersPage').then((m) => ({ default: m.IntakeOrdersPage })),
 )
+const CastingCutsPage = lazy(() =>
+  import('./pages/CastingCutsPage').then((m) => ({ default: m.CastingCutsPage })),
+)
+const CastingSlipPrintPage = lazy(() =>
+  import('./pages/CastingSlipPrintPage').then((m) => ({ default: m.CastingSlipPrintPage })),
+)
+const CastingCutPrintPage = lazy(() =>
+  import('./pages/CastingCutPrintPage').then((m) => ({ default: m.CastingCutPrintPage })),
+)
 const ProductionOrderDetailPage = lazy(() =>
   import('./pages/ProductionOrderDetailPage').then((m) => ({ default: m.ProductionOrderDetailPage })),
 )
@@ -44,6 +54,9 @@ const ProductionTicketPrintPage = lazy(() =>
 )
 const MyTicketsPage = lazy(() =>
   import('./pages/MyTicketsPage').then((m) => ({ default: m.MyTicketsPage })),
+)
+const MaterialRequestsPage = lazy(() =>
+  import('./pages/MaterialRequestsPage').then((m) => ({ default: m.MaterialRequestsPage })),
 )
 const SubTicketPage = lazy(() =>
   import('./pages/SubTicketPage').then((m) => ({ default: m.SubTicketPage })),
@@ -83,6 +96,22 @@ export default function App() {
           }
         />
         <Route
+          path="/casting/:code/print"
+          element={
+            <Suspense fallback={<PrintSheetSkeleton />}>
+              <CastingSlipPrintPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/casting-cuts/:code/print"
+          element={
+            <Suspense fallback={<PrintSheetSkeleton />}>
+              <CastingCutPrintPage />
+            </Suspense>
+          }
+        />
+        <Route
           path="/finished-goods/shipments/:code/print"
           element={
             <Suspense fallback={<PrintSheetSkeleton />}>
@@ -90,13 +119,17 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route element={<AppShell />}>
+        <Route element={<ShellRoute />}>
           <Route path="/casting" element={<CastingOrdersPage />} />
+          {/* Thợ đúc quét QR trên phiếu đúc giấy → mở thẳng phiếu (bước 8). */}
+          <Route path="/casting/:code" element={<CastingOrdersPage />} />
           <Route path="/intake-orders" element={<IntakeOrdersPage />} />
+          <Route path="/casting-cuts" element={<CastingCutsPage />} />
           <Route path="/orders" element={<ProductionOrdersPage />} />
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}
           <Route path="/orders/:code" element={<OrderDetailRoute />} />
           <Route path="/my-tickets" element={<MyTicketsPage />} />
+          <Route path="/material-requests" element={<MaterialRequestsPage />} />
           <Route path="/tickets/:ticketCode" element={<SubTicketPage />} />
           <Route path="/" element={<DashboardPage />} />
           <Route path="/warehouses" element={<WarehousesPage />} />
@@ -117,6 +150,12 @@ export default function App() {
 }
 
 /** Thợ chỉ được xem thông tin tham khảo; người quản lý mở màn đơn đầy đủ. */
+/** Tài khoản chỉ làm thợ dùng khung gọn riêng; các tài khoản khác dùng khung có sidebar. */
+function ShellRoute() {
+  const { user } = useAuth()
+  return isWorkerOnly(user) ? <WorkerShell /> : <AppShell />
+}
+
 function OrderDetailRoute() {
   const { user } = useAuth()
   return isWorkerOnly(user) ? <OrderReferencePage /> : <ProductionOrderDetailPage />

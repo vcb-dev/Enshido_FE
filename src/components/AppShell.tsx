@@ -16,12 +16,15 @@ import {
   Stack,
   Toolbar,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/Logout'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import CloudOffIcon from '@mui/icons-material/CloudOff'
 import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
+import MenuOpenIcon from '@mui/icons-material/MenuOpen'
 import SettingsIcon from '@mui/icons-material/Settings'
 import PlaceIcon from '@mui/icons-material/Place'
 import CategoryIcon from '@mui/icons-material/Category'
@@ -30,6 +33,7 @@ import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
@@ -44,11 +48,20 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, canAny, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
+const SIDEBAR_OPEN_KEY = 'enshido.sidebarOpen'
+
+function readSidebarOpen() {
+  try {
+    return localStorage.getItem(SIDEBAR_OPEN_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 function initials(name?: string, username?: string) {
   const source = (name || username || '?').trim()
@@ -63,7 +76,11 @@ export function AppShell() {
   const { user, logout, offline } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const theme = useTheme()
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Desktop: sidebar đóng/mở được, nhớ lựa chọn giữa các lần vào lại.
+  const [desktopOpen, setDesktopOpen] = useState(readSidebarOpen)
   const [loggingOut, setLoggingOut] = useState(false)
   const waiting = useWaitingCount()
   const canManageUsers = can(user, Permission.USERS_MANAGE)
@@ -79,6 +96,29 @@ export function AppShell() {
   // Đóng drawer sau mỗi lần điều hướng — kể cả từ breadcrumb hay tab, không chỉ
   // từ menu bên trong drawer.
   useEffect(() => setMobileOpen(false), [location.pathname])
+
+  function toggleSidebar() {
+    if (!isDesktop) {
+      setMobileOpen(true)
+      return
+    }
+    setDesktopOpen((open) => {
+      try {
+        localStorage.setItem(SIDEBAR_OPEN_KEY, open ? '0' : '1')
+      } catch {
+        // Không lưu được thì chỉ mất ghi nhớ, vẫn đóng/mở bình thường.
+      }
+      return !open
+    })
+  }
+
+  const sidebarWidth = desktopOpen ? DRAWER_WIDTH : 0
+  const slide = theme.transitions.create(['width', 'margin'], {
+    easing: theme.transitions.easing.sharp,
+    duration: desktopOpen
+      ? theme.transitions.duration.enteringScreen
+      : theme.transitions.duration.leavingScreen,
+  })
 
   async function onLogout() {
     setLoggingOut(true)
@@ -96,17 +136,18 @@ export function AppShell() {
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          ml: { md: `${DRAWER_WIDTH}px` },
+          width: { md: `calc(100% - ${sidebarWidth}px)` },
+          ml: { md: `${sidebarWidth}px` },
+          transition: slide,
         }}
       >
         <Toolbar variant="dense" sx={{ gap: 1.5 }}>
           <IconButton
             edge="start"
-            onClick={() => setMobileOpen(true)}
-            sx={{ display: { md: 'none' } }}
+            aria-label={isDesktop && desktopOpen ? 'Thu gọn menu' : 'Mở menu'}
+            onClick={toggleSidebar}
           >
-            <TableRowsIcon />
+            {isDesktop && desktopOpen ? <MenuOpenIcon /> : <TableRowsIcon />}
           </IconButton>
           <Typography variant="subtitle1" noWrap sx={{ flex: 1, minWidth: 0, color: 'primary.dark', fontWeight: 700 }}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -160,7 +201,10 @@ export function AppShell() {
         </Toolbar>
       </AppBar>
 
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+      <Box
+        component="nav"
+        sx={{ width: { md: sidebarWidth }, flexShrink: { md: 0 }, transition: slide }}
+      >
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -182,8 +226,8 @@ export function AppShell() {
           />
         </Drawer>
         <Drawer
-          variant="permanent"
-          open
+          variant="persistent"
+          open={desktopOpen}
           sx={{
             display: { xs: 'none', md: 'block' },
             '& .MuiDrawer-paper': {
@@ -211,7 +255,6 @@ export function AppShell() {
         sx={{
           flexGrow: 1,
           p: { xs: 1.5, md: 2 },
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
           minWidth: 0,
           height: '100%',
           display: 'flex',
@@ -307,6 +350,7 @@ function DrawerNav({
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
+  const { user } = useAuth()
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box
@@ -318,7 +362,7 @@ function DrawerNav({
           background: 'linear-gradient(180deg, #fffdfa 0%, #f5ead9 100%)',
         }}
       >
-        {/* Desktop: sidebar luôn mở cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
+        {/* Desktop: sidebar nằm cạnh nội dung nên logo nhỏ lại cho đỡ chiếm chỗ. */}
         <Box component="img" src={logo} alt="Enshido" sx={{ width: { xs: 150, md: 96 }, height: 'auto' }} />
       </Box>
       <Divider />
@@ -328,9 +372,16 @@ function DrawerNav({
         ) : null}
         {workerOnly ? null : (
           <>
-            <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
+            {canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE) ? (
+              <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
+            ) : null}
             <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
-            <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            {canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER) ? (
+              <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+            ) : null}
+            {canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC) ? (
+              <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
+            ) : null}
           </>
         )}
         {isWorker ? (

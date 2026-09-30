@@ -26,11 +26,6 @@ function waxConfirmedListKey(key: QueryKey) {
   return slot === 'wax-confirmed-for-all' || slot === 'wax-confirmed-count'
 }
 
-function waitCastingListKey(key: QueryKey) {
-  const slot = key[1]
-  return slot === 'wait-casting-for-all' || slot === 'wait-casting-count'
-}
-
 function warehousePendingListKey(key: QueryKey) {
   const slot = key[1]
   return slot === 'warehouse-pending-for-all' || slot === 'warehouse-pending-count'
@@ -202,42 +197,6 @@ function patchWaxConfirmedUpsert(
   return { ...old, items: [...old.items, order], total: old.total + 1 }
 }
 
-function patchWaxConfirmedRemove(
-  old: IntakeOrderList,
-  queryKey: QueryKey,
-  orderId: string,
-): IntakeOrderList | undefined {
-  if (!waxConfirmedListKey(queryKey)) return undefined
-  if (queryKey[1] === 'wax-confirmed-count') {
-    return { ...old, total: Math.max(0, old.total - 1) }
-  }
-  if (!old.items.some((item) => item.id === orderId)) return undefined
-  return {
-    ...old,
-    items: old.items.filter((item) => item.id !== orderId),
-    total: Math.max(0, old.total - 1),
-  }
-}
-
-function patchWaitCastingUpsert(
-  old: IntakeOrderList,
-  queryKey: QueryKey,
-  order: IntakeOrder,
-): IntakeOrderList | undefined {
-  if (!waitCastingListKey(queryKey)) return undefined
-  if (queryKey[1] === 'wait-casting-count') {
-    const bump = old.items.some((item) => item.id === order.id) ? 0 : 1
-    return { ...old, total: old.total + bump }
-  }
-  if (old.items.some((item) => item.id === order.id)) {
-    return {
-      ...old,
-      items: old.items.map((item) => (item.id === order.id ? order : item)),
-    }
-  }
-  return { ...old, items: [...old.items, order], total: old.total + 1 }
-}
-
 /** Gộp bucket cache thành một danh sách — sort cố định để đổi trạng thái không nhảy dòng. */
 export function mergeIntakeQueueItems(
   pendingItems: IntakeOrder[],
@@ -247,6 +206,8 @@ export function mergeIntakeQueueItems(
   waxItems: IntakeOrder[] = [],
   waxConfirmedItems: IntakeOrder[] = [],
   waitCastingItems: IntakeOrder[] = [],
+  castingItems: IntakeOrder[] = [],
+  castDoneItems: IntakeOrder[] = [],
 ): IntakeOrder[] {
   const byId = new Map<string, IntakeOrder>()
   for (const item of pendingItems) byId.set(item.id, item)
@@ -256,6 +217,8 @@ export function mergeIntakeQueueItems(
   for (const item of waxItems) byId.set(item.id, item)
   for (const item of waxConfirmedItems) byId.set(item.id, item)
   for (const item of waitCastingItems) byId.set(item.id, item)
+  for (const item of castingItems) byId.set(item.id, item)
+  for (const item of castDoneItems) byId.set(item.id, item)
   return [...byId.values()].sort((a, b) => {
     const tb = Date.parse(b.createdAt) || 0
     const ta = Date.parse(a.createdAt) || 0
@@ -332,19 +295,6 @@ export function afterIntakeCastingTreeUpdated(queryClient: QueryClient, order: I
     if (wax) return wax
     const warehouse = patchWarehousePendingUpsert(old, queryKey, order)
     if (warehouse) return warehouse
-    return undefined
-  })
-}
-
-export function afterIntakeCastingSlipCreated(
-  queryClient: QueryClient,
-  order: IntakeOrder,
-) {
-  patchIntakeQueries(queryClient, (old, queryKey) => {
-    const confirmed = patchWaxConfirmedRemove(old, queryKey, order.id)
-    if (confirmed) return confirmed
-    const wait = patchWaitCastingUpsert(old, queryKey, order)
-    if (wait) return wait
     return undefined
   })
 }

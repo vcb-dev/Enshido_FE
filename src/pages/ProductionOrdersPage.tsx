@@ -7,6 +7,7 @@ import {
   attachIntakeModel3dApi,
   rejectIntakeOrderApi,
   confirmIntakeWarehouseApi,
+  waxPrintBatchApi,
   submitIntakeCastingTreeSpecsApi,
   submitIntakeProductSpecsApi,
   listIntakeOrdersApi,
@@ -16,18 +17,15 @@ import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
 import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
 import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
 import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
+import { WarehouseConfirmDialog } from '../intake/WarehouseConfirmDialog'
+import { WaxPrintBatchDialog } from '../intake/WaxPrintBatchDialog'
 import { IntakeCastingTreeDialog } from '../intake/IntakeCastingTreeDialog'
-import { IntakeCastingSlipDialog } from '../intake/IntakeCastingSlipDialog'
 import {
   intakeNeedsCastingSlip,
   intakeNeedsCastingTreeSpecs,
   intakeNeedsModel3d,
   intakeNeedsProductSpecs,
 } from '../intake/intakeActions'
-import {
-  createCastingSlipsFromIntakeApi,
-  type CreateCastingSlipsPayload,
-} from '../api/castingSlips'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import { intakeProductWeightCaption, intakeShowsProductWeight } from '../intake/intakeDisplay'
 import { intakeDetailImages, intakeProductionStageColumn } from '../intake/intakeImages'
@@ -39,7 +37,6 @@ import {
   afterIntakeProductSpecsSubmitted,
   afterIntakeWarehouseConfirmed,
   afterIntakeCastingTreeUpdated,
-  afterIntakeCastingSlipCreated,
   afterIntakeRejected,
   markIntakeOrdersStale,
   mergeIntakeQueueItems,
@@ -48,6 +45,7 @@ import { IntakeStatusChip } from '../intake/IntakeStatusChip'
 import { INTAKE_PENDING_TAB } from '../orders/intakePendingTab'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import {
   createProductionOrderApi,
   deleteProductionOrderApi,
@@ -66,7 +64,7 @@ import {
   type SubTicketSummary,
   type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
-import { formatQty, formatStockedDate } from '../api/inventory'
+import { formatStockedDate } from '../api/inventory'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
@@ -112,8 +110,9 @@ export function ProductionOrdersPage() {
   const [rejectTarget, setRejectTarget] = useState<IntakeOrder | null>(null)
   const [model3dTarget, setModel3dTarget] = useState<IntakeOrder | null>(null)
   const [productSpecsTarget, setProductSpecsTarget] = useState<IntakeOrder | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<IntakeOrder | null>(null)
+  const [waxBatchOpen, setWaxBatchOpen] = useState(false)
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
-  const [castingSlipTarget, setCastingSlipTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
   const table = useTableParams({
     pageSize: 25,
@@ -249,6 +248,35 @@ export function ProductionOrdersPage() {
     staleTime: 15_000,
   })
 
+  const intakeCastingAll = useQuery({
+    queryKey: ['intake-orders', 'casting-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'CASTING',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+  const intakeCastDoneAll = useQuery({
+    queryKey: ['intake-orders', 'cast-done-for-all', search, params.requestType],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: 'CAST_DONE',
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: 1,
+        pageSize: 200,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isAllView,
+    staleTime: 15_000,
+  })
+
   const pendingTotal = intakePendingAll.data?.total ?? 0
   const pendingItems = intakePendingAll.data?.items ?? []
   const approvedTotal = intakeApprovedAll.data?.total ?? 0
@@ -263,6 +291,10 @@ export function ProductionOrdersPage() {
   const waxConfirmedItems = intakeWaxConfirmedAll.data?.items ?? []
   const waitCastingTotal = intakeWaitCastingAll.data?.total ?? 0
   const waitCastingItems = intakeWaitCastingAll.data?.items ?? []
+  const castingTotal = intakeCastingAll.data?.total ?? 0
+  const castingItems = intakeCastingAll.data?.items ?? []
+  const castDoneTotal = intakeCastDoneAll.data?.total ?? 0
+  const castDoneItems = intakeCastDoneAll.data?.items ?? []
   const intakeQueueItems = useMemo(
     () =>
       mergeIntakeQueueItems(
@@ -273,6 +305,8 @@ export function ProductionOrdersPage() {
         waxItems,
         waxConfirmedItems,
         waitCastingItems,
+        castingItems,
+        castDoneItems,
       ),
     [
       pendingItems,
@@ -282,6 +316,8 @@ export function ProductionOrdersPage() {
       waxItems,
       waxConfirmedItems,
       waitCastingItems,
+      castingItems,
+      castDoneItems,
     ],
   )
   const intakeQueueTotal =
@@ -291,7 +327,9 @@ export function ProductionOrdersPage() {
     warehousePendingTotal +
     waxTotal +
     waxConfirmedTotal +
-    waitCastingTotal
+    waitCastingTotal +
+    castingTotal +
+    castDoneTotal
   const mergeSlice = useMemo(
     () => sliceMergedPage(params.page, params.pageSize, intakeQueueItems, intakeQueueTotal),
     [params.page, params.pageSize, intakeQueueItems, intakeQueueTotal],
@@ -365,6 +403,18 @@ export function ProductionOrdersPage() {
   const intakeWaitCastingCount = useQuery({
     queryKey: ['intake-orders', 'wait-casting-count'],
     queryFn: () => listIntakeOrdersApi({ status: 'WAIT_CASTING', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeCastingCount = useQuery({
+    queryKey: ['intake-orders', 'casting-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'CASTING', page: 1, pageSize: 1 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+  const intakeCastDoneCount = useQuery({
+    queryKey: ['intake-orders', 'cast-done-count'],
+    queryFn: () => listIntakeOrdersApi({ status: 'CAST_DONE', page: 1, pageSize: 1 }),
     staleTime: 30_000,
     refetchInterval: 30_000,
   })
@@ -483,11 +533,22 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const confirmWarehouse = useMutation({
-    mutationFn: (id: string) => confirmIntakeWarehouseApi(id),
+    mutationFn: (vars: { id: string; checkedWeightGram?: number }) =>
+      confirmIntakeWarehouseApi(vars.id, vars.checkedWeightGram),
     onSuccess: (order) => {
+      setConfirmTarget(null)
       afterIntakeWarehouseConfirmed(queryClient, order)
       markIntakeOrdersStale(queryClient)
       toast.success(`Đã có sáp — ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const waxBatch = useMutation({
+    mutationFn: waxPrintBatchApi,
+    onSuccess: (result) => {
+      setWaxBatchOpen(false)
+      void queryClient.invalidateQueries({ queryKey: ['intake-orders'] })
+      toast.success(`Đã in sáp ${result.items.length} đơn — chờ cấy cây thông`)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -506,31 +567,6 @@ export function ProductionOrdersPage() {
       afterIntakeCastingTreeUpdated(queryClient, order)
       markIntakeOrdersStale(queryClient)
       toast.success(`Đã gửi số liệu — chờ thủ kho (${order.code})`)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const submitCastingSlip = useMutation({
-    mutationFn: ({
-      id,
-      payload,
-    }: {
-      id: string
-      payload: CreateCastingSlipsPayload
-    }) => createCastingSlipsFromIntakeApi(id, payload),
-    onSuccess: (result) => {
-      const prev = castingSlipTarget
-      setCastingSlipTarget(null)
-      if (prev) {
-        afterIntakeCastingSlipCreated(queryClient, { ...prev, status: 'WAIT_CASTING' })
-      }
-      markIntakeOrdersStale(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
-      const codes = result.items.map((s) => s.code).join(', ')
-      toast.success(
-        result.count > 1
-          ? `Đã lên ${result.count} phiếu đúc (${codes}) — chờ đúc`
-          : `Đã lên phiếu đúc ${codes} — chờ đúc`,
-      )
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -597,13 +633,22 @@ export function ProductionOrdersPage() {
           onIntakeUpdate: (row) => setModel3dTarget(row),
           onIntakeProductSpecs: (row) => setProductSpecsTarget(row),
           onIntakeCastingTree: (row) => setCastingTreeTarget(row),
-          onIntakeCastingSlip: (row) => setCastingSlipTarget(row),
+          // Bước 7 lên phiếu cho nhiều đơn cùng lúc ở màn Lệnh đúc — tích sẵn đơn này.
+          onIntakeCastingSlip: (row) => navigate(`/casting?new=${row.id}`),
           onIntakeView: (row) => setIntakeViewTarget(row),
-          onIntakeWarehouseConfirm: (row) => confirmWarehouse.mutate(row.id),
+          onIntakeWarehouseConfirm: (row) => setConfirmTarget(row),
           warehouseConfirmLoadingId: confirmWarehouse.isPending
-            ? (confirmWarehouse.variables ?? null)
+            ? (confirmWarehouse.variables?.id ?? null)
             : null,
           canConfirmIntakeWarehouse: isIntakeWarehouseKeeper,
+          can: {
+            approve: can(user, Permission.INTAKE_APPROVE),
+            model3d: can(user, Permission.PRODUCTION_MODEL3D),
+            wax: can(user, Permission.PRODUCTION_WAX),
+            keeper: isIntakeWarehouseKeeper,
+            cast: can(user, Permission.PRODUCTION_CAST),
+            qc: can(user, Permission.PRODUCTION_QC),
+          },
           loadingEditId: loadEdit.isPending ? (loadEdit.variables?.id ?? null) : null,
           isAdmin,
         },
@@ -643,6 +688,7 @@ export function ProductionOrdersPage() {
       confirmWarehouse.isPending,
       confirmWarehouse.variables,
       isIntakeWarehouseKeeper,
+      user,
       navigate,
       params.dueDate,
       params.receivedDate,
@@ -685,7 +731,9 @@ export function ProductionOrdersPage() {
     (intakeWarehousePendingCount.data?.total ?? 0) +
     (intakeWaxCount.data?.total ?? 0) +
     (intakeWaxConfirmedCount.data?.total ?? 0) +
-    (intakeWaitCastingCount.data?.total ?? 0)
+    (intakeWaitCastingCount.data?.total ?? 0) +
+    (intakeCastingCount.data?.total ?? 0) +
+    (intakeCastDoneCount.data?.total ?? 0)
   const columnFiltered = Boolean(
     params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
   )
@@ -700,6 +748,13 @@ export function ProductionOrdersPage() {
         title="Lệnh sản xuất"
         subtitle="Lên đơn, theo dõi trạng thái và in phiếu cho thợ."
         compactSubtitle
+        actions={
+          can(user, Permission.PRODUCTION_MODEL3D) ? (
+            <Button variant="outlined" onClick={() => setWaxBatchOpen(true)}>
+              In sáp nhiều đơn
+            </Button>
+          ) : undefined
+        }
       />
 
       <Tabs
@@ -917,6 +972,20 @@ export function ProductionOrdersPage() {
           void attachModel3d.mutateAsync({ id: model3dTarget.id, model3dUrl })
         }}
       />
+      <WaxPrintBatchDialog
+        open={waxBatchOpen}
+        saving={waxBatch.isPending}
+        onClose={() => setWaxBatchOpen(false)}
+        onSave={(payload) => waxBatch.mutate(payload)}
+      />
+      <WarehouseConfirmDialog
+        order={confirmTarget}
+        saving={confirmWarehouse.isPending}
+        onClose={() => setConfirmTarget(null)}
+        onConfirm={(checkedWeightGram) =>
+          confirmTarget && confirmWarehouse.mutate({ id: confirmTarget.id, checkedWeightGram })
+        }
+      />
       <IntakeProductSpecsDialog
         order={productSpecsTarget}
         saving={submitProductSpecs.isPending}
@@ -933,15 +1002,6 @@ export function ProductionOrdersPage() {
         onSave={(payload) => {
           if (!castingTreeTarget) return
           void submitCastingTree.mutateAsync({ id: castingTreeTarget.id, ...payload })
-        }}
-      />
-      <IntakeCastingSlipDialog
-        order={castingSlipTarget}
-        saving={submitCastingSlip.isPending}
-        onClose={() => setCastingSlipTarget(null)}
-        onSave={(payload) => {
-          if (!castingSlipTarget) return
-          void submitCastingSlip.mutateAsync({ id: castingSlipTarget.id, payload })
         }}
       />
       <IntakeOrderDetailDialog
@@ -998,9 +1058,22 @@ function renderIntakeWorkflowAction(
     onIntakeWarehouseConfirm: (row: IntakeOrder) => void
     warehouseConfirmLoadingId: string | null
     canConfirmIntakeWarehouse: boolean
+    /** Quyền theo việc của người đang đăng nhập — không có quyền thì chỉ hiện "Chờ …". */
+    can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
   },
 ) {
+  // Chưa đến lượt người này: nói rõ đang chờ vai trò nào thay vì hiện nút bấm sẽ bị BE từ chối.
+  const waiting = (role: string) => (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      sx={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'block', maxWidth: 112, mx: 'auto', textAlign: 'center' }}
+    >
+      Chờ {role}
+    </Typography>
+  )
   if (order.status === 'PENDING_APPROVAL') {
+    if (!actions.can.approve) return waiting('quản lý SX duyệt')
     return (
       <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
         <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
@@ -1013,6 +1086,7 @@ function renderIntakeWorkflowAction(
     )
   }
   if (intakeNeedsModel3d(order)) {
+    if (!actions.can.model3d) return waiting('thợ 3D')
     return (
       <Button size="small" variant="outlined" onClick={() => actions.onIntakeUpdate(order)}>
         Cập nhật link 3D
@@ -1020,6 +1094,10 @@ function renderIntakeWorkflowAction(
     )
   }
   if (intakeNeedsProductSpecs(order)) {
+    // Không khuôn = in sáp (thợ 3D); có khuôn = bơm sáp (thợ sáp).
+    if (order.hasMold ? !actions.can.wax : !actions.can.model3d) {
+      return waiting(order.hasMold ? 'thợ sáp' : 'thợ 3D')
+    }
     return (
       <Button
         size="small"
@@ -1062,6 +1140,7 @@ function renderIntakeWorkflowAction(
     )
   }
   if (intakeNeedsCastingTreeSpecs(order)) {
+    if (!actions.can.wax) return waiting('thợ sáp')
     return (
       <Button
         size="small"
@@ -1079,7 +1158,22 @@ function renderIntakeWorkflowAction(
       </Button>
     )
   }
+  if (intakeNeedsCastingSlip(order) && order.castingSlip) {
+    // Đã lên + in phiếu, chờ thủ kho cấp vật tư và chụp ảnh (đơn vẫn ở E đến lúc đó).
+    return (
+      <Button
+        size="small"
+        variant="outlined"
+        component={RouterLink}
+        to={`/casting/${order.castingSlip.code}`}
+        sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
+      >
+        Phiếu {order.castingSlip.code} · chờ cấp vật tư
+      </Button>
+    )
+  }
   if (intakeNeedsCastingSlip(order)) {
+    if (!actions.can.keeper) return waiting('thủ kho lên phiếu đúc')
     return (
       <Button
         size="small"
@@ -1096,6 +1190,34 @@ function renderIntakeWorkflowAction(
         }}
       >
         Lên lệnh đúc
+      </Button>
+    )
+  }
+  if (order.status === 'WAIT_CASTING' || order.status === 'CASTING') {
+    if (!actions.can.cast && !actions.can.keeper) return waiting('thợ đúc')
+    return (
+      <Button
+        size="small"
+        variant="outlined"
+        component={RouterLink}
+        to="/casting"
+        sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
+      >
+        Xem Lệnh đúc
+      </Button>
+    )
+  }
+  if (order.status === 'CAST_DONE') {
+    if (!actions.can.keeper && !actions.can.qc) return waiting('thủ kho cắt cây')
+    return (
+      <Button
+        size="small"
+        variant="contained"
+        component={RouterLink}
+        to="/casting-cuts"
+        sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
+      >
+        Cắt cây thông
       </Button>
     )
   }
@@ -1121,6 +1243,7 @@ function orderColumns(
     onIntakeWarehouseConfirm: (row: IntakeOrder) => void
     warehouseConfirmLoadingId: string | null
     canConfirmIntakeWarehouse: boolean
+    can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
     loadingEditId: string | null
     isAdmin: boolean
   },
@@ -1263,9 +1386,6 @@ function orderColumns(
           <>
             {sub.qty}
             {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-              {formatQty(sub.silverWeight)} g bạc
-            </Typography>
           </>
         )
       },

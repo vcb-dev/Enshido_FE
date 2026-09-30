@@ -11,6 +11,9 @@ export type IntakeOrderStatus =
   | 'PENDING_WAREHOUSE_CONFIRMATION'
   | 'WAX_CONFIRMED'
   | 'WAIT_CASTING'
+  | 'CASTING'
+  | 'CAST_DONE'
+  | 'WAIT_COOLING'
   | 'REJECTED'
   | 'NEW'
   | 'IN_PROGRESS'
@@ -36,6 +39,11 @@ export type IntakeOrder = {
   model3dUrl: string | null
   productWeightGram: string | null
   castingTreeWeightGram: string | null
+  /** Bước 5–6: TL thủ kho cân kiểm lúc xác nhận sáp. */
+  waxCheckedWeightGram: string | null
+  waxCheckedByName: string | null
+  /** Phiếu đúc đang giữ đơn (kể cả phiếu chưa cấp vật tư). */
+  castingSlip?: { code: string; status: string } | null
   createdAt: string
   images: OrderImage[]
 }
@@ -126,10 +134,21 @@ export function submitIntakeProductSpecsApi(
   })
 }
 
-export function confirmIntakeWarehouseApi(id: string) {
+export function confirmIntakeWarehouseApi(id: string, checkedWeightGram?: number) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/confirm-warehouse`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify(checkedWeightGram != null ? { checkedWeightGram } : {}),
+  })
+}
+
+/** Bước 4: in sáp nhiều đơn một lần — ảnh cả khay + cân nặng từng đơn. */
+export function waxPrintBatchApi(payload: {
+  items: { id: string; productWeightGram: number }[]
+  images: OrderImage[]
+}) {
+  return apiFetch<{ items: IntakeOrder[] }>('/intake-orders/wax-print', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 
@@ -138,6 +157,17 @@ export function submitIntakeCastingTreeSpecsApi(
   payload: { castingTreeWeightGram: number; images: OrderImage[] },
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/casting-tree-specs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Bước 4: một lượt in sáp nhiều đơn — ảnh cả khay + cân nặng từng đơn. */
+export function submitIntakeWaxPrintBatchApi(payload: {
+  items: { id: string; productWeightGram: number }[]
+  images: OrderImage[]
+}) {
+  return apiFetch<{ count: number }>('/intake-orders/wax-print-batch', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

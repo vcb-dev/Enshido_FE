@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import {
@@ -7,7 +9,6 @@ import {
   type ProductionOrderDetail,
   type SubTicket,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
 import { LAST_STAGE, lastStageDone, STAGE_LABEL } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
 import { DefectDialog, FinishDialog } from './OutcomeDialogs'
@@ -56,10 +57,13 @@ export function SubTicketMatrixCard({
   const settled = ticket.outcome != null
   const idle = ticket.state === 'IDLE'
   const delivered = order.status === 'DELIVERED'
-  const canFinish = idle && ticket.entryCount > 0 && !delivered
+  // Chốt Lỗi / Hoàn thiện là việc của KCS.
+  const { user } = useAuth()
+  const isQc = can(user, Permission.PRODUCTION_QC)
+  const canFinish = isQc && idle && ticket.entryCount > 0 && !delivered
   // Hoàn thiện phải đi hết phiếu: chưa có khâu Xi được KCS nhận lại thì nút còn khoá.
   const finishReady = lastStageDone(order.stages.filter((entry) => entry.subTicketId === ticket.id))
-  const canDefect = idle && !delivered
+  const canDefect = isQc && idle && !delivered
   const shipped = (order.finishedGoods?.shippedQty ?? 0) > 0
 
   return (
@@ -84,7 +88,7 @@ export function SubTicketMatrixCard({
           </Typography>
           <SubTicketStateChip state={ticket.state} />
           <Typography variant="body2" color="text.secondary">
-            {ticket.qty} sp · {formatQty(ticket.silverWeight)} g bạc
+            {ticket.qty} sp
             {ticket.note ? ` · ${ticket.note}` : ''}
           </Typography>
         </Stack>

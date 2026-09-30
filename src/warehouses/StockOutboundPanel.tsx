@@ -344,7 +344,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         editDisabled={row.autoIssued}
         titles={
           row.autoIssued
-            ? { edit: `Phiếu tự tạo khi lên đơn ${row.productionOrderCode ?? ''} — sửa trên đơn` }
+            ? { edit: `Phiếu tự tạo từ đơn ${row.productionOrderCode ?? ''} — không sửa tay được` }
             : undefined
         }
       />

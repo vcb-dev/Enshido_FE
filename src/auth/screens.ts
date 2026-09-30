@@ -1,4 +1,4 @@
-import { can, isWorkerOnly, Permission, type PermissionCode, type PermissionUser } from './permissions'
+import { can, canAny, isWorkerOnly, Permission, type PermissionCode, type PermissionUser } from './permissions'
 import { WAREHOUSES, warehousePath, type WarehouseCode } from '../warehouses/catalog'
 
 export type ScreenGroup = {
@@ -23,6 +23,20 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
   {
     label: 'Sản xuất',
     items: [{ key: Permission.PRODUCTION_WORKER, label: 'Thợ sản xuất (nhận phiếu con)' }],
+  },
+  {
+    label: 'Quy trình đơn hàng (việc được làm)',
+    items: [
+      { key: Permission.INTAKE_CREATE, label: 'Tạo đơn (bước 1)' },
+      {
+        key: Permission.PRODUCTION_MANAGER,
+        label:
+          'Quản lý xưởng = quản lý SX + thủ kho + KCS: duyệt đơn, xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây, chia phiếu, KCS nhận lại (bước 2, 5–7, 9–15)',
+      },
+      { key: Permission.PRODUCTION_MODEL3D, label: 'Thợ 3D: gắn link 3D, in sáp (bước 3–4)' },
+      { key: Permission.PRODUCTION_WAX, label: 'Thợ sáp: cấy cây thông, bơm sáp (bước 5–6)' },
+      { key: Permission.PRODUCTION_CAST, label: 'Thợ đúc: bắt đầu đúc, nhập kết quả (bước 8–9)' },
+    ],
   },
   {
     label: 'Cấu hình',
@@ -68,5 +82,11 @@ export function firstAllowedPath(user: PermissionUser | undefined | null): strin
   if (can(user, Permission.SCREEN_CATALOGS)) return '/settings/catalogs'
   if (can(user, Permission.USERS_MANAGE)) return '/users'
   if (can(user, Permission.PRODUCTION_WORKER)) return '/my-tickets'
+  // Người chỉ có quyền theo việc (thợ 3D, thợ đúc…) vào thẳng màn của việc mình.
+  if (canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE)) return '/intake-orders'
+  if (canAny(user, Permission.PRODUCTION_MODEL3D, Permission.PRODUCTION_WAX, Permission.PRODUCTION_CAST)) {
+    return '/orders'
+  }
+  if (canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)) return '/orders'
   return '/'
 }
