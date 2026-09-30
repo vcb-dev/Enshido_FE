@@ -833,6 +833,12 @@ export function ProductionOrdersPage() {
           columns={columns}
           rows={tableRows}
           rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
+          onRowClick={(row) =>
+            row.kind === 'intake'
+              ? setIntakeViewTarget(row.row)
+              : navigate(`/orders/${row.row.code}`)
+          }
+          onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}
           subRows={{
             get: (row) =>
               row.kind === 'intake'

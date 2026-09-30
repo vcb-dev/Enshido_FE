@@ -352,9 +352,9 @@ export function CastingOrdersPage() {
         actions={
           canConfirm ? (
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" onClick={() => setLossOpen(true)}>
+              {/* <Button variant="outlined" onClick={() => setLossOpen(true)}>
                 Hao hụt theo thợ
-              </Button>
+              </Button> */}
               <Button variant="contained" onClick={() => setCreateOpen(true)}>
                 Lên phiếu đúc
               </Button>
