@@ -9,7 +9,7 @@ import {
 import { toast } from 'sonner'
 import { reportNetworkFailure } from '../auth/connectivity'
 import { persistOptions } from '../auth/offlineCache'
-import { claimSubTicketApi, type ProductionOrderDetail } from '../api/productionOrders'
+import { submitSubTicketApi, type ProductionOrderDetail } from '../api/productionOrders'
 import { registerSubTicketActions } from './subTicketActions'
 import {
   queuedByTicket,
@@ -126,18 +126,18 @@ describe('có mạng', () => {
   it('gửi thẳng, ghi đơn mới vào cache và báo cho thợ', async () => {
     fetchMock.mockResolvedValue(jsonRes(ORDER))
 
-    await fire(client, 'claim').promise
+    await fire(client, 'accept').promise
 
-    expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/claim'])
+    expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/accept'])
     expect(client.getQueryData(['production-order', 'A012'])).toEqual(CACHED_ORDER)
-    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã nhận phiếu A012-1'))
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã nhận hàng phiếu A012-1'))
     expect(toast.info).not.toHaveBeenCalled()
   })
 
   it('lỗi nghiệp vụ thì báo nguyên văn máy chủ và không thử lại', async () => {
     fetchMock.mockResolvedValue(jsonRes({ message: 'Phiếu A012-1 đã có thợ Nam nhận' }, 400))
 
-    const error = (await fire(client, 'claim').promise) as Error
+    const error = (await fire(client, 'accept').promise) as Error
 
     expect(error.message).toBe('Phiếu A012-1 đã có thợ Nam nhận')
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -150,29 +150,29 @@ describe('mất mạng', () => {
     fetchMock.mockResolvedValue(jsonRes(ORDER))
     onlineManager.setOnline(false)
 
-    const { observer } = fire(client, 'claim')
+    const { observer } = fire(client, 'accept')
     await tick()
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(observer.getCurrentResult().isPaused).toBe(true)
-    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('Đã xếp hàng nhận phiếu A012-1'))
+    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('Đã xếp hàng nhận hàng phiếu A012-1'))
     expect(toast.success).not.toHaveBeenCalled()
 
     // Đúng thứ mà thẻ phiếu đọc để hiện chip vàng.
     const queued = queuedByTicket(readQueue(client)).get('A012-1')
-    expect(queued).toEqual({ ticketCode: 'A012-1', action: 'claim', waiting: true })
+    expect(queued).toEqual({ ticketCode: 'A012-1', action: 'accept', waiting: true })
   })
 
   it('có sóng lại thì tự gửi lên, không cần thợ bấm lại', async () => {
     fetchMock.mockResolvedValue(jsonRes(ORDER))
     onlineManager.setOnline(false)
-    const { promise } = fire(client, 'claim')
+    const { promise } = fire(client, 'accept')
     await tick()
 
     onlineManager.setOnline(true)
     await promise
 
-    expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/claim'])
+    expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/accept'])
     expect(toast.success).toHaveBeenCalledOnce()
     expect(readQueue(client)).toHaveLength(0)
   })
@@ -180,7 +180,7 @@ describe('mất mạng', () => {
   it('nhiều phiếu thì giữ nguyên thứ tự thợ bấm', async () => {
     fetchMock.mockResolvedValue(jsonRes(ORDER))
     onlineManager.setOnline(false)
-    const first = fire(client, 'claim', { orderCode: 'A012', no: 1, ticketCode: 'A012-1' })
+    const first = fire(client, 'accept', { orderCode: 'A012', no: 1, ticketCode: 'A012-1' })
     const second = fire(client, 'submit', { orderCode: 'A012', no: 2, ticketCode: 'A012-2' })
     await tick()
 
@@ -191,7 +191,7 @@ describe('mất mạng', () => {
     await Promise.all([first.promise, second.promise])
 
     expect(calledUrls()).toEqual([
-      '/api/production-orders/A012/sub-tickets/1/claim',
+      '/api/production-orders/A012/sub-tickets/1/accept',
       '/api/production-orders/A012/sub-tickets/2/submit',
     ])
   })
@@ -227,7 +227,7 @@ describe('tắt app rồi mở lại', () => {
 
   it('thao tác đã gửi xong thì không lưu lại để gửi lần nữa', async () => {
     fetchMock.mockResolvedValue(jsonRes(ORDER))
-    await fire(client, 'claim').promise
+    await fire(client, 'accept').promise
 
     expect(dehydrate(client, persistOptions.dehydrateOptions).mutations).toHaveLength(0)
   })
@@ -235,7 +235,7 @@ describe('tắt app rồi mở lại', () => {
 
 describe('chính sách thử lại', () => {
   it('chỉ thử lại khi hỏng vì mạng, tối đa 2 lần', () => {
-    const retry = client.getMutationDefaults(subTicketMutationKey('claim')).retry
+    const retry = client.getMutationDefaults(subTicketMutationKey('accept')).retry
     expect(typeof retry).toBe('function')
     const shouldRetry = retry as (count: number, error: Error) => boolean
     const network = Object.assign(new Error('Mất kết nối tới máy chủ'), { name: 'NetworkError' })
@@ -250,7 +250,7 @@ describe('chính sách thử lại', () => {
   it('fetch chết vì mạng thì hạ cờ ngoại tuyến và đổi sang lỗi tiếng Việt', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
-    await expect(claimSubTicketApi('A012', 1)).rejects.toThrow('Mất kết nối tới máy chủ')
+    await expect(submitSubTicketApi('A012', 1)).rejects.toThrow('Mất kết nối tới máy chủ')
     expect(reportNetworkFailure).toHaveBeenCalled()
   })
 })

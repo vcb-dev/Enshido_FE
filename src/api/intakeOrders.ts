@@ -38,6 +38,9 @@ export type IntakeOrder = {
   hasMold: boolean | null
   model3dUrl: string | null
   productWeightGram: string | null
+  /** Đá theo file 3D (cả đơn); 0 viên = không có đá. */
+  stoneCount3d?: number | null
+  stoneWeight3dGram?: string | null
   castingTreeWeightGram: string | null
   /** Bước 5–6: TL thủ kho cân kiểm lúc xác nhận sáp. */
   waxCheckedWeightGram: string | null
@@ -117,7 +120,10 @@ export function rejectIntakeOrderApi(id: string, payload: { reason?: string }) {
   })
 }
 
-export function attachIntakeModel3dApi(id: string, payload: { model3dUrl: string }) {
+export function attachIntakeModel3dApi(
+  id: string,
+  payload: { model3dUrl: string; stoneCount3d?: number | null; stoneWeight3dGram?: number | null },
+) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/model-3d`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -126,7 +132,12 @@ export function attachIntakeModel3dApi(id: string, payload: { model3dUrl: string
 
 export function submitIntakeProductSpecsApi(
   id: string,
-  payload: { productWeightGram: number; images: OrderImage[] },
+  payload: {
+    productWeightGram: number
+    images: OrderImage[]
+    stoneCount3d?: number | null
+    stoneWeight3dGram?: number | null
+  },
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/product-specs`, {
     method: 'POST',

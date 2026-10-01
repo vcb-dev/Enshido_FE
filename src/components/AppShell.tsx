@@ -33,7 +33,6 @@ import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
-import ContentCutIcon from '@mui/icons-material/ContentCut'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
@@ -378,9 +377,6 @@ function DrawerNav({
             <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
             {canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER) ? (
               <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
-            ) : null}
-            {canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC) ? (
-              <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
             ) : null}
           </>
         )}

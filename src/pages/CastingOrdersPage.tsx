@@ -7,6 +7,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Link,
   Stack,
   Table,
   TableBody,
@@ -17,7 +18,7 @@ import {
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   confirmCastingSlipApi,
   createCastingSlipApi,
@@ -30,6 +31,7 @@ import {
   type CastingSlip,
   type CastingSlipImage,
   type CastingSlipResultPayload,
+  type ConfirmCastingSlipPayload,
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
 } from '../api/castingSlips'
@@ -51,9 +53,12 @@ import { CastingLossDialog } from '../intake/CastingLossDialog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
+import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { can, Permission } from '../auth/permissions'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
+import { invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlWarehouse } from '../orders/nvlStock'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -95,6 +100,7 @@ export function CastingOrdersPage() {
   const { code: scannedCode } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [resultTarget, setResultTarget] = useState<CastingSlip | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [issueTarget, setIssueTarget] = useState<CastingSlip | null>(null)
   const [lossOpen, setLossOpen] = useState(false)
@@ -214,8 +220,16 @@ export function CastingOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const confirm = useMutation({
-    mutationFn: (slip: CastingSlip) => confirmCastingSlipApi(slip.id),
-    onSuccess: (updated) => afterAction(updated, `Phiếu ${updated.code}: đã xác nhận Đúc xong`),
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
+      confirmCastingSlipApi(slip.id, payload),
+    onSuccess: (updated) => {
+      setConfirmTarget(null)
+      afterAction(updated, `Phiếu ${updated.code}: đã tạo ${updated.orders.length} lệnh sản xuất, chuyển Nguội`)
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
+      invalidateBtpStock(queryClient)
+      invalidateNvlWarehouse(queryClient)
+    },
     onError: (error: Error) => toast.error(error.message),
   })
   const canConfirm = canConfirmIntakeWarehouse(user)
@@ -352,9 +366,9 @@ export function CastingOrdersPage() {
         actions={
           canConfirm ? (
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" onClick={() => setLossOpen(true)}>
+              {/* <Button variant="outlined" onClick={() => setLossOpen(true)}>
                 Hao hụt theo thợ
-              </Button>
+              </Button> */}
               <Button variant="contained" onClick={() => setCreateOpen(true)}>
                 Lên phiếu đúc
               </Button>
@@ -390,7 +404,7 @@ export function CastingOrdersPage() {
         onRemove={(slip) => remove.mutate(slip)}
         onStart={(slip) => start.mutate(slip)}
         onEnterResult={(slip) => setResultTarget(slip)}
-        onConfirm={(slip) => confirm.mutate(slip)}
+        onConfirm={(slip) => setConfirmTarget(slip)}
         onClose={closeView}
       />
       <CastingLossDialog open={lossOpen} onClose={() => setLossOpen(false)} />
@@ -412,6 +426,12 @@ export function CastingOrdersPage() {
         saving={submitResult.isPending}
         onClose={() => setResultTarget(null)}
         onSave={(payload) => resultTarget && submitResult.mutate({ slip: resultTarget, payload })}
+      />
+      <CastingSlipConfirmDialog
+        slip={confirmTarget}
+        saving={confirm.isPending}
+        onClose={() => setConfirmTarget(null)}
+        onSave={(payload) => confirmTarget && confirm.mutate({ slip: confirmTarget, payload })}
       />
     </Stack>
   )
@@ -466,6 +486,10 @@ function CastingSlipViewDialog({
       })),
     [slip?.resultImages],
   )
+  const restThumbs = useMemo(
+    () => (slip?.restImages ?? []).map((image) => ({ ...image, kind: 'CASTING_TREE' as const })),
+    [slip?.restImages],
+  )
 
   const disabledCell = { bgcolor: 'action.hover', color: 'text.disabled' } as const
 
@@ -510,7 +534,15 @@ function CastingSlipViewDialog({
               <TableBody>
                 {slip.orders.map((line) => (
                   <TableRow key={line.intakeOrderId}>
-                    <TableCell sx={{ fontWeight: 700 }}>{line.code}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>
+                      {line.code}
+                      {line.productionOrderCode ? (
+                        <Link component={RouterLink} to={`/orders/${line.productionOrderCode}`}
+                          onClick={onClose} sx={{ display: 'block', fontSize: 12 }}>
+                          Lệnh {line.productionOrderCode} →
+                        </Link>
+                      ) : null}
+                    </TableCell>
                     <TableCell>{line.trackingCode ?? '—'}</TableCell>
                     <TableCell>{line.productName || '—'}</TableCell>
                     <TableCell align="right">{line.qty}</TableCell>
@@ -649,6 +681,15 @@ function CastingSlipViewDialog({
                 {slip.confirmedByName ? ` · ${slip.confirmedByName}` : ''}
               </Typography>
             ) : null}
+            {slip.restWeightGram != null ? (
+              <Stack spacing={0.5}>
+                <Typography variant="body2">Phần cây còn lại vào kho NVL: <strong>{formatGram(slip.restWeightGram)} g</strong></Typography>
+                {slip.cutLossGram != null ? (
+                  <Typography variant="body2">Hao hụt khi chia phôi: <strong>{formatGram(slip.cutLossGram)} g</strong></Typography>
+                ) : null}
+                {restThumbs.length ? <IntakeImageThumbs label="Ảnh phần cây còn lại" images={restThumbs} /> : null}
+              </Stack>
+            ) : null}
           </Stack>
         ) : null}
       </DialogContent>
@@ -690,10 +731,11 @@ function CastingSlipViewDialog({
             {slip.status === 'WAIT_CASTING' ? 'Chờ thợ đúc bắt đầu' : 'Chờ thợ đúc nhập kết quả'}
           </Typography>
         ) : null}
-        {slip?.status === 'PENDING_CONFIRMATION' ? (
+        {(slip?.status === 'PENDING_CONFIRMATION' ||
+          (slip?.status === 'DONE' && slip.orders.some((line) => line.status === 'CAST_DONE'))) ? (
           canConfirm ? (
             <Button variant="contained" disabled={busy} onClick={() => onConfirm(slip)}>
-              Xác nhận đúc xong
+              Xác nhận và chia phôi
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>

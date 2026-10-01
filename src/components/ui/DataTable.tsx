@@ -83,8 +83,8 @@ export type CardRole = 'title' | 'meta' | 'body' | 'actions' | 'hidden'
 
 /**
  * Dòng con xổ ra dưới dòng cha (vd. phiếu con dưới đơn mẹ), dùng chung bộ cột với dòng cha —
- * mỗi cột tự vẽ ô dòng con qua `Column.renderSub`. Dòng có con thì bấm vào dòng (hoặc mũi tên
- * ở cột đầu) để xổ / thu; tiêu đề cột đầu có nút xổ / thu tất cả.
+ * mỗi cột tự vẽ ô dòng con qua `Column.renderSub`. Mũi tên ở cột đầu dùng để xổ / thu;
+ * tiêu đề cột đầu có nút xổ / thu tất cả.
  */
 export type SubRowsConfig<T, S> = {
   /** Các dòng con của một dòng; rỗng thì dòng đó không có mũi tên. */
@@ -119,8 +119,8 @@ export type DataTableProps<T, S = never> = {
   showIndex?: boolean
   /** Số dòng đã bỏ qua ở các trang trước, để STT chạy tiếp. */
   indexOffset?: number
-  /** Dòng có dòng con thì bấm vào là xổ / thu, không gọi `onRowClick`. */
   onRowClick?: (row: T) => void
+  onSubRowClick?: (sub: S, parent: T) => void
   isRowSelected?: (row: T) => boolean
   sort?: { key: string; dir: SortDir }
   onSortChange?: (key: string) => void
@@ -195,7 +195,7 @@ const OPEN_PARENT_SX = { bgcolor: '#f3e9da', cursor: 'pointer' } as const
  * Bấm vào link / nút / ô nhập bên trong dòng thì để chúng tự xử lý, không xổ / thu dòng.
  * Kéo chuột bôi đen chữ cũng không tính là bấm.
  */
-function isToggleClick(event: MouseEvent) {
+function isRowClick(event: MouseEvent) {
   if (typeof window !== 'undefined' && window.getSelection()?.toString()) return false
   const target = event.target
   return !(
@@ -256,6 +256,7 @@ export function DataTable<T, S = never>({
   showIndex,
   indexOffset = 0,
   onRowClick,
+  onSubRowClick,
   isRowSelected,
   sort,
   onSortChange,
@@ -532,6 +533,8 @@ export function DataTable<T, S = never>({
             loading={loading}
             showSkeleton={showSkeleton}
             emptyText={emptyText}
+            onRowClick={onRowClick}
+            onSubRowClick={onSubRowClick}
           />
         ) : (
         <TableContainer
@@ -621,12 +624,14 @@ export function DataTable<T, S = never>({
                         hover
                         selected={isRowSelected?.(row) ?? false}
                         onClick={
-                          subs.length
+                          onRowClick
                             ? (event) => {
-                                if (isToggleClick(event)) toggle(key)
+                                if (isRowClick(event)) onRowClick(row)
                               }
-                            : onRowClick
-                              ? () => onRowClick(row)
+                            : subs.length
+                              ? (event) => {
+                                  if (isRowClick(event)) toggle(key)
+                                }
                               : undefined
                         }
                         sx={
@@ -674,7 +679,22 @@ export function DataTable<T, S = never>({
                     return [
                       parent,
                       ...subs.map((sub) => (
-                        <TableRow key={`${key}::${subRows.key(sub)}`} hover sx={SUB_ROW_SX}>
+                        <TableRow
+                          key={`${key}::${subRows.key(sub)}`}
+                          hover
+                          onClick={
+                            onSubRowClick
+                              ? (event) => {
+                                  if (isRowClick(event)) onSubRowClick(sub, row)
+                                }
+                              : undefined
+                          }
+                          sx={
+                            onSubRowClick
+                              ? { ...SUB_ROW_SX, cursor: 'pointer' }
+                              : SUB_ROW_SX
+                          }
+                        >
                           {leadCol ? (
                             <TableCell align="right" sx={leadColSx}>
                               <SubdirectoryArrowRightIcon
@@ -810,6 +830,8 @@ function CardList<T, S>({
   loading,
   showSkeleton,
   emptyText,
+  onRowClick,
+  onSubRowClick,
 }: {
   columns: Column<T, S>[]
   rows: T[]
@@ -824,6 +846,8 @@ function CardList<T, S>({
   loading?: boolean
   showSkeleton?: boolean
   emptyText: ReactNode
+  onRowClick?: (row: T) => void
+  onSubRowClick?: (sub: S, parent: T) => void
 }) {
   const declaredTitle = columns.some((column) => column.card === 'title')
   const roleOf = (column: Column<T, S>, index: number): CardRole => {
@@ -874,7 +898,18 @@ function CardList<T, S>({
         const open = expanded.has(key)
 
         return (
-          <Paper key={key} variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
+          <Paper
+            key={key}
+            variant="outlined"
+            onClick={
+              onRowClick
+                ? (event) => {
+                    if (isRowClick(event)) onRowClick(row)
+                  }
+                : undefined
+            }
+            sx={{ p: 1.5, minWidth: 0, cursor: onRowClick ? 'pointer' : undefined }}
+          >
             <Stack
               direction="row"
               spacing={1}
@@ -981,7 +1016,20 @@ function CardList<T, S>({
                         <Paper
                           key={subRows.key(sub)}
                           variant="outlined"
-                          sx={{ p: 1, bgcolor: '#faf6f0', minWidth: 0 }}
+                          onClick={
+                            onSubRowClick
+                              ? (event) => {
+                                  event.stopPropagation()
+                                  if (isRowClick(event)) onSubRowClick(sub, row)
+                                }
+                              : undefined
+                          }
+                          sx={{
+                            p: 1,
+                            bgcolor: '#faf6f0',
+                            minWidth: 0,
+                            cursor: onSubRowClick ? 'pointer' : undefined,
+                          }}
                         >
                           <Stack
                             direction="row"

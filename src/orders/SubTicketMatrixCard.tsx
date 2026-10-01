@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   clearSubTicketOutcomeApi,
@@ -9,7 +10,7 @@ import {
   type ProductionOrderDetail,
   type SubTicket,
 } from '../api/productionOrders'
-import { LAST_STAGE, lastStageDone, STAGE_LABEL } from './catalog'
+import { LAST_STAGE, lastStageDone, STAGE_LABEL, subTicketUrl } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
 import { DefectDialog, FinishDialog } from './OutcomeDialogs'
 import { TicketMatrix } from './TicketMatrix'
@@ -25,6 +26,7 @@ export function SubTicketMatrixCard({
   isAdmin,
   linkToTicket = false,
   showHeader = true,
+  showQr = true,
   embedded = false,
 }: {
   order: ProductionOrderDetail
@@ -34,6 +36,8 @@ export function SubTicketMatrixCard({
   linkToTicket?: boolean
   /** Trang phiếu con đã có tên phiếu ở đầu trang nên bỏ dòng tiêu đề này. */
   showHeader?: boolean
+  /** Mã QR của chính phiếu con này — thợ quét để vào phiếu, nhận việc và báo xong từng khâu. */
+  showQr?: boolean
   /** Dùng bên trong accordion/card cha thì bỏ nền, viền và khoảng đệm lồng nhau. */
   embedded?: boolean
 }) {
@@ -71,26 +75,43 @@ export function SubTicketMatrixCard({
       elevation={embedded ? 0 : 1}
       sx={embedded ? { p: 0, bgcolor: 'transparent' } : { p: { xs: 1, md: 1.5 } }}
     >
-      {showHeader ? (
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {linkToTicket ? (
-              <Box component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ color: 'inherit' }}>
-                Phiếu {ticket.code}
+      {showHeader || showQr ? (
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+            {showHeader ? (
+              <>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  {linkToTicket ? (
+                    <Box component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ color: 'inherit' }}>
+                      Phiếu {ticket.code}
+                    </Box>
+                  ) : (
+                    `Phiếu ${ticket.code}`
+                  )}
+                </Typography>
+                <SubTicketStateChip state={ticket.state} />
+                <Typography variant="body2" color="text.secondary">
+                  {ticket.qty} sp
+                  {ticket.note ? ` · ${ticket.note}` : ''}
+                </Typography>
+              </>
+            ) : null}
+          </Stack>
+          {showQr ? (
+            <Stack spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
+              <Box
+                component={RouterLink}
+                to={`/tickets/${ticket.code}`}
+                aria-label={`Mở phiếu ${ticket.code}`}
+                sx={{ p: 0.75, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1, lineHeight: 0 }}
+              >
+                <QRCodeSVG value={subTicketUrl(ticket.code)} size={88} marginSize={0} />
               </Box>
-            ) : (
-              `Phiếu ${ticket.code}`
-            )}
-          </Typography>
-          <SubTicketStateChip state={ticket.state} />
-          <Typography variant="body2" color="text.secondary">
-            {ticket.qty} sp
-            {ticket.note ? ` · ${ticket.note}` : ''}
-          </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {ticket.code}
+              </Typography>
+            </Stack>
+          ) : null}
         </Stack>
       ) : null}
 

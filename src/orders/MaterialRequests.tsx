@@ -78,7 +78,7 @@ type StockSource = 'NVL' | 'BTP'
  */
 export function stageSources(stage: StageCode | null | undefined): StockSource[] {
   if (stage === 'FILING') return ['BTP']
-  if (stage === 'STONE_SETTING') return ['NVL']
+  if (stage === 'STONE_SETTING') return ['NVL', 'BTP']
   return []
 }
 

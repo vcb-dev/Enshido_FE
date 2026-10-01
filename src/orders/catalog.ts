@@ -13,8 +13,13 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
   NEW: { label: 'Mới', bg: '#eee8df', fg: '#4a3d2f' },
   REDO_3D: { label: 'Sửa 3D', bg: '#f39c12', fg: '#ffffff' },
   CASTING: { label: 'Đúc', bg: '#8e44ad', fg: '#ffffff' },
-  FILING: { label: 'Nguội', bg: '#6c5ce7', fg: '#ffffff' },
-  STONE_SETTING: { label: 'Vào đá', bg: '#00897b', fg: '#ffffff' },
+  WAIT_FILING: { label: 'Chờ nguội', bg: '#a29bfe', fg: '#1f1b4d' },
+  FILING: { label: 'Đang nguội', bg: '#6c5ce7', fg: '#ffffff' },
+  FILING_DEFECT: { label: 'Lỗi nguội', bg: '#d63031', fg: '#ffffff' },
+  WAIT_STONE: { label: 'Chờ vào đá', bg: '#55c1b5', fg: '#06302c' },
+  STONE_SETTING: { label: 'Đang vào đá', bg: '#00897b', fg: '#ffffff' },
+  STONE_DEFECT: { label: 'Lỗi vào đá', bg: '#b71c1c', fg: '#ffffff' },
+  WAIT_ENGRAVING: { label: 'Chờ khắc', bg: '#a89a8a', fg: '#2b241c' },
   ENGRAVING: { label: 'Khắc', bg: '#6f6254', fg: '#ffffff' },
   POLISHING: { label: 'Bóng', bg: '#0097a7', fg: '#ffffff' },
   PLATING: { label: 'Xi', bg: '#c2185b', fg: '#ffffff' },
@@ -26,8 +31,13 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
 /** Thứ tự tab trên danh sách đơn. Bỏ Mới / Sửa 3D — Đơn BTP không qua 3D. */
 export const STATUS_TABS: ProductionStatus[] = [
   'CASTING',
+  'WAIT_FILING',
   'FILING',
+  'FILING_DEFECT',
+  'WAIT_STONE',
   'STONE_SETTING',
+  'STONE_DEFECT',
+  'WAIT_ENGRAVING',
   'ENGRAVING',
   'POLISHING',
   'PLATING',
@@ -62,8 +72,11 @@ export const STAGE_LABEL: Record<StageCode, string> = {
 
 /** Trạng thái đơn đang nằm ở một khâu trên phiếu; ngoài các trạng thái này thì được làm lại từ khâu bất kỳ. */
 const IN_STAGE_STATUSES: ProductionStatus[] = [
+  'WAIT_FILING',
   'FILING',
+  'WAIT_STONE',
   'STONE_SETTING',
+  'WAIT_ENGRAVING',
   'ENGRAVING',
   'POLISHING',
   'PLATING',
@@ -250,6 +263,7 @@ export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
   CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
   WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },
   SUBMITTED: { label: 'Chờ KCS cân lại', bg: '#fff4d6', fg: '#8a6100' },
+  CONFIRMING: { label: 'Chờ thủ kho xác nhận', bg: '#e3f2fd', fg: '#1565c0' },
   DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
   FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }

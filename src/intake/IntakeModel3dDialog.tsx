@@ -10,21 +10,24 @@ import {
   Typography,
 } from '@mui/material'
 import type { IntakeOrder } from '../api/intakeOrders'
+import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
 
 type IntakeModel3dDialogProps = {
   order: IntakeOrder | null
   saving: boolean
   onClose: () => void
-  onSave: (model3dUrl: string) => void
+  onSave: (payload: { model3dUrl: string; stoneCount3d: number | null; stoneWeight3dGram: number | null }) => void
 }
 
 export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeModel3dDialogProps) {
   const [model3dUrl, setModel3dUrl] = useState('')
   const [error, setError] = useState('')
+  const [stone, setStone] = useState<StoneSpecs>(stoneSpecsOf(null))
 
   useEffect(() => {
     if (order) {
       setModel3dUrl(order.model3dUrl?.trim() ?? '')
+      setStone(stoneSpecsOf(order))
       setError('')
     }
   }, [order])
@@ -36,7 +39,7 @@ export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeMo
       return
     }
     setError('')
-    onSave(value)
+    onSave({ model3dUrl: value, ...stoneSpecsPayload(stone) })
   }
 
   return (
@@ -70,6 +73,7 @@ export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeMo
             disabled={saving}
             placeholder="https://…"
           />
+          <StoneSpecsFields value={stone} onChange={setStone} disabled={saving} />
         </Stack>
       </DialogContent>
       <DialogActions>

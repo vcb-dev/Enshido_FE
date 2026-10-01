@@ -88,6 +88,14 @@ export default function App() {
           }
         />
         <Route
+          path="/orders/:code/tickets/print-all"
+          element={
+            <Suspense fallback={<PrintSheetSkeleton />}>
+              <ProductionTicketPrintPage all />
+            </Suspense>
+          }
+        />
+        <Route
           path="/orders/:code/tickets/:no/print"
           element={
             <Suspense fallback={<PrintSheetSkeleton />}>

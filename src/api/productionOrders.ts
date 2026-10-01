@@ -1,11 +1,17 @@
 import { apiFetch } from './auth'
+import type { IntakeOrderStatus } from './intakeOrders'
 
 export type ProductionStatus =
   | 'NEW'
   | 'REDO_3D'
   | 'CASTING'
+  | 'WAIT_FILING'
   | 'FILING'
+  | 'FILING_DEFECT'
+  | 'WAIT_STONE'
   | 'STONE_SETTING'
+  | 'STONE_DEFECT'
+  | 'WAIT_ENGRAVING'
   | 'ENGRAVING'
   | 'POLISHING'
   | 'PLATING'
@@ -21,7 +27,7 @@ export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
 /** Đơn NVL: làm từ đầu (3D → Đúc → khâu). Đơn BTP: lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
 export type ProductionSource = 'NVL' | 'BTP'
 
-export type ProductionImageKind = 'DETAIL' | 'PRODUCT' | 'CASTING_TREE'
+export type ProductionImageKind = 'DETAIL' | 'PRODUCT' | 'CASTING_TREE' | 'CUT_BLANK'
 
 export type OrderImage = {
   id?: string
@@ -85,6 +91,8 @@ export type SubTicketSummary = {
   note: string | null
   createdAt: string
   state: SubTicketState
+  /** Trạng thái thật của phiếu (Chờ nguội, Đang nguội, Chờ vào đá…) — nguồn xếp tab và chip. */
+  status: ProductionStatus
   /** Khâu đang chạy, hoặc khâu vừa xong nếu đang rảnh / đã chốt. Chưa giao khâu nào thì null. */
   stage: StageCode | null
   /** Người đang giữ hàng (đã nhận hoặc đang làm). Đang chờ nhận / rảnh thì null. */
@@ -156,6 +164,18 @@ export type StageEntry = {
   returnedStoneCount: number | null
   btpRecoveredWeight: string | null
   silverRecoveredWeight: string | null
+  /** Nguội / Vào đá: SL hàng lỗi, S999 thừa; thủ kho xác nhận (null = chưa) rồi mới nhập kho. */
+  defectQty: number | null
+  scrapS999Weight: string | null
+  confirmedAt: string | null
+  confirmedByName: string | null
+  /** Số lần KCS đã sửa lại kết quả (tối đa 3 trước khi thủ kho xác nhận). */
+  kcsRevisionCount: number
+  outputMaterialId: string | null
+  /** Báo lỗi ngay ở khâu đang làm: lúc báo, người báo và lý do. */
+  defectReportedAt: string | null
+  defectReportedByName: string | null
+  defectNote: string | null
   silverLoss: string | null
   silverLossPercent: string | null
   /** Đá vào khâu = đá phát lúc giao + đá xuất thêm (viên). */
@@ -259,6 +279,8 @@ export type SubTicketState =
   | 'WORKING'
   /** Thợ đã báo làm xong, chờ KCS cân lại. */
   | 'SUBMITTED'
+  /** KCS đã nhận lại Nguội / Vào đá, chờ thủ kho xác nhận để nhập kho. */
+  | 'CONFIRMING'
   | 'DEFECT'
   | 'FINISH'
 
@@ -273,6 +295,11 @@ export type SubTicket = {
   qty: number
   note: string | null
   state: SubTicketState
+  /** Đá thủ kho đã cấp (giữ chỗ) cho khâu Vào đá đang chờ thợ nhận. */
+  heldStoneCount: number
+  heldStoneWeight: string | null
+  /** Trạng thái thật của phiếu (Chờ nguội, Đang nguội, Chờ vào đá…). */
+  status: ProductionStatus
   /** Khâu đang chờ nhận hoặc đang làm. */
   activeStage: StageCode | null
   pendingStage: StageCode | null
@@ -342,11 +369,11 @@ export type ProductionOrderDetail = Omit<
   nvlLines: ProductionNvlWorkLine[]
   castingSentDate: string | null
   castingReturnedDate: string | null
-  /** Lúc thủ kho cắt cây chia phôi — có mốc này đơn NVL vào Nguội. */
+  /** Lúc thủ kho xác nhận đúc và cân phôi — có mốc này đơn NVL vào Nguội. */
   cutAt: string | null
-  /** Phôi nhận ở phiếu cắt cây gần nhất. */
+  /** Phôi nhận sau đúc; `code` chỉ có ở dữ liệu phiếu cắt cũ. */
   cut: {
-    code: string
+    code: string | null
     cutAt: string
     qty: number
     weight: string
@@ -388,6 +415,8 @@ export type ProductionOrderDetail = Omit<
   /** NVL xuất thêm + hao hụt của cả đơn. */
   materials: TicketMaterials
   statusLogs: StatusLog[]
+  /** Phiếu bù cho hàng lỗi Nguội / Vào đá: đơn tạo bù đang đi lại từ bước sáp. */
+  reworks: Array<{ code: string; status: IntakeOrderStatus; qty: number; entryId: string | null; ticketNo: number | null }>
 }
 
 export type ProductionOrderLookups = {
@@ -487,6 +516,10 @@ export type ReturnPayload = {
   stoneWeight?: string | null
   /** Khâu Vào đá: số viên đá thợ trả lại. */
   returnedStoneCount?: number | null
+  /** Nguội / Vào đá của phiếu con: SL hàng lỗi KCS tách ra. */
+  defectQty?: number | null
+  /** Nguội / Vào đá: TL nguyên liệu thừa S999 (g). */
+  scrapS999Weight?: string | null
   btpRecoveredWeight?: string | null
   silverRecoveredWeight?: string | null
   note?: string
@@ -805,6 +838,36 @@ export function returnStageApi(code: string, stageId: string, payload: ReturnPay
   })
 }
 
+/** Báo lỗi ở khâu đang làm (thợ giữ khâu, KCS hoặc admin) — lý do bắt buộc. */
+export function reportStageDefectApi(code: string, no: number, note: string) {
+  return orderFetch(ticketPath(code, no, '/stage-defect'), {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
+}
+
+export function clearStageDefectApi(code: string, no: number) {
+  return orderFetch(ticketPath(code, no, '/stage-defect'), { method: 'DELETE' })
+}
+
+/** Thủ kho tạo phiếu bù cho hàng lỗi đã xác nhận — đi lại từ bước sáp. */
+export function createReworkApi(code: string, stageId: string) {
+  return orderFetch(orderPath(code, `/stages/${stageId}/rework`), { method: 'POST', body: '{}' })
+}
+
+/** Thủ kho xác nhận sau KCS (Nguội / Vào đá): nhập kho BTP hàng đạt, NVL hàng lỗi + thừa. */
+export function confirmStageApi(code: string, stageId: string) {
+  return orderFetch(orderPath(code, `/stages/${stageId}/confirm`), { method: 'POST', body: '{}' })
+}
+
+/** KCS sửa lại kết quả đã nhận ở Nguội / Vào đá (tối đa 3 lần, trước khi thủ kho xác nhận). */
+export function reviseReturnApi(code: string, stageId: string, payload: ReturnPayload) {
+  return orderFetch(orderPath(code, `/stages/${stageId}/return`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function undoReturnApi(code: string, stageId: string) {
   return orderFetch(orderPath(code, `/stages/${stageId}/return`), {
     method: 'DELETE',
@@ -999,14 +1062,6 @@ export function deleteSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no), { method: 'DELETE' })
 }
 
-/** Mở một khâu cho thợ tự nhận. Bỏ trống `nos` = mọi phiếu con đang rảnh. */
-export function openSubTicketStageApi(code: string, payload: { stage: StageCode; nos?: number[] }) {
-  return orderFetch(orderPath(code, '/sub-tickets/open-stage'), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
 export function openOrderStageApi(code: string, stage: StageCode) {
   return orderFetch(orderPath(code, '/work/open-stage'), {
     method: 'POST',
@@ -1022,12 +1077,26 @@ export function cancelSubTicketPendingApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/pending'), { method: 'DELETE' })
 }
 
-/** Thợ tự nhận khâu đang mở của phiếu con. */
-export function claimSubTicketApi(code: string, no: number) {
-  return orderFetch(ticketPath(code, no, '/claim'), {
+/** Thủ kho chỉ định thợ cho khâu của phiếu con (bỏ trống `stage` = khâu kế tiếp). */
+export function assignSubTicketApi(
+  code: string,
+  no: number,
+  payload: {
+    stage?: StageCode
+    craftsmanUserId: string
+    /** Khâu Vào đá: đá thủ kho cấp (giữ chỗ, xuất kho khi xác nhận sau KCS). */
+    stones?: Array<{ materialId: string; stoneCount: number; weight?: string | null }>
+  },
+) {
+  return orderFetch(ticketPath(code, no, '/assign'), {
     method: 'POST',
-    body: '{}',
+    body: JSON.stringify(payload),
   })
+}
+
+/** Thợ được chỉ định quét QR nhận hàng — khâu Nguội tự ghi giao và xuất phôi khỏi kho BTP. */
+export function acceptSubTicketApi(code: string, no: number) {
+  return orderFetch(ticketPath(code, no, '/accept'), { method: 'POST', body: '{}' })
 }
 
 export function claimOrderApi(code: string) {

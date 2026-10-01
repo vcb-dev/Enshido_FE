@@ -13,12 +13,18 @@ import type { OrderImage } from '../api/productionOrders'
 import { formatQty, parseQtyInput, qtyFromApi } from '../api/inventory'
 import { QtyTextField } from '../components/ui/QtyTextField'
 import { ImageUploadField } from '../orders/ImageUploadField'
+import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
 
 type IntakeProductSpecsDialogProps = {
   order: IntakeOrder | null
   saving: boolean
   onClose: () => void
-  onSave: (payload: { productWeightGram: number; images: OrderImage[] }) => void
+  onSave: (payload: {
+    productWeightGram: number
+    images: OrderImage[]
+    stoneCount3d: number | null
+    stoneWeight3dGram: number | null
+  }) => void
 }
 
 export function IntakeProductSpecsDialog({
@@ -30,6 +36,7 @@ export function IntakeProductSpecsDialog({
   const [weight, setWeight] = useState('')
   const [images, setImages] = useState<OrderImage[]>([])
   const [uploading, setUploading] = useState(false)
+  const [stone, setStone] = useState<StoneSpecs>(stoneSpecsOf(null))
   const [weightError, setWeightError] = useState('')
   const [imagesError, setImagesError] = useState('')
 
@@ -41,6 +48,7 @@ export function IntakeProductSpecsDialog({
           : '',
       )
       setImages([])
+      setStone(stoneSpecsOf(order))
       setWeightError('')
       setImagesError('')
     }
@@ -59,7 +67,7 @@ export function IntakeProductSpecsDialog({
     }
     setWeightError('')
     setImagesError('')
-    onSave({ productWeightGram: grams, images })
+    onSave({ productWeightGram: grams, images, ...stoneSpecsPayload(stone) })
   }
 
   return (
@@ -104,6 +112,9 @@ export function IntakeProductSpecsDialog({
             disabled={saving || uploading}
             slotProps={{ htmlInput: { inputMode: 'decimal' } }}
           />
+          {order?.hasMold ? (
+            <StoneSpecsFields value={stone} onChange={setStone} disabled={saving || uploading} />
+          ) : null}
           <Stack spacing={0.5}>
             <ImageUploadField
               label={order?.hasMold ? 'Ảnh sản phẩm' : 'Ảnh sản phẩm / sáp'}

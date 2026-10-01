@@ -167,6 +167,7 @@ export function summarizeSubTickets(order: ProductionOrderDetail): SubTicketSumm
       note: ticket.note,
       createdAt: ticket.createdAt,
       state: ticket.state,
+      status: ticket.status,
       stage: ticket.activeStage ?? own.at(-1)?.stage ?? null,
       workerName:
         ticket.state === 'CLAIMED'

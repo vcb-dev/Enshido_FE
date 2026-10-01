@@ -1,8 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
   Breadcrumbs,
@@ -31,7 +28,6 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
@@ -51,8 +47,11 @@ import {
   getProductionOrderApi,
   getProductionOrderLookupsApi,
   handoverOrderApi,
+  assignSubTicketApi,
+  confirmStageApi,
   handoverSubTicketApi,
   returnStageApi,
+  reviseReturnApi,
   openOrderStageApi,
   undoFinishOrderApi,
   undoReturnApi,
@@ -83,8 +82,8 @@ import {
   LAST_STAGE,
   lastStageDone,
   MANUAL_STATUSES,
-  orderTicketUrl,
   parentWorkTicketUrl,
+  subTicketUrl,
   SILVER_LOSS_LIMITS,
   STAGE_LABEL,
   STAGES,
@@ -103,7 +102,10 @@ import {
   KcsReturnDialog,
   type HandoverDialogState,
 } from '../orders/StageDialogs'
-import { SubTicketsPanel } from '../orders/SubTicketsPanel'
+import { SubTicketToolbar } from '../orders/SubTicketToolbar'
+import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
+import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
+import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
 import { useOrderMutation } from '../orders/useOrderMutation'
 import { stageColumns } from '../orders/ticketRows'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
@@ -122,6 +124,8 @@ export function ProductionOrderDetailPage() {
   const [editing, setEditing] = useState(false)
   const [handover, setHandover] = useState<HandoverDialogState | null>(null)
   const [handoverOpen, setHandoverOpen] = useState(false)
+  const [keeperTarget, setKeeperTarget] = useState<StageEntry | null>(null)
+  const [assignTarget, setAssignTarget] = useState<{ ticket: SubTicket; stageOptions: StageCode[] } | null>(null)
   const [returning, setReturning] = useState<StageEntry | null>(null)
   const [castingOpen, setCastingOpen] = useState(false)
   const [statusDialog, setStatusDialog] = useState(false)
@@ -130,6 +134,7 @@ export function ProductionOrderDetailPage() {
   const [parentStageDialog, setParentStageDialog] = useState(false)
   const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [selectedSubTicketId, setSelectedSubTicketId] = useState<string | null>(null)
 
   // Tab lưu trên URL để gửi link / quét QR là mở đúng khung cần xem.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -176,10 +181,10 @@ export function ProductionOrderDetailPage() {
     (payload: CastingPayload) => updateCastingApi(code, payload),
     'Đã lưu thông tin Đúc',
   )
-  // Đơn không chia chạy trực tiếp trên phiếu mẹ; đơn đã chia thì thợ tự nhận từng phiếu con.
+  // Đơn không chia chạy trực tiếp trên phiếu mẹ; đơn chia phiếu được giao cho thợ theo từng phiếu.
   const saveHandover = useOrderMutation(
     code,
-    (payload: HandoverPayload & { stage?: StageCode }) => {
+    (payload: HandoverPayload) => {
       if (handover?.mode === 'confirm') {
         // Thợ là người đã tự nhận phiếu, khâu là khâu đang mở — server tự lấy.
         return handoverSubTicketApi(code, handover.ticket.no, {
@@ -212,11 +217,31 @@ export function ProductionOrderDetailPage() {
         ? 'Đã xác nhận giao trên phiếu mẹ'
         : 'Đã lưu thông tin giao',
   )
+  const assignWorker = useOrderMutation(
+    code,
+    ({
+      ticket,
+      stage,
+      craftsmanUserId,
+      stones,
+    }: {
+      ticket: SubTicket
+      stage: StageCode
+      craftsmanUserId: string
+      stones: Array<{ materialId: string; stoneCount: number; weight: string | null }>
+    }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, stones }),
+    'Đã chỉ định thợ — thợ quét QR nhận hàng',
+  )
+  const confirmStage = useOrderMutation(
+    code,
+    (entry: StageEntry) => confirmStageApi(code, entry.id),
+    'Thủ kho đã xác nhận — hàng đạt nhập kho BTP, hàng lỗi + nguyên liệu thừa nhập kho NVL',
+  )
   const saveReturn = useOrderMutation(
     code,
     ({ entry, payload }: { entry: StageEntry; payload: ReturnPayload }) =>
-      returnStageApi(code, entry.id, payload),
-    'KCS đã nhận lại',
+      entry.returnedAt ? reviseReturnApi(code, entry.id, payload) : returnStageApi(code, entry.id, payload),
+    'Đã lưu kết quả cân KCS',
   )
   const undoReturn = useOrderMutation(
     code,
@@ -305,7 +330,7 @@ export function ProductionOrderDetailPage() {
     isAdmin &&
     stages.length === 0 &&
     !order.lastPrintedAt &&
-    (order.status === 'NEW' || (isBtp && order.status === 'FILING'))
+    (order.status === 'NEW' || (isBtp && order.status === 'WAIT_FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
 
   function openConfirmHandover(ticket: SubTicket) {
@@ -346,11 +371,11 @@ export function ProductionOrderDetailPage() {
                   variant="contained"
                   startIcon={<PrintIcon fontSize="small" />}
                   component={RouterLink}
-                  to={`/orders/${order.code}/print`}
+                  to={directOnParent ? `/orders/${order.code}/print` : `/orders/${order.code}/tickets/print-all`}
                   target="_blank"
                   disabled={!canPrint}
                 >
-                  In phiếu
+                  {directOnParent ? 'In phiếu' : `In ${order.subTickets.length} phiếu con`}
                 </Button>
               </span>
             </Tooltip>
@@ -391,6 +416,20 @@ export function ProductionOrderDetailPage() {
           </ListItemIcon>
           <ListItemText primary="Đổi trạng thái" secondary={locked ? 'Đơn đã giao / đã xuất hàng' : undefined} />
         </MenuItem>
+        {directOnParent ? null : (
+          <MenuItem
+            component={RouterLink}
+            to={`/orders/${order.code}/print`}
+            target="_blank"
+            disabled={!canPrint}
+            onClick={() => setMoreMenu(null)}
+          >
+            <ListItemIcon>
+              <PrintIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="In phiếu tổng" secondary="Không có mã QR — QR nằm trên từng phiếu con" />
+          </MenuItem>
+        )}
         {canDelete ? <Divider /> : null}
         {canDelete ? (
           <MenuItem
@@ -410,7 +449,7 @@ export function ProductionOrderDetailPage() {
 
       {!canPrint ? (
         <Alert severity="info">
-          Đơn chưa cắt cây chia phôi — thủ kho cắt cây ở màn Cắt cây thông thì mới in được phiếu và giao khâu cho thợ.
+          Đơn chưa có phôi sau đúc — thủ kho xác nhận phiếu đúc và cân phôi để chuyển sang Nguội.
         </Alert>
       ) : order.lastPrintedAt == null ? (
         <Alert severity="info">
@@ -457,7 +496,11 @@ export function ProductionOrderDetailPage() {
           {/* Mô tả, thông số và ảnh là một khối nhận diện đơn — gộp chung một thẻ cho trang ngắn lại. */}
           {tab === 'overview' ? (
             <Section title="Tổng quan đơn">
-              <OverviewSummary order={order} onOpenProduction={() => setTab('production')} />
+              <OverviewSummary
+                order={order}
+                onOpenProduction={() => setTab('production')}
+              />
+              {splitIntoTickets ? <ProductionTicketSummary tickets={order.subTickets} /> : null}
               <Divider sx={{ my: 2 }} />
               <InfoGrid order={order} />
               <Stack spacing={2} sx={{ mt: 2 }}>
@@ -478,7 +521,6 @@ export function ProductionOrderDetailPage() {
                 />
               }
             >
-              {splitIntoTickets ? <ProductionTicketSummary tickets={order.subTickets} /> : null}
               {directOnParent ? (
                 <Box
                   sx={{
@@ -591,19 +633,6 @@ export function ProductionOrderDetailPage() {
                   <WorkHistory order={order} ticket={null} />
                 </Box>
               )}
-              <SubTicketsPanel
-                order={order}
-                canManage={canManageTickets}
-                isAdmin={isAdmin}
-                locked={locked}
-                canPrint={canPrint}
-                busy={undoReturn.isPending}
-                undoingEntryId={undoReturn.isPending ? undoReturn.variables?.id : null}
-                onConfirm={openConfirmHandover}
-                onReturn={setReturning}
-                onEditHandover={openEditHandover}
-                onUndoReturn={(entry) => undoReturn.mutate(entry)}
-              />
               {directOnParent ? (
                 <Box sx={{ mt: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
@@ -678,83 +707,150 @@ export function ProductionOrderDetailPage() {
                     </Box>
                   ) : null}
                 </Box>
-              ) : splitIntoTickets ? (
-                /* Bảng tổng hợp rộng là dữ liệu tra cứu, mặc định thu gọn khi đơn đã chia. */
-                <Accordion disableGutters elevation={0} sx={matrixAccordionSx}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        Tổng hợp cả đơn
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Số cộng từ các phiếu con · mở để xem ma trận từng khâu
-                      </Typography>
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <TicketMatrix order={order} />
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                      Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
-                      {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
-                    </Typography>
-                    <ReworkHistory stages={stages} />
-                  </AccordionDetails>
-                </Accordion>
               ) : null}
-
-              {order.subTickets.map((ticket) => (
-                <Accordion key={ticket.id} disableGutters elevation={0} sx={matrixAccordionSx}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      useFlexGap
-                      sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}
+              <SubTicketToolbar order={order} canManage={canManageTickets} locked={locked} />
+              {order.subTickets.length ? (() => {
+                const selectedTicket =
+                  order.subTickets.find((ticket) => ticket.id === selectedSubTicketId) ??
+                  (!splitIntoTickets ? order.subTickets[0] : undefined)
+                const selectedTab = splitIntoTickets
+                  ? selectedTicket?.id ?? 'all-tickets'
+                  : selectedTicket?.id ?? order.subTickets[0].id
+                const showingSummary = splitIntoTickets && selectedTab === 'all-tickets'
+                return (
+                  <Paper variant="outlined" sx={{ minWidth: 0, overflow: 'hidden' }}>
+                    <Tabs
+                      variant="scrollable"
+                      scrollButtons="auto"
+                      value={selectedTab}
+                      onChange={(_, value: string) => setSelectedSubTicketId(value)}
+                      aria-label="Phiếu con"
+                      sx={{
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                        bgcolor: '#f8f3eb',
+                        '& .MuiTab-root': { alignItems: 'flex-start', textAlign: 'left', minHeight: 56, px: 1.5 },
+                      }}
                     >
-                      <Link
-                        component={RouterLink}
-                        to={`/tickets/${ticket.code}`}
-                        onClick={(event) => event.stopPropagation()}
-                        sx={{ fontWeight: 700 }}
-                      >
-                        {ticket.code}
-                      </Link>
-                      <SubTicketStateChip state={ticket.state} />
-                      <Typography variant="caption" color="text.secondary">
-                        {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'} · {ticket.qty} sp
-                        {Number(ticket.materials.issuedMetalWeight)
-                          ? ` · xuất thêm ${formatQty(ticket.materials.issuedMetalWeight)} g bạc`
-                          : ''}
-                        {ticket.materials.pendingCount ? ` · ${ticket.materials.pendingCount} yêu cầu chờ xuất` : ''}
-                      </Typography>
-                    </Stack>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <SubTicketMatrixCard
-                      order={order}
-                      ticket={ticket}
-                      isAdmin={isAdmin}
-                      showHeader={false}
-                      embedded
-                    />
-                    <Box sx={{ mt: 1.5 }}>
-                      <MaterialRequestsCard
-                        order={order}
-                        ticketNo={ticket.no}
-                        materials={ticket.materials}
-                        userId={user?.id ?? null}
-                        canHandle={can(user, Permission.WAREHOUSE_KEEPER)}
-                        isAdmin={isAdmin}
-                      />
+                      {splitIntoTickets ? (
+                        <Tab
+                          value="all-tickets"
+                          id="sub-ticket-tab-all"
+                          aria-controls="sub-ticket-panel-all"
+                          label={<Typography variant="body2" sx={{ fontWeight: 700 }}>Tổng hợp cả đơn</Typography>}
+                        />
+                      ) : null}
+                      {order.subTickets.map((ticket) => (
+                        <Tab
+                          key={ticket.id}
+                          value={ticket.id}
+                          id={`sub-ticket-tab-${ticket.id}`}
+                          aria-controls={`sub-ticket-panel-${ticket.id}`}
+                          label={
+                            <Stack spacing={0.5} sx={{ alignItems: 'flex-start', minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>{ticket.code}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {ticket.qty} sp · {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'}
+                              </Typography>
+                            </Stack>
+                          }
+                        />
+                      ))}
+                    </Tabs>
+                    <Box
+                      role="tabpanel"
+                      id={showingSummary ? 'sub-ticket-panel-all' : `sub-ticket-panel-${selectedTicket!.id}`}
+                      aria-labelledby={showingSummary ? 'sub-ticket-tab-all' : `sub-ticket-tab-${selectedTicket!.id}`}
+                      sx={{ minWidth: 0, p: { xs: 1, md: 1.5 } }}
+                    >
+                      {showingSummary ? (
+                        <>
+                          <TicketMatrix order={order} />
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                            Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
+                            {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
+                          </Typography>
+                          <ReworkHistory stages={stages} />
+                        </>
+                      ) : selectedTicket ? (
+                        <>
+                          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+                            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                              <Link component={RouterLink} to={`/tickets/${selectedTicket.code}`} sx={{ fontWeight: 700 }}>
+                                {selectedTicket.code}
+                              </Link>
+                              <SubTicketStateChip state={selectedTicket.state} />
+                              <Typography variant="caption" color="text.secondary">
+                                {Number(selectedTicket.materials.issuedMetalWeight)
+                                  ? `Xuất thêm ${formatQty(selectedTicket.materials.issuedMetalWeight)} g bạc · `
+                                  : ''}
+                                {selectedTicket.materials.pendingCount
+                                  ? `${selectedTicket.materials.pendingCount} yêu cầu chờ xuất`
+                                  : ''}
+                              </Typography>
+                            </Stack>
+                            {/* Mã QR của chính phiếu con: thợ quét để vào phiếu, nhận việc, báo xong từng khâu. */}
+                            <Stack spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                              <Box
+                                component={RouterLink}
+                                to={`/tickets/${selectedTicket.code}`}
+                                aria-label={`Mở phiếu ${selectedTicket.code}`}
+                                sx={{ p: 0.75, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1, lineHeight: 0 }}
+                              >
+                                <QRCodeSVG value={subTicketUrl(selectedTicket.code)} size={88} marginSize={0} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                                {selectedTicket.code}
+                              </Typography>
+                            </Stack>
+                          </Stack>
+                          <Box sx={{ mb: 1.25 }}>
+                            <SubTicketWorkActions
+                              order={order}
+                              ticket={selectedTicket}
+                              canManage={canManageTickets}
+                              isAdmin={isAdmin}
+                              locked={locked}
+                              canPrint={canPrint}
+                              busy={undoReturn.isPending}
+                              undoingEntryId={undoReturn.isPending ? undoReturn.variables?.id : null}
+                              onConfirm={openConfirmHandover}
+                              onAssign={(ticket, stageOptions) => setAssignTarget({ ticket, stageOptions })}
+                              onReturn={setReturning}
+                              onKeeperConfirm={setKeeperTarget}
+                              onEditHandover={openEditHandover}
+                              onUndoReturn={(entry) => undoReturn.mutate(entry)}
+                            />
+                          </Box>
+                          <SubTicketMatrixCard
+                            order={order}
+                            ticket={selectedTicket}
+                            isAdmin={isAdmin}
+                            showHeader={false}
+                            showQr={false}
+                            embedded
+                          />
+                          <Box sx={{ mt: 1.5 }}>
+                            <MaterialRequestsCard
+                              order={order}
+                              ticketNo={selectedTicket.no}
+                              materials={selectedTicket.materials}
+                              userId={user?.id ?? null}
+                              canHandle={can(user, Permission.WAREHOUSE_KEEPER)}
+                              isAdmin={isAdmin}
+                            />
+                          </Box>
+                        </>
+                      ) : null}
                     </Box>
-                  </AccordionDetails>
-                </Accordion>
-              ))}
+                  </Paper>
+                )
+              })() : null}
             </Section>
           ) : null}
 
           {tab === 'cost' ? (
-            <OrderCostingCard code={order.code} editable={order.status !== 'DELIVERED'} />
+            <OrderCostingCard code={order.code} />
           ) : null}
 
           {tab === 'goods' ? <FinishedGoodsCard order={order} /> : null}
@@ -764,24 +860,22 @@ export function ProductionOrderDetailPage() {
           spacing={1.5}
           sx={{ minWidth: 0, position: { lg: 'sticky' }, top: { lg: 12 }, alignSelf: 'start' }}
         >
-          <Section title="Mã QR">
-            <Stack spacing={1} sx={{ alignItems: 'center' }}>
-              <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1 }}>
-                <QRCodeSVG
-                  value={directOnParent ? parentWorkTicketUrl(order.code) : orderTicketUrl(order.code)}
-                  size={112}
-                  marginSize={1}
-                />
-              </Box>
-              <Typography variant="h6">{order.code}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-                Quét để mở đơn và cập nhật khâu
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                In lần cuối: {formatDateTime(order.lastPrintedAt)}
-              </Typography>
-            </Stack>
-          </Section>
+          {directOnParent ? (
+            <Section title="Mã QR">
+              <Stack spacing={1} sx={{ alignItems: 'center' }}>
+                <Box sx={{ p: 1, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1 }}>
+                  <QRCodeSVG value={parentWorkTicketUrl(order.code)} size={112} marginSize={1} />
+                </Box>
+                <Typography variant="h6">{order.code}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+                  Quét để mở phiếu và cập nhật khâu
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  In lần cuối: {formatDateTime(order.lastPrintedAt)}
+                </Typography>
+              </Stack>
+            </Section>
+          ) : null}
 
           <Section title="Trạng thái đơn">
             <StatusTimeline order={order} isBtp={isBtp} />
@@ -825,14 +919,16 @@ export function ProductionOrderDetailPage() {
                 <Field label="Ngày báo Đúc" value={formatStockedDate(order.castingSentDate)} />
                 <Field label="Ngày Đúc về" value={formatStockedDate(order.castingReturnedDate)} />
                 <Field
-                  label="Cắt cây chia phôi"
+                  label="Phôi sau đúc"
                   value={
-                    order.cut ? (
+                    order.cut?.code ? (
                       <Link component={RouterLink} to="/casting-cuts">
                         {order.cut.code} · {formatDateTime(order.cut.cutAt)}
                       </Link>
+                    ) : order.cut ? (
+                      formatDateTime(order.cut.cutAt)
                     ) : (
-                      'Chưa cắt'
+                      'Chưa có phôi'
                     )
                   }
                 />
@@ -841,6 +937,7 @@ export function ProductionOrderDetailPage() {
                   value={order.cut ? `${order.cut.qty} sp · ${formatQty(order.cut.weight)} g` : '—'}
                 />
               </Box>
+              <Gallery label="Ảnh cân phôi sau đúc" images={order.images.filter((image) => image.kind === 'CUT_BLANK')} />
             </Section>
           )}
 
@@ -887,6 +984,36 @@ export function ProductionOrderDetailPage() {
               setHandoverOpen(false)
               void queryClient.invalidateQueries({ queryKey: ['production-order', code] })
             },
+          })
+        }
+      />
+
+      <KeeperConfirmDialog
+        entry={keeperTarget}
+        ticketCode={
+          keeperTarget?.subTicketNo != null ? `${order.code}-${keeperTarget.subTicketNo}` : order.code
+        }
+        saving={confirmStage.isPending}
+        onClose={() => setKeeperTarget(null)}
+        onConfirm={(entry) =>
+          confirmStage.mutate(entry, {
+            onSuccess: () => setKeeperTarget(null),
+            onError: () => setKeeperTarget(null),
+          })
+        }
+      />
+
+      <AssignWorkerDialog
+        open={assignTarget != null}
+        ticket={assignTarget?.ticket ?? null}
+        stageOptions={assignTarget?.stageOptions ?? []}
+        workers={(lookups.data?.users ?? []).filter((worker) => lookups.data?.workerIds.includes(worker.id))}
+        saving={assignWorker.isPending}
+        onClose={() => setAssignTarget(null)}
+        onSave={(payload) =>
+          assignWorker.mutate(payload, {
+            onSuccess: () => setAssignTarget(null),
+            onError: () => setAssignTarget(null),
           })
         }
       />
@@ -1077,7 +1204,11 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
   const logs = [...order.statusLogs].reverse()
   // Đơn BTP không qua 3D và Đúc; Sản xuất lỗi là nhánh ngoài luồng nên chỉ hiện khi đã xảy ra.
   const flow = STATUS_TABS.filter(
-    (status) => status !== 'DEFECT' && !(isBtp && (status === 'REDO_3D' || status === 'CASTING')),
+    (status) =>
+      status !== 'DEFECT' &&
+      status !== 'FILING_DEFECT' &&
+      status !== 'STONE_DEFECT' &&
+      !(isBtp && (status === 'REDO_3D' || status === 'CASTING')),
   )
   const passed = new Set(logs.map((log) => log.toStatus))
   // Đơn đang ở Sản xuất lỗi thì không nằm trong luồng — lấy mốc là bước trong luồng gần nhất đã qua.
@@ -1489,18 +1620,6 @@ const TABS: Array<{ value: TabKey; label: string }> = [
   { value: 'cost', label: 'Chi phí' },
   { value: 'goods', label: 'Kho thành phẩm' },
 ]
-
-const matrixAccordionSx = {
-  mt: 1,
-  border: '1px solid',
-  borderColor: 'divider',
-  borderRadius: '6px !important',
-  overflow: 'hidden',
-  '&::before': { display: 'none' },
-  '& .MuiAccordionSummary-root': { minHeight: 48, bgcolor: '#f8fafb' },
-  '& .MuiAccordionSummary-content': { my: 1 },
-  '& .MuiAccordionDetails-root': { p: { xs: 1, md: 1.5 }, borderTop: '1px solid', borderColor: 'divider' },
-} as const
 
 /** Các lần làm trước của khâu đã làm lại — phiếu chỉ in lần gần nhất nên liệt kê riêng. */
 function ReworkHistory({ stages }: { stages: StageEntry[] }) {

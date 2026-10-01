@@ -17,7 +17,6 @@ import { PrintSheetSkeleton } from '../components/ui'
 import { cloudinaryFit } from '../api/uploads'
 import {
   formatDateTime,
-  orderTicketUrl,
   parentWorkTicketUrl,
   SILVER_LOSS_TONE,
   STAGE_LABEL,
@@ -56,8 +55,12 @@ const SPAN_3 = SPAN_1 + 2
 const OUTCOME_COL_WIDTH = 13
 const STAGE_COL_WIDTH = `${((81 - OUTCOME_COL_WIDTH * TICKET_OUTCOMES.length) / STAGES.length).toFixed(2)}%`
 
-/** In phiếu mẹ (`/orders/:code/print`) hoặc phiếu con cho thợ (`/orders/:code/tickets/:no/print`). */
-export function ProductionTicketPrintPage() {
+/**
+ * In phiếu mẹ (`/orders/:code/print`), một phiếu con (`/orders/:code/tickets/:no/print`) hoặc
+ * mọi phiếu con của đơn, mỗi phiếu một trang (`/orders/:code/tickets/print-all`). Mã QR chỉ nằm
+ * trên phiếu con — thợ quét là vào đúng phiếu đó để nhận việc và báo xong từng khâu.
+ */
+export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
   const { code = '', no } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -72,7 +75,9 @@ export function ProductionTicketPrintPage() {
   })
   const ticketNo = no != null ? Number(no) : null
   const subTicket = ticketNo != null ? detail.data?.subTickets.find((ticket) => ticket.no === ticketNo) : undefined
-  const missingTicket = ticketNo != null && detail.data != null && !subTicket
+  const missingTicket =
+    (ticketNo != null && detail.data != null && !subTicket) ||
+    (all && detail.data != null && detail.data.subTickets.length === 0)
   // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
   const canPrint =
     !missingTicket &&
@@ -81,6 +86,26 @@ export function ProductionTicketPrintPage() {
   async function print() {
     window.print()
     try {
+      if (all) {
+        const stamps = await Promise.all(
+          (detail.data?.subTickets ?? []).map(async (ticket) => ({
+            no: ticket.no,
+            lastPrintedAt: (await markSubTicketPrintedApi(code, ticket.no)).lastPrintedAt,
+          })),
+        )
+        queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
+          prev
+            ? {
+                ...prev,
+                subTickets: prev.subTickets.map((ticket) => {
+                  const stamp = stamps.find((item) => item.no === ticket.no)
+                  return stamp ? { ...ticket, lastPrintedAt: stamp.lastPrintedAt } : ticket
+                }),
+              }
+            : prev,
+        )
+        return
+      }
       if (ticketNo != null) {
         const { lastPrintedAt } = await markSubTicketPrintedApi(code, ticketNo)
         queryClient.setQueryData<ProductionOrderDetail>(['production-order', code], (prev) =>
@@ -139,7 +164,9 @@ export function ProductionTicketPrintPage() {
       <Box sx={{ p: 2 }}>
         <Alert severity="error">
           {missingTicket
-            ? `Không tìm thấy phiếu con ${code}-${no}`
+            ? all
+              ? `Đơn ${code} chưa chia phiếu con`
+              : `Không tìm thấy phiếu con ${code}-${no}`
             : detail.error instanceof Error
               ? detail.error.message
               : 'Không tải được đơn sản xuất'}
@@ -161,7 +188,7 @@ export function ProductionTicketPrintPage() {
         sx={{ py: 1.5, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}
       >
         <Button variant="contained" startIcon={<PrintIcon />} disabled={!canPrint} onClick={() => void print()}>
-          In phiếu
+          {all ? `In ${order.subTickets.length} phiếu con` : 'In phiếu'}
         </Button>
         <ToggleButtonGroup
           size="small"
@@ -189,26 +216,32 @@ export function ProductionTicketPrintPage() {
         </Alert>
       )}
 
-      <Box
-        className="ticket"
-        sx={{
-          width: PAPER_WIDTH[paper],
-          maxWidth: '100%',
-          mx: 'auto',
-          p: '6mm',
-          bgcolor: '#fff',
-          color: '#000',
-          boxShadow: '0 1px 6px rgba(0,0,0,.2)',
-          fontFamily: '"Times New Roman", Times, serif',
-          fontSize: paper === 'A5' ? '8.5pt' : '11pt',
-          lineHeight: 1.2,
-          visibility: canPrint ? 'visible' : 'hidden',
-          '& table': { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', breakInside: 'avoid' },
-          '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
-        }}
-      >
-        <Ticket order={order} subTicket={subTicket} printedBy={user?.fullName || user?.username || ''} />
-      </Box>
+      {(all ? order.subTickets : [subTicket]).map((ticket, index, list) => (
+        <Box
+          key={ticket?.id ?? 'parent'}
+          className="ticket"
+          sx={{
+            width: PAPER_WIDTH[paper],
+            maxWidth: '100%',
+            mx: 'auto',
+            mb: all ? 2 : 0,
+            p: '6mm',
+            bgcolor: '#fff',
+            color: '#000',
+            boxShadow: '0 1px 6px rgba(0,0,0,.2)',
+            fontFamily: '"Times New Roman", Times, serif',
+            fontSize: paper === 'A5' ? '8.5pt' : '11pt',
+            lineHeight: 1.2,
+            visibility: canPrint ? 'visible' : 'hidden',
+            // Mỗi phiếu con một trang giấy.
+            '@media print': { breakAfter: index === list.length - 1 ? 'auto' : 'page', mb: 0 },
+            '& table': { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', breakInside: 'avoid' },
+            '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
+          }}
+        >
+          <Ticket order={order} subTicket={ticket} printedBy={user?.fullName || user?.username || ''} />
+        </Box>
+      ))}
     </Box>
   )
 }
@@ -249,24 +282,23 @@ function Ticket({
 
   return (
     <>
-      <Box sx={{ position: 'relative', textAlign: 'center', minHeight: '11mm' }}>
+      <Box sx={{ position: 'relative', textAlign: 'center', minHeight: subTicket || order.subTickets.length === 0 ? '21mm' : '11mm' }}>
         <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>
           {subTicket ? 'Phiếu sản xuất — phiếu con' : 'Phiếu sản xuất'}
         </Box>
-        <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
-          <QRCodeSVG
-            value={
-              subTicket
-                ? subTicketUrl(subTicket.code)
-                : order.subTickets.length === 0
-                  ? parentWorkTicketUrl(order.code)
-                  : orderTicketUrl(order.code)
-            }
-            size={96}
-            marginSize={0}
-            style={{ width: '11mm', height: '11mm' }}
-          />
-        </Box>
+        {/* Đơn đã chia: mã QR nằm trên từng phiếu con, phiếu tổng không có QR. Đơn chưa chia
+            (BTP, đơn cũ) thợ vẫn quét QR của chính phiếu mẹ. */}
+        {subTicket || order.subTickets.length === 0 ? (
+          <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
+            <QRCodeSVG
+              value={subTicket ? subTicketUrl(subTicket.code) : parentWorkTicketUrl(order.code)}
+              size={128}
+              marginSize={0}
+              style={{ width: '17mm', height: '17mm' }}
+            />
+            <Box sx={{ fontSize: '0.75em', fontWeight: 700 }}>{subTicket ? subTicket.code : order.code}</Box>
+          </Box>
+        ) : null}
       </Box>
 
       <table style={{ marginTop: '1mm' }}>

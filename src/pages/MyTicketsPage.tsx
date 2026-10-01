@@ -73,6 +73,7 @@ export function MyTicketsPage() {
   // Cache, thông báo và hàng chờ khi mất mạng nằm hết trong orders/subTicketActions.ts.
   const claim = useSubTicketAction('claim')
   const unclaim = useSubTicketAction('unclaim')
+  const accept = useSubTicketAction('accept')
   const submit = useSubTicketAction('submit')
   const unsubmit = useSubTicketAction('unsubmit')
   // Khoá theo từng phiếu, không khoá cả màn: mất mạng thì thao tác nằm chờ rất lâu, thợ
@@ -135,6 +136,30 @@ export function MyTicketsPage() {
         >
           Đã làm xong
         </Button>
+      )
+    }
+    if (item.state === 'CLAIMED' && (item.stage === 'FILING' || item.stage === 'STONE_SETTING')) {
+      return (
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="contained"
+            disabled={busy}
+            loading={sending(item, 'accept')}
+            onClick={() => accept.mutate(vars(item))}
+            sx={{ minWidth: 132 }}
+          >
+            Nhận hàng
+          </Button>
+          <Button
+            variant="outlined"
+            color="inherit"
+            disabled={busy}
+            loading={sending(item, 'unclaim')}
+            onClick={() => unclaim.mutate(vars(item))}
+          >
+            Huỷ nhận
+          </Button>
+        </Stack>
       )
     }
     if (item.state === 'CLAIMED') {

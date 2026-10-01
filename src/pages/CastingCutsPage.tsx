@@ -197,8 +197,8 @@ export function CastingCutsPage() {
       sx={{ flex: { md: 1 }, minHeight: { md: 0 }, height: { md: '100%' }, overflow: { xs: 'visible', md: 'hidden' } }}
     >
       <PageHeader
-        title="Cắt cây thông"
-        subtitle="Cân cây sau đúc, chia phôi cho từng đơn. Lưu phiếu: phôi vào kho BTP, phần còn lại vào kho NVL chính, đơn chuyển sang Nguội."
+        title="Phiếu cắt cây cũ"
+        subtitle="Lịch sử phiếu đã lập trước khi chuyển việc cân phôi vào bước xác nhận đúc."
         compactSubtitle
       />
       <DataTable
@@ -207,7 +207,7 @@ export function CastingCutsPage() {
         rowKey={(row) => row.id}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText={search ? 'Không có phiếu cắt khớp tìm kiếm.' : 'Chưa có phiếu cắt. Bấm Cắt cây thông.'}
+        emptyText={search ? 'Không có phiếu cắt khớp tìm kiếm.' : 'Không có phiếu cắt cũ.'}
         variant="grid"
         fixedLayout
         minWidth={900}
@@ -220,11 +220,6 @@ export function CastingCutsPage() {
         onPageSizeChange={table.setPageSize}
         rowsLabel="phiếu"
         sx={{ flex: { md: 1 } }}
-        toolbar={
-          <Button variant="contained" sx={{ ml: 'auto' }} onClick={() => setCreating(true)}>
-            Cắt cây thông
-          </Button>
-        }
       />
       <CastingCutFormDialog
         open={creating}

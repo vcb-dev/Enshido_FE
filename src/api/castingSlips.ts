@@ -11,6 +11,7 @@ export type CastingSlipOrderLine = {
   trackingCode: string | null
   qty: number
   status: string
+  productionOrderCode: string | null
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
 }
@@ -48,6 +49,9 @@ export type CastingSlip = {
   submittedByName: string | null
   confirmedAt: string | null
   confirmedByName: string | null
+  restWeightGram: string | null
+  cutLossGram: string | null
+  restImages: CastingSlipImage[]
   /** Ảnh phiếu + vật tư lúc cấp (bước 7). */
   images: CastingSlipImage[]
   /** Ảnh cân cây thông sau đúc (bước 9). */
@@ -61,6 +65,18 @@ export type CastingSlipResultPayload = {
   silverUsedGram: number
   plasterUsedGram: number
   images: CastingSlipImage[]
+}
+
+export type ConfirmCastingSlipPayload = {
+  blanks: Array<{
+    intakeOrderId: string
+    qty: number
+    weightGram: number
+    images: CastingSlipImage[]
+  }>
+  restWeightGram: number
+  restMaterialId?: string | null
+  restImages: CastingSlipImage[]
 }
 
 export type CastingSlipList = {
@@ -192,6 +208,9 @@ export function submitCastingSlipResultApi(id: string, payload: CastingSlipResul
   })
 }
 
-export function confirmCastingSlipApi(id: string) {
-  return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, { method: 'POST', body: '{}' })
+export function confirmCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
