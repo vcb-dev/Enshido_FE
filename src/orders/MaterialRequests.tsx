@@ -797,7 +797,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
 }: {
   form: UseFormReturn<T>
   stage: StageCode | null
-  /** Phôi cắt cây của đơn còn chưa xuất — tổng xuất mã phôi không được vượt (khớp BE). */
+  /** Phôi sau đúc của đơn còn chưa xuất — tổng xuất mã phôi không được vượt (khớp BE). */
   blank?: { materialId: string; leftQty: number; leftWeight: number } | null
 }) {
   const stoneStage = stage === 'STONE_SETTING'

@@ -315,7 +315,7 @@ export function ProductionOrderDetailPage() {
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
-  // Đơn NVL vào Nguội khi đã cắt cây chia phôi; đơn cũ trước khi có phiếu cắt đi theo ngày Đúc.
+  // Đơn NVL vào Nguội khi đã xác nhận phiếu đúc (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
   const canPrint = isBtp || Boolean(order.castingSentDate || order.cutAt)
   const castingReady = isBtp || Boolean(order.cutAt || (order.castingSentDate && order.castingReturnedDate))
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
@@ -586,7 +586,7 @@ export function ProductionOrderDetailPage() {
                         </Button>
                       ) : parentOpenableStages.length > 0 && !order.finishedGoods ? (
                         <Tooltip
-                          title={castingReady ? '' : 'Cắt cây chia phôi cho đơn trước khi giao khâu'}
+                          title={castingReady ? '' : 'Xác nhận phiếu đúc (cân phôi) cho đơn trước khi giao khâu'}
                         >
                           <span>
                             <Button
@@ -921,11 +921,7 @@ export function ProductionOrderDetailPage() {
                 <Field
                   label="Phôi sau đúc"
                   value={
-                    order.cut?.code ? (
-                      <Link component={RouterLink} to="/casting-cuts">
-                        {order.cut.code} · {formatDateTime(order.cut.cutAt)}
-                      </Link>
-                    ) : order.cut ? (
+                    order.cut ? (
                       formatDateTime(order.cut.cutAt)
                     ) : (
                       'Chưa có phôi'

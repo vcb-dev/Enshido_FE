@@ -16,7 +16,7 @@ import type {
   CastingSlip,
   ConfirmCastingSlipPayload,
 } from "../api/castingSlips";
-import { listRestMaterialOptionsApi } from "../api/castingCuts";
+import { listRestMaterialOptionsApi } from "../api/castingSlips";
 import { formatQty, parseQtyInput } from "../api/inventory";
 import type { OrderImage } from "../api/productionOrders";
 import { QtyTextField } from "../components/ui/QtyTextField";

@@ -194,7 +194,7 @@ export type MaterialRequestKind = 'METAL' | 'STONE' | 'OTHER'
 /** Một lần thợ xin xuất NVL trong lúc làm khâu. */
 export type MaterialRequest = {
   id: string
-  /** Mã là phôi cắt cây của đơn: phần phôi chưa xuất — không xuất vượt (khớp BE). */
+  /** Mã là phôi sau đúc của đơn: phần phôi chưa xuất — không xuất vượt (khớp BE). */
   blankLeft?: { qty: string | null; weight: string | null } | null
   orderCode: string
   subTicketNo: number | null
@@ -371,9 +371,9 @@ export type ProductionOrderDetail = Omit<
   castingReturnedDate: string | null
   /** Lúc thủ kho xác nhận đúc và cân phôi — có mốc này đơn NVL vào Nguội. */
   cutAt: string | null
-  /** Phôi nhận sau đúc; `code` chỉ có ở dữ liệu phiếu cắt cũ. */
+  /** Phôi nhận lúc xác nhận phiếu đúc. */
   cut: {
-    code: string | null
+    code: null
     cutAt: string
     qty: number
     weight: string

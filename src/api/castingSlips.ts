@@ -214,3 +214,13 @@ export function confirmCastingSlipApi(id: string, payload: ConfirmCastingSlipPay
     body: JSON.stringify(payload),
   })
 }
+
+/** Mã NVL (gram, kho NVL chính) nhận phần cây còn lại lúc xác nhận đúc. */
+export type RestMaterialOptions = {
+  defaultName: string
+  items: { id: string; sku: string | null; name: string }[]
+}
+
+export function listRestMaterialOptionsApi() {
+  return apiFetch<RestMaterialOptions>('/casting-slips/rest-material-options')
+}

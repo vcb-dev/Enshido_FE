@@ -32,9 +32,6 @@ export function canAccessPath(
   if (p === '/casting' || p.startsWith('/casting/')) {
     return !isWorkerOnly(user) && canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER)
   }
-  if (p === '/casting-cuts') {
-    return !isWorkerOnly(user) && canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
-  }
   if (p.startsWith('/orders/')) return true
   // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.
   if (p.startsWith('/tickets/')) return true

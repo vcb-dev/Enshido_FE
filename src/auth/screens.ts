@@ -31,7 +31,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
       {
         key: Permission.PRODUCTION_MANAGER,
         label:
-          'Quản lý xưởng = quản lý SX + thủ kho + KCS: duyệt đơn, xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây, chia phiếu, KCS nhận lại (bước 2, 5–7, 9–15)',
+          'Quản lý xưởng = quản lý SX + thủ kho + KCS: duyệt đơn, xác nhận sáp / đúc xong, lên phiếu đúc, xác nhận đúc (cân phôi), chia phiếu, KCS nhận lại (bước 2, 5–9, 11–18)',
       },
       { key: Permission.PRODUCTION_MODEL3D, label: 'Thợ 3D: gắn link 3D, in sáp (bước 3–4)' },
       { key: Permission.PRODUCTION_WAX, label: 'Thợ sáp: cấy cây thông, bơm sáp (bước 5–6)' },

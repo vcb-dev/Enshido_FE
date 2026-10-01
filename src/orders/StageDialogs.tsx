@@ -422,7 +422,7 @@ export function HandoverDialog({
             .join(' · ') || undefined}
           rules={{
             validate: (value) => {
-              // Không giao vượt hàng đang có (KCS nhận lại khâu trước / phôi cắt cây) — khớp BE.
+              // Không giao vượt hàng đang có (KCS nhận lại khâu trước / phôi sau đúc) — khớp BE.
               if (silverLimit != null && value !== '' && Number(value) > silverLimit) {
                 return `Không vượt số hàng đang có (${formatQty(String(silverLimit))} g)`
               }
