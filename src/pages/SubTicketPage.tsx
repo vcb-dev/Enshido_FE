@@ -70,9 +70,9 @@ export function SubTicketPage() {
     queryFn: () => getSubTicketOrderApi(ticketCode),
     enabled: Boolean(orderCode),
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
 
   if (detail.isLoading) return <TicketDetailSkeleton />

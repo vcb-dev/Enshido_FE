@@ -36,23 +36,6 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     ],
   },
   {
-    label: 'Quy trình đơn hàng (việc được làm)',
-    items: [
-      { key: Permission.INTAKE_CREATE, label: 'Tạo đơn (bước 1)' },
-      {
-        key: Permission.PRODUCTION_MANAGER,
-        label:
-          'Quản lý xưởng = quản lý SX + thủ kho + KCS: duyệt đơn, xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây, chia phiếu, KCS nhận lại (bước 2, 5–7, 9–15)',
-      },
-      { key: Permission.INTAKE_APPROVE, label: 'Duyệt / từ chối đơn (bước 2)' },
-      { key: Permission.PRODUCTION_MODEL3D, label: 'Thợ 3D: gắn link 3D, in sáp (bước 3–4)' },
-      { key: Permission.PRODUCTION_WAX, label: 'Thợ sáp: cấy cây thông, bơm sáp (bước 5–6)' },
-      { key: Permission.WAREHOUSE_KEEPER, label: 'Thủ kho: xác nhận sáp, lên phiếu đúc, duyệt NVL (bước 5–11)' },
-      { key: Permission.PRODUCTION_CAST, label: 'Thợ đúc: bắt đầu đúc, nhập kết quả (bước 8–9)' },
-      { key: Permission.PRODUCTION_QC, label: 'KCS: cắt cây, nhận lại hàng, chốt lỗi (bước 10–15)' },
-    ],
-  },
-  {
     label: 'Cấu hình',
     items: [
       { key: Permission.SCREEN_LOCATIONS, label: 'Vị trí' },

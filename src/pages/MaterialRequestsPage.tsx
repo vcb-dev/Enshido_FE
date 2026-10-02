@@ -61,8 +61,10 @@ export function MaterialRequestsPage() {
   const list = useQuery({
     queryKey: ['material-requests', status],
     queryFn: () => listMaterialRequestsApi(status),
-    staleTime: 5_000,
-    refetchInterval: status === 'PENDING' ? 15_000 : false,
+    staleTime: 30_000,
+    refetchInterval: status === 'PENDING' ? 45_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   })
 
   function afterMaterialRequestHandled(

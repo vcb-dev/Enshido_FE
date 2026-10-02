@@ -154,7 +154,8 @@ export function ProductionOrderDetailPage() {
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
     // giữa chừng không xoá thứ người dùng đang gõ.
-    refetchInterval: tab === 'production' ? 20_000 : 30_000,
+    // Thợ cập nhật trên máy khác — vá cache khi cùng phiên; poll nhẹ khi đang xem tab Quy trình.
+    refetchInterval: tab === 'production' ? 60_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
