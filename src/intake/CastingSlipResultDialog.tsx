@@ -11,12 +11,11 @@ import {
 import type { CastingSlip, CastingSlipResultPayload } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty, parseQtyInput } from '../api/inventory'
-import { confirmWeights, ratioWarning } from '../orders/weightSanity'
 import { QtyTextField } from '../components/ui/QtyTextField'
 import { ImageUploadField } from '../orders/ImageUploadField'
 
 type Props = {
-  slip: CastingSlip | null
+  slip: Pick<CastingSlip, 'id' | 'code' | 'issueTotalGram' | 'waxWeightGram'> | null
   saving: boolean
   onClose: () => void
   onSave: (payload: CastingSlipResultPayload) => void
@@ -63,23 +62,6 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
     if (plasterUsedGram == null) return setError('Nhập trọng lượng thạch cao đã dùng (g)')
     if (!images.length) return setError('Chụp ảnh cân cây thông sau đúc')
     setError('')
-    const wax = Number(slip?.waxWeightGram ?? 0)
-    if (
-      !confirmWeights([
-        ratioWarning(castTreeWeightGram, 'Cây thông sau đúc', silverUsedGram, 'bạc đã dùng', {
-          min: 0.5,
-          max: 1,
-          note: 'hao hụt đúc trên 50%',
-        }),
-        ratioWarning(castTreeWeightGram, 'Cây thông sau đúc', wax, 'sáp giao', {
-          min: 1,
-          max: 100,
-          note: 'bạc thường nặng khoảng 10 lần sáp',
-        }),
-      ])
-    ) {
-      return
-    }
     onSave({
       castTreeWeightGram,
       silverUsedGram,

@@ -92,7 +92,7 @@ import {
 } from '../orders/catalog'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
-import { afterProductionOrderSaved } from '../orders/orderCache'
+import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../orders/orderCache'
 import { RequestTypeChip, SourceChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { FinishDialog } from '../orders/OutcomeDialogs'
@@ -159,7 +159,7 @@ export function ProductionOrderDetailPage() {
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
     // giữa chừng không xoá thứ người dùng đang gõ.
-    refetchInterval: tab === 'production' ? 5_000 : 30_000,
+    refetchInterval: tab === 'production' ? 20_000 : 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
@@ -278,7 +278,7 @@ export function ProductionOrderDetailPage() {
         invalidateNvlStock(queryClient)
       }
       if (wasNvl) invalidateNvlStock(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      removeProductionOrderFromLists(queryClient, detail.data!.id, code)
       navigate('/orders', { replace: true })
     },
     onError: (error: Error) => toast.error(error.message),

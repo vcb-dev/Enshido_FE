@@ -24,6 +24,35 @@ export function refreshProductionOrderLists(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
 }
 
+/** Mọi thao tác role trả về chi tiết đơn — vá list + cache chi tiết tức thì. */
+export function applyProductionOrderDetail(
+  queryClient: QueryClient,
+  order: ProductionOrderDetail,
+) {
+  seedProductionOrder(queryClient, order)
+}
+
+export function removeProductionOrderFromLists(queryClient: QueryClient, orderId: string, code: string) {
+  queryClient.setQueriesData(
+    { queryKey: ['production-orders'] },
+    (current: ProductionOrderListResponse | undefined) => {
+      if (!current?.items) return current
+      const removed = current.items.find((item) => item.id === orderId)
+      if (!removed) return current
+      const statusCounts = { ...current.statusCounts }
+      statusCounts.ALL = Math.max(0, statusCounts.ALL - 1)
+      statusCounts[removed.status] = Math.max(0, statusCounts[removed.status] - 1)
+      return {
+        ...current,
+        total: Math.max(0, current.total - 1),
+        statusCounts,
+        items: current.items.filter((item) => item.id !== orderId),
+      }
+    },
+  )
+  queryClient.removeQueries({ queryKey: ['production-order', code] })
+}
+
 /**
  * Sau lên đơn / lưu: hiện trang đơn ngay từ cache, trừ tồn trên picker,
  * rồi mới làm mới kho khi trình duyệt rảnh — tránh giật lúc ấn Lên đơn.
@@ -43,7 +72,6 @@ export function afterProductionOrderSaved(
       invalidateNvlWarehouse(queryClient)
     }
     if (wasNvl) invalidateNvlStock(queryClient)
-    refreshProductionOrderLists(queryClient)
   })
 }
 

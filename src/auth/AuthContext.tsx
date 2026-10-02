@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -18,23 +17,9 @@ import {
 import { clearCachedSession, hasCsrfCookie, readCachedUser, saveCachedUser } from './session'
 import { reportNetworkFailure } from './connectivity'
 import { isOffline, sessionBoot } from './sessionBoot'
-import { firstAllowedPath } from './screens'
 import { prefetchStaff, prefetchWarehouseStock } from './prefetchWarehouse'
 import { can, Permission } from './permissions'
-
-type AuthContextValue = {
-  user: AuthUser | null
-  loading: boolean
-  /**
-   * Máy chủ đang không với tới được: giao diện dựng từ dữ liệu đã tải, thao tác của thợ
-   * trên phiếu con thì nằm trong hàng chờ (xem orders/subTicketActions.ts).
-   */
-  offline: boolean
-  login: (username: string, password: string) => Promise<AuthUser>
-  logout: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
+import { AuthStateContext } from './auth-state-context'
 
 const hasCookieAtBoot = typeof document !== 'undefined' && hasCsrfCookie()
 
@@ -67,8 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void import('../pages/DashboardPage')
       void import('../pages/WarehousesPage')
       if (can(session.user, Permission.USERS_MANAGE)) prefetchStaff(queryClient)
-      const homeWarehouse = firstAllowedPath(session.user).match(/^\/warehouses\/([^/]+)/)?.[1]
-      if (homeWarehouse) prefetchWarehouseStock(queryClient, [homeWarehouse])
+      void import('./screens').then(({ firstAllowedPath }) => {
+        const homeWarehouse = firstAllowedPath(session.user).match(/^\/warehouses\/([^/]+)/)?.[1]
+        if (homeWarehouse) prefetchWarehouseStock(queryClient, [homeWarehouse])
+      })
     },
     [queryClient],
   )
@@ -138,11 +125,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, loading, offline, login, logout],
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthStateContext.Provider value={value}>{children}</AuthStateContext.Provider>
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext)
+  const ctx = useContext(AuthStateContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }

@@ -26,6 +26,9 @@ import {
   type SubTicketAction,
   type SubTicketVars,
 } from './subTicketQueue'
+import { patchMyTicketsAfterSubTicketAction } from './myTicketsCache'
+import { applyProductionOrderDetail } from './orderCache'
+import { scheduleMyTicketsRefresh } from './myTicketsRefresh'
 
 type ActionDef = {
   run: (orderCode: string, no: number | null) => Promise<ProductionOrderDetail>
@@ -95,23 +98,19 @@ export function registerSubTicketActions(queryClient: QueryClient) {
           if (!onlineManager.isOnline()) toast.info(def.queued(vars.ticketCode))
         },
         onSuccess: (order, vars) => {
-          queryClient.setQueryData(['production-order', vars.orderCode], order)
+          applyProductionOrderDetail(queryClient, order)
+          patchMyTicketsAfterSubTicketAction(queryClient, order, vars, action)
           void queryClient.invalidateQueries({
             queryKey: ['production-order-costing', vars.orderCode],
+            refetchType: 'none',
           })
-          void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
-          // Danh sách đơn dùng query key riêng. Nếu không làm mới, người điều hành có thể
-          // vẫn thấy số phiếu/trạng thái cũ dù thao tác của thợ đã lên máy chủ.
-          void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+          scheduleMyTicketsRefresh(queryClient)
           toast.success(def.done(vars.ticketCode))
         },
         onError: (error, vars) => {
           toast.error(`Phiếu ${vars.ticketCode}: ${error.message}`)
-          // Thao tác có thể đã kịp lên máy chủ trước khi mất sóng — tải lại cho thợ thấy
-          // trạng thái thật, đừng để màn hình đứng ở trạng thái đoán.
-          void queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
+          scheduleMyTicketsRefresh(queryClient)
           void queryClient.invalidateQueries({ queryKey: ['production-order', vars.orderCode] })
-          void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
         },
       },
     )

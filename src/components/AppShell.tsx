@@ -47,8 +47,10 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, canAny, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
+import { canAccessProductionOrdersPage, canUseMyTickets } from '../intake/intake3dAccess'
+import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
 import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
@@ -86,9 +88,10 @@ export function AppShell() {
   const canSeeConfig =
     can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
-  const isWorker = can(user, Permission.PRODUCTION_WORKER)
-  // Tài khoản chỉ làm thợ: giấu hẳn các màn quản lý, không chỉ chặn ở route.
-  const workerOnly = isWorkerOnly(user)
+  const showMyTickets = canUseMyTickets(user)
+  const showIntakeOrders = canSeeIntakeOrdersMenu(user)
+  const showProductionOrders = canAccessProductionOrdersPage(user)
+  const showCastingOrders = canSeeCastingOrdersMenu(user)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
 
@@ -218,8 +221,10 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
-            isWorker={isWorker}
-            workerOnly={workerOnly}
+            showMyTickets={showMyTickets}
+            showIntakeOrders={showIntakeOrders}
+            showProductionOrders={showProductionOrders}
+            showCastingOrders={showCastingOrders}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -241,8 +246,10 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
-            isWorker={isWorker}
-            workerOnly={workerOnly}
+            showMyTickets={showMyTickets}
+            showIntakeOrders={showIntakeOrders}
+            showProductionOrders={showProductionOrders}
+            showCastingOrders={showCastingOrders}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -334,22 +341,23 @@ function DrawerNav({
   canManageUsers,
   canSeeConfig,
   showDashboard,
-  isWorker,
-  workerOnly,
+  showMyTickets,
+  showIntakeOrders,
+  showProductionOrders,
+  showCastingOrders,
   showKho,
   warehouses,
 }: {
   canManageUsers: boolean
   canSeeConfig: boolean
   showDashboard: boolean
-  /** Tài khoản có quyền Thợ sản xuất — thấy màn Phiếu của tôi. */
-  isWorker: boolean
-  /** Tài khoản chỉ làm thợ — ẩn các màn quản lý đơn và kho. */
-  workerOnly: boolean
+  showMyTickets: boolean
+  showIntakeOrders: boolean
+  showProductionOrders: boolean
+  showCastingOrders: boolean
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
-  const { user } = useAuth()
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box
@@ -369,18 +377,16 @@ function DrawerNav({
         {showDashboard ? (
           <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         ) : null}
-        {workerOnly ? null : (
-          <>
-            {canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE) ? (
-              <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
-            ) : null}
-            <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
-            {canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER) ? (
-              <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
-            ) : null}
-          </>
-        )}
-        {isWorker ? (
+        {showIntakeOrders ? (
+          <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
+        ) : null}
+        {showProductionOrders ? (
+          <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
+        ) : null}
+        {showCastingOrders ? (
+          <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+        ) : null}
+        {showMyTickets ? (
           <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
         ) : null}
         {showKho ? (

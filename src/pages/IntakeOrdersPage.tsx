@@ -15,6 +15,11 @@ import {
 } from '../api/intakeOrders'
 import type { OrderImage, ProductionRequestType } from '../api/productionOrders'
 import {
+  afterIntakeCreated,
+  afterIntakeUpdated,
+  removeIntakeOrderFromCaches,
+} from '../intake/intakeOrderCache'
+import {
   ColumnHeaderFilter,
   ColumnHeaderSearch,
   CrudDialogShell,
@@ -132,22 +137,12 @@ export function IntakeOrdersPage() {
     navigate(location.pathname, { replace: true, state: null })
   }, [dialog, list.data?.items, location.pathname, location.state, navigate])
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['intake-orders'] })
-    if (dialog.row) {
-      void queryClient.invalidateQueries({
-        queryKey: ['edit-logs', 'intake_order_form', dialog.row.id],
-      })
-    }
-  }
-
   const create = useMutation({
     mutationFn: createIntakeOrderApi,
-    onSuccess: () => {
+    onSuccess: (order) => {
       dialog.close()
       toast.success('Đã tạo đơn')
-      refresh()
-      void queryClient.invalidateQueries({ queryKey: ['intake-orders', 'pending-count'] })
+      afterIntakeCreated(queryClient, order)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -155,20 +150,20 @@ export function IntakeOrdersPage() {
   const update = useMutation({
     mutationFn: ({ id, ...payload }: UpsertIntakeOrderPayload & { id: string }) =>
       updateIntakeOrderApi(id, payload),
-    onSuccess: () => {
+    onSuccess: (order) => {
       dialog.close()
       toast.success('Đã lưu đơn')
-      refresh()
+      afterIntakeUpdated(queryClient, order)
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
   const remove = useMutation({
     mutationFn: deleteIntakeOrderApi,
-    onSuccess: () => {
+    onSuccess: (_void, id) => {
       setDeleteTarget(null)
       toast.success('Đã xóa đơn')
-      refresh()
+      removeIntakeOrderFromCaches(queryClient, id)
     },
     onError: (error: Error) => toast.error(error.message),
   })

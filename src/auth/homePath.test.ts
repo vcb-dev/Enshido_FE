@@ -34,10 +34,19 @@ describe('isWorkerOnly — khớp với bản ở backend', () => {
 })
 
 describe('canAccessPath — thợ không có màn quản lý đơn', () => {
-  it('chặn danh sách đơn', () => {
+  it('chặn danh sách đơn với thợ sản xuất', () => {
     expect(canAccessPath(worker, '/orders')).toBe(false)
     expect(canAccessPath(admin, '/orders')).toBe(true)
     expect(canAccessPath(staff, '/orders')).toBe(true)
+  })
+
+  it('cho thợ 3D vào Lệnh sản xuất', () => {
+    const worker3d: PermissionUser = {
+      roleCode: 'WORKER',
+      permissions: [Permission.PRODUCTION_MODEL3D],
+    }
+    expect(canAccessPath(worker3d, '/orders')).toBe(true)
+    expect(canAccessPath(worker3d, '/my-tickets')).toBe(false)
   })
 
   it('vẫn cho mở /orders/:code — rơi vào trang tham khảo chỉ-đọc', () => {

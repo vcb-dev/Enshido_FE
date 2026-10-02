@@ -10,6 +10,8 @@ import {
   waxPrintBatchApi,
   submitIntakeCastingTreeSpecsApi,
   submitIntakeProductSpecsApi,
+  getIntakePipelineCountsApi,
+  getIntakePipelineListsApi,
   listIntakeOrdersApi,
   type IntakeOrder,
 } from '../api/intakeOrders'
@@ -38,7 +40,7 @@ import {
   afterIntakeWarehouseConfirmed,
   afterIntakeCastingTreeUpdated,
   afterIntakeRejected,
-  markIntakeOrdersStale,
+  afterIntakeBatchUpdated,
   mergeIntakeQueueItems,
 } from '../intake/intakeOrderCache'
 import { IntakeStatusChip } from '../intake/IntakeStatusChip'
@@ -57,7 +59,6 @@ import {
   listProductionOrdersApi,
   updateProductionOrderApi,
   type ProductionOrderDetail,
-  type ProductionOrderListResponse,
   type ProductionOrderRow,
   type ProductionRequestType,
   type ProductionStatus,
@@ -91,7 +92,7 @@ import {
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
-import { afterProductionOrderSaved } from '../orders/orderCache'
+import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../orders/orderCache'
 import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
@@ -144,158 +145,40 @@ export function ProductionOrdersPage() {
     dir: params.sort ? params.dir : undefined,
   }
 
-  const intakePendingAll = useQuery({
-    queryKey: [
-      'intake-orders',
-      'pending-for-all',
-      search,
-      params.requestType,
-    ],
+  const intakePipelineLists = useQuery({
+    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType],
     queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'PENDING_APPROVAL',
+      getIntakePipelineListsApi({
         requestType: params.requestType as ProductionRequestType | '',
         search,
-        page: 1,
         pageSize: 200,
       }),
     placeholderData: keepPreviousData,
     enabled: isAllView,
-    staleTime: 15_000,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
 
-  const intakeApprovedAll = useQuery({
-    queryKey: ['intake-orders', 'approved-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'APPROVED',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeReadyAll = useQuery({
-    queryKey: ['intake-orders', 'ready-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'READY_FOR_PRODUCTION',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeWarehousePendingAll = useQuery({
-    queryKey: ['intake-orders', 'warehouse-pending-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'PENDING_WAREHOUSE_CONFIRMATION',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeWaxAll = useQuery({
-    queryKey: ['intake-orders', 'wax-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'WAX_PRINTED',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeWaxConfirmedAll = useQuery({
-    queryKey: ['intake-orders', 'wax-confirmed-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'WAX_CONFIRMED',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeWaitCastingAll = useQuery({
-    queryKey: ['intake-orders', 'wait-casting-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'WAIT_CASTING',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-
-  const intakeCastingAll = useQuery({
-    queryKey: ['intake-orders', 'casting-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'CASTING',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-  const intakeCastDoneAll = useQuery({
-    queryKey: ['intake-orders', 'cast-done-for-all', search, params.requestType],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'CAST_DONE',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: 1,
-        pageSize: 200,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isAllView,
-    staleTime: 15_000,
-  })
-
-  const pendingTotal = intakePendingAll.data?.total ?? 0
-  const pendingItems = intakePendingAll.data?.items ?? []
-  const approvedTotal = intakeApprovedAll.data?.total ?? 0
-  const approvedItems = intakeApprovedAll.data?.items ?? []
-  const readyTotal = intakeReadyAll.data?.total ?? 0
-  const readyItems = intakeReadyAll.data?.items ?? []
-  const warehousePendingTotal = intakeWarehousePendingAll.data?.total ?? 0
-  const warehousePendingItems = intakeWarehousePendingAll.data?.items ?? []
-  const waxTotal = intakeWaxAll.data?.total ?? 0
-  const waxItems = intakeWaxAll.data?.items ?? []
-  const waxConfirmedTotal = intakeWaxConfirmedAll.data?.total ?? 0
-  const waxConfirmedItems = intakeWaxConfirmedAll.data?.items ?? []
-  const waitCastingTotal = intakeWaitCastingAll.data?.total ?? 0
-  const waitCastingItems = intakeWaitCastingAll.data?.items ?? []
-  const castingTotal = intakeCastingAll.data?.total ?? 0
-  const castingItems = intakeCastingAll.data?.items ?? []
-  const castDoneTotal = intakeCastDoneAll.data?.total ?? 0
-  const castDoneItems = intakeCastDoneAll.data?.items ?? []
+  const pendingTotal = intakePipelineLists.data?.PENDING_APPROVAL?.total ?? 0
+  const pendingItems = intakePipelineLists.data?.PENDING_APPROVAL?.items ?? []
+  const approvedTotal = intakePipelineLists.data?.APPROVED?.total ?? 0
+  const approvedItems = intakePipelineLists.data?.APPROVED?.items ?? []
+  const readyTotal = intakePipelineLists.data?.READY_FOR_PRODUCTION?.total ?? 0
+  const readyItems = intakePipelineLists.data?.READY_FOR_PRODUCTION?.items ?? []
+  const warehousePendingTotal = intakePipelineLists.data?.PENDING_WAREHOUSE_CONFIRMATION?.total ?? 0
+  const warehousePendingItems = intakePipelineLists.data?.PENDING_WAREHOUSE_CONFIRMATION?.items ?? []
+  const waxTotal = intakePipelineLists.data?.WAX_PRINTED?.total ?? 0
+  const waxItems = intakePipelineLists.data?.WAX_PRINTED?.items ?? []
+  const waxConfirmedTotal = intakePipelineLists.data?.WAX_CONFIRMED?.total ?? 0
+  const waxConfirmedItems = intakePipelineLists.data?.WAX_CONFIRMED?.items ?? []
+  const waitCastingTotal = intakePipelineLists.data?.WAIT_CASTING?.total ?? 0
+  const waitCastingItems = intakePipelineLists.data?.WAIT_CASTING?.items ?? []
+  const castingTotal = intakePipelineLists.data?.CASTING?.total ?? 0
+  const castingItems = intakePipelineLists.data?.CASTING?.items ?? []
+  const castPendingTotal = intakePipelineLists.data?.CAST_PENDING_CONFIRMATION?.total ?? 0
+  const castPendingItems = intakePipelineLists.data?.CAST_PENDING_CONFIRMATION?.items ?? []
+  const castDoneTotal = intakePipelineLists.data?.CAST_DONE?.total ?? 0
+  const castDoneItems = intakePipelineLists.data?.CAST_DONE?.items ?? []
   const intakeQueueItems = useMemo(
     () =>
       mergeIntakeQueueItems(
@@ -307,6 +190,7 @@ export function ProductionOrdersPage() {
         waxConfirmedItems,
         waitCastingItems,
         castingItems,
+        castPendingItems,
         castDoneItems,
       ),
     [
@@ -318,6 +202,7 @@ export function ProductionOrdersPage() {
       waxConfirmedItems,
       waitCastingItems,
       castingItems,
+      castPendingItems,
       castDoneItems,
     ],
   )
@@ -330,6 +215,7 @@ export function ProductionOrdersPage() {
     waxConfirmedTotal +
     waitCastingTotal +
     castingTotal +
+    castPendingTotal +
     castDoneTotal
   const mergeSlice = useMemo(
     () => sliceMergedPage(params.page, params.pageSize, intakeQueueItems, intakeQueueTotal),
@@ -348,7 +234,8 @@ export function ProductionOrdersPage() {
     return {
       ...listBaseParams,
       page: 1,
-      pageSize: mergeSlice.prodStart + mergeSlice.prodTake,
+      pageSize: mergeSlice.prodTake,
+      offset: mergeSlice.prodStart,
     }
   }, [isAllView, listBaseParams, mergeSlice.prodStart, mergeSlice.prodTake, params.page, params.pageSize])
 
@@ -358,67 +245,17 @@ export function ProductionOrdersPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: !isIntakePendingView && productionListParams !== null,
-    refetchInterval: isIntakePendingView ? false : 15_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: !isIntakePendingView,
+    refetchOnWindowFocus: false,
   })
-  const intakePendingCount = useQuery({
-    queryKey: ['intake-orders', 'pending-count'],
-    queryFn: () =>
-      listIntakeOrdersApi({ status: 'PENDING_APPROVAL', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+  const intakePipelineCounts = useQuery({
+    queryKey: ['intake-orders', 'pipeline-counts'],
+    queryFn: getIntakePipelineCountsApi,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   })
-  const intakeApprovedCount = useQuery({
-    queryKey: ['intake-orders', 'approved-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'APPROVED', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeReadyCount = useQuery({
-    queryKey: ['intake-orders', 'ready-count'],
-    queryFn: () =>
-      listIntakeOrdersApi({ status: 'READY_FOR_PRODUCTION', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeWarehousePendingCount = useQuery({
-    queryKey: ['intake-orders', 'warehouse-pending-count'],
-    queryFn: () =>
-      listIntakeOrdersApi({ status: 'PENDING_WAREHOUSE_CONFIRMATION', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeWaxCount = useQuery({
-    queryKey: ['intake-orders', 'wax-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'WAX_PRINTED', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeWaxConfirmedCount = useQuery({
-    queryKey: ['intake-orders', 'wax-confirmed-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'WAX_CONFIRMED', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeWaitCastingCount = useQuery({
-    queryKey: ['intake-orders', 'wait-casting-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'WAIT_CASTING', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeCastingCount = useQuery({
-    queryKey: ['intake-orders', 'casting-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'CASTING', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
-  const intakeCastDoneCount = useQuery({
-    queryKey: ['intake-orders', 'cast-done-count'],
-    queryFn: () => listIntakeOrdersApi({ status: 'CAST_DONE', page: 1, pageSize: 1 }),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  })
+  const intakePipe = intakePipelineCounts.data ?? {}
   const isIntakeWarehouseKeeper = canConfirmIntakeWarehouse(user)
   const intakeList = useQuery({
     queryKey: [
@@ -484,7 +321,6 @@ export function ProductionOrdersPage() {
     onSuccess: (order) => {
       setApproveTarget(null)
       afterIntakeApproved(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(`Đã duyệt đơn ${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -502,7 +338,6 @@ export function ProductionOrdersPage() {
     onSuccess: (order) => {
       setModel3dTarget(null)
       afterIntakeModel3dAttached(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(`Đã cập nhật 3D — ${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -513,7 +348,6 @@ export function ProductionOrdersPage() {
     onSuccess: (order) => {
       setRejectTarget(null)
       afterIntakeRejected(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(`Đã từ chối đơn ${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -535,7 +369,6 @@ export function ProductionOrdersPage() {
     onSuccess: (order) => {
       setProductSpecsTarget(null)
       afterIntakeProductSpecsSubmitted(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(
         order.status === 'PENDING_WAREHOUSE_CONFIRMATION'
           ? `Đã gửi số liệu — chờ thủ kho (${order.code})`
@@ -545,21 +378,24 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const confirmWarehouse = useMutation({
-    mutationFn: (vars: { id: string; checkedWeightGram?: number }) =>
-      confirmIntakeWarehouseApi(vars.id, vars.checkedWeightGram),
+    mutationFn: (id: string) => confirmIntakeWarehouseApi(id),
     onSuccess: (order) => {
       setConfirmTarget(null)
       afterIntakeWarehouseConfirmed(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(`Đã có sáp — ${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  function goCastingIssue(order: IntakeOrder) {
+    const code = order.castingSlip?.code
+    if (!code) return
+    navigate(`/casting?issue=${encodeURIComponent(code)}`)
+  }
   const waxBatch = useMutation({
     mutationFn: waxPrintBatchApi,
     onSuccess: (result) => {
       setWaxBatchOpen(false)
-      void queryClient.invalidateQueries({ queryKey: ['intake-orders'] })
+      afterIntakeBatchUpdated(queryClient, result.items)
       toast.success(`Đã in sáp ${result.items.length} đơn — chờ cấy cây thông`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -577,7 +413,6 @@ export function ProductionOrdersPage() {
     onSuccess: (order) => {
       setCastingTreeTarget(null)
       afterIntakeCastingTreeUpdated(queryClient, order)
-      markIntakeOrdersStale(queryClient)
       toast.success(`Đã gửi số liệu — chờ thủ kho (${order.code})`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -587,19 +422,9 @@ export function ProductionOrdersPage() {
     mutationFn: (row) => deleteProductionOrderApi(row.code),
     successMessage: 'Đã xóa đơn',
     queryKeys: [['production-orders']],
-    invalidateKeys: [['production-orders'], ['production-order-lookups']],
+    invalidateKeys: [['production-order-lookups']],
     onRemoved: (row) => {
-      queryClient.setQueriesData(
-        { queryKey: ['production-orders'] },
-        (current: ProductionOrderListResponse | undefined) => {
-          if (!current?.items) return current
-          return {
-            ...current,
-            items: current.items.filter((item) => item.id !== row.id),
-            total: Math.max(0, current.total - 1),
-          }
-        },
-      )
+      removeProductionOrderFromLists(queryClient, row.id, row.code)
       if (row.source === 'BTP') {
         invalidateBtpStock(queryClient)
         invalidateNvlStock(queryClient)
@@ -647,10 +472,11 @@ export function ProductionOrdersPage() {
           onIntakeCastingTree: (row) => setCastingTreeTarget(row),
           // Bước 7 lên phiếu cho nhiều đơn cùng lúc ở màn Lệnh đúc — tích sẵn đơn này.
           onIntakeCastingSlip: (row) => navigate(`/casting?new=${row.id}`),
+          onIntakeCastingSlipIssue: goCastingIssue,
           onIntakeView: (row) => setIntakeViewTarget(row),
           onIntakeWarehouseConfirm: (row) => setConfirmTarget(row),
           warehouseConfirmLoadingId: confirmWarehouse.isPending
-            ? (confirmWarehouse.variables?.id ?? null)
+            ? (confirmWarehouse.variables ?? null)
             : null,
           canConfirmIntakeWarehouse: isIntakeWarehouseKeeper,
           can: {
@@ -717,14 +543,8 @@ export function ProductionOrdersPage() {
     if (!isAllView) return list.data?.items ?? []
     if (productionListParams === null || !list.data?.items) return []
     if (mergeSlice.prodTake <= 0) return []
-    return list.data.items.slice(mergeSlice.prodStart, mergeSlice.prodStart + mergeSlice.prodTake)
-  }, [
-    isAllView,
-    list.data?.items,
-    mergeSlice.prodStart,
-    mergeSlice.prodTake,
-    productionListParams,
-  ])
+    return list.data.items
+  }, [isAllView, list.data?.items, mergeSlice.prodTake, productionListParams])
   const tableRows: ProductionListRow[] = useMemo(() => {
     if (!isAllView) return (list.data?.items ?? []).map((row) => ({ kind: 'order', row }))
     return [
@@ -737,15 +557,16 @@ export function ProductionOrdersPage() {
     : (list.data?.total ?? 0)
   const allTabCount =
     (counts?.ALL ?? 0) +
-    (intakePendingCount.data?.total ?? 0) +
-    (intakeApprovedCount.data?.total ?? 0) +
-    (intakeReadyCount.data?.total ?? 0) +
-    (intakeWarehousePendingCount.data?.total ?? 0) +
-    (intakeWaxCount.data?.total ?? 0) +
-    (intakeWaxConfirmedCount.data?.total ?? 0) +
-    (intakeWaitCastingCount.data?.total ?? 0) +
-    (intakeCastingCount.data?.total ?? 0) +
-    (intakeCastDoneCount.data?.total ?? 0)
+    (intakePipe.PENDING_APPROVAL ?? 0) +
+    (intakePipe.APPROVED ?? 0) +
+    (intakePipe.READY_FOR_PRODUCTION ?? 0) +
+    (intakePipe.PENDING_WAREHOUSE_CONFIRMATION ?? 0) +
+    (intakePipe.WAX_PRINTED ?? 0) +
+    (intakePipe.WAX_CONFIRMED ?? 0) +
+    (intakePipe.WAIT_CASTING ?? 0) +
+    (intakePipe.CASTING ?? 0) +
+    (intakePipe.CAST_PENDING_CONFIRMATION ?? 0) +
+    (intakePipe.CAST_DONE ?? 0)
   const columnFiltered = Boolean(
     params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
   )
@@ -785,7 +606,7 @@ export function ProductionOrdersPage() {
         <Tab value="" label={tabLabel('Tất cả', allTabCount)} />
         <Tab
           value={INTAKE_PENDING_TAB}
-          label={tabLabel('Chờ duyệt', intakePendingCount.data?.total)}
+          label={tabLabel('Chờ duyệt', intakePipe.PENDING_APPROVAL)}
         />
         {!isIntakePendingView
           ? STATUS_TABS.map((status) => (
@@ -870,23 +691,11 @@ export function ProductionOrdersPage() {
           }}
           loading={
             (list.isLoading && !list.data) ||
-            (isAllView &&
-              !intakePendingAll.data &&
-              !intakeApprovedAll.data &&
-              !intakeReadyAll.data &&
-              !intakeWarehousePendingAll.data &&
-              !intakeWaxAll.data &&
-              !intakeWaxConfirmedAll.data &&
-              (intakePendingAll.isLoading ||
-                intakeApprovedAll.isLoading ||
-                intakeReadyAll.isLoading ||
-                intakeWarehousePendingAll.isLoading ||
-                intakeWaxAll.isLoading ||
-                intakeWaxConfirmedAll.isLoading))
+            (isAllView && intakePipelineLists.isLoading && !intakePipelineLists.data)
           }
           errorText={
-            (list.error ?? intakePendingAll.error) instanceof Error
-              ? (list.error ?? intakePendingAll.error)!.message
+            (list.error ?? intakePipelineLists.error) instanceof Error
+              ? (list.error ?? intakePipelineLists.error)!.message
               : undefined
           }
           emptyText={narrowed ? 'Không có đơn khớp bộ lọc.' : 'Chưa có lệnh sản xuất.'}
@@ -1000,9 +809,7 @@ export function ProductionOrdersPage() {
         order={confirmTarget}
         saving={confirmWarehouse.isPending}
         onClose={() => setConfirmTarget(null)}
-        onConfirm={(checkedWeightGram) =>
-          confirmTarget && confirmWarehouse.mutate({ id: confirmTarget.id, checkedWeightGram })
-        }
+        onConfirm={() => confirmTarget && confirmWarehouse.mutate(confirmTarget.id)}
       />
       <IntakeProductSpecsDialog
         order={productSpecsTarget}
@@ -1026,7 +833,6 @@ export function ProductionOrdersPage() {
         order={intakeViewTarget}
         onClose={() => setIntakeViewTarget(null)}
       />
-
       <ConfirmDeleteDialog
         open={Boolean(del.row)}
         title="Xóa lệnh sản xuất"
@@ -1073,6 +879,7 @@ function renderIntakeWorkflowAction(
     onIntakeProductSpecs: (row: IntakeOrder) => void
     onIntakeCastingTree: (row: IntakeOrder) => void
     onIntakeCastingSlip: (row: IntakeOrder) => void
+    onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     onIntakeWarehouseConfirm: (row: IntakeOrder) => void
     warehouseConfirmLoadingId: string | null
     canConfirmIntakeWarehouse: boolean
@@ -1177,13 +984,13 @@ function renderIntakeWorkflowAction(
     )
   }
   if (intakeNeedsCastingSlip(order) && order.castingSlip) {
-    // Đã lên + in phiếu, chờ thủ kho cấp vật tư và chụp ảnh (đơn vẫn ở E đến lúc đó).
+    // Đã lên + in phiếu — chuyển sang màn Lệnh đúc và mở form cấp vật tư.
+    if (!actions.can.keeper) return waiting('thủ kho cấp vật tư')
     return (
       <Button
         size="small"
         variant="outlined"
-        component={RouterLink}
-        to={`/casting/${order.castingSlip.code}`}
+        onClick={() => actions.onIntakeCastingSlipIssue(order)}
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
         Phiếu {order.castingSlip.code} · chờ cấp vật tư
@@ -1211,7 +1018,11 @@ function renderIntakeWorkflowAction(
       </Button>
     )
   }
-  if (order.status === 'WAIT_CASTING' || order.status === 'CASTING') {
+  if (
+    order.status === 'WAIT_CASTING' ||
+    order.status === 'CASTING' ||
+    order.status === 'CAST_PENDING_CONFIRMATION'
+  ) {
     if (!actions.can.cast && !actions.can.keeper) return waiting('thợ đúc')
     return (
       <Button
@@ -1257,6 +1068,7 @@ function orderColumns(
     onIntakeProductSpecs: (row: IntakeOrder) => void
     onIntakeCastingTree: (row: IntakeOrder) => void
     onIntakeCastingSlip: (row: IntakeOrder) => void
+    onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     onIntakeView: (row: IntakeOrder) => void
     onIntakeWarehouseConfirm: (row: IntakeOrder) => void
     warehouseConfirmLoadingId: string | null
