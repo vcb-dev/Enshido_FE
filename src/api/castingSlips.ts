@@ -48,13 +48,24 @@ export type CastingSlip = {
   submittedByName: string | null
   confirmedAt: string | null
   confirmedByName: string | null
+  rejectedAt: string | null
+  rejectedByName: string | null
+  redoOfSlipId: string | null
   /** Ảnh phiếu + vật tư lúc cấp (bước 7). */
   images: CastingSlipImage[]
   /** Ảnh cân cây thông sau đúc (bước 9). */
   resultImages: CastingSlipImage[]
+  /** Phiếu làm lại sau lỗi đúc — hiển thị dưới phiếu cha trên bảng. */
+  redos?: CastingSlip[]
 }
 
-export type CastingSlipStatus = 'PENDING_ISSUE' | 'WAIT_CASTING' | 'CASTING' | 'PENDING_CONFIRMATION' | 'DONE'
+export type CastingSlipStatus =
+  | 'PENDING_ISSUE'
+  | 'WAIT_CASTING'
+  | 'CASTING'
+  | 'PENDING_CONFIRMATION'
+  | 'DONE'
+  | 'CAST_FAILED'
 
 export type CastingSlipResultPayload = {
   castTreeWeightGram: number
@@ -83,9 +94,16 @@ export type CastingSlipCandidate = {
   waxWeightGram: string | null
 }
 
+export type CastCastWorkerOption = {
+  id: string
+  fullName: string
+  username: string
+}
+
 export type CreateCastingSlipPayload = {
   slipDate: string
   intakeOrderIds: string[]
+  assignedUserId: string
   issueS999Gram?: number
   issueMasterAlloyGram?: number
   issueS925Gram?: number
@@ -128,6 +146,10 @@ export function getCastingSlipByCodeApi(code: string) {
 export function listCastingSlipCandidatesApi(search: string) {
   const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''
   return apiFetch<CastingSlipCandidate[]>(`/casting-slips/candidates${query}`)
+}
+
+export function listCastWorkersApi() {
+  return apiFetch<CastCastWorkerOption[]>('/casting-slips/cast-workers')
 }
 
 export function createCastingSlipApi(payload: CreateCastingSlipPayload) {
@@ -194,4 +216,9 @@ export function submitCastingSlipResultApi(id: string, payload: CastingSlipResul
 
 export function confirmCastingSlipApi(id: string) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, { method: 'POST', body: '{}' })
+}
+
+/** Thủ kho báo lỗi đúc — trả về phiếu làm lại (Chờ đúc). */
+export function rejectCastingSlipApi(id: string) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}/reject-cast`, { method: 'POST', body: '{}' })
 }

@@ -19,11 +19,13 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import {
   listCastingSlipCandidatesApi,
+  listCastWorkersApi,
+  type CastCastWorkerOption,
   type CastingSlipCandidate,
   type CreateCastingSlipPayload,
 } from '../api/castingSlips'
+import { AutocompleteInput, SearchInput } from '../components/ui'
 import { formatQty, parseQtyInput } from '../api/inventory'
-import { confirmWeights, ratioWarning } from '../orders/weightSanity'
 import { QtyTextField } from '../components/ui/QtyTextField'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { formatDateShort } from '../orders/catalog'
@@ -43,7 +45,7 @@ function optionalGram(value: string): number | undefined {
 
 /**
  * Bước 7: thủ kho lọc các đơn đã có sáp (E), gom vào một lần đúc, nhập bạc + hội cấp theo
- * định mức và chụp ảnh phiếu + vật tư. Lưu xong các đơn sang Chờ đúc (F) và mở trang in phiếu.
+ * định mức. Lưu xong phiếu ở Chờ cấp vật tư; cấp xong các đơn sang Chờ đúc (F).
  */
 export function CastingSlipCreateDialog({
   open,
@@ -66,13 +68,22 @@ export function CastingSlipCreateDialog({
   const [s999, setS999] = useState('')
   const [hoi, setHoi] = useState('')
   const [s925, setS925] = useState('')
+  const [assignee, setAssignee] = useState<CastCastWorkerOption | null>(null)
+  const [assigneeTouched, setAssigneeTouched] = useState(false)
   const [error, setError] = useState('')
+
+  const castWorkers = useQuery({
+    queryKey: ['cast-workers'],
+    queryFn: listCastWorkersApi,
+    enabled: open,
+    staleTime: 60_000,
+  })
 
   const candidates = useQuery({
     queryKey: ['casting-slip-candidates', search],
     queryFn: () => listCastingSlipCandidatesApi(search),
     enabled: open,
-    staleTime: 5_000,
+    staleTime: 30_000,
   })
 
   useEffect(() => {
@@ -83,6 +94,8 @@ export function CastingSlipCreateDialog({
     setS999('')
     setHoi('')
     setS925('')
+    setAssignee(null)
+    setAssigneeTouched(false)
     setError('')
   }, [open])
 
@@ -124,26 +137,20 @@ export function CastingSlipCreateDialog({
     })
   }
 
+  const assigneeError =
+    assigneeTouched && !assignee ? 'Chọn thợ đúc được giao phiếu' : undefined
+
   function submit() {
     if (!picked.length) return setError('Chọn ít nhất một đơn đi đúc')
+    setAssigneeTouched(true)
+    if (!assignee?.id) return setError('Chọn thợ đúc được giao phiếu')
     if (issueParts.some((n) => n != null && Number.isNaN(n))) return setError('Số gram giao không hợp lệ')
     if (!(issueTotal > 0)) return setError('Nhập số gram bạc / hội / S925 cấp cho lần đúc')
     setError('')
-    // Bạc nặng khoảng 10–11 lần sáp cùng thể tích: lệch quá xa là nhầm đơn vị / dấu chấm.
-    if (
-      !confirmWeights([
-        ratioWarning(issueTotal, 'Tổng giao', waxTotal, 'sáp giao', {
-          min: 1,
-          max: 100,
-          note: 'bạc thường nặng khoảng 10 lần sáp',
-        }),
-      ])
-    ) {
-      return
-    }
     onSave({
       slipDate,
       intakeOrderIds: picked.map((row) => row.id),
+      assignedUserId: assignee.id,
       issueS999Gram: issueParts[0],
       issueMasterAlloyGram: issueParts[1],
       issueS925Gram: issueParts[2],
@@ -162,14 +169,15 @@ export function CastingSlipCreateDialog({
             đơn sang <strong>Chờ đúc</strong>.
           </Typography>
 
-          <TextField
-            size="small"
-            label="Lọc đơn chờ đúc"
-            placeholder="Mã đơn / mã SX / mã sản phẩm / tên…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
+          <Stack spacing={1}>
+            <Typography variant="subtitle2">Lọc đơn chờ đúc</Typography>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Mã đơn, mã SX, mã SP, tên sản phẩm…"
+              sx={{ maxWidth: 420 }}
+            />
+            <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
             <TableHead>
               <TableRow>
                 <TableCell padding="checkbox">
@@ -212,10 +220,35 @@ export function CastingSlipCreateDialog({
               ) : null}
             </TableBody>
           </Table>
-          <Typography variant="body2">
-            Đã chọn <strong>{picked.length}</strong> đơn · Trọng lượng sáp (cây thông) giao:{' '}
-            <strong>{formatQty(String(waxTotal))} g</strong>
-          </Typography>
+            <Typography variant="body2">
+              Đã chọn <strong>{picked.length}</strong> đơn · Trọng lượng sáp (cây thông) giao:{' '}
+              <strong>{formatQty(String(waxTotal))} g</strong>
+            </Typography>
+          </Stack>
+
+          <AutocompleteInput
+            label="Giao cho thợ"
+            required
+            options={castWorkers.data ?? []}
+            value={assignee}
+            onChange={(next) => {
+              setAssigneeTouched(true)
+              setAssignee(next)
+            }}
+            getOptionLabel={(option) => option.fullName}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            loading={castWorkers.isLoading}
+            disabled={busy}
+            errorText={assigneeError}
+            helperText={
+              castWorkers.isError
+                ? 'Không tải được danh sách thợ đúc'
+                : !castWorkers.isLoading && (castWorkers.data?.length ?? 0) === 0
+                  ? 'Chưa có tài khoản thợ đúc — tick quyền Thợ đúc ở Nhân sự.'
+                  : 'Chỉ hiện nhân sự vai trò Thợ đúc (Nhân sự).'
+            }
+            noOptionsText="Không có thợ đúc"
+          />
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
@@ -242,7 +275,7 @@ export function CastingSlipCreateDialog({
         <Button onClick={onClose} disabled={busy}>
           Hủy
         </Button>
-        <Button variant="contained" onClick={submit} disabled={busy}>
+        <Button variant="contained" onClick={submit} disabled={busy || !assignee?.id}>
           {saving ? 'Đang lưu…' : `Lưu và in phiếu (${picked.length} đơn)`}
         </Button>
       </DialogActions>

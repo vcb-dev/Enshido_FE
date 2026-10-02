@@ -1,6 +1,12 @@
 import { can, canAny, isWorkerOnly, Permission } from './permissions'
+import {
+  canAccessProductionOrdersPage,
+  canSeeCastingSlipsPage,
+  canUseMyTickets,
+  isIntakePipelineScoped,
+} from '../intake/intake3dAccess'
 import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
-
+import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from './screenAccess'
 export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
   return firstAllowedPath(user)
 }
@@ -18,27 +24,29 @@ export function canAccessPath(
     const code = p.split('/')[2] ?? ''
     return canSeeWarehouse(user, code)
   }
-  // Thợ không vào màn quản lý đơn và trang in phiếu; riêng /orders/:code rơi vào bản
-  // chỉ-đọc "Thông tin đơn (tham khảo)" để QR trên phiếu giấy đã in vẫn dùng được.
-  // In phiếu đúc là việc của thủ kho (bước 7).
   if (p.startsWith('/casting/') && p.endsWith('/print')) {
     return !isWorkerOnly(user) && can(user, Permission.WAREHOUSE_KEEPER)
   }
-  if (p === '/orders' || p.endsWith('/print')) return !isWorkerOnly(user)
-  // Các màn thao tác theo quy trình: cần quyền của việc tương ứng.
+  if (p === '/orders' || (p.endsWith('/print') && p.startsWith('/orders'))) {
+    if (isWorkerOnly(user)) return false
+    if (p === '/orders') return canAccessProductionOrdersPage(user)
+    return !isWorkerOnly(user)
+  }
   if (p === '/intake-orders') {
-    return !isWorkerOnly(user) && canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE)
+    if (isWorkerOnly(user)) return false
+    return canSeeIntakeOrdersMenu(user)
   }
   if (p === '/casting' || p.startsWith('/casting/')) {
-    return !isWorkerOnly(user) && canAny(user, Permission.PRODUCTION_CAST, Permission.WAREHOUSE_KEEPER)
+    if (isIntakePipelineScoped(user)) return false
+    if (isWorkerOnly(user)) return false
+    return canSeeCastingOrdersMenu(user) || canSeeCastingSlipsPage(user)
   }
   if (p === '/casting-cuts') {
     return !isWorkerOnly(user) && canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
   }
   if (p.startsWith('/orders/')) return true
-  // Trang phiếu con mở từ QR — ai đăng nhập cũng xem được, chỉ thợ mới bấm nhận.
   if (p.startsWith('/tickets/')) return true
-  if (p === '/my-tickets') return can(user, Permission.PRODUCTION_WORKER)
+  if (p === '/my-tickets') return canUseMyTickets(user)
   if (p === '/finished-goods' || p.startsWith('/finished-goods/')) {
     if (isWorkerOnly(user)) return false
     return canSeeWarehouse(user, 'thanh-pham') || user?.roleCode === 'ADMIN'

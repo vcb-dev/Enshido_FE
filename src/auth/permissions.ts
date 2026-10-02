@@ -9,6 +9,10 @@ export const Permission = {
   SCREEN_WAREHOUSE_THANH_PHAM: 'screen.warehouse.thanh-pham',
   SCREEN_LOCATIONS: 'screen.locations',
   SCREEN_CATALOGS: 'screen.catalogs',
+  SCREEN_INTAKE_ORDERS: 'screen.intake-orders',
+  SCREEN_PRODUCTION_ORDERS: 'screen.production-orders',
+  SCREEN_CASTING_ORDERS: 'screen.casting-orders',
+  SCREEN_MY_TICKETS: 'screen.my-tickets',
   /** Thợ sản xuất: tự nhận phiếu con ở màn "Phiếu của tôi". */
   PRODUCTION_WORKER: 'production.worker',
   /** Bước 1: tạo đơn. */
@@ -91,8 +95,18 @@ export function can(
  * Tài khoản chỉ làm thợ — dùng để CHẶN các màn quản lý đơn. Hệ quyền màn hình chỉ biết
  * "cho thêm" nên việc cấm phải hỏi tường minh ở đây. Thợ kiêm admin thì không bị chặn.
  */
+function isProductionStageWorker(user: PermissionUser): boolean {
+  return (
+    can(user, Permission.PRODUCTION_MODEL3D) ||
+    can(user, Permission.PRODUCTION_WAX) ||
+    can(user, Permission.PRODUCTION_CAST)
+  )
+}
+
 export function isWorkerOnly(user: PermissionUser | undefined | null): boolean {
   if (!user) return false
   const roles = [user.roleCode, ...(user.extraRoles ?? [])].filter(Boolean)
-  return roles.includes('WORKER') && !roles.includes('ADMIN')
+  if (!roles.includes('WORKER') || roles.includes('ADMIN')) return false
+  if (isProductionStageWorker(user)) return false
+  return true
 }

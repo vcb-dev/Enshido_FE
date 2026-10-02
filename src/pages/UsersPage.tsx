@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -19,19 +19,29 @@ import {
   createUserApi,
   listUsersApi,
   updateUserApi,
-  type RoleCode,
   type UserRow,
 } from '../api/auth'
 import { useAuth } from '../auth/AuthContext'
-import { ALL_PERMISSIONS, ROLE_LABELS, type PermissionCode } from '../auth/permissions'
-import { SCREEN_GROUPS } from '../auth/screens'
-import type { StageCode } from '../api/productionOrders'
-import { STAGE_LABEL, STAGES } from '../orders/catalog'
+import type { PermissionCode } from '../auth/permissions'
+import {
+  allowedScreensForSave,
+  defaultEditScreensForPreset,
+  inferStaffJobPreset,
+  presetShowsScreenEditor,
+  roleAndScreensForPreset,
+  screenGroupsForUserEdit,
+  screensFromUserForPreset,
+  staffJobLabel,
+  staffJobPresetHint,
+  staffJobPresetForEditForm,
+  staffJobSelectOptions,
+  type StaffJobPreset,
+} from '../auth/staffJobPresets'
+import { STAGE_LABEL } from '../orders/catalog'
 import {
   DataTable,
   EditReasonBlock,
   Form,
-  FormCheckbox,
   FormRow,
   FormSelect,
   FormTextField,
@@ -43,11 +53,13 @@ import {
 } from '../components/ui'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 
-const ROLE_OPTIONS: SelectOption<RoleCode>[] = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'USER', label: 'Nhân viên' },
-  { value: 'WORKER', label: 'Thợ' },
-]
+function toStaffJobSelect(
+  options: { value: StaffJobPreset; label: string }[],
+): SelectOption<StaffJobPreset>[] {
+  return options.map((option) => ({ value: option.value, label: option.label }))
+}
+
+const STAFF_JOB_FORM_SELECT = toStaffJobSelect(staffJobSelectOptions())
 
 export function UsersPage() {
   const { user: me } = useAuth()
@@ -84,6 +96,14 @@ export function UsersPage() {
     })
   }, [users.data, me?.id, params.search, params.sort, params.dir])
 
+  const takenUsernames = useMemo(() => {
+    const set = new Set<string>()
+    for (const row of users.data ?? []) {
+      set.add(row.username.trim().toLowerCase())
+    }
+    return set
+  }, [users.data])
+
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
 
@@ -95,7 +115,7 @@ export function UsersPage() {
         key: 'roleCode',
         header: 'Vai trò',
         sortable: true,
-        render: (row) => ROLE_LABELS[row.roleCode] ?? row.roleCode,
+        render: (row) => staffJobLabel(row),
       },
       { key: 'department', header: 'Bộ phận', sortable: true },
       {
@@ -176,6 +196,7 @@ export function UsersPage() {
 
       <CreateUserDialog
         open={createOpen}
+        takenUsernames={takenUsernames}
         onClose={() => setCreateOpen(false)}
         onCreated={refreshUsers}
       />
@@ -197,82 +218,109 @@ type UserFormValues = {
   fullName: string
   username: string
   password: string
-  roleCode: RoleCode
+  staffJob: StaffJobPreset
   department: string
-  keepOpen: boolean
 }
 
 const EMPTY_USER: UserFormValues = {
   fullName: '',
   username: '',
   password: '',
-  roleCode: 'USER',
+  staffJob: 'kcs',
   department: '',
-  keepOpen: false,
 }
+
+const USERNAME_TAKEN_MESSAGE = 'Tài khoản đã tồn tại'
+const PASSWORD_MIN_MESSAGE = 'Tối thiểu 6 ký tự'
 
 function CreateUserDialog({
   open,
+  takenUsernames,
   onClose,
   onCreated,
 }: {
   open: boolean
+  takenUsernames: ReadonlySet<string>
   onClose: () => void
   onCreated: () => void
 }) {
-  const form = useForm<UserFormValues>({ defaultValues: EMPTY_USER })
+  const form = useForm<UserFormValues>({
+    defaultValues: EMPTY_USER,
+    // Chỉ Tài khoản / Mật khẩu validate khi blur (trigger tay). mode onBlur + autoFocus Họ tên
+    // khiến dialog vừa mở đã blur và báo lỗi required.
+    reValidateMode: 'onBlur',
+  })
   const [screens, setScreens] = useState<PermissionCode[]>([])
-  // Admin xem hết; thợ đã có quyền kèm role nên không cần tick màn hình nào.
-  const roleCode = useWatch({ control: form.control, name: 'roleCode' })
-  const presetRole = roleCode === 'ADMIN' || roleCode === 'WORKER'
-  const [stages, setStages] = useState<StageCode[]>([])
-  const [stagesError, setStagesError] = useState('')
-
+  const staffJob = useWatch({ control: form.control, name: 'staffJob' })
   useEffect(() => {
     if (open) {
-      form.reset(EMPTY_USER)
-      setScreens([])
-      setStages([])
-      setStagesError('')
+      form.reset(EMPTY_USER, { keepErrors: false, keepDirty: false, keepTouched: false })
+      setScreens(defaultEditScreensForPreset('kcs'))
     }
   }, [open, form])
+
+  const usernameRules = useMemo(
+    () => ({
+      minLength: { value: 3, message: 'Tối thiểu 3 ký tự' },
+      validate: (value: string) => {
+        const username = value.trim().toLowerCase()
+        if (!username) return true
+        return takenUsernames.has(username) ? USERNAME_TAKEN_MESSAGE : true
+      },
+    }),
+    [takenUsernames],
+  )
+
+  const passwordRules = useMemo(
+    () => ({
+      minLength: { value: 6, message: PASSWORD_MIN_MESSAGE },
+      validate: (value: string) =>
+        !value || value.length >= 6 ? true : PASSWORD_MIN_MESSAGE,
+    }),
+    [],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setScreens(defaultEditScreensForPreset(staffJob))
+  }, [staffJob, open])
 
   const toggle = (key: PermissionCode, checked: boolean) =>
     setScreens((prev) => (checked ? [...prev, key] : prev.filter((item) => item !== key)))
 
   const mutation = useMutation({
-    mutationFn: (values: UserFormValues) =>
-      createUserApi({
+    mutationFn: (values: UserFormValues) => {
+      const mapped = roleAndScreensForPreset(values.staffJob)
+      return createUserApi({
         username: values.username.trim(),
         fullName: values.fullName.trim(),
         password: values.password,
-        roleCode: values.roleCode,
+        roleCode: mapped.roleCode,
         department: values.department.trim() || undefined,
-        allowedScreens: presetRole ? [] : screens,
-        workerStages: values.roleCode === 'WORKER' ? stages : [],
-      }),
-    onMutate: (values) => {
-      toast.success('Đã tạo nhân sự')
-      if (values.keepOpen) {
-        form.reset({ ...EMPTY_USER, keepOpen: true })
-        setStages([])
-      } else onClose()
+        allowedScreens: allowedScreensForSave(values.staffJob, screens),
+        workerStages: [],
+      })
     },
-    onSuccess: () => onCreated(),
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: () => {
+      toast.success('Đã tạo nhân sự')
+      onCreated()
+      onClose()
+    },
+    onError: (error: Error) => {
+      const message = error.message || 'Không tạo được nhân sự'
+      if (message.includes('tồn tại')) {
+        form.setError('username', { type: 'server', message: USERNAME_TAKEN_MESSAGE })
+        return
+      }
+      toast.error(message)
+    },
   })
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <Form
         form={form}
-        onSubmit={(values) => {
-          if (values.roleCode === 'WORKER' && stages.length === 0) {
-            setStagesError('Chọn ít nhất một khâu thợ được nhận')
-            return
-          }
-          mutation.mutate(values)
-        }}
+        onSubmit={(values) => mutation.mutate(values)}
       >
         <DialogTitle>Thêm nhân sự</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
@@ -288,48 +336,36 @@ function CreateUserDialog({
               name="username"
               label="Tài khoản"
               required
-              rules={{ minLength: { value: 3, message: 'Tối thiểu 3 ký tự' } }}
+              rules={usernameRules}
+              onBlur={() => void form.trigger('username')}
             />
             <FormTextField<UserFormValues>
               name="password"
               label="Mật khẩu"
               type="password"
               required
-              rules={{ minLength: { value: 6, message: 'Tối thiểu 6 ký tự' } }}
+              rules={passwordRules}
+              onBlur={() => void form.trigger('password')}
             />
           </FormRow>
           <FormRow>
-            <FormSelect<UserFormValues, RoleCode>
-              name="roleCode"
+            <FormSelect<UserFormValues, StaffJobPreset>
+              name="staffJob"
               label="Vai trò"
-              options={ROLE_OPTIONS}
+              options={STAFF_JOB_FORM_SELECT}
               required
             />
             <FormTextField<UserFormValues> name="department" label="Bộ phận" />
           </FormRow>
-          {presetRole ? (
-            <Typography variant="body2" color="text.secondary">
-              {roleCode === 'ADMIN'
-                ? 'Tài khoản Admin luôn xem được mọi màn hình.'
-                : 'Tài khoản Thợ chỉ dùng màn Phiếu của tôi — quyền đã kèm theo vai trò.'}
-            </Typography>
-          ) : null}
-          {roleCode === 'WORKER' ? (
-            <WorkerStagesField
-              value={stages}
-              error={stagesError}
-              onChange={(next) => {
-                setStages(next)
-                if (next.length) setStagesError('')
-              }}
-            />
-          ) : null}
-          {presetRole ? null : (
+          <Typography variant="body2" color="text.secondary">
+            {staffJobPresetHint(staffJob)}
+          </Typography>
+          {presetShowsScreenEditor(staffJob) ? (
             <>
               <Typography variant="body2" color="text.secondary">
-                Tích màn hình được xem và việc được làm. Bỏ tích thì người này không vào được màn / không làm được việc đó.
+                Tích thêm màn hình menu (kho, cấu hình…). Quyền công đoạn đã gắn theo vai trò ở trên.
               </Typography>
-              {SCREEN_GROUPS.map((group) => (
+              {screenGroupsForUserEdit().map((group) => (
                 <Stack key={group.label} spacing={0.25}>
                   <Typography variant="subtitle2">{group.label}</Typography>
                   <FormGroup>
@@ -350,8 +386,7 @@ function CreateUserDialog({
                 </Stack>
               ))}
             </>
-          )}
-          <FormCheckbox<UserFormValues> name="keepOpen" label="Lưu xong tiếp tục thêm người khác" />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>
@@ -368,7 +403,7 @@ type EditUserFormValues = {
   fullName: string
   username: string
   password: string
-  roleCode: RoleCode
+  staffJob: StaffJobPreset
   department: string
 }
 
@@ -383,47 +418,63 @@ function EditUserDialog({
 }) {
   const isAdmin = user?.roleCode === 'ADMIN'
   const form = useForm<EditUserFormValues>({
-    defaultValues: { fullName: '', username: '', password: '', roleCode: 'USER', department: '' },
+    defaultValues: { fullName: '', username: '', password: '', staffJob: 'kcs', department: '' },
   })
   const [screens, setScreens] = useState<PermissionCode[]>([])
   const [editReason, setEditReason] = useState('')
   const [reasonError, setReasonError] = useState('')
-  const [stages, setStages] = useState<StageCode[]>([])
-  const [stagesError, setStagesError] = useState('')
-  const roleCode = useWatch({ control: form.control, name: 'roleCode' })
-
+  const staffJob = useWatch({ control: form.control, name: 'staffJob' })
+  const staffJobLoaded = useRef<StaffJobPreset | null>(null)
   useEffect(() => {
     if (!user) return
-    setStages(user.workerStages ?? [])
-    setStagesError('')
+    staffJobLoaded.current = null
+    const preset = inferStaffJobPreset(user)
+    const formPreset = staffJobPresetForEditForm(preset)
     form.reset({
       fullName: user.fullName,
       username: user.username,
       password: '',
-      roleCode: user.roleCode,
+      staffJob: formPreset,
       department: user.department ?? '',
     })
-    setScreens(isAdmin ? ALL_PERMISSIONS : ((user.allowedScreens ?? []) as PermissionCode[]))
+    setScreens(isAdmin ? [] : screensFromUserForPreset(user, formPreset))
     setEditReason('')
     setReasonError('')
   }, [user, isAdmin, form])
 
+  useEffect(() => {
+    if (!user || isAdmin) return
+    if (staffJobLoaded.current === null) {
+      staffJobLoaded.current = staffJob
+      return
+    }
+    if (staffJobLoaded.current === staffJob) return
+    staffJobLoaded.current = staffJob
+    setScreens(defaultEditScreensForPreset(staffJob))
+  }, [staffJob, user, isAdmin])
+
   const mutation = useMutation({
-    mutationFn: (values: EditUserFormValues) =>
-      updateUserApi(user!.id, {
+    mutationFn: (values: EditUserFormValues) => {
+      const targetId = user?.id
+      if (!targetId) throw new Error('Không tìm thấy nhân sự')
+      const mapped = roleAndScreensForPreset(values.staffJob)
+      return updateUserApi(targetId, {
         fullName: values.fullName.trim(),
-        roleCode: values.roleCode,
+        roleCode: isAdmin ? undefined : mapped.roleCode,
         department: values.department.trim(),
         password: values.password.trim() || undefined,
-        allowedScreens: isAdmin ? undefined : screens,
-        workerStages: values.roleCode === 'WORKER' ? stages : [],
+        allowedScreens: isAdmin
+          ? undefined
+          : allowedScreensForSave(values.staffJob, screens),
+        workerStages: [],
         editReason: editReason.trim(),
-      }),
-    onMutate: () => {
+      })
+    },
+    onSuccess: () => {
       toast.success('Đã lưu nhân sự')
+      onSaved()
       onClose()
     },
-    onSuccess: () => onSaved(),
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -438,10 +489,6 @@ function EditUserDialog({
       <Form
         form={form}
         onSubmit={(values) => {
-          if (values.roleCode === 'WORKER' && stages.length === 0) {
-            setStagesError('Chọn ít nhất một khâu thợ được nhận')
-            return
-          }
           if (!editReason.trim()) {
             setReasonError('Nhập lý do chỉnh sửa')
             return
@@ -469,62 +516,58 @@ function EditUserDialog({
             />
           </FormRow>
           <FormRow>
-            <FormSelect<EditUserFormValues, RoleCode>
-              name="roleCode"
+            <FormSelect<EditUserFormValues, StaffJobPreset>
+              name="staffJob"
               label="Vai trò"
-              options={ROLE_OPTIONS}
+              options={STAFF_JOB_FORM_SELECT}
               required
               disabled={isAdmin}
             />
             <FormTextField<EditUserFormValues> name="department" label="Bộ phận" />
           </FormRow>
-          {roleCode === 'WORKER' ? (
-            <WorkerStagesField
-              value={stages}
-              error={stagesError}
-              onChange={(next) => {
-                setStages(next)
-                if (next.length) setStagesError('')
-              }}
-            />
-          ) : null}
-
-          <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
-            Màn hình được xem
-          </Typography>
           {isAdmin ? (
             <Typography variant="body2" color="text.secondary">
               Tài khoản Admin luôn xem được mọi màn hình.
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              Tích màn hình được xem và việc được làm. Bỏ tích thì người này không vào được màn / không làm được việc đó.
+              {staffJobPresetHint(staffJob)}
             </Typography>
           )}
-          {SCREEN_GROUPS.map((group) => (
-            <Stack key={group.label} spacing={0.25}>
-              <Typography variant="subtitle2">{group.label}</Typography>
-              <FormGroup>
-                {group.items.map((item) => (
-                  <FormControlLabel
-                    key={item.key}
-                    control={
-                      <Checkbox
-                        size="small"
-                        checked={screens.includes(item.key)}
-                        disabled={isAdmin}
-                        onChange={(event) => toggle(item.key, event.target.checked)}
+          {!isAdmin && presetShowsScreenEditor(staffJob) ? (
+            <>
+              <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
+                Màn hình được xem
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tích thêm màn hình menu. Quyền công đoạn đã gắn theo vai trò.
+              </Typography>
+              {screenGroupsForUserEdit().map((group) => (
+                <Stack key={group.label} spacing={0.25}>
+                  <Typography variant="subtitle2">{group.label}</Typography>
+                  <FormGroup>
+                    {group.items.map((item) => (
+                      <FormControlLabel
+                        key={item.key}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={screens.includes(item.key)}
+                            onChange={(event) => toggle(item.key, event.target.checked)}
+                          />
+                        }
+                        label={item.label}
                       />
-                    }
-                    label={item.label}
-                  />
-                ))}
-              </FormGroup>
-            </Stack>
-          ))}
+                    ))}
+                  </FormGroup>
+                </Stack>
+              ))}
+            </>
+          ) : null}
+          {user ? (
           <EditReasonBlock
             entityType="user"
-            entityId={user?.id}
+            entityId={user.id}
             reason={editReason}
             onReasonChange={(value) => {
               setEditReason(value)
@@ -533,10 +576,11 @@ function EditUserDialog({
             required
             error={reasonError}
           />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Hủy</Button>
-          <Button type="submit" variant="contained">
+          <Button type="submit" variant="contained" disabled={!user}>
             Lưu
           </Button>
         </DialogActions>
@@ -556,12 +600,16 @@ function LockUserDialog({
 }) {
   const locking = Boolean(user?.isActive)
   const mutation = useMutation({
-    mutationFn: () => updateUserApi(user!.id, { isActive: !user!.isActive }),
-    onMutate: () => {
+    mutationFn: () => {
+      const targetId = user?.id
+      if (!targetId) throw new Error('Không tìm thấy nhân sự')
+      return updateUserApi(targetId, { isActive: !user!.isActive })
+    },
+    onSuccess: () => {
       toast.success(locking ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản')
+      onSaved()
       onClose()
     },
-    onSuccess: () => onSaved(),
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -591,43 +639,3 @@ function LockUserDialog({
   )
 }
 
-/** Khâu thợ được tự nhận trên phiếu — mỗi công đoạn một nhóm thợ riêng, một người làm được nhiều khâu. */
-function WorkerStagesField({
-  value,
-  error,
-  onChange,
-}: {
-  value: StageCode[]
-  error?: string
-  onChange: (stages: StageCode[]) => void
-}) {
-  return (
-    <Stack spacing={0.25}>
-      <Typography variant="subtitle2">Khâu thợ được nhận *</Typography>
-      <FormGroup row>
-        {STAGES.map((stage) => (
-          <FormControlLabel
-            key={stage}
-            control={
-              <Checkbox
-                size="small"
-                checked={value.includes(stage)}
-                onChange={(event) =>
-                  onChange(
-                    event.target.checked
-                      ? STAGES.filter((item) => item === stage || value.includes(item))
-                      : value.filter((item) => item !== stage),
-                  )
-                }
-              />
-            }
-            label={STAGE_LABEL[stage]}
-          />
-        ))}
-      </FormGroup>
-      <Typography variant="caption" color={error ? 'error' : 'text.secondary'}>
-        {error || 'Thợ chỉ thấy và nhận được phiếu đang mở ở các khâu đã tích.'}
-      </Typography>
-    </Stack>
-  )
-}

@@ -410,6 +410,8 @@ export type ProductionOrderListParams = {
   dueDate?: string
   page: number
   pageSize: number
+  /** Ghép trang tab Tất cả — chỉ lấy một đoạn lệnh SX, không kéo từ đầu danh sách. */
+  offset?: number
   sort?: string
   dir?: 'asc' | 'desc'
 }
@@ -540,6 +542,20 @@ export type MyTicketItem = {
   pendingRequests: number
 }
 
+/** Phiếu đúc đã giao cho thợ (bước 7 — màn Phiếu của tôi). */
+export type MyCastingSlipItem = {
+  id: string
+  code: string
+  status: 'PENDING_ISSUE' | 'WAIT_CASTING' | 'CASTING' | 'PENDING_CONFIRMATION' | 'DONE'
+  slipDate: string
+  batchOrderCodes: string
+  waxWeightGram: string
+  issueTotalGram: string
+  orderCount: number
+  startedAt: string | null
+  confirmedAt: string | null
+}
+
 export type MyTickets = {
   /** Khâu tài khoản được nhận (admin: mọi khâu). */
   stages?: StageCode[]
@@ -549,6 +565,12 @@ export type MyTickets = {
   mine: MyTicketItem[]
   /** KCS vừa nhận lại. */
   recent: MyTicketItem[]
+  /** Phiếu đúc giao cho mình, chờ bấm Nhận phiếu (Chờ đúc). */
+  castingAvailable?: MyCastingSlipItem[]
+  /** Phiếu đúc đã nhận / đang làm / chờ thủ kho. */
+  castingMine?: MyCastingSlipItem[]
+  /** Phiếu đúc đã hoàn tất (thủ kho xác nhận). */
+  castingRecent?: MyCastingSlipItem[]
 }
 
 export type OrderOption = { code: string; description: string; status: ProductionStatus }

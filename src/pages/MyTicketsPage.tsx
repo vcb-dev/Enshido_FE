@@ -21,17 +21,29 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import InboxIcon from '@mui/icons-material/Inbox'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined'
 import ScaleIcon from '@mui/icons-material/Scale'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Link as RouterLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   getMyTicketsApi,
   getSubTicketOrderApi,
+  type MyCastingSlipItem,
   type MyTicketItem,
+  type MyTickets,
   type SubTicketState,
 } from '../api/productionOrders'
+import {
+  startCastingSlipApi,
+  submitCastingSlipResultApi,
+  type CastingSlipResultPayload,
+  type CastingSlipStatus,
+} from '../api/castingSlips'
+import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { formatQty } from '../api/inventory'
+import { applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { CardGroupSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
@@ -44,6 +56,21 @@ type TabKey = 'mine' | 'available' | 'recent'
 /** Thứ tự việc đang giữ: đang làm lên đầu, rồi chờ giao, cuối cùng là đã báo xong. */
 const MINE_ORDER: Partial<Record<SubTicketState, number>> = { WORKING: 0, CLAIMED: 1, SUBMITTED: 2 }
 
+const CASTING_MINE_ORDER: Partial<Record<CastingSlipStatus, number>> = {
+  CASTING: 0,
+  PENDING_CONFIRMATION: 1,
+  PENDING_ISSUE: 2,
+}
+
+const CASTING_SLIP_STATUS_LABEL: Record<CastingSlipStatus, string> = {
+  PENDING_ISSUE: 'Chờ cấp vật tư',
+  WAIT_CASTING: 'Chờ đúc',
+  CASTING: 'Đang đúc',
+  PENDING_CONFIRMATION: 'Chờ thủ kho xác nhận',
+  DONE: 'Đúc xong',
+  CAST_FAILED: 'Lỗi đúc',
+}
+
 /** Màn của thợ: nhận phiếu đang mở ở khâu của mình, theo dõi việc đang giữ và vừa nộp. */
 export function MyTicketsPage() {
   const { user } = useAuth()
@@ -51,15 +78,19 @@ export function MyTicketsPage() {
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
-    // Khâu vừa được mở từ máy người giao phải xuất hiện sớm trên máy của thợ.
-    refetchInterval: 10_000,
+    staleTime: 45_000,
+    // API my-tickets nặng (nhiều truy vấn) — tránh poll quá dày.
+    refetchInterval: 45_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 
+  // Prefetch tối đa vài phiếu — prefetch hàng loạt sau my-tickets làm nghẽn API.
   useEffect(() => {
     if (!tickets.data) return
-    for (const item of [...tickets.data.available, ...tickets.data.mine]) {
+    const queue = [...tickets.data.available, ...tickets.data.mine].slice(0, 4)
+    if (queue.length === 0) return
+    for (const item of queue) {
       const key = ['production-order', item.orderCode] as const
       if (queryClient.getQueryData(key)) continue
       void queryClient.prefetchQuery({
@@ -96,10 +127,108 @@ export function MyTicketsPage() {
     [data?.available],
   )
   const recent = data?.recent ?? []
+  const castingMine = useMemo(
+    () =>
+      [...(data?.castingMine ?? [])].sort(
+        (a, b) => (CASTING_MINE_ORDER[a.status] ?? 9) - (CASTING_MINE_ORDER[b.status] ?? 9),
+      ),
+    [data?.castingMine],
+  )
+  const castingAvailable = data?.castingAvailable ?? []
+  const castingRecent = data?.castingRecent ?? []
+
+  const [resultSlip, setResultSlip] = useState<MyCastingSlipItem | null>(null)
+  const [startingId, setStartingId] = useState<string | null>(null)
+
+  function patchMyTickets(patch: (prev: MyTickets) => MyTickets) {
+    queryClient.setQueryData<MyTickets>(['my-tickets'], (prev) => (prev ? patch(prev) : prev))
+  }
+
+  const startCasting = useMutation({
+    mutationFn: (id: string) => startCastingSlipApi(id),
+    onMutate: async (id) => {
+      setStartingId(id)
+      await queryClient.cancelQueries({ queryKey: ['my-tickets'] })
+      const prev = queryClient.getQueryData<MyTickets>(['my-tickets'])
+      const moved = prev?.castingAvailable?.find((row) => row.id === id)
+      if (prev && moved) {
+        const now = new Date().toISOString()
+        patchMyTickets((data) => ({
+          ...data,
+          castingAvailable: (data.castingAvailable ?? []).filter((row) => row.id !== id),
+          castingMine: [{ ...moved, status: 'CASTING', startedAt: now }, ...(data.castingMine ?? [])],
+        }))
+      }
+      return { prev }
+    },
+    onSuccess: (slip) => {
+      toast.success(`Phiếu ${slip.code}: đã nhận — đang đúc`)
+      patchMyTickets((data) => ({
+        ...data,
+        castingMine: (data.castingMine ?? []).map((row) =>
+          row.id === slip.id
+            ? {
+                ...row,
+                status: 'CASTING',
+                startedAt: slip.startedAt ?? row.startedAt,
+              }
+            : row,
+        ),
+      }))
+    },
+    onError: (error: Error, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['my-tickets'], ctx.prev)
+      toast.error(error.message)
+    },
+    onSettled: () => setStartingId(null),
+  })
+
+  const submitCastingResult = useMutation({
+    mutationFn: (vars: { id: string; payload: CastingSlipResultPayload }) =>
+      submitCastingSlipResultApi(vars.id, vars.payload),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ['my-tickets'] })
+      const prev = queryClient.getQueryData<MyTickets>(['my-tickets'])
+      const held = prev?.castingMine?.find((row) => row.id === id)
+      if (prev && held) {
+        patchMyTickets((data) => ({
+          ...data,
+          castingMine: (data.castingMine ?? []).map((row) =>
+            row.id === id ? { ...row, status: 'PENDING_CONFIRMATION' } : row,
+          ),
+        }))
+      }
+      return { prev }
+    },
+    onSuccess: (slip) => {
+      setResultSlip(null)
+      applyCastingSlipUpdate(queryClient, slip)
+      toast.success(`Phiếu ${slip.code}: đã gửi kết quả — chờ thủ kho xác nhận`)
+    },
+    onError: (error: Error, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['my-tickets'], ctx.prev)
+      toast.error(error.message)
+    },
+  })
+
+  function openCastingResult(item: MyCastingSlipItem) {
+    setResultSlip(item)
+  }
 
   const [tab, setTab] = useState<TabKey | null>(null)
   // Lần đầu vào: đang giữ việc thì mở tab việc của tôi, chưa có thì mở tab chờ nhận.
-  const activeTab: TabKey = tab ?? (data && mine.length === 0 && available.length > 0 ? 'available' : 'mine')
+  const activeTab: TabKey =
+    tab ??
+    (data &&
+    mine.length === 0 &&
+    castingMine.length === 0 &&
+    available.length + castingAvailable.length > 0
+      ? 'available'
+      : 'mine')
+
+  const availableCount = available.length + castingAvailable.length
+  const mineCount = mine.length + castingMine.length
+  const recentCount = recent.length + castingRecent.length
 
   const count = (state: SubTicketState) => mine.filter((item) => item.state === state).length
 
@@ -167,6 +296,14 @@ export function MyTicketsPage() {
   }
 
   const list = activeTab === 'mine' ? mine : activeTab === 'available' ? available : recent
+  const castingList =
+    activeTab === 'mine'
+      ? castingMine
+      : activeTab === 'available'
+        ? castingAvailable
+        : activeTab === 'recent'
+          ? castingRecent
+          : []
 
   return (
     <Stack spacing={{ xs: 2, md: 2.5 }}>
@@ -231,10 +368,10 @@ export function MyTicketsPage() {
             />
             <StatTile
               label="Phiếu chờ nhận"
-              value={available.length}
+              value={availableCount}
               icon={<InboxIcon />}
               accent="#6b4513"
-              highlight={available.length > 0}
+              highlight={availableCount > 0}
               onClick={() => setTab('available')}
             />
           </Box>
@@ -262,20 +399,20 @@ export function MyTicketsPage() {
                 '& .MuiTab-root': { minHeight: 44, fontWeight: 600, textTransform: 'none', px: 1 },
               }}
             >
-              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mine.length} />} />
-              <Tab value="available" label={<TabLabel text="Chờ nhận" count={available.length} />} />
-              <Tab value="recent" label={<TabLabel text="Đã nộp" count={recent.length} />} />
+              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mineCount} />} />
+              <Tab value="available" label={<TabLabel text="Chờ nhận" count={availableCount} />} />
+              <Tab value="recent" label={<TabLabel text="Đã nộp" count={recentCount} />} />
             </Tabs>
           </Box>
 
-          {list.length === 0 ? (
+          {list.length === 0 && castingList.length === 0 ? (
             activeTab === 'mine' ? (
               <EmptyState
                 icon={<AssignmentTurnedInIcon />}
                 title="Bạn chưa giữ phiếu nào"
                 description={
-                  available.length
-                    ? `Có ${available.length} phiếu đang chờ nhận ở khâu của bạn.`
+                  availableCount
+                    ? `Có ${availableCount} phiếu đang chờ nhận ở khâu của bạn.`
                     : 'Khi người giao mở khâu của bạn, phiếu sẽ hiện ở tab Chờ nhận.'
                 }
               />
@@ -296,6 +433,19 @@ export function MyTicketsPage() {
                 gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(3, minmax(0, 1fr))' },
               }}
             >
+              {castingList.map((item) => (
+                <CastingSlipCard
+                  key={`casting-${item.code}`}
+                  item={item}
+                  tab={activeTab}
+                  starting={startingId === item.id && startCasting.isPending}
+                  onStart={() => {
+                    setStartingId(item.id)
+                    startCasting.mutate(item.id)
+                  }}
+                  onEnterResult={() => void openCastingResult(item)}
+                />
+              ))}
               {list.map((item) => (
                 <TicketCard
                   key={`${item.ticketCode}-${item.stage}-${item.state}-${item.returnedAt ?? ''}`}
@@ -309,7 +459,136 @@ export function MyTicketsPage() {
           )}
         </>
       )}
+      <CastingSlipResultDialog
+        slip={resultSlip}
+        saving={submitCastingResult.isPending}
+        onClose={() => setResultSlip(null)}
+        onSave={(payload) => resultSlip && submitCastingResult.mutate({ id: resultSlip.id, payload })}
+      />
     </Stack>
+  )
+}
+
+function castingSlipStatusLine(item: MyCastingSlipItem, tab: TabKey) {
+  if (tab === 'recent') {
+    return item.confirmedAt
+      ? `Thủ kho xác nhận ${formatDateShort(item.confirmedAt)}`
+      : 'Đã hoàn tất'
+  }
+  if (tab === 'available') {
+    return `Ngày phiếu ${formatDateShort(item.slipDate)} · bấm Nhận phiếu để bắt đầu đúc`
+  }
+  if (item.startedAt) return `Bắt đầu đúc ${formatDateShort(item.startedAt)}`
+  return `Ngày phiếu ${formatDateShort(item.slipDate)} · ${CASTING_SLIP_STATUS_LABEL[item.status]}`
+}
+
+function CastingSlipCard({
+  item,
+  tab,
+  starting,
+  onStart,
+  onEnterResult,
+}: {
+  item: MyCastingSlipItem
+  tab: TabKey
+  starting: boolean
+  onStart: () => void
+  onEnterResult: () => void
+}) {
+  const status = castingSlipStatusLine(item, tab)
+  const action =
+    tab === 'available' && item.status === 'WAIT_CASTING' ? (
+      <Button size="small" variant="contained" loading={starting} onClick={onStart} sx={{ minWidth: 132 }}>
+        Nhận phiếu
+      </Button>
+    ) : tab === 'mine' && item.status === 'CASTING' ? (
+      <Button size="small" variant="contained" onClick={onEnterResult} sx={{ minWidth: 132 }}>
+        Nhập kết quả đúc
+      </Button>
+    ) : null
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 2,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        transition: 'box-shadow .15s',
+        '&:hover': { boxShadow: '0 4px 16px rgba(62,42,14,.08)' },
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 1.5,
+          p: 1.5,
+          flex: 1,
+        }}
+      >
+        <Box
+          sx={{
+            width: 64,
+            height: 64,
+            flexShrink: 0,
+            borderRadius: 1.5,
+            display: 'grid',
+            placeItems: 'center',
+            bgcolor: 'action.selected',
+            color: 'primary.dark',
+          }}
+        >
+          <LocalFireDepartmentOutlinedIcon />
+        </Box>
+        <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+          <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography sx={{ fontWeight: 800, letterSpacing: '.01em' }}>{item.code}</Typography>
+            <Chip
+              size="small"
+              label="Phiếu đúc"
+              sx={{ height: 22, borderRadius: 1, bgcolor: 'action.selected', color: 'primary.dark', fontWeight: 600 }}
+            />
+            <Box sx={{ flex: 1 }} />
+            <Chip
+              size="small"
+              label={CASTING_SLIP_STATUS_LABEL[item.status]}
+              sx={{ height: 22, borderRadius: 1, fontWeight: 600 }}
+            />
+          </Stack>
+          <Typography
+            variant="body2"
+            sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+          >
+            {item.batchOrderCodes}
+          </Typography>
+          <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap', pt: 0.25 }}>
+            <MetaItem icon={<Inventory2OutlinedIcon />}>{item.orderCount} đơn</MetaItem>
+            <MetaItem icon={<ScaleIcon />}>{formatQty(item.waxWeightGram)} g sáp</MetaItem>
+            <MetaItem icon={<EventIcon />}>{formatDateShort(item.slipDate)}</MetaItem>
+          </Stack>
+        </Stack>
+      </Box>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: 'center',
+          px: 1.5,
+          py: 1,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.default',
+          minHeight: 52,
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+          {status}
+        </Typography>
+        {action}
+      </Stack>
+    </Paper>
   )
 }
 

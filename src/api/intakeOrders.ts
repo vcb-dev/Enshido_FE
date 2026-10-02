@@ -12,6 +12,7 @@ export type IntakeOrderStatus =
   | 'WAX_CONFIRMED'
   | 'WAIT_CASTING'
   | 'CASTING'
+  | 'CAST_PENDING_CONFIRMATION'
   | 'CAST_DONE'
   | 'WAIT_COOLING'
   | 'REJECTED'
@@ -39,7 +40,7 @@ export type IntakeOrder = {
   model3dUrl: string | null
   productWeightGram: string | null
   castingTreeWeightGram: string | null
-  /** Bước 5–6: TL thủ kho cân kiểm lúc xác nhận sáp. */
+  /** Bước 5–6: TL thủ kho cân kiểm (nếu nhập); không có thì dùng số thợ báo. */
   waxCheckedWeightGram: string | null
   waxCheckedByName: string | null
   /** Phiếu đúc đang giữ đơn (kể cả phiếu chưa cấp vật tư). */
@@ -83,6 +84,26 @@ export function listIntakeOrdersApi(params: {
   query.set('page', String(params.page))
   query.set('pageSize', String(params.pageSize))
   return apiFetch<IntakeOrderList>(`/intake-orders?${query.toString()}`)
+}
+
+export type IntakePipelineCounts = Partial<Record<IntakeOrderStatus, number>>
+
+export function getIntakePipelineCountsApi() {
+  return apiFetch<IntakePipelineCounts>('/intake-orders/pipeline-counts')
+}
+
+export type IntakePipelineLists = Partial<Record<IntakeOrderStatus, IntakeOrderList>>
+
+export function getIntakePipelineListsApi(params: {
+  requestType?: ProductionRequestType | ''
+  search?: string
+  pageSize?: number
+}) {
+  const query = new URLSearchParams()
+  if (params.requestType) query.set('requestType', params.requestType)
+  if (params.search?.trim()) query.set('search', params.search.trim())
+  if (params.pageSize != null) query.set('pageSize', String(params.pageSize))
+  return apiFetch<IntakePipelineLists>(`/intake-orders/pipeline-lists?${query.toString()}`)
 }
 
 export function createIntakeOrderApi(payload: UpsertIntakeOrderPayload) {

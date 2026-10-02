@@ -39,6 +39,7 @@ import {
   REQUEST_STATUS_META,
 } from '../orders/MaterialRequests'
 import { seedProductionOrder } from '../orders/orderCache'
+import { removeMaterialRequestFromCache } from '../orders/materialRequestsCache'
 
 const TABS: Array<{ value: MaterialRequestStatus; label: string }> = [
   { value: 'PENDING', label: 'Chờ xuất' },
@@ -64,25 +65,45 @@ export function MaterialRequestsPage() {
     refetchInterval: status === 'PENDING' ? 15_000 : false,
   })
 
-  const done = (message: string) => ({
-    onSuccess: (order: Parameters<typeof seedProductionOrder>[1]) => {
-      seedProductionOrder(queryClient, order)
-      void queryClient.invalidateQueries({ queryKey: ['material-requests'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-order-costing', order.code] })
-      void queryClient.invalidateQueries({ queryKey: ['production-order-activity', order.code] })
-      void queryClient.invalidateQueries({ queryKey: ['nvl-options'] })
-      void queryClient.invalidateQueries({ queryKey: ['btp-options'] })
-      toast.success(message)
+  function afterMaterialRequestHandled(
+    order: Parameters<typeof seedProductionOrder>[1],
+    requestId: string,
+    message: string,
+  ) {
+    seedProductionOrder(queryClient, order)
+    removeMaterialRequestFromCache(queryClient, requestId, status)
+    void queryClient.invalidateQueries({
+      queryKey: ['production-order-costing', order.code],
+      refetchType: 'none',
+    })
+    void queryClient.invalidateQueries({
+      queryKey: ['production-order-activity', order.code],
+      refetchType: 'none',
+    })
+    void queryClient.invalidateQueries({ queryKey: ['nvl-options'], refetchType: 'none' })
+    void queryClient.invalidateQueries({ queryKey: ['btp-options'], refetchType: 'none' })
+    toast.success(message)
+  }
+
+  const issue = useMutation({
+    mutationFn: (payload: IssueMaterialPayload) => issueMaterialRequestApi(issuing?.id ?? '', payload),
+    onSuccess: (order) => {
+      const requestId = issuing?.id
+      setIssuing(null)
+      if (!requestId) return
+      afterMaterialRequestHandled(order, requestId, 'Đã xuất NVL cho thợ')
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const issue = useMutation({
-    mutationFn: (payload: IssueMaterialPayload) => issueMaterialRequestApi(issuing?.id ?? '', payload),
-    ...done('Đã xuất NVL cho thợ'),
-  })
   const reject = useMutation({
     mutationFn: (reason: string) => rejectMaterialRequestApi(rejecting?.id ?? '', reason),
-    ...done('Đã từ chối yêu cầu'),
+    onSuccess: (order) => {
+      const requestId = rejecting?.id
+      setRejecting(null)
+      if (!requestId) return
+      afterMaterialRequestHandled(order, requestId, 'Đã từ chối yêu cầu')
+    },
+    onError: (error: Error) => toast.error(error.message),
   })
 
   const rows = list.data ?? []

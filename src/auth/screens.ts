@@ -1,5 +1,11 @@
 import { can, canAny, isWorkerOnly, Permission, type PermissionCode, type PermissionUser } from './permissions'
 import { WAREHOUSES, warehousePath, type WarehouseCode } from '../warehouses/catalog'
+import {
+  canAccessProductionOrdersPage,
+  canSeeCastingSlipsPage,
+  canUseMyTickets,
+} from '../intake/intake3dAccess'
+import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from './screenAccess'
 
 export type ScreenGroup = {
   label: string
@@ -21,8 +27,13 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     ],
   },
   {
-    label: 'Sản xuất',
-    items: [{ key: Permission.PRODUCTION_WORKER, label: 'Thợ sản xuất (nhận phiếu con)' }],
+    label: 'Sản xuất (màn hình menu)',
+    items: [
+      { key: Permission.SCREEN_INTAKE_ORDERS, label: 'Tạo đơn' },
+      { key: Permission.SCREEN_PRODUCTION_ORDERS, label: 'Lệnh sản xuất' },
+      { key: Permission.SCREEN_CASTING_ORDERS, label: 'Lệnh đúc' },
+      { key: Permission.SCREEN_MY_TICKETS, label: 'Phiếu của tôi' },
+    ],
   },
   {
     label: 'Quy trình đơn hàng (việc được làm)',
@@ -33,9 +44,12 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
         label:
           'Quản lý xưởng = quản lý SX + thủ kho + KCS: duyệt đơn, xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây, chia phiếu, KCS nhận lại (bước 2, 5–7, 9–15)',
       },
+      { key: Permission.INTAKE_APPROVE, label: 'Duyệt / từ chối đơn (bước 2)' },
       { key: Permission.PRODUCTION_MODEL3D, label: 'Thợ 3D: gắn link 3D, in sáp (bước 3–4)' },
       { key: Permission.PRODUCTION_WAX, label: 'Thợ sáp: cấy cây thông, bơm sáp (bước 5–6)' },
+      { key: Permission.WAREHOUSE_KEEPER, label: 'Thủ kho: xác nhận sáp, lên phiếu đúc, duyệt NVL (bước 5–11)' },
       { key: Permission.PRODUCTION_CAST, label: 'Thợ đúc: bắt đầu đúc, nhập kết quả (bước 8–9)' },
+      { key: Permission.PRODUCTION_QC, label: 'KCS: cắt cây, nhận lại hàng, chốt lỗi (bước 10–15)' },
     ],
   },
   {
@@ -73,20 +87,17 @@ export function hasAnyWarehouse(user: PermissionUser | undefined | null) {
 }
 
 export function firstAllowedPath(user: PermissionUser | undefined | null): string {
-  // Thợ vào thẳng phần việc của mình, kể cả khi được tick thêm màn hình khác.
   if (isWorkerOnly(user)) return '/my-tickets'
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
+  if (canSeeIntakeOrdersMenu(user)) return '/intake-orders'
+  if (canAccessProductionOrdersPage(user)) return '/orders'
+  if (canSeeCastingOrdersMenu(user) || canSeeCastingSlipsPage(user)) return '/casting'
   const firstWarehouse = visibleWarehouses(user)[0]
   if (firstWarehouse) return warehousePath(firstWarehouse)
   if (can(user, Permission.SCREEN_LOCATIONS)) return '/settings/locations'
   if (can(user, Permission.SCREEN_CATALOGS)) return '/settings/catalogs'
   if (can(user, Permission.USERS_MANAGE)) return '/users'
-  if (can(user, Permission.PRODUCTION_WORKER)) return '/my-tickets'
-  // Người chỉ có quyền theo việc (thợ 3D, thợ đúc…) vào thẳng màn của việc mình.
-  if (canAny(user, Permission.INTAKE_CREATE, Permission.INTAKE_APPROVE)) return '/intake-orders'
-  if (canAny(user, Permission.PRODUCTION_MODEL3D, Permission.PRODUCTION_WAX, Permission.PRODUCTION_CAST)) {
-    return '/orders'
-  }
+  if (canUseMyTickets(user)) return '/my-tickets'
   if (canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)) return '/orders'
   return '/'
 }

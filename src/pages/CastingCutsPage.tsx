@@ -22,6 +22,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
+import { applyCastingCutCreated, removeCastingCutFromCaches } from '../casting/castingCutsCache'
 import {
   createCastingCutApi,
   deleteCastingCutApi,
@@ -112,12 +113,6 @@ export function CastingCutsPage() {
     placeholderData: keepPreviousData,
     staleTime: 15_000,
   })
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['casting-cuts'] })
-    void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-    void queryClient.invalidateQueries({ queryKey: ['production-order'] })
-  }
 
   const columns = useMemo<Column<CastingCut>[]>(
     () => [
@@ -231,7 +226,7 @@ export function CastingCutsPage() {
         onClose={() => setCreating(false)}
         onSaved={(cut) => {
           setCreating(false)
-          refresh()
+          applyCastingCutCreated(queryClient, cut)
           setViewing(cut)
         }}
       />
@@ -239,8 +234,8 @@ export function CastingCutsPage() {
         cut={viewing}
         onClose={() => setViewing(null)}
         onDeleted={() => {
+          if (viewing) removeCastingCutFromCaches(queryClient, viewing.id)
           setViewing(null)
-          refresh()
         }}
       />
     </Stack>
