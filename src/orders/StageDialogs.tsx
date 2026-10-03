@@ -355,13 +355,11 @@ export function HandoverDialog({
     >
       {selfConfirmBlocked ? (
         <Alert severity="error" sx={{ mt: 1 }}>
-          Bạn là thợ đã nhận phiếu này — không tự xác nhận giao cho mình được. Nhờ người khác
-          cân bạc và xác nhận.
+          Bạn là thợ nhận phiếu này — nhờ người khác xác nhận giao.
         </Alert>
       ) : selfConfirm ? (
         <Alert severity="warning" sx={{ mt: 1 }}>
-          Bạn đang tự xác nhận giao cho chính mình (quyền admin) — lần cân bạc này chỉ có một
-          người. Lịch sử khâu sẽ ghi người giao và thợ là cùng một người.
+          Bạn đang tự xác nhận giao cho chính mình (admin).
         </Alert>
       ) : null}
       <FormRow columns={2} sx={{ mt: 1 }}>
@@ -466,8 +464,7 @@ export function HandoverDialog({
           {stoneBudget.totalCount == null && stoneBudget.totalWeight == null ? (
             <Alert severity="warning" sx={{ mt: 1, py: 0.25 }}>
               <Typography variant="body2">
-                Đơn chưa ghi số lượng / trọng lượng đá nên không chặn được phần giao — bổ sung ở
-                phần sửa đơn nếu cần.
+                Đơn chưa có số lượng / TL đá.
               </Typography>
             </Alert>
           ) : (
@@ -552,6 +549,8 @@ type ReturnValues = {
   returnedSilverWeight: string
   /** Nguội / Vào đá: SL hàng lỗi KCS tách ra. */
   defectQty: string
+  /** Lý do hàng lỗi — hiện ở cột Lỗi của phiếu. */
+  defectReason: string
   btpRecoveredWeight: string
   silverRecoveredWeight: string
   /** Nguội / Vào đá: S999 thừa (g). */
@@ -595,6 +594,7 @@ export function KcsReturnDialog({
       returnedQty: '',
       returnedSilverWeight: '',
       defectQty: '',
+      defectReason: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       scrapS999Weight: '',
@@ -626,6 +626,7 @@ export function KcsReturnDialog({
         returnedQty: entry.returnedQty != null ? String(entry.returnedQty) : '',
         returnedSilverWeight: entry.returnedSilverWeight ?? '',
         defectQty: entry.defectQty != null ? String(entry.defectQty) : '',
+        defectReason: entry.defectReason ?? '',
         btpRecoveredWeight: entry.btpRecoveredWeight ?? '',
         silverRecoveredWeight: entry.silverRecoveredWeight ?? '',
         scrapS999Weight: entry.scrapS999Weight ?? '',
@@ -640,6 +641,7 @@ export function KcsReturnDialog({
       returnedQty: flagged ? '0' : entry.handedQty != null ? String(entry.handedQty) : '',
       returnedSilverWeight: '',
       defectQty: flagged && entry.handedQty != null ? String(entry.handedQty) : '',
+      defectReason: '',
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       scrapS999Weight: '',
@@ -650,20 +652,34 @@ export function KcsReturnDialog({
   }, [entry, form])
   const returnedStones = useWatch({ control: form.control, name: 'returnedStones' }) ?? []
 
-  const [returnedQty, returnedSilver, btp, silverRecovered, scrapS999, defectQty] = useWatch({
+  const [returnedQty, returnedSilver, btp, silverRecovered, scrapS999] = useWatch({
     control: form.control,
-    name: [
-      'returnedQty',
-      'returnedSilverWeight',
-      'btpRecoveredWeight',
-      'silverRecoveredWeight',
-      'scrapS999Weight',
-      'defectQty',
-    ],
+    name: ['returnedQty', 'returnedSilverWeight', 'btpRecoveredWeight', 'silverRecoveredWeight', 'scrapS999Weight'],
   })
   /** Nguội / Vào đá của phiếu con: KCS tách hàng đạt / hàng lỗi / nguyên liệu thừa, thủ kho xác nhận sau. */
   const keeperStage =
     entry != null && entry.subTicketId != null && (entry.stage === 'FILING' || entry.stage === 'STONE_SETTING')
+  /**
+   * Khâu đã bị báo lỗi, KCS nhận lần đầu: form điền sẵn cả lô là hàng lỗi. KCS nhập số đạt thì
+   * số lỗi tự thành phần còn lại (đã giao − đạt) — trừ khi KCS đã tự sửa ô số lỗi.
+   */
+  /** KCS nhận lại 0 sp: phiếu đóng ở nhánh Lỗi (khâu qua thủ kho thì sau khi thủ kho xác nhận). */
+  const allDefect = returnedQty === '0' && entry?.returnedAt == null
+  const watchedDefectQty = useWatch({ control: form.control, name: 'defectQty' })
+  /** Có hàng lỗi thì cho ghi lý do; lỗi hết ở khâu không qua thủ kho thì bắt buộc (phiếu chốt Lỗi ngay). */
+  const reasonRequired = allDefect && !keeperStage
+  const showDefectReason = reasonRequired || (keeperStage && Number(watchedDefectQty || 0) > 0)
+  const defectFollowsReturned = keeperStage && entry?.defectReportedAt != null && !entry?.returnedAt
+  const handedQty = entry?.handedQty ?? null
+  useEffect(() => {
+    if (!keeperStage || handedQty == null) return
+    if (defectFollowsReturned && !form.getFieldState('defectQty').isDirty) {
+      const rest = Math.max(0, handedQty - Number(returnedQty || 0))
+      if (form.getValues('defectQty') !== String(rest)) form.setValue('defectQty', String(rest))
+    }
+    // Báo ngay khi đạt + lỗi vượt số đã giao, không đợi bấm lưu.
+    if (form.getValues('defectQty')) void form.trigger('defectQty')
+  }, [returnedQty, keeperStage, defectFollowsReturned, handedQty, form])
   /**
    * Khâu Vào đá: đá và bạc đã gắn thành một BTP nên KCS chỉ đếm và cân lại cả cụm, không tách
    * đá riêng. Mốc so là bạc giao + đá giao (BE coi như gắn hết số đá đã giao).
@@ -761,6 +777,7 @@ export function KcsReturnDialog({
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
       returnedSilverWeight: values.returnedSilverWeight,
       defectQty: keeperStage ? Number(values.defectQty || 0) : null,
+      defectReason: values.defectReason.trim() || null,
       scrapS999Weight: keeperStage ? values.scrapS999Weight || null : null,
       btpRecoveredWeight: values.btpRecoveredWeight || null,
       silverRecoveredWeight: values.silverRecoveredWeight || null,
@@ -869,7 +886,7 @@ export function KcsReturnDialog({
           required
           helperText={
             silverLimit != null
-              ? `Tối đa ${formatQty(String(silverLimit))} g${stoneStage ? ' (bạc vào khâu + đá)' : issuedMetal ? ' (giao + xuất thêm)' : ' đã giao'}, tính cả phần thu hồi`
+              ? `Tối đa ${formatQty(String(silverLimit))} g`
               : undefined
           }
           transform={(value) => capAt(silverRoomFor('returnedSilverWeight'))(value)}
@@ -885,26 +902,20 @@ export function KcsReturnDialog({
 
       {entry?.defectReportedAt ? (
         <Alert severity="error" sx={{ py: 0.25 }}>
-          {entry.defectReportedByName ?? '—'} báo lỗi khâu này: {entry.defectNote}. Cân hàng thật rồi nhập số hàng đạt /
-          hàng lỗi.
+          {entry.defectReportedByName ?? '—'} báo lỗi: {entry.defectNote}
         </Alert>
       ) : null}
 
       {entry?.pendingRequestCount ? (
         <Alert severity="warning" sx={{ py: 0.25 }}>
-          Còn {entry.pendingRequestCount} yêu cầu xuất NVL của khâu này chưa xử lý — kho xuất hoặc từ chối trước rồi
-          KCS mới nhận lại được.
+          Còn {entry.pendingRequestCount} yêu cầu xuất NVL chưa xử lý.
         </Alert>
       ) : null}
 
       {weighedStones.length || legacyStones.length ? (
         <Box sx={{ p: 1.25, border: '1px solid #e9e0d4', borderRadius: 1 }}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            Đá thừa — cân cả gói theo từng mã
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Không cần đếm viên: hệ thống quy số viên thừa theo tỷ lệ TL gói lúc cấp. Không thừa thì để trống. Thủ kho xác
-            nhận xong mới xuất kho phần đã dùng, đá thừa vẫn nằm trong kho.
+            Đá thừa (cân gói, không thừa để trống)
           </Typography>
           {weighedStones.map((line, index) => {
             const returned = Number(returnedStones[index]?.weight || 0)
@@ -942,8 +953,8 @@ export function KcsReturnDialog({
           {legacyStones.length ? (
             <FormRow columns={2}>
               <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                {legacyStones.map((line) => line.sku || line.name).join(', ')} cấp trước khi có cân gói — đếm số viên trả
-                lại (tối đa {legacyStones.reduce((sum, line) => sum + (line.stoneCount ?? 0), 0)} viên).
+                {legacyStones.map((line) => line.sku || line.name).join(', ')} — đếm viên trả (tối đa{' '}
+                {legacyStones.reduce((sum, line) => sum + (line.stoneCount ?? 0), 0)})
               </Typography>
               <FormTextField<ReturnValues>
                 name="legacyReturnedCount"
@@ -971,7 +982,7 @@ export function KcsReturnDialog({
               type="number"
               helperText={
                 entry?.handedQty != null
-                  ? `Đạt ${returnedQty || 0} + lỗi ${defectQty || 0} tối đa ${entry.handedQty} sp đã giao`
+                  ? `Đạt + lỗi ≤ ${entry.handedQty}`
                   : undefined
               }
               slotProps={{ htmlInput: { min: 0, step: 1 } }}
@@ -1001,10 +1012,6 @@ export function KcsReturnDialog({
               transform={(value) => capAt(silverRoomFor('scrapS999Weight'))(value)}
             />
           </FormRow>
-          <Alert severity="info" sx={{ py: 0.25 }}>
-            Hàng đạt nhập kho BTP, hàng lỗi + nguyên liệu thừa nhập kho NVL — thủ kho xác nhận xong mới nhập kho.
-            Đạt 0 sp thì phiếu chốt Lỗi.
-          </Alert>
         </>
       ) : (
         <FormRow columns={2}>
@@ -1027,7 +1034,7 @@ export function KcsReturnDialog({
             <Typography variant="body2">
               Hao hụt số lượng: <b>{loss.qty.value} sp</b>
               {loss.qty.percent != null ? ` (${loss.qty.percent.toFixed(2)}%)` : ''}
-              {loss.qty.value > 0 ? ' — ghi rõ lý do thiếu hàng ở ghi chú' : ''}
+
             </Typography>
           ) : null}
           {loss.silver ? (
@@ -1035,13 +1042,31 @@ export function KcsReturnDialog({
               {btpWeight ? 'Hao hụt BTP' : 'Hao hụt bạc'}: <b>{formatQty(loss.silver.value.toFixed(4))} g</b>
               {loss.silver.percent != null ? ` (${loss.silver.percent.toFixed(2)}%)` : ''}
               {loss.silver.percent != null && loss.silver.percent > SILVER_LOSS_LIMITS.warn
-                ? ` — vượt ngưỡng ${SILVER_LOSS_LIMITS.warn}%, kiểm tra lại trước khi nhận`
+                ? ` — vượt ${SILVER_LOSS_LIMITS.warn}%`
                 : ''}
             </Typography>
           ) : null}
         </Alert>
       ) : null}
 
+      {allDefect ? (
+        <Alert severity="warning" sx={{ py: 0.25 }}>
+          Đạt 0 sp — {keeperStage ? 'thủ kho xác nhận xong phiếu chốt Lỗi' : 'phiếu chốt Lỗi'}.
+        </Alert>
+      ) : null}
+      {showDefectReason ? (
+        <FormTextField<ReturnValues>
+          name="defectReason"
+          label="Lý do lỗi"
+          required={reasonRequired}
+          rules={{
+            validate: (value) => (!reasonRequired || String(value ?? '').trim() ? true : 'Ghi lý do lỗi'),
+          }}
+          multiline
+          minRows={1}
+          maxRows={4}
+        />
+      ) : null}
       <FormTextField<ReturnValues> name="note" label="Ghi chú" multiline minRows={2} maxRows={6} />
     </CrudDialogShell>
   )
@@ -1099,7 +1124,7 @@ export function CastingDialog({
     >
       {sentDate ? null : (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Báo Đúc chuyển đơn sang trạng thái Đúc. Từ bước này mới in được phiếu cho thợ.
+          Đơn chuyển sang Đúc.
         </Typography>
       )}
       <FormRow columns={2} sx={{ mt: 1 }}>

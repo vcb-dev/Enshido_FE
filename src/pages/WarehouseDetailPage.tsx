@@ -46,7 +46,7 @@ import {
   ColumnHeaderFilter,
   ColumnHeaderSearch,
   DataTable,
-  EditReasonBlock,
+  FormEditReasonBlock,
   Form,
   FormMoneyField,
   FormQtyField,
@@ -1256,12 +1256,10 @@ function StockEditDialog({
   onSave: (payloads: UpdateStockPayload[]) => void
 }) {
   const form = useForm<StockDialogValues>({
-    defaultValues: { items: [EMPTY_STOCK] },
+    defaultValues: { items: [EMPTY_STOCK], editReason: '' },
   })
   const items = useFieldArray({ control: form.control, name: 'items' })
   const [uploading, setUploading] = useState(false)
-  const [editReason, setEditReason] = useState('')
-  const [reasonError, setReasonError] = useState('')
   const onUploadingChange = useCallback((busy: boolean) => setUploading(busy), [])
   const lookups = useQuery({
     queryKey: ['inventory-lookups'],
@@ -1291,9 +1289,8 @@ function StockEditDialog({
 
   useEffect(() => {
     if (!open) return
-    setEditReason('')
-    setReasonError('')
     form.reset({
+      editReason: '',
       items: [
         row
           ? {
@@ -1371,19 +1368,16 @@ function StockEditDialog({
 
   const readOnly = kind === 'view'
 
-  function submit(values: { items: StockFormValues[] }) {
+  function submit(values: StockDialogValues) {
     if (readOnly) return
-    if (row && !editReason.trim()) {
-      setReasonError('Nhập lý do chỉnh sửa')
-      return
-    }
+    const editReason = values.editReason.trim()
     const payloads = values.items
       .filter((item) => item.name.trim())
       .map((item) => ({
         ...stockPayloadFromItem(item, profile, categoryOptions),
         // Chỉ gửi khi kho vừa cân — gửi lại số cũ sẽ dời mốc cân sang lúc lưu.
         ...(row && item.gramBase ? { gramBase: item.gramBase } : {}),
-        editReason: editReason.trim() || undefined,
+        editReason: editReason || undefined,
       }))
     if (!payloads.length) return
     onSave(payloads)
@@ -1450,16 +1444,12 @@ function StockEditDialog({
               ))}
             </Stack>
             {row ? (
-              <EditReasonBlock
+              <FormEditReasonBlock<StockDialogValues>
+                name="editReason"
                 entityType="stock"
                 entityId={row.id}
-                reason={editReason}
-                onReasonChange={(value) => {
-                  setEditReason(value)
-                  if (value.trim()) setReasonError('')
-                }}
-                required
-                error={reasonError}
+                required={!readOnly}
+                readOnly={readOnly}
               />
             ) : null}
           </DialogContent>
@@ -1482,7 +1472,7 @@ function StockEditDialog({
   )
 }
 
-type StockDialogValues = { items: StockFormValues[] }
+type StockDialogValues = { items: StockFormValues[]; editReason: string }
 
 function stockPayloadFromItem(
   values: StockFormValues,
@@ -1835,10 +1825,7 @@ function StockItemFields({
             }}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
-            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
+            Tồn: SL {formatQty(qty)} · TT {formatMoney(amount)}
           </Typography>
           {profile.showShapeColor && row && !isGramUnitName(row.unit) ? (
             <FormRow columns={2}>
@@ -1846,16 +1833,16 @@ function StockItemFields({
                 {row.gramOnHand != null ? (
                   <>
                     TL tồn hiện tại: <b>{formatQty(row.gramOnHand)} g</b>
-                    {row.gramBaseAt ? ` (cân lúc ${new Date(row.gramBaseAt).toLocaleString('vi-VN')}, cộng nhập − xuất sau đó)` : ''}
+                    {row.gramBaseAt ? ` (cân lúc ${new Date(row.gramBaseAt).toLocaleString('vi-VN')})` : ''}
                   </>
                 ) : (
-                  'Chưa cân TL tồn — nhập số cân để bắt đầu theo dõi trọng lượng.'
+                  'Chưa cân TL tồn.'
                 )}
               </Typography>
               <FormQtyField<StockDialogValues>
                 name={`items.${index}.gramBase`}
                 label="Cân lại TL tồn (g)"
-                helperText="Để trống nếu lần này không cân. Nhập là lấy làm mốc TL tồn từ bây giờ."
+                helperText="Để trống nếu không cân"
               />
             </FormRow>
           ) : null}

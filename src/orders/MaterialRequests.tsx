@@ -251,8 +251,7 @@ export function MaterialRequestDialog({
       onExited={() => undefined}
     >
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Xin thêm bạc / đá cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}. Kho cân và bấm xuất thì phần này
-        mới trừ tồn và cộng vào bạc / đá vào khâu để tính hao hụt.{sourcesNote(stage)}
+        Xin thêm bạc / đá cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}.{sourcesNote(stage)}
       </Typography>
       <Controller
         control={form.control}
@@ -373,8 +372,7 @@ export function IssueMaterialDialog({
       ) : null}
       {holdMode ? (
         <Alert severity="warning" sx={{ py: 0.25 }}>
-          Đá chỉ giữ chỗ trong tồn, chưa xuất kho. Cân <b>cả gói</b> lúc cấp — KCS cân gói thừa khi nhận lại, thủ kho
-          xác nhận thì mới xuất phần thợ đã dùng.
+          Đá chỉ giữ chỗ, chưa xuất kho. Cân <b>cả gói</b>.
         </Alert>
       ) : null}
       <FormRow columns={2}>
@@ -567,10 +565,6 @@ export function MaterialRequestsCard({
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
             NVL xuất theo phiếu {ticketCode}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Người lên đơn xuất lúc giao khâu; thiếu giữa chừng thợ xin thêm, kho cân và xuất. Mọi phần
-            đã xuất cộng vào bạc / đá vào khâu.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
@@ -937,7 +931,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   if (!required) {
     return (
       <Typography variant="body2" color="text.secondary">
-        Khâu {stage ? STAGE_LABEL[stage] : 'này'} không xuất kho — thợ nhận hàng từ khâu trước.
+        Khâu {stage ? STAGE_LABEL[stage] : 'này'} không xuất kho.
       </Typography>
     )
   }

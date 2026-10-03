@@ -16,14 +16,19 @@ import {
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { listIntakeOrdersApi, type IntakeOrder } from '../api/intakeOrders'
-import { parseQtyInput } from '../api/inventory'
 import type { OrderImage } from '../api/productionOrders'
-import { QtyTextField } from '../components/ui/QtyTextField'
+import { DialogForm, FormQtyField } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
-import { ImageUploadField } from '../orders/ImageUploadField'
+import { FormImageField } from '../orders/FormImageField'
 
 type Payload = { items: { id: string; productWeightGram: number }[]; images: OrderImage[] }
+
+/** Theo id đơn: có tích in trong khay không và cân nặng sản phẩm của đơn. */
+type Values = { rows: Record<string, { checked: boolean; weight: string }>; images: OrderImage[] }
+
+const EMPTY: Values = { rows: {}, images: [] }
 
 /**
  * Bước 4: thợ 3D in sáp nhiều đơn một lần — chụp ảnh cả khay, rồi tách cân nặng từng đơn.
@@ -41,11 +46,8 @@ export function WaxPrintBatchDialog({
   onSave: (payload: Payload) => void
 }) {
   const fullScreen = useIsMobile()
-  const [weights, setWeights] = useState<Record<string, string>>({})
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [images, setImages] = useState<OrderImage[]>([])
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState('')
+  const form = useForm<Values>({ defaultValues: EMPTY })
 
   const list = useQuery({
     queryKey: ['intake-orders', 'wax-print-candidates'],
@@ -56,114 +58,115 @@ export function WaxPrintBatchDialog({
   const rows: IntakeOrder[] = (list.data?.items ?? []).filter((row) => row.hasMold !== true)
 
   useEffect(() => {
-    if (!open) return
-    setWeights({})
-    setSelected(new Set())
-    setImages([])
-    setError('')
-  }, [open])
+    if (open) form.reset(EMPTY)
+  }, [open, form])
 
-  function toggle(id: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (checked) next.add(id)
-      else next.delete(id)
-      return next
-    })
-  }
+  const picked = useWatch({ control: form.control, name: 'rows' })
+  const selectedIds = rows.filter((row) => picked?.[row.id]?.checked).map((row) => row.id)
+  const rootError = form.formState.errors.root?.message
+  const hasSelection = selectedIds.length > 0
+  useEffect(() => {
+    if (hasSelection) form.clearErrors('root')
+  }, [hasSelection, form])
 
-  function submit() {
-    const ids = rows.filter((row) => selected.has(row.id)).map((row) => row.id)
-    if (!ids.length) return setError('Chọn các đơn vừa in trong khay')
-    const items: Payload['items'] = []
-    for (const id of ids) {
-      const parsed = parseQtyInput((weights[id] ?? '').trim())
-      const grams = parsed ? Number(parsed) : NaN
-      if (!Number.isFinite(grams) || grams <= 0) {
-        const code = rows.find((row) => row.id === id)?.code ?? ''
-        return setError(`Nhập cân nặng sản phẩm của đơn ${code}`)
-      }
-      items.push({ id, productWeightGram: grams })
+  function submit(values: Values) {
+    if (!selectedIds.length) {
+      form.setError('root', { message: 'Chọn các đơn vừa in trong khay' })
+      return
     }
-    if (!images.length) return setError('Chụp ảnh cả khay sáp')
-    setError('')
-    onSave({ items, images })
+    onSave({
+      items: selectedIds.map((id) => ({ id, productWeightGram: Number(values.rows[id].weight) })),
+      images: values.images,
+    })
   }
 
   const busy = saving || uploading
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullScreen={fullScreen} fullWidth maxWidth="md">
       <DialogTitle>In sáp nhiều đơn</DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
-            Tích các đơn vừa in chung một khay, chụp ảnh cả khay, rồi tách cân nặng sản phẩm từng đơn. Lưu xong
-            các đơn sang <strong>Chờ SX · Đã in sáp</strong>.
-          </Typography>
-          <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox" />
-                <TableCell>Mã đơn</TableCell>
-                <TableCell>Mã SP</TableCell>
-                <TableCell>Sản phẩm</TableCell>
-                <TableCell align="right">SL</TableCell>
-                <TableCell sx={{ width: 180 }}>Cân nặng sản phẩm (g)</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => {
-                const checked = selected.has(row.id)
-                return (
-                  <TableRow key={row.id} hover>
-                    <TableCell padding="checkbox">
-                      <Checkbox size="small" checked={checked} onChange={(event) => toggle(row.id, event.target.checked)} />
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{row.code}</TableCell>
-                    <TableCell>{row.trackingCode ?? '—'}</TableCell>
-                    <TableCell>{row.productName || '—'}</TableCell>
-                    <TableCell align="right">{row.qty}</TableCell>
-                    <TableCell>
-                      <QtyTextField
-                        label=""
-                        size="small"
-                        fullWidth
-                        value={weights[row.id] ?? ''}
-                        disabled={!checked || busy}
-                        onChange={(next) => setWeights((prev) => ({ ...prev, [row.id]: next }))}
-                      />
+      <DialogForm form={form} onSubmit={submit}>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              Tích các đơn cùng khay, nhập cân nặng từng đơn.
+            </Typography>
+            <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox" />
+                  <TableCell>Mã đơn</TableCell>
+                  <TableCell>Mã SP</TableCell>
+                  <TableCell>Sản phẩm</TableCell>
+                  <TableCell align="right">SL</TableCell>
+                  <TableCell sx={{ width: 180 }}>Cân nặng sản phẩm (g)</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => {
+                  const checked = Boolean(picked?.[row.id]?.checked)
+                  return (
+                    <TableRow key={row.id} hover>
+                      <TableCell padding="checkbox">
+                        <Controller
+                          control={form.control}
+                          name={`rows.${row.id}.checked`}
+                          render={({ field }) => (
+                            <Checkbox size="small" checked={Boolean(field.value)} onChange={(_, next) => field.onChange(next)} />
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{row.code}</TableCell>
+                      <TableCell>{row.trackingCode ?? '—'}</TableCell>
+                      <TableCell>{row.productName || '—'}</TableCell>
+                      <TableCell align="right">{row.qty}</TableCell>
+                      <TableCell>
+                        <FormQtyField<Values>
+                          name={`rows.${row.id}.weight`}
+                          label=""
+                          size="small"
+                          fullWidth
+                          disabled={!checked || busy}
+                          rules={{
+                            validate: (value, values) =>
+                              !values.rows[row.id]?.checked || Number(value) > 0
+                                ? true
+                                : `Nhập cân nặng sản phẩm của đơn ${row.code}`,
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary', py: 2 }}>
+                      {list.isFetching ? 'Đang tải…' : 'Không có đơn nào chờ in sáp'}
                     </TableCell>
                   </TableRow>
-                )
-              })}
-              {!rows.length ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary', py: 2 }}>
-                    {list.isFetching ? 'Đang tải…' : 'Không có đơn nào chờ in sáp'}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-          <ImageUploadField
-            label="Ảnh cả khay sáp"
-            kind="PRODUCT"
-            value={images}
-            onChange={setImages}
-            onUploadingChange={setUploading}
-            readOnly={saving}
-          />
-          {error ? <Alert severity="error">{error}</Alert> : null}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Hủy
-        </Button>
-        <Button variant="contained" onClick={submit} disabled={busy}>
-          {saving ? 'Đang lưu…' : `Lưu (${selected.size} đơn)`}
-        </Button>
-      </DialogActions>
+                ) : null}
+              </TableBody>
+            </Table>
+            <FormImageField<Values>
+              name="images"
+              label="Ảnh cả khay sáp"
+              kind="PRODUCT"
+              required
+              requiredMessage="Chụp ảnh cả khay sáp"
+              onUploadingChange={setUploading}
+              readOnly={saving}
+            />
+            {rootError ? <Alert severity="error">{rootError}</Alert> : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={busy}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="contained" disabled={busy}>
+            {saving ? 'Đang lưu…' : `Lưu (${selectedIds.length} đơn)`}
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }

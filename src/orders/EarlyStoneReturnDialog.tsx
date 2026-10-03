@@ -58,8 +58,7 @@ export function EarlyStoneReturnDialog({
       onExited={() => undefined}
     >
       <Alert severity="info" sx={{ mt: 1 }}>
-        Thợ trả túi đá không vừa (đổi size) giữa khâu. Cân cả túi trả — phần này nhả khỏi giữ chỗ, quay lại tồn khả
-        dụng ngay. Thợ xin túi size mới bằng nút <b>Xin xuất NVL</b>.
+        Cân cả túi đá thợ trả.
       </Alert>
       <FormRow columns={1}>
         <FormSelect<Values>

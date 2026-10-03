@@ -172,6 +172,8 @@ export type StageEntry = {
   silverRecoveredWeight: string | null
   /** Nguội / Vào đá: SL hàng lỗi, S999 thừa; thủ kho xác nhận (null = chưa) rồi mới nhập kho. */
   defectQty: number | null
+  /** Lý do hàng lỗi KCS ghi lúc nhận lại. */
+  defectReason?: string | null
   scrapS999Weight: string | null
   confirmedAt: string | null
   confirmedByName: string | null
@@ -566,6 +568,8 @@ export type ReturnPayload = {
   returnedStones?: Array<{ materialId: string; weight: string }>
   /** Nguội / Vào đá của phiếu con: SL hàng lỗi KCS tách ra. */
   defectQty?: number | null
+  /** Lý do hàng lỗi (tuỳ chọn; bắt buộc khi lỗi hết ở khâu không qua thủ kho). */
+  defectReason?: string | null
   /** Nguội / Vào đá: TL nguyên liệu thừa S999 (g). */
   scrapS999Weight?: string | null
   btpRecoveredWeight?: string | null
@@ -1221,17 +1225,15 @@ export function handoverOrderApi(code: string, payload: SubTicketHandoverPayload
   })
 }
 
-/** KCS chốt phiếu con ở nhánh Lỗi (lý do bắt buộc) hoặc Hoàn thiện. */
-export function setSubTicketOutcomeApi(
-  code: string,
-  no: number,
-  outcome: SubTicketOutcome,
-  note?: string,
-) {
-  return orderFetch(
-    ticketPath(code, no, outcome === 'DEFECT' ? '/defect' : '/finish'),
-    { method: 'POST', body: JSON.stringify({ note }) },
-  )
+/**
+ * KCS chốt phiếu con ở nhánh Hoàn thiện. Nhánh Lỗi không chốt tay — phiếu tự chốt Lỗi khi
+ * KCS nhận lại 0 sản phẩm ở một khâu.
+ */
+export function finishSubTicketApi(code: string, no: number, note?: string) {
+  return orderFetch(ticketPath(code, no, '/finish'), {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
 }
 
 /** Admin gỡ kết cục phiếu con: phiếu về lại luồng làm, đơn tính lại trạng thái và kho. */

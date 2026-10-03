@@ -34,6 +34,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import SyncIcon from '@mui/icons-material/Sync'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useForm, useWatch } from 'react-hook-form'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -71,7 +72,7 @@ import {
 } from '../api/productionOrders'
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
-import { OrderDetailSkeleton, PageHeader, SelectInput, TextInput, TrashIcon } from '../components/ui'
+import { DialogForm, FormSelect, FormTextField, OrderDetailSkeleton, PageHeader, TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { WorkHistory } from '../orders/WorkHistory'
 import { OrderCostingCard } from '../orders/OrderCostingCard'
@@ -315,7 +316,7 @@ export function ProductionOrderDetailPage() {
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
-  // Đơn NVL vào Nguội khi đã xác nhận phiếu đúc (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
+  // Đơn NVL vào Nguội khi đã cắt cây thông (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
   const canPrint = isBtp || Boolean(order.castingSentDate || order.cutAt)
   const castingReady = isBtp || Boolean(order.cutAt || (order.castingSentDate && order.castingReturnedDate))
   const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
@@ -449,7 +450,7 @@ export function ProductionOrderDetailPage() {
 
       {!canPrint ? (
         <Alert severity="info">
-          Đơn chưa có phôi sau đúc — thủ kho xác nhận phiếu đúc và cân phôi để chuyển sang Nguội.
+          Đơn chưa có phôi sau đúc — thủ kho cắt cây thông (cân phôi) để chuyển sang Nguội.
         </Alert>
       ) : order.lastPrintedAt == null ? (
         <Alert severity="info">
@@ -586,7 +587,7 @@ export function ProductionOrderDetailPage() {
                         </Button>
                       ) : parentOpenableStages.length > 0 && !order.finishedGoods ? (
                         <Tooltip
-                          title={castingReady ? '' : 'Xác nhận phiếu đúc (cân phôi) cho đơn trước khi giao khâu'}
+                          title={castingReady ? '' : 'Cắt cây thông (cân phôi) cho đơn trước khi giao khâu'}
                         >
                           <span>
                             <Button
@@ -641,20 +642,6 @@ export function ProductionOrderDetailPage() {
                   <TicketMatrix
                     order={order}
                     outcomeActions={{
-                      DEFECT:
-                        canQc && !order.finishedGoods && order.status !== 'DELIVERED' ? (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={() => {
-                              setStatusPreset('DEFECT')
-                              setStatusDialog(true)
-                            }}
-                          >
-                            Ghi lỗi
-                          </Button>
-                        ) : null,
                       FINISH: order.finishedGoods ? (
                         isAdmin && (order.finishedGoods.shippedQty ?? 0) === 0 ? (
                           <Button
@@ -896,9 +883,6 @@ export function ProductionOrderDetailPage() {
                     )
                   }
                 />
-                <Typography variant="caption" color="text.secondary">
-                  Lấy hàng đúc sẵn từ kho BTP — không qua 3D và Đúc. Phiếu xuất BTP tự tạo khi lên đơn.
-                </Typography>
               </Stack>
             </Section>
           ) : (
@@ -1712,38 +1696,41 @@ function OpenOrderStageDialog({
   onClose: () => void
   onSave: (stage: StageCode) => void
 }) {
-  const [stage, setStage] = useState<StageCode | ''>('')
+  const form = useForm<{ stage: StageCode | '' }>({ defaultValues: { stage: '' } })
+  const stage = useWatch({ control: form.control, name: 'stage' })
 
   useEffect(() => {
-    if (open) setStage((current) => (current && stages.includes(current) ? current : (stages[0] ?? '')))
-  }, [open, stages])
+    if (!open) return
+    const current = form.getValues('stage')
+    form.reset({ stage: current && stages.includes(current) ? current : (stages[0] ?? '') })
+  }, [open, stages, form])
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
       <DialogTitle>Mở khâu trên phiếu mẹ</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          Phiếu sẽ xuất hiện ở màn “Phiếu của tôi”. Thợ tự nhận trước; người giao chỉ cân bạc và xác nhận sau.
-        </Typography>
-        <SelectInput<StageCode>
-          label="Khâu"
-          value={stage}
-          onChange={setStage}
-          options={stages.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
-          required
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button variant="contained" disabled={!stage} loading={saving} onClick={() => stage && onSave(stage)}>
-          Mở khâu
-        </Button>
-      </DialogActions>
+      <DialogForm form={form} onSubmit={(values) => values.stage && onSave(values.stage)}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+          <FormSelect<{ stage: StageCode | '' }, StageCode>
+            name="stage"
+            label="Khâu"
+            options={stages.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
+            required
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="contained" disabled={!stage} loading={saving}>
+            Mở khâu
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }
+
+type StatusValues = { target: ProductionStatus | ''; note: string }
 
 function StatusDialog({
   open,
@@ -1762,12 +1749,12 @@ function StatusDialog({
   onClose: () => void
   onSave: (payload: { status: ProductionStatus; note?: string }) => void
 }) {
-  const [target, setTarget] = useState<ProductionStatus | ''>('')
-  const [note, setNote] = useState('')
+  const form = useForm<StatusValues>({ defaultValues: { target: '', note: '' } })
+  const [target, note] = useWatch({ control: form.control, name: ['target', 'note'] })
 
   useEffect(() => {
-    if (open && initialTarget) setTarget(initialTarget)
-  }, [open, initialTarget])
+    if (open && initialTarget) form.setValue('target', initialTarget)
+  }, [open, initialTarget, form])
 
   // Đơn BTP không qua 3D nên không có Sửa 3D.
   const manual = MANUAL_STATUSES.filter((item) => item !== current && !(isBtp && item === 'REDO_3D'))
@@ -1786,50 +1773,46 @@ function StatusDialog({
       maxWidth="xs"
       slotProps={{
         transition: {
-          onExited: () => {
-            setTarget('')
-            setNote('')
-          },
+          onExited: () => form.reset({ target: '', note: '' }),
         },
       }}
     >
       <DialogTitle>Đổi trạng thái đơn</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          Đúc đổi qua nút “Báo Đúc”; Nguội → Xi đổi khi giao khâu cho thợ; Hoàn thiện chốt ở cột Hoàn thiện
-          trên phiếu; Đã giao tự đổi khi lập phiếu xuất hàng đủ số lượng. Đơn trong kho thành phẩm (chưa xuất)
-          chuyển Sản xuất lỗi thì rút khỏi kho.
-        </Typography>
-        <SelectInput<ProductionStatus>
-          label="Trạng thái mới"
-          value={target}
-          onChange={setTarget}
-          options={options}
-          required
-        />
-        <TextInput
-          label={noteRequired ? 'Mô tả lỗi' : 'Ghi chú'}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          required={noteRequired}
-          multiline
-          minRows={2}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!target || (noteRequired && !note.trim())}
-          loading={saving}
-          loadingPosition="start"
-          onClick={() => target && onSave({ status: target, note: note.trim() || undefined })}
-        >
-          Lưu
-        </Button>
-      </DialogActions>
+      <DialogForm
+        form={form}
+        onSubmit={(values) => values.target && onSave({ status: values.target, note: values.note.trim() || undefined })}
+      >
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+          <FormSelect<StatusValues, ProductionStatus>
+            name="target"
+            label="Trạng thái mới"
+            options={options}
+            required
+          />
+          <FormTextField<StatusValues>
+            name="note"
+            label={noteRequired ? 'Mô tả lỗi' : 'Ghi chú'}
+            required={noteRequired}
+            rules={{ validate: (value, values) => (values.target !== 'DEFECT' || value.trim() ? true : 'Nhập mô tả lỗi') }}
+            multiline
+            minRows={2}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={!target || (noteRequired && !note.trim())}
+            loading={saving}
+            loadingPosition="start"
+          >
+            Lưu
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }

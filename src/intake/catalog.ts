@@ -17,7 +17,7 @@ export const INTAKE_STATUS_META: Record<IntakeOrderStatus, ChipTone> = {
   WAIT_CASTING: { label: 'Chờ đúc (F)', bg: '#283593', fg: '#ffffff' },
   CASTING: { label: 'Đang đúc (G)', bg: '#c62828', fg: '#ffffff' },
   CAST_PENDING_CONFIRMATION: {
-    label: 'Chờ thủ kho xác nhận đúc',
+    label: 'Chờ thủ kho kiểm tra đúc / cắt cây',
     bg: '#e65100',
     fg: '#ffffff',
   },

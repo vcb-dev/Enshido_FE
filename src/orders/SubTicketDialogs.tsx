@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Alert,
   Autocomplete,
@@ -27,7 +27,7 @@ import type {
   SubTicketPayload,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { CrudDialogShell, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
+import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
 import { isInStage, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
 
@@ -36,6 +36,8 @@ import { evenSplit } from './evenSplit'
 type TicketValues = { qty: string; note: string }
 
 type SplitRow = { qty: string; note: string }
+
+type SplitValues = { rows: SplitRow[] }
 
 /** Chia lần đầu thành ít nhất hai phiếu; lưu nguyên khối để không bao giờ sinh một phiếu lẻ. */
 export function SplitSubTicketsDialog({
@@ -51,7 +53,8 @@ export function SplitSubTicketsDialog({
   onClose: () => void
   onSave: (tickets: SubTicketPayload[]) => void
 }) {
-  const [rows, setRows] = useState<SplitRow[]>([])
+  const form = useForm<SplitValues>({ defaultValues: { rows: [] } })
+  const { fields, replace } = useFieldArray({ control: form.control, name: 'rows' })
   const seeded = useRef(false)
 
   useEffect(() => {
@@ -61,8 +64,8 @@ export function SplitSubTicketsDialog({
     }
     if (seeded.current) return
     seeded.current = true
-    setRows(evenSplit(order.qty, 2).map((qty) => ({ qty: qty > 0 ? String(qty) : '', note: '' })))
-  }, [open, order.qty])
+    form.reset({ rows: evenSplit(order.qty, 2).map((qty) => ({ qty: qty > 0 ? String(qty) : '', note: '' })) })
+  }, [open, order.qty, form])
 
   /** Thêm / xoá phiếu thì chia đều lại số lượng cho mọi phiếu (giữ ghi chú); người dùng chỉnh sau. */
   const resplit = (next: SplitRow[]) =>
@@ -71,8 +74,7 @@ export function SplitSubTicketsDialog({
       qty: qty > 0 ? String(qty) : '',
     }))
 
-  const update = (index: number, field: keyof SplitRow, value: string) =>
-    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)))
+  const rows = useWatch({ control: form.control, name: 'rows' }) ?? []
   const totalQty = rows.reduce((sum, row) => sum + Number(row.qty || 0), 0)
   const invalidRow = rows.some((row) => !Number.isInteger(Number(row.qty)) || Number(row.qty) < 1)
   const invalidTotals = totalQty > order.qty
@@ -81,90 +83,82 @@ export function SplitSubTicketsDialog({
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>Chia đơn {order.code} thành phiếu con</DialogTitle>
-      <DialogContent sx={{ pt: '8px !important' }}>
-        <Alert severity="info" sx={{ mb: 1.5 }}>
-          Chỉ chia khi có từ 2 phần việc trở lên. Nếu một thợ làm toàn bộ đơn, đóng hộp thoại và giao khâu trực
-          tiếp trên phiếu mẹ. Phiếu con chỉ chia số lượng — bạc / đá thợ xin xuất dần trong lúc làm.
-        </Alert>
-        <Stack spacing={1}>
-          {rows.map((row, index) => (
-            <Box
-              key={index}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr 1fr', sm: '72px 1fr 1.5fr auto' },
-                gap: 1,
-                alignItems: 'start',
-                p: 1,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 700, pt: 1.25 }}>
-                Phiếu {index + 1}
-              </Typography>
-              <TextField
-                size="small"
-                type="number"
-                label="Số lượng"
-                value={row.qty}
-                onChange={(event) => update(index, 'qty', event.target.value)}
-                slotProps={{ htmlInput: { min: 1 } }}
-              />
-              <TextField
-                size="small"
-                label="Ghi chú"
-                value={row.note}
-                onChange={(event) => update(index, 'note', event.target.value)}
-                slotProps={{ htmlInput: { maxLength: 500 } }}
-              />
-              <Button
-                size="small"
-                color="error"
-                disabled={rows.length <= 2}
-                onClick={() => setRows((current) => resplit(current.filter((_, rowIndex) => rowIndex !== index)))}
-                sx={{ mt: 0.5 }}
+      <DialogForm
+        form={form}
+        onSubmit={(values) =>
+          onSave(values.rows.map((row) => ({ qty: Number(row.qty), note: row.note.trim() || undefined })))
+        }
+      >
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <Alert severity="info" sx={{ mb: 1.5 }}>
+            Chia từ 2 phiếu trở lên. Một thợ làm cả đơn thì giao thẳng trên phiếu mẹ.
+          </Alert>
+          <Stack spacing={1}>
+            {fields.map((field, index) => (
+              <Box
+                key={field.id}
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr 1fr', sm: '72px 1fr 1.5fr auto' },
+                  gap: 1,
+                  alignItems: 'start',
+                  p: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }}
               >
-                Xóa
-              </Button>
-            </Box>
-          ))}
-        </Stack>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, justifyContent: 'space-between' }}>
-          <Button
-            size="small"
-            // Mỗi phiếu ít nhất 1 sp nên không thêm quá số lượng đơn.
-            disabled={rows.length >= order.qty}
-            onClick={() => setRows((current) => resplit([...current, { qty: '', note: '' }]))}
-          >
-            Thêm phiếu
+                <Typography variant="body2" sx={{ fontWeight: 700, pt: 1.25 }}>
+                  Phiếu {index + 1}
+                </Typography>
+                <FormTextField<SplitValues>
+                  name={`rows.${index}.qty`}
+                  size="small"
+                  type="number"
+                  label="Số lượng"
+                  slotProps={{ htmlInput: { min: 1 } }}
+                />
+                <FormTextField<SplitValues>
+                  name={`rows.${index}.note`}
+                  size="small"
+                  label="Ghi chú"
+                  slotProps={{ htmlInput: { maxLength: 500 } }}
+                />
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={fields.length <= 2}
+                  onClick={() => replace(resplit(form.getValues('rows').filter((_, rowIndex) => rowIndex !== index)))}
+                  sx={{ mt: 0.5 }}
+                >
+                  Xóa
+                </Button>
+              </Box>
+            ))}
+          </Stack>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, justifyContent: 'space-between' }}>
+            <Button
+              size="small"
+              // Mỗi phiếu ít nhất 1 sp nên không thêm quá số lượng đơn.
+              disabled={fields.length >= order.qty}
+              onClick={() => replace(resplit([...form.getValues('rows'), { qty: '', note: '' }]))}
+            >
+              Thêm phiếu
+            </Button>
+            <Typography variant="body2" color={invalidTotals ? 'error.main' : 'text.secondary'}>
+              Đã chia {totalQty}/{order.qty} sp
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
           </Button>
-          <Typography variant="body2" color={invalidTotals ? 'error.main' : 'text.secondary'}>
-            Đã chia {totalQty}/{order.qty} sp
-          </Typography>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          disabled={!canSubmit}
-          loading={saving}
-          onClick={() =>
-            onSave(
-              rows.map((row) => ({
-                qty: Number(row.qty),
-                note: row.note.trim() || undefined,
-              })),
-            )
-          }
-        >
-          Tạo {rows.length} phiếu
-        </Button>
-      </DialogActions>
+          <Button type="submit" variant="contained" disabled={!canSubmit} loading={saving}>
+            Tạo {rows.length} phiếu
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }
@@ -398,10 +392,6 @@ export function AssignWorkerDialog({
       onClose={onClose}
       onExited={() => undefined}
     >
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Thợ được chỉ định thấy phiếu ở màn Phiếu của tôi, quét QR và bấm nhận hàng. Nguội tự xuất phôi khỏi kho BTP,
-        Vào đá tự xuất BTP đã nguội.
-      </Typography>
       <FormRow columns={1}>
         <FormSelect<AssignValues>
           name="stage"
@@ -425,8 +415,7 @@ export function AssignWorkerDialog({
               Đá cấp cho thợ
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Chỉ giữ chỗ trong tồn, chưa xuất kho. Cân cả gói lúc cấp; KCS cân gói thừa khi nhận lại, thủ kho xác nhận
-              thì xuất phần đã dùng theo tỷ lệ TL.
+              Giữ chỗ, chưa xuất kho. Cân cả gói.
             </Typography>
           </Box>
           {stones.fields.map((field, index) => (

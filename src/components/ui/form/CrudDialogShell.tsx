@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
-import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form'
+import { useController } from 'react-hook-form'
+import type { FieldValues, Path, PathValue, SubmitHandler, UseFormReturn } from 'react-hook-form'
 import { useIsMobile } from '../../../hooks/useBreakpoint'
 import type { CrudDialogKind } from '../../../hooks/useCrudDialog'
 import { EditReasonBlock, type EditLogTarget } from './EditReasonBlock'
+
+/** Field lý do chỉnh sửa mà khung tự gắn vào form của nơi gọi (gửi kèm `values.editReason`). */
+const EDIT_REASON_FIELD = 'editReason'
 import { Form } from './Form'
 
 export type CrudDialogShellProps<T extends FieldValues> = {
@@ -54,20 +58,26 @@ export function CrudDialogShell<T extends FieldValues>({
 }: CrudDialogShellProps<T>) {
   const fullScreen = useIsMobile()
   const [busy, setBusy] = useState(false)
-  const [editReason, setEditReason] = useState('')
-  const [reasonError, setReasonError] = useState('')
   const submitted = useRef(false)
   const pending = saving || busy
   const needsReason = Boolean(editLog && kind === 'edit')
+  const reasonName = EDIT_REASON_FIELD as Path<T>
+  const reason = useController({
+    control: form.control,
+    name: reasonName,
+    rules: {
+      validate: (value) => (!needsReason || String(value ?? '').trim() ? true : 'Nhập lý do chỉnh sửa'),
+    },
+  })
 
   useEffect(() => {
     if (!open) {
       setBusy(false)
       submitted.current = false
-      setEditReason('')
-      setReasonError('')
+      form.setValue(reasonName, '' as PathValue<T, Path<T>>)
+      form.clearErrors(reasonName)
     }
-  }, [open])
+  }, [open, form, reasonName])
 
   // Nơi gọi thường truyền `mutation.mutate(...)` vào onSubmit — hàm đó không ném lỗi, lỗi đi
   // thẳng vào toast, nên nhánh catch bên dưới không bao giờ chạy. Không nhả ở đây thì
@@ -101,17 +111,11 @@ export function CrudDialogShell<T extends FieldValues>({
         form={form}
         onSubmit={async (values) => {
           if (submitted.current) return
-          if (needsReason && !editReason.trim()) {
-            setReasonError('Nhập lý do chỉnh sửa')
-            submitted.current = false
-            setBusy(false)
-            return
-          }
           submitted.current = true
           savingSeen.current = false
           setBusy(true)
           try {
-            await onSubmit({ ...values, editReason: editReason.trim() })
+            await onSubmit({ ...values, editReason: String(values[EDIT_REASON_FIELD] ?? '').trim() })
           } catch {
             submitted.current = false
             setBusy(false)
@@ -149,13 +153,10 @@ export function CrudDialogShell<T extends FieldValues>({
             <EditReasonBlock
               entityType={editLog.entityType}
               entityId={editLog.entityId}
-              reason={editReason}
-              onReasonChange={(value) => {
-                setEditReason(value)
-                if (value.trim()) setReasonError('')
-              }}
+              reason={String(reason.field.value ?? '')}
+              onReasonChange={reason.field.onChange}
               required={kind === 'edit'}
-              error={kind === 'edit' ? reasonError : undefined}
+              error={kind === 'edit' ? reason.fieldState.error?.message : undefined}
               readOnly={kind === 'view'}
             />
           ) : null}

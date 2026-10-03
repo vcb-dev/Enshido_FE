@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -19,7 +19,7 @@ import {
 } from '../api/finishedGoods'
 import { formatMoney, formatQty, moneyDigitsFromApi } from '../api/inventory'
 import {
-  EditReasonBlock,
+  FormEditReasonBlock,
   Form,
   FormMoneyField,
   FormRow,
@@ -43,6 +43,7 @@ type FormValues = {
   platingColor: string
   stockUnitPrice: string
   openingQty: string
+  editReason: string
 }
 
 const EMPTY: FormValues = {
@@ -54,6 +55,7 @@ const EMPTY: FormValues = {
   platingColor: '',
   stockUnitPrice: '',
   openingQty: '0',
+  editReason: '',
 }
 
 function formValuesFromRow(row: FinishedGoodsStockRow | null): FormValues {
@@ -67,6 +69,7 @@ function formValuesFromRow(row: FinishedGoodsStockRow | null): FormValues {
     platingColor: row.platingColor ?? '',
     stockUnitPrice: moneyDigitsFromApi(row.unitCost),
     openingQty: row.openingQty || '0',
+    editReason: '',
   }
 }
 
@@ -140,8 +143,6 @@ function StockForm({
   const readOnly = kind === 'view'
   const initial = useMemo(() => formValuesFromRow(row), [row])
   const form = useForm<FormValues>({ defaultValues: initial })
-  const [editReason, setEditReason] = useState('')
-  const [reasonError, setReasonError] = useState('')
   const openingQty = useWatch({ control: form.control, name: 'openingQty' })
   const stockUnitPrice = useWatch({ control: form.control, name: 'stockUnitPrice' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })
@@ -160,16 +161,12 @@ function StockForm({
   )
 
   useEffect(() => {
-    setEditReason('')
-    setReasonError('')
-  }, [row?.id, kind])
+    form.setValue('editReason', '')
+    form.clearErrors('editReason')
+  }, [row?.id, kind, form])
 
   function submit(values: FormValues) {
     if (readOnly) return
-    if (row && !editReason.trim()) {
-      setReasonError('Nhập lý do chỉnh sửa')
-      return
-    }
     onSaved({
       orderCode: row?.orderCode,
       model3dCode: values.model3dCode.trim(),
@@ -185,7 +182,7 @@ function StockForm({
       receivedAt: row ? row.receivedAt.slice(0, 10) : todayYmd(),
       sizeLabel: values.sizeLabel.trim() || undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
-      editReason: editReason.trim() || undefined,
+      editReason: values.editReason.trim() || undefined,
     })
   }
 
@@ -284,22 +281,14 @@ function StockForm({
             }
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(qty)} · TT {formatMoney(amount)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
-            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
+            Tồn: SL {formatQty(qty)} · TT {formatMoney(amount)}
           </Typography>
         {row ? (
-          <EditReasonBlock
+          <FormEditReasonBlock<FormValues>
+            name="editReason"
             entityType="fg_receipt"
             entityId={row.id}
-            reason={editReason}
-            onReasonChange={(value) => {
-              setEditReason(value)
-              if (value.trim()) setReasonError('')
-            }}
             required={kind === 'edit'}
-            error={kind === 'edit' ? reasonError : undefined}
             readOnly={kind === 'view'}
           />
         ) : null}
@@ -390,10 +379,7 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
             notes
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, mt: 1.5 }}>
-            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
+            Tồn: SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
           </Typography>
         </Paper>
       </DialogContent>

@@ -65,7 +65,7 @@ const SLIP_STATUS_META: Record<CastingSlipStatus, { label: string; bg: string }>
   PENDING_ISSUE: { label: 'Chờ cấp vật tư', bg: '#8d6e63' },
   WAIT_CASTING: { label: 'Chờ đúc', bg: '#283593' },
   CASTING: { label: 'Đang đúc', bg: '#c62828' },
-  PENDING_CONFIRMATION: { label: 'Chờ thủ kho xác nhận', bg: '#e65100' },
+  PENDING_CONFIRMATION: { label: 'Chờ thủ kho kiểm tra đúc / cắt cây', bg: '#e65100' },
   DONE: { label: 'Đúc xong', bg: '#00695c' },
   CAST_FAILED: { label: 'Lỗi đúc', bg: '#636e72' },
 }
@@ -101,7 +101,7 @@ export function CastingOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [createOpen, setCreateOpen] = useState(false)
   const [issueTarget, setIssueTarget] = useState<CastingSlip | null>(null)
-  /** Phiếu đang mở hộp "Xác nhận và chia phôi" (cân phôi từng đơn + phần cây còn lại). */
+  /** Phiếu đang mở hộp "Cắt cây thông" (cân phôi từng đơn + phần cây còn lại). */
   const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
   // `?new=<id>`: mở từ nút "Lên lệnh đúc" trên một dòng Lệnh sản xuất.
   const preselectId = searchParams.get('new')
@@ -225,7 +225,7 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  // Xác nhận đúc kiêm cắt cây: chia phôi từng đơn, sinh lệnh SX (Chờ nguội), phôi vào kho BTP,
+  // Cắt cây thông: chia phôi từng đơn, sinh lệnh SX (Chờ nguội), phôi vào kho BTP,
   // phần cây còn lại vào kho NVL.
   const confirm = useMutation({
     mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
@@ -295,7 +295,7 @@ export function CastingOrdersPage() {
               disabled={confirmingId === row.id || rejectingId === row.id}
               onClick={() => setConfirmTarget(row)}
             >
-              Xác nhận và chia phôi
+              Cắt cây thông
             </Button>
             <Button
               size="small"
@@ -773,7 +773,7 @@ function CastingSlipViewDialog({
               Lỗi đúc
             </Button>
             <Button variant="contained" disabled={busy || busyReject} onClick={() => onConfirm(slip)}>
-              Xác nhận và chia phôi
+              Cắt cây thông
             </Button>
           </>
         ) : null}

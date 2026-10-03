@@ -83,10 +83,7 @@ export function WarehouseStockView({
             notes
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, mt: 1.5 }}>
-            Tồn = Tồn đầu kỳ + Nhập − Xuất. SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-            TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
+            Tồn: SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
           </Typography>
         </Paper>
       </DialogContent>

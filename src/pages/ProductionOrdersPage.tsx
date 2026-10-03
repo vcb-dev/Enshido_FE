@@ -875,7 +875,7 @@ function renderIntakeWorkflowAction(
     </Typography>
   )
   if (order.status === 'PENDING_APPROVAL') {
-    if (!actions.can.approve) return waiting('quản lý SX duyệt')
+    if (!actions.can.approve) return waiting('thủ kho duyệt')
     return (
       <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
         <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
@@ -1014,7 +1014,7 @@ function renderIntakeWorkflowAction(
     )
   }
   if (order.status === 'CAST_DONE') {
-    if (!actions.can.keeper) return waiting('thủ kho chia phôi')
+    if (!actions.can.keeper) return waiting('thủ kho cắt cây thông')
     return (
       <Button
         size="small"
@@ -1023,7 +1023,7 @@ function renderIntakeWorkflowAction(
         to="/casting"
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
-        Chia phôi → Nguội
+        Cắt cây thông
       </Button>
     )
   }

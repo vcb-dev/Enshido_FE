@@ -46,6 +46,10 @@ export type IntakeOrder = {
   /** Bước 5–6: TL thủ kho cân kiểm (nếu nhập); không có thì dùng số thợ báo. */
   waxCheckedWeightGram: string | null
   waxCheckedByName: string | null
+  /** Bước 2 từ chối đơn: lý do (tuỳ chọn), người và lúc từ chối. */
+  rejectReason?: string | null
+  rejectedByName?: string | null
+  rejectedAt?: string | null
   /** Phiếu đúc đang giữ đơn (kể cả phiếu chưa cấp vật tư). */
   castingSlip?: { code: string; status: string } | null
   createdAt: string

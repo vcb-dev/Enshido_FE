@@ -60,6 +60,14 @@ export function SearchInput({
     <TextField
       value={text}
       onChange={(event) => setText(event.target.value)}
+      onKeyDown={(event) => {
+        // Enter = tìm ngay, và không gửi form bao ngoài (ô lọc nằm trong form của hộp thoại).
+        if (event.key !== 'Enter') return
+        event.preventDefault()
+        if (text === settled.current) return
+        settled.current = text
+        onChange(text)
+      }}
       placeholder={placeholder}
       disabled={disabled}
       autoFocus={autoFocus}

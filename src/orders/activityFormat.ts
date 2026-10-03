@@ -7,7 +7,7 @@ export const ACTION_LABEL: Record<string, string> = {
   ORDER_DELETE: 'Xoá đơn',
   ORDER_STATUS: 'Đổi trạng thái',
   ORDER_CASTING: 'Báo Đúc / Đúc về',
-  ORDER_CUT: 'Xác nhận đúc · nhận phôi',
+  ORDER_CUT: 'Cắt cây thông · nhận phôi',
   ORDER_UNDO_CUT: 'Xoá phiếu cắt cây (luồng cũ)',
   ORDER_FINISH: 'Hoàn thiện đơn',
   ORDER_UNDO_FINISH: 'Gỡ hoàn thiện',

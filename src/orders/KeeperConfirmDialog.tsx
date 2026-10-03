@@ -202,9 +202,6 @@ export function KeeperConfirmDialog({
                     })}
                   </TableBody>
                 </Table>
-                <Typography variant="caption" color="text.secondary">
-                  Đá thừa vẫn nằm trong kho — chỉ phần đã dùng (gắn lên + mất) bị trừ tồn.
-                </Typography>
               </Stack>
             ) : stoneStage && stoneUsed != null ? (
               <Stack spacing={0.25}>
@@ -221,11 +218,11 @@ export function KeeperConfirmDialog({
 
             {goodQty === 0 ? (
               <Alert severity="warning" sx={{ py: 0.25 }}>
-                Hàng đạt 0 sp — xác nhận xong phiếu {ticketCode} sẽ chốt <b>Lỗi {stage ? STAGE_LABEL[stage].toLowerCase() : ''}</b>.
+                Đạt 0 sp — phiếu sẽ chốt <b>Lỗi {stage ? STAGE_LABEL[stage].toLowerCase() : ''}</b>.
               </Alert>
             ) : (
               <Typography variant="caption" color="text.secondary">
-                Sau khi xác nhận, phiếu sang {stoneStage ? 'Chờ khắc' : 'Chờ vào đá'} và có thể chỉ định thợ khâu kế tiếp.
+                Xác nhận xong phiếu sang {stoneStage ? 'Chờ khắc' : 'Chờ vào đá'}.
               </Typography>
             )}
           </>

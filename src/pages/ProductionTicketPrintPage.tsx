@@ -212,7 +212,7 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
 
       {canPrint ? null : (
         <Alert className="ticket-toolbar" severity="warning" sx={{ maxWidth: 720, mx: 'auto', mb: 1.5 }}>
-          Đơn {order.code} chưa xác nhận Đúc — chỉ in phiếu cho thợ từ bước Đúc.
+          Đơn {order.code} chưa cắt cây thông — chỉ in phiếu cho thợ sau khi cắt cây thông.
         </Alert>
       )}
 
