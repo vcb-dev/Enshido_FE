@@ -73,7 +73,7 @@ export function SubTicketPage() {
     queryKey: ['production-order', orderCode],
     queryFn: () => getSubTicketOrderApi(ticketCode),
     enabled: Boolean(orderCode),
-    staleTime: 10_000,
+    staleTime: 30_000,
     ...liveRefresh(LIVE_REFRESH_MS.ticket),
   })
 

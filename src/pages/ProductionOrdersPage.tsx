@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Chip, IconButton, Link, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, Link, Stack, Tab, Tabs, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
@@ -50,12 +50,11 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   createProductionOrderApi,
-  deleteProductionOrderApi,
-  getProductionOrderApi,
   getProductionOrderLookupsApi,
   listBtpOptionsApi,
   listFinishedProductOptionsApi,
   listNvlOptionsApi,
+  getProductionOrderStatusCountsApi,
   listProductionOrdersApi,
   updateProductionOrderApi,
   type ProductionOrderDetail,
@@ -71,13 +70,10 @@ import {
   ColumnHeaderFilter,
   ColumnHeaderSearch,
   DataTable,
-  EyeIcon,
   PageHeader,
-  RowActions,
   type Column,
 } from '../components/ui'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import {
   formatDateShort,
@@ -90,23 +86,32 @@ import {
   SUB_TICKET_STATE_META,
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
-import { invalidateBtpStock } from '../orders/btpStock'
-import { invalidateNvlStock } from '../orders/nvlStock'
-import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../orders/orderCache'
+import { afterProductionOrderSaved } from '../orders/orderCache'
 import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
-import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
   | { kind: 'order'; row: ProductionOrderRow }
 
+const actionTextButtonSx = {
+  minWidth: 0,
+  maxWidth: '100%',
+  width: 112,
+  px: 0.5,
+  py: 0.25,
+  fontSize: '0.75rem',
+  lineHeight: 1.35,
+  whiteSpace: 'normal',
+  textTransform: 'none',
+} as const
+
 export function ProductionOrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ProductionOrderDetail | null>(null)
   const [approveTarget, setApproveTarget] = useState<IntakeOrder | null>(null)
@@ -117,6 +122,7 @@ export function ProductionOrdersPage() {
   const [waxBatchOpen, setWaxBatchOpen] = useState(false)
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
+  const [productionViewTarget, setProductionViewTarget] = useState<ProductionOrderRow | null>(null)
   const table = useTableParams({
     pageSize: 25,
     filters: {
@@ -145,6 +151,15 @@ export function ProductionOrdersPage() {
     sort: params.sort || undefined,
     dir: params.sort ? params.dir : undefined,
   }
+  const productionCountFilters = useMemo(
+    () => ({
+      requestType: params.requestType as ProductionRequestType | '',
+      search,
+      receivedDate: params.receivedDate,
+      dueDate: params.dueDate,
+    }),
+    [params.dueDate, params.receivedDate, params.requestType, search],
+  )
 
   const intakePipelineLists = useQuery({
     queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType],
@@ -152,7 +167,7 @@ export function ProductionOrdersPage() {
       getIntakePipelineListsApi({
         requestType: params.requestType as ProductionRequestType | '',
         search,
-        pageSize: 200,
+        pageSize: 120,
       }),
     placeholderData: keepPreviousData,
     enabled: isAllView,
@@ -235,14 +250,24 @@ export function ProductionOrdersPage() {
     return {
       ...listBaseParams,
       page: 1,
-      pageSize: mergeSlice.prodTake,
+        pageSize: mergeSlice.prodTake,
       offset: mergeSlice.prodStart,
     }
   }, [isAllView, listBaseParams, mergeSlice.prodStart, mergeSlice.prodTake, params.page, params.pageSize])
 
+  const productionStatusCounts = useQuery({
+    queryKey: ['production-orders', 'status-counts', productionCountFilters],
+    queryFn: () => getProductionOrderStatusCountsApi(productionCountFilters),
+    staleTime: 60_000,
+    // Badge tab đi cùng danh sách đang tự làm mới — không thì số trên tab lệch với dòng.
+    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.background),
+    enabled: !isIntakePendingView,
+  })
+
   const list = useQuery({
     queryKey: ['production-orders', productionListParams],
-    queryFn: () => listProductionOrdersApi(productionListParams!),
+    queryFn: () =>
+      listProductionOrdersApi({ ...productionListParams!, includeCounts: false }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: !isIntakePendingView && productionListParams !== null,
@@ -303,14 +328,6 @@ export function ProductionOrdersPage() {
       afterProductionOrderSaved(queryClient, order, editing)
       toast.success(`Đã lưu đơn ${order.code}`)
       setFormOpen(false)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const loadEdit = useMutation({
-    mutationFn: (row: ProductionOrderRow) => getProductionOrderApi(row.code),
-    onSuccess: (order) => {
-      setEditing(order)
-      setFormOpen(true)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -417,21 +434,6 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const del = useDeleteRowDialog<ProductionOrderRow>({
-    mutationFn: (row) => deleteProductionOrderApi(row.code),
-    successMessage: 'Đã xóa đơn',
-    queryKeys: [['production-orders']],
-    invalidateKeys: [['production-order-lookups']],
-    onRemoved: (row) => {
-      removeProductionOrderFromLists(queryClient, row.id, row.code)
-      if (row.source === 'BTP') {
-        invalidateBtpStock(queryClient)
-        invalidateNvlStock(queryClient)
-      }
-      if (row.source === 'NVL') invalidateNvlStock(queryClient)
-    },
-  })
-
   const requestTypeOptions = useMemo(
     () => REQUEST_TYPES.map((type) => ({ id: type, name: REQUEST_TYPE_META[type].label })),
     [],
@@ -461,9 +463,7 @@ export function ProductionOrdersPage() {
     () =>
       orderColumns(
         {
-          onView: (row) => navigate(`/orders/${row.code}`),
-          onEdit: (row) => loadEdit.mutate(row),
-          onDelete: (row) => del.request(row),
+          onView: (row) => setProductionViewTarget(row),
           onIntakeApprove: (row) => setApproveTarget(row),
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
@@ -486,8 +486,6 @@ export function ProductionOrdersPage() {
             cast: can(user, Permission.PRODUCTION_CAST),
             qc: can(user, Permission.PRODUCTION_QC),
           },
-          loadingEditId: loadEdit.isPending ? (loadEdit.variables?.id ?? null) : null,
-          isAdmin,
         },
         {
           search: (
@@ -517,11 +515,6 @@ export function ProductionOrdersPage() {
         },
       ),
     [
-      del.request,
-      isAdmin,
-      loadEdit.mutate,
-      loadEdit.isPending,
-      loadEdit.variables,
       confirmWarehouse.isPending,
       confirmWarehouse.variables,
       isIntakeWarehouseKeeper,
@@ -536,7 +529,7 @@ export function ProductionOrdersPage() {
       table.setFilter,
     ],
   )
-  const counts = list.data?.statusCounts
+  const counts = productionStatusCounts.data?.statusCounts ?? list.data?.statusCounts
   const intakeItems = intakeList.data?.items ?? []
   const prodPageItems = useMemo(() => {
     if (!isAllView) return list.data?.items ?? []
@@ -832,17 +825,9 @@ export function ProductionOrdersPage() {
         order={intakeViewTarget}
         onClose={() => setIntakeViewTarget(null)}
       />
-      <ConfirmDeleteDialog
-        open={Boolean(del.row)}
-        title="Xóa lệnh sản xuất"
-        description={
-          del.row
-            ? `Xóa đơn ${del.row.code}? Ảnh của đơn cũng bị xóa khỏi kho ảnh.`
-            : ''
-        }
-        deleting={del.deleting}
-        onClose={del.cancel}
-        onConfirm={del.confirm}
+      <ProductionOrderViewDialog
+        row={productionViewTarget}
+        onClose={() => setProductionViewTarget(null)}
       />
     </Stack>
   )
@@ -860,13 +845,6 @@ function StatusTabLabel({ status, count }: { status: ProductionStatus; count: nu
       <span>{tabLabel(meta.label, count)}</span>
     </Stack>
   )
-}
-
-function deleteHint(row: ProductionOrderRow, isAdmin: boolean) {
-  if (!isAdmin) return 'Chỉ admin được xóa đơn'
-  if (row.status === 'NEW') return 'Xóa'
-  if (row.source === 'BTP' && row.status === 'WAIT_FILING') return 'Xóa'
-  return 'Chỉ xóa được đơn mới tạo, chưa giao khâu'
 }
 
 function renderIntakeWorkflowAction(
@@ -1059,8 +1037,6 @@ function renderIntakeWorkflowAction(
 function orderColumns(
   actions: {
     onView: (row: ProductionOrderRow) => void
-    onEdit: (row: ProductionOrderRow) => void
-    onDelete: (row: ProductionOrderRow) => void
     onIntakeApprove: (row: IntakeOrder) => void
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
@@ -1073,8 +1049,6 @@ function orderColumns(
     warehouseConfirmLoadingId: string | null
     canConfirmIntakeWarehouse: boolean
     can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
-    loadingEditId: string | null
-    isAdmin: boolean
   },
   filters: {
     search: ReactNode
@@ -1101,7 +1075,7 @@ function orderColumns(
           return row.row.sxCode
         }
         const order = row.row
-        return order.subTickets.length ? (
+        const body = order.subTickets.length ? (
           <>
             {order.code}
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
@@ -1110,6 +1084,18 @@ function orderColumns(
           </>
         ) : (
           order.code
+        )
+        return (
+          <Link
+            component={RouterLink}
+            to={`/orders/${order.code}`}
+            underline="hover"
+            color="inherit"
+            sx={{ fontWeight: 700 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {body}
+          </Link>
         )
       },
       renderSub: (sub) => (
@@ -1319,48 +1305,33 @@ function orderColumns(
                 size="small"
                 variant="text"
                 onClick={() => actions.onIntakeView(row.row)}
-                sx={{
-                  minWidth: 0,
-                  maxWidth: '100%',
-                  width: 112,
-                  px: 0.5,
-                  py: 0.25,
-                  fontSize: '0.75rem',
-                  lineHeight: 1.35,
-                  whiteSpace: 'normal',
-                  textTransform: 'none',
-                }}
+                sx={actionTextButtonSx}
               >
                 Xem chi tiết
               </Button>
             </Stack>
           ) : (
-            <RowActions
-              onView={() => actions.onView(row.row)}
-              onEdit={() => actions.onEdit(row.row)}
-              editLoading={actions.loadingEditId === row.row.id}
-              onDelete={() => actions.onDelete(row.row)}
-              deleteDisabled={
-                !actions.isAdmin ||
-                !(row.row.status === 'NEW' || (row.row.source === 'BTP' && row.row.status === 'WAIT_FILING'))
-              }
-              titles={{
-                view: 'Xem chi tiết',
-                edit: 'Chỉnh sửa',
-                delete: deleteHint(row.row, actions.isAdmin),
-              }}
-            />
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => actions.onView(row.row)}
+              sx={actionTextButtonSx}
+            >
+              Xem chi tiết
+            </Button>
           )}
         </Box>
       ),
       renderSub: (sub) => (
-        <Stack direction="row" sx={{ justifyContent: 'center' }}>
-          <Tooltip title="Xem phiếu con">
-            <IconButton size="small" aria-label={`Xem phiếu con ${sub.code}`} component={RouterLink} to={`/tickets/${sub.code}`}>
-              <EyeIcon />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+        <Button
+          size="small"
+          variant="text"
+          component={RouterLink}
+          to={`/tickets/${sub.code}`}
+          sx={actionTextButtonSx}
+        >
+          Xem chi tiết
+        </Button>
       ),
     },
   ]

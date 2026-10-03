@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { ProductionOrderDetail } from '../api/productionOrders'
 import { seedProductionOrder } from './orderCache'
 import { scheduleMyTicketsRefresh } from './myTicketsRefresh'
+import { scheduleProductionStatusCountsRefresh } from './productionStatusCountsRefresh'
 
 /** Mọi thao tác trên đơn trả về chi tiết đơn mới — ghi thẳng vào cache, không refetch cả sổ. */
 export function useOrderMutation<V>(
@@ -24,6 +25,7 @@ export function useOrderMutation<V>(
         refetchType: 'none',
       })
       scheduleMyTicketsRefresh(queryClient)
+      scheduleProductionStatusCountsRefresh(queryClient)
       toast.success(success)
     },
     onError: (error: Error) => toast.error(error.message),

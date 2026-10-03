@@ -102,7 +102,7 @@ export type SubTicketSummary = {
 
 export type ProductionOrderListResponse = {
   total: number
-  statusCounts: Record<ProductionStatus | 'ALL', number>
+  statusCounts?: Record<ProductionStatus | 'ALL', number>
   items: ProductionOrderRow[]
 }
 
@@ -481,7 +481,13 @@ export type ProductionOrderListParams = {
   offset?: number
   sort?: string
   dir?: 'asc' | 'desc'
+  includeCounts?: boolean
 }
+
+export type ProductionOrderCountFilters = Pick<
+  ProductionOrderListParams,
+  'requestType' | 'source' | 'search' | 'receivedDate' | 'dueDate'
+>
 
 export type UpsertProductionOrderPayload = {
   source: ProductionSource
@@ -776,12 +782,28 @@ async function orderFetch(path: string, options?: RequestInit): Promise<Producti
 export async function listProductionOrdersApi(params: ProductionOrderListParams) {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '') query.set(key, String(value))
+    if (value === undefined || value === '') continue
+    if (key === 'includeCounts' && value === false) {
+      query.set('includeCounts', 'false')
+      continue
+    }
+    if (key === 'includeCounts') continue
+    query.set(key, String(value))
   }
   const res = await apiFetch<Omit<ProductionOrderListResponse, 'items'> & { items: SparseOrderRow[] }>(
     `${BASE}?${query.toString()}`,
   )
   return { ...res, items: res.items.map(fillOrderRow) }
+}
+
+export function getProductionOrderStatusCountsApi(params: ProductionOrderCountFilters) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query.set(key, String(value))
+  }
+  return apiFetch<{ statusCounts: Record<ProductionStatus | 'ALL', number> }>(
+    `${BASE}/status-counts?${query.toString()}`,
+  )
 }
 
 export function getProductionOrderLookupsApi() {

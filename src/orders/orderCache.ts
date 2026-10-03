@@ -10,13 +10,17 @@ import type {
 } from '../api/productionOrders'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock, invalidateNvlWarehouse } from './nvlStock'
+import {
+  patchProductionStatusCounts,
+  scheduleProductionStatusCountsRefresh,
+} from './productionStatusCountsRefresh'
 
 /** Ghi cache chi tiết + vá danh sách để vào trang đơn ngay, không chờ refetch. */
 export function seedProductionOrder(queryClient: QueryClient, order: ProductionOrderDetail) {
   queryClient.setQueryData(['production-order', order.code], order)
   queryClient.setQueriesData(
     { queryKey: ['production-orders'] },
-    (current: ProductionOrderListResponse | undefined) => patchOrderList(current, order),
+    (current: ProductionOrderListResponse | undefined) => patchOrderList(queryClient, current, order),
   )
 }
 
@@ -30,6 +34,7 @@ export function applyProductionOrderDetail(
   order: ProductionOrderDetail,
 ) {
   seedProductionOrder(queryClient, order)
+  scheduleProductionStatusCountsRefresh(queryClient)
 }
 
 export function removeProductionOrderFromLists(queryClient: QueryClient, orderId: string, code: string) {
@@ -39,9 +44,14 @@ export function removeProductionOrderFromLists(queryClient: QueryClient, orderId
       if (!current?.items) return current
       const removed = current.items.find((item) => item.id === orderId)
       if (!removed) return current
-      const statusCounts = { ...current.statusCounts }
-      statusCounts.ALL = Math.max(0, statusCounts.ALL - 1)
-      statusCounts[removed.status] = Math.max(0, statusCounts[removed.status] - 1)
+      patchProductionStatusCounts(queryClient, removed.status, undefined)
+      const statusCounts = current.statusCounts
+        ? {
+            ...current.statusCounts,
+            ALL: Math.max(0, current.statusCounts.ALL - 1),
+            [removed.status]: Math.max(0, current.statusCounts[removed.status] - 1),
+          }
+        : undefined
       return {
         ...current,
         total: Math.max(0, current.total - 1),
@@ -63,6 +73,7 @@ export function afterProductionOrderSaved(
   previous?: ProductionOrderDetail | null,
 ) {
   seedProductionOrder(queryClient, order)
+  scheduleProductionStatusCountsRefresh(queryClient)
   if (!previous) patchPickerStock(queryClient, order)
   scheduleIdle(() => {
     const wasBtp = previous?.source === 'BTP' || order.source === 'BTP'
@@ -208,6 +219,7 @@ export function summarizeSubTickets(order: ProductionOrderDetail): SubTicketSumm
 }
 
 function patchOrderList(
+  queryClient: QueryClient,
   current: ProductionOrderListResponse | undefined,
   order: ProductionOrderDetail,
 ): ProductionOrderListResponse | undefined {
@@ -215,19 +227,34 @@ function patchOrderList(
   const row = toListRow(order)
   const index = current.items.findIndex((item) => item.id === order.id)
   if (index >= 0) {
+    const prev = current.items[index]!
+    if (prev.status !== order.status) {
+      patchProductionStatusCounts(queryClient, prev.status, order.status)
+    }
     const items = current.items.slice()
     items[index] = row
-    return { ...current, items }
+    let statusCounts = current.statusCounts
+    if (statusCounts && prev.status !== order.status) {
+      statusCounts = { ...statusCounts }
+      statusCounts[prev.status] = Math.max(0, statusCounts[prev.status] - 1)
+      statusCounts[order.status] = (statusCounts[order.status] ?? 0) + 1
+    }
+    return { ...current, items, ...(statusCounts ? { statusCounts } : {}) }
   }
   const sameSource = current.items.every((item) => item.source === order.source)
   if (!sameSource && current.items.length > 0) return current
-  const statusCounts = { ...current.statusCounts }
-  statusCounts.ALL += 1
-  statusCounts[order.status] += 1
+  patchProductionStatusCounts(queryClient, undefined, order.status)
+  const statusCounts = current.statusCounts
+    ? {
+        ...current.statusCounts,
+        ALL: current.statusCounts.ALL + 1,
+        [order.status]: (current.statusCounts[order.status] ?? 0) + 1,
+      }
+    : undefined
   return {
     ...current,
     total: current.total + 1,
-    statusCounts,
+    ...(statusCounts ? { statusCounts } : {}),
     items: [row, ...current.items],
   }
 }

@@ -62,7 +62,7 @@ export function MaterialRequestsPage() {
   const list = useQuery({
     queryKey: ['material-requests', status],
     queryFn: () => listMaterialRequestsApi(status),
-    staleTime: 5_000,
+    staleTime: 30_000,
     ...liveRefresh(status === 'PENDING' ? LIVE_REFRESH_MS.list : false),
   })
 

@@ -160,6 +160,7 @@ export function ProductionOrderDetailPage() {
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
     // giữa chừng không xoá thứ người dùng đang gõ.
+    // Thợ cập nhật trên máy khác — vá cache khi cùng phiên; poll khi đang xem tab Sản xuất.
     ...liveRefresh(tab === 'production' ? LIVE_REFRESH_MS.active : false),
   })
   const lookups = useQuery({
