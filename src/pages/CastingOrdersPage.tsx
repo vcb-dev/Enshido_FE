@@ -264,7 +264,7 @@ export function CastingOrdersPage() {
       const orders = slip.orders.map((line) => line.code).join(', ')
       if (
         !window.confirm(
-          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc (F) để thợ làm lại.`,
+          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc để thợ làm lại.`,
         )
       ) {
         return
