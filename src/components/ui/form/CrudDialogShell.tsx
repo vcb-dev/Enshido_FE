@@ -74,9 +74,12 @@ export function CrudDialogShell<T extends FieldValues>({
   // mutation hỏng xong nút vẫn quay vòng mãi và nút Hủy cũng khoá theo. Dựa vào `saving`:
   // vừa từ true về false mà hộp thoại còn mở thì là lỗi (thành công thì nơi gọi đã đóng).
   const wasSaving = useRef(false)
+  /** Lượt bấm lưu hiện tại có thật sự gọi mutation không (saving từng bật). */
+  const savingSeen = useRef(false)
   useEffect(() => {
     if (saving) {
       wasSaving.current = true
+      savingSeen.current = true
       return
     }
     if (!wasSaving.current) return
@@ -105,13 +108,23 @@ export function CrudDialogShell<T extends FieldValues>({
             return
           }
           submitted.current = true
+          savingSeen.current = false
           setBusy(true)
           try {
             await onSubmit({ ...values, editReason: editReason.trim() })
           } catch {
             submitted.current = false
             setBusy(false)
+            return
           }
+          // onSubmit dừng giữa chừng mà không lưu (người dùng bấm "Quay lại sửa" ở hộp kiểm tra
+          // số liệu, hay tự chặn lỗi): không có mutation nào để nhả nút — mở khoá lại ở đây.
+          // Đợi một nhịp để `saving` của mutation vừa gọi (nếu có) kịp bật.
+          setTimeout(() => {
+            if (savingSeen.current || !submitted.current) return
+            submitted.current = false
+            setBusy(false)
+          }, 0)
         }}
         onSubmitInvalid={() => {
           submitted.current = false

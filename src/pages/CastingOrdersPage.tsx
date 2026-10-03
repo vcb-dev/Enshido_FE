@@ -57,6 +57,7 @@ import {
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlWarehouse } from '../orders/nvlStock'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -177,8 +178,9 @@ export function CastingOrdersPage() {
         pageSize: params.pageSize,
       }),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+    // Thợ đúc nhận / báo xong và thủ kho xác nhận trên máy khác — danh sách phải tự cập nhật.
+    ...liveRefresh(LIVE_REFRESH_MS.list),
   })
 
   // Đổi trạng thái phiếu kéo theo trạng thái đơn tạo (G, H) nên làm mới cả hai danh sách.

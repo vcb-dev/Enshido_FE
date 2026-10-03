@@ -113,6 +113,7 @@ import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
 import { deadlineWarning } from '../orders/deadline'
 import { VerticalInfoList } from '../orders/VerticalInfoList'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 export function ProductionOrderDetailPage() {
   const { code = '' } = useParams()
@@ -159,9 +160,7 @@ export function ProductionOrderDetailPage() {
     // Thợ nhận phiếu / báo xong trên điện thoại của họ — không tự làm mới thì màn này đứng
     // ở trạng thái cũ tới khi tải lại trang. Các hộp thoại chỉ nạp form lúc mở nên làm mới
     // giữa chừng không xoá thứ người dùng đang gõ.
-    refetchInterval: tab === 'production' ? 20_000 : 30_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    ...liveRefresh(tab === 'production' ? LIVE_REFRESH_MS.active : false),
   })
   const lookups = useQuery({
     queryKey: ['production-order-lookups'],
@@ -228,7 +227,7 @@ export function ProductionOrderDetailPage() {
       ticket: SubTicket
       stage: StageCode
       craftsmanUserId: string
-      stones: Array<{ materialId: string; stoneCount: number; weight: string | null }>
+      stones: Array<{ materialId: string; stoneCount: number | null; weight: string }>
     }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, stones }),
     'Đã chỉ định thợ — thợ quét QR nhận hàng',
   )
@@ -987,7 +986,7 @@ export function ProductionOrderDetailPage() {
       <KeeperConfirmDialog
         entry={keeperTarget}
         ticketCode={
-          keeperTarget?.subTicketNo != null ? `${order.code}-${keeperTarget.subTicketNo}` : order.code
+          order.subTickets.find((ticket) => ticket.no === keeperTarget?.subTicketNo)?.code ?? order.code
         }
         saving={confirmStage.isPending}
         onClose={() => setKeeperTarget(null)}

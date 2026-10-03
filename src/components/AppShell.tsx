@@ -51,7 +51,7 @@ import { can, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets } from '../intake/intake3dAccess'
 import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
-import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
+import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
 const SIDEBAR_OPEN_KEY = 'enshido.sidebarOpen'
@@ -489,7 +489,7 @@ function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          {WAREHOUSE_SECTIONS.map((s) => (
+          {sectionsOf(warehouse).map((s) => (
             <NavItem
               key={s.code}
               to={warehousePath(warehouse, s.code)}

@@ -14,6 +14,7 @@ import {
   Stack,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -69,20 +70,20 @@ import { validateStockName } from '../warehouses/stockName'
 import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
+import { StockDraftPanel } from '../warehouses/StockDraftPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
   CONSUMABLE_CATEGORIES,
   METAL_KINDS,
   THANH_PHAM_WAREHOUSE,
-  WAREHOUSE_SECTIONS,
+  sectionsOf,
   catalogChildren,
   materialTypesFor,
   stockProfile,
   stockWarehouseCode,
   warehouseByCode,
   warehousePath,
-  warehouseSectionByCode,
   withFallback,
   type StockProfile,
   type WarehouseSectionCode,
@@ -120,7 +121,10 @@ export function WarehouseDetailPage() {
   const sectionCode = warehouse.sections
     ? (bin as WarehouseSectionCode | undefined)
     : (section as WarehouseSectionCode | undefined)
-  const activeSection = warehouseSectionByCode(sectionCode)
+  // Chỉ nhận mục có ở kho này (Xuất nháp chỉ có ở kho NVL chính) — mục lạ thì về Tồn.
+  const activeSection = sectionCode
+    ? sectionsOf(warehouse).find((s) => s.code === sectionCode)
+    : undefined
 
   if (section === 'gia' || bin === 'gia') {
     return <Navigate to="/warehouses/nvl-chinh/stock" replace />
@@ -176,7 +180,7 @@ export function WarehouseDetailPage() {
             '& .MuiTab-root': { minHeight: 40, py: 0 },
           }}
         >
-          {WAREHOUSE_SECTIONS.map((s) => (
+          {sectionsOf(warehouse).map((s) => (
             <Tab
               key={s.code}
               value={s.code}
@@ -194,6 +198,8 @@ export function WarehouseDetailPage() {
         <StockInboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'outbound' ? (
         <StockOutboundPanel warehouseCode={stockKey} />
+      ) : activeSection?.code === 'drafts' ? (
+        <StockDraftPanel warehouseCode={stockKey} />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}
@@ -202,6 +208,10 @@ export function WarehouseDetailPage() {
 }
 
 
+/** Mã tính theo gram: SL chính là TL — không cần cân TL tồn riêng. */
+const isGramUnitName = (name: string | undefined) =>
+  ['g', 'gr', 'gram', 'grams', 'gam'].includes((name ?? '').trim().toLowerCase())
+
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
 const split = { borderLeft: '2px solid #6b4513' }
 const groupHead = {
@@ -209,6 +219,7 @@ const groupHead = {
   in: { ...split, bgcolor: '#e4f0e8', fontWeight: 700 },
   out: { ...split, bgcolor: '#f3ebe7', fontWeight: 700 },
   stock: { ...split, bgcolor: '#e8d8bd', fontWeight: 700, color: 'primary.main' },
+  real: { ...split, bgcolor: '#e3ecf3', fontWeight: 700 },
 }
 /** Bốn nhóm tiêu đề bậc 1 của bảng tồn: mỗi nhóm gộp một cặp SL / TT. */
 const STOCK_GROUPS = {
@@ -216,6 +227,8 @@ const STOCK_GROUPS = {
   in: { key: 'in', label: 'Nhập', headSx: groupHead.in },
   out: { key: 'out', label: 'Xuất', headSx: groupHead.out },
   stock: { key: 'stock', label: 'Tồn', headSx: groupHead.stock },
+  /** Tồn thực = đầu kỳ + nhập − xuất; khả dụng = thực − đá đang giữ chỗ cho phiếu Vào đá. */
+  real: { key: 'real', label: 'Thực tế (khả dụng = thực − giữ chỗ)', headSx: groupHead.real },
 } satisfies Record<string, ColumnGroup>
 
 const groupBody = {
@@ -223,6 +236,7 @@ const groupBody = {
   in: { ...split, ...numCell, bgcolor: '#f2f8f4' },
   out: { ...split, ...numCell, bgcolor: '#faf6f4' },
   stock: { ...split, ...numCell, bgcolor: '#f1e6d5', fontWeight: 700 },
+  real: { ...split, ...numCell, bgcolor: '#f3f7fa' },
 }
 
 function availabilityColor(code: AvailabilityCode) {
@@ -874,6 +888,62 @@ function stockColumns(
       cellSx: { ...groupBody.stock, borderLeft: '1px solid #cbbda9' },
       render: (row) => formatMoney(row.amount),
     },
+    {
+      key: 'onHandQty',
+      header: 'Tồn thực',
+      group: STOCK_GROUPS.real,
+      headSx: groupHead.real,
+      align: 'right',
+      cellSx: groupBody.real,
+      render: (row) =>
+        row.onHandQty == null ? (
+          '—'
+        ) : row.ledgerMismatch ? (
+          <Tooltip title={`Sổ tồn ghi ${formatQty(row.qty)} nhưng tồn đầu kỳ + nhập − xuất = ${formatQty(row.onHandQty)} — cần kiểm kê`}>
+            <Box component="span" sx={{ color: 'warning.main', fontWeight: 700 }}>
+              {formatQty(row.onHandQty)} ⚠
+            </Box>
+          </Tooltip>
+        ) : (
+          formatQty(row.onHandQty)
+        ),
+    },
+    {
+      key: 'heldQty',
+      header: 'Giữ chỗ',
+      group: STOCK_GROUPS.real,
+      headSx: { bgcolor: groupHead.real.bgcolor },
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
+      render: (row) => (Number(row.heldQty) > 0 ? formatQty(row.heldQty ?? '0') : '—'),
+    },
+    {
+      key: 'availableQty',
+      header: 'Khả dụng',
+      group: STOCK_GROUPS.real,
+      headSx: { bgcolor: groupHead.real.bgcolor },
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor, fontWeight: 700 },
+      render: (row) => (row.availableQty == null ? '—' : formatQty(row.availableQty)),
+    },
+    {
+      key: 'gramOnHand',
+      header: 'TL tồn (g)',
+      group: STOCK_GROUPS.real,
+      headSx: { bgcolor: groupHead.real.bgcolor },
+      align: 'right',
+      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
+      render: (row) =>
+        row.gramOnHand != null ? (
+          formatQty(row.gramOnHand)
+        ) : (
+          <Tooltip title="Chưa cân TL tồn — sửa dòng tồn, nhập số cân để bắt đầu theo dõi">
+            <Box component="span" sx={{ color: 'text.disabled' }}>
+              chưa cân
+            </Box>
+          </Tooltip>
+        ),
+    },
   )
 
   if (profile.showNvlCategory || profile.showBtpCategory) {
@@ -1127,6 +1197,8 @@ type StockFormValues = {
   weight: string
   images: OrderImage[]
   openingQty: string
+  /** Kho NVL chính, mã không tính theo gram: TL tồn vừa cân (g) — trống = lần này không cân. */
+  gramBase: string
   stockUnitPrice: string
   inQty: string
   inAmount: string
@@ -1152,6 +1224,7 @@ const EMPTY_STOCK: StockFormValues = {
   weight: '',
   images: [],
   openingQty: '0',
+  gramBase: '',
   stockUnitPrice: '',
   inQty: '0',
   inAmount: '0',
@@ -1241,6 +1314,7 @@ function StockEditDialog({
               weight: row.weight ? qtyFromApi(row.weight) : '',
               images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
               openingQty: qtyFromApi(row.openingQty),
+              gramBase: '',
               stockUnitPrice: moneyDigitsFromApi(row.stockUnitPrice),
               inQty: qtyFromApi(row.inQty),
               inAmount: row.inAmount,
@@ -1307,6 +1381,8 @@ function StockEditDialog({
       .filter((item) => item.name.trim())
       .map((item) => ({
         ...stockPayloadFromItem(item, profile, categoryOptions),
+        // Chỉ gửi khi kho vừa cân — gửi lại số cũ sẽ dời mốc cân sang lúc lưu.
+        ...(row && item.gramBase ? { gramBase: item.gramBase } : {}),
         editReason: editReason.trim() || undefined,
       }))
     if (!payloads.length) return
@@ -1764,6 +1840,25 @@ function StockItemFields({
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.25, mt: -1 }}>
             TT đầu kỳ = SL × đơn giá tồn. Nhập / xuất / tồn kho lấy từ phiếu, không sửa tay.
           </Typography>
+          {profile.showShapeColor && row && !isGramUnitName(row.unit) ? (
+            <FormRow columns={2}>
+              <Typography variant="body2" sx={{ alignSelf: 'center', px: 0.25 }}>
+                {row.gramOnHand != null ? (
+                  <>
+                    TL tồn hiện tại: <b>{formatQty(row.gramOnHand)} g</b>
+                    {row.gramBaseAt ? ` (cân lúc ${new Date(row.gramBaseAt).toLocaleString('vi-VN')}, cộng nhập − xuất sau đó)` : ''}
+                  </>
+                ) : (
+                  'Chưa cân TL tồn — nhập số cân để bắt đầu theo dõi trọng lượng.'
+                )}
+              </Typography>
+              <FormQtyField<StockDialogValues>
+                name={`items.${index}.gramBase`}
+                label="Cân lại TL tồn (g)"
+                helperText="Để trống nếu lần này không cân. Nhập là lấy làm mốc TL tồn từ bây giờ."
+              />
+            </FormRow>
+          ) : null}
         </Box>
         {showLineActions ? (
           <LineActions

@@ -39,6 +39,7 @@ import {
   StickyActions,
   TicketThumb,
 } from '../worker/WorkerUi'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 /** Phiếu mẹ (đơn chưa chia) và phiếu con quy về cùng một dạng để dùng chung một màn. */
 type TicketModel = {
@@ -72,15 +73,15 @@ export function SubTicketPage() {
     queryKey: ['production-order', orderCode],
     queryFn: () => getSubTicketOrderApi(ticketCode),
     enabled: Boolean(orderCode),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    staleTime: 10_000,
+    ...liveRefresh(LIVE_REFRESH_MS.ticket),
   })
 
   if (detail.isLoading) return <TicketDetailSkeleton />
   const order = detail.data
-  const model = order ? toModel(order, parsed?.no ?? null) : null
+  // Đơn chỉ có một phiếu thì mã phiếu chính là mã đơn — mở bằng mã đơn vẫn ra phiếu đó.
+  const no = parsed?.no ?? (order?.subTickets.length === 1 ? order.subTickets[0].no : null)
+  const model = order ? toModel(order, no) : null
   if (!order || !model) {
     // Mất mạng mà phiếu này chưa từng được tải về: nói đúng lý do, đừng để thợ tưởng là
     // quét nhầm mã. Phiếu thuộc phần việc của mình thì màn "Phiếu của tôi" đã kéo sẵn.

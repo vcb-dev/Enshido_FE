@@ -78,11 +78,10 @@ export function MyTicketsPage() {
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
-    staleTime: 45_000,
-    // API my-tickets nặng (nhiều truy vấn) — tránh poll quá dày.
-    refetchInterval: 45_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    // API my-tickets nặng (nhiều truy vấn) — không poll; thao tác trên máy đã vá cache, còn
+    // thay đổi từ máy khác hiện khi thợ quay lại tab.
+    staleTime: 90_000,
+    refetchOnWindowFocus: true,
   })
 
   // Prefetch tối đa vài phiếu — prefetch hàng loạt sau my-tickets làm nghẽn API.

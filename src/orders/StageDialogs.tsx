@@ -1,4 +1,5 @@
 import { confirmWeights, ratioWarning } from './weightSanity'
+import { stoneReturnPreview } from './stoneReturn'
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Typography } from '@mui/material'
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
@@ -555,7 +556,21 @@ type ReturnValues = {
   silverRecoveredWeight: string
   /** Nguội / Vào đá: S999 thừa (g). */
   scrapS999Weight: string
+  /** Vào đá của phiếu con: TL gói đá thừa theo từng mã đã cấp (g). */
+  returnedStones: Array<{ materialId: string; weight: string }>
+  /** Vào đá: số viên trả lại của dòng cấp cũ không cân gói. */
+  legacyReturnedCount: string
   note: string
+}
+
+/** Gói đá thừa trống theo từng mã có cân gói lúc cấp — sửa lại thì điền số KCS cân lần trước. */
+/** Mã đá còn túi đang giữ (có cân gói) — KCS cân gói thừa từng mã; túi đã trả hết giữa khâu thì bỏ. */
+function weighedLinesOf(entry: StageEntry) {
+  return entry.stoneLines.filter((line) => line.weight != null && Number(line.weight) > 0)
+}
+
+function returnedStonesOf(entry: StageEntry) {
+  return weighedLinesOf(entry).map((line) => ({ materialId: line.materialId, weight: entry.returnedAt ? (line.returnedWeight ?? '') : '' }))
 }
 
 /** KCS nhận lại hàng từ thợ và cân lại bạc. Người KCS là tài khoản đang đăng nhập. */
@@ -583,12 +598,22 @@ export function KcsReturnDialog({
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       scrapS999Weight: '',
+      returnedStones: [],
+      legacyReturnedCount: '',
       note: '',
     },
   })
 
   useEffect(() => {
     if (!entry) return
+    const legacyCount =
+      entry.returnedAt && entry.stoneLines.some((line) => line.weight == null)
+        ? String(
+            entry.stoneLines
+              .filter((line) => line.weight == null)
+              .reduce((sum, line) => sum + (line.returnedCount ?? 0), 0),
+          )
+        : ''
     // Đã báo lỗi ở khâu Nguội / Vào đá: điền sẵn cả lô là hàng lỗi, KCS sửa lại theo hàng thật.
     const flagged =
       entry.defectReportedAt != null &&
@@ -604,6 +629,8 @@ export function KcsReturnDialog({
         btpRecoveredWeight: entry.btpRecoveredWeight ?? '',
         silverRecoveredWeight: entry.silverRecoveredWeight ?? '',
         scrapS999Weight: entry.scrapS999Weight ?? '',
+        returnedStones: returnedStonesOf(entry),
+        legacyReturnedCount: legacyCount,
         note: '',
       })
       return
@@ -616,9 +643,12 @@ export function KcsReturnDialog({
       btpRecoveredWeight: '',
       silverRecoveredWeight: '',
       scrapS999Weight: '',
+      returnedStones: returnedStonesOf(entry),
+      legacyReturnedCount: '',
       note: '',
     })
   }, [entry, form])
+  const returnedStones = useWatch({ control: form.control, name: 'returnedStones' }) ?? []
 
   const [returnedQty, returnedSilver, btp, silverRecovered, scrapS999, defectQty] = useWatch({
     control: form.control,
@@ -639,8 +669,14 @@ export function KcsReturnDialog({
    * đá riêng. Mốc so là bạc giao + đá giao (BE coi như gắn hết số đá đã giao).
    */
   const stoneStage = entry?.stage === 'STONE_SETTING'
+  /** Đá giữ chỗ của khâu: mã có cân gói thì KCS cân gói thừa, dòng cấp cũ không cân thì đếm viên. */
+  const weighedStones = stoneStage && entry ? weighedLinesOf(entry) : []
+  const legacyStones = stoneStage ? (entry?.stoneLines ?? []).filter((line) => line.weight == null) : []
+  // Túi thợ trả giữa khâu (đổi size) không còn là đá đã phát.
   const stoneHandedWeight = stoneStage
-    ? Number(entry?.handedStoneWeight ?? 0) + Number(entry?.issuedStoneWeight ?? 0)
+    ? Number(entry?.handedStoneWeight ?? 0) +
+      Number(entry?.issuedStoneWeight ?? 0) -
+      Number(entry?.stoneReturnedEarlyWeight ?? 0)
     : 0
   // KCS cân cả cụm bạc + đá nên mốc so là bạc vào khâu + TL đá đã giao.
   const stone = stoneHandedWeight
@@ -702,7 +738,7 @@ export function KcsReturnDialog({
     ? `KCS sửa lại — ${entry ? STAGE_LABEL[entry.stage] : ''} (lần ${(entry?.kcsRevisionCount ?? 0) + 1}/3)`
     : `KCS cân lại — ${entry ? STAGE_LABEL[entry.stage] : ''}`
 
-  function submit(values: ReturnValues) {
+  async function submit(values: ReturnValues) {
     const back =
       Number(values.returnedSilverWeight || 0) +
       Number(values.btpRecoveredWeight || 0) +
@@ -710,13 +746,13 @@ export function KcsReturnDialog({
       Number(values.scrapS999Weight || 0)
     if (
       silverLimit != null &&
-      !confirmWeights([
+      !(await confirmWeights([
         ratioWarning(back, 'Nhận lại + thu hồi', silverLimit, 'bạc vào khâu', {
           min: 0.5,
           max: 1,
           note: 'hao hụt khâu trên 50%',
         }),
-      ])
+      ]))
     ) {
       return
     }
@@ -728,6 +764,12 @@ export function KcsReturnDialog({
       scrapS999Weight: keeperStage ? values.scrapS999Weight || null : null,
       btpRecoveredWeight: values.btpRecoveredWeight || null,
       silverRecoveredWeight: values.silverRecoveredWeight || null,
+      ...(stoneStage && entry?.stoneLines.length
+        ? {
+            returnedStones: values.returnedStones.filter((line) => Number(line.weight) > 0),
+            returnedStoneCount: legacyStones.length ? Number(values.legacyReturnedCount || 0) : null,
+          }
+        : {}),
       note: values.note.trim(),
     })
   }
@@ -795,7 +837,7 @@ export function KcsReturnDialog({
             validate: (value) =>
               !entry ||
               !value ||
-              new Date(value) >= new Date(toDateTimeInput(entry.handedAt)) ||
+              new Date(String(value)) >= new Date(toDateTimeInput(entry.handedAt)) ||
               'Không được trước thời gian giao',
           }}
         />
@@ -853,6 +895,71 @@ export function KcsReturnDialog({
           Còn {entry.pendingRequestCount} yêu cầu xuất NVL của khâu này chưa xử lý — kho xuất hoặc từ chối trước rồi
           KCS mới nhận lại được.
         </Alert>
+      ) : null}
+
+      {weighedStones.length || legacyStones.length ? (
+        <Box sx={{ p: 1.25, border: '1px solid #e9e0d4', borderRadius: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            Đá thừa — cân cả gói theo từng mã
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Không cần đếm viên: hệ thống quy số viên thừa theo tỷ lệ TL gói lúc cấp. Không thừa thì để trống. Thủ kho xác
+            nhận xong mới xuất kho phần đã dùng, đá thừa vẫn nằm trong kho.
+          </Typography>
+          {weighedStones.map((line, index) => {
+            const returned = Number(returnedStones[index]?.weight || 0)
+            const preview = stoneReturnPreview(line, returned)
+            return (
+              <FormRow key={line.materialId} columns={2}>
+                <Box sx={{ alignSelf: 'center' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {[line.sku, line.name].filter(Boolean).join(' · ')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Đang giữ {formatQty(line.qty)} {line.unit}
+                    {line.stoneCount != null ? ` · ${line.stoneCount} viên` : ''} · gói {formatQty(line.weight ?? '0')} g
+                    {line.extraCount ? ` (gồm ${line.extraCount} lần xin thêm)` : ''}
+                    {line.earlyReturnedWeight ? ` · đã trả giữa khâu ${formatQty(line.earlyReturnedWeight)} g` : ''}
+                  </Typography>
+                </Box>
+                <FormQtyField<ReturnValues>
+                  name={`returnedStones.${index}.weight`}
+                  label="TL gói đá thừa (g)"
+                  transform={(value) => capAt(Number(line.weight))(value)}
+                  helperText={
+                    preview && returned > 0
+                      ? `${preview.returnedCount != null ? `≈ ${preview.returnedCount} viên thừa → ` : ''}xuất ${formatQty(String(preview.usedQty))} ${line.unit}`
+                      : `Không thừa → xuất hết ${formatQty(line.qty)} ${line.unit}`
+                  }
+                  rules={{
+                    validate: (value) =>
+                      !value || Number(value) <= Number(line.weight) || `Không quá ${formatQty(line.weight ?? '0')} g đã cấp`,
+                  }}
+                />
+              </FormRow>
+            )
+          })}
+          {legacyStones.length ? (
+            <FormRow columns={2}>
+              <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                {legacyStones.map((line) => line.sku || line.name).join(', ')} cấp trước khi có cân gói — đếm số viên trả
+                lại (tối đa {legacyStones.reduce((sum, line) => sum + (line.stoneCount ?? 0), 0)} viên).
+              </Typography>
+              <FormTextField<ReturnValues>
+                name="legacyReturnedCount"
+                label="Đá trả lại (viên)"
+                type="number"
+                slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                transform={(value) => value.replace(/[^\d]/g, '')}
+                rules={{
+                  validate: (value) =>
+                    Number(value || 0) <= legacyStones.reduce((sum, line) => sum + (line.stoneCount ?? 0), 0) ||
+                    'Nhiều hơn số đá đã cấp',
+                }}
+              />
+            </FormRow>
+          ) : null}
+        </Box>
       ) : null}
 
       {keeperStage ? (

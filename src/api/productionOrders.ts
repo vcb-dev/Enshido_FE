@@ -1,4 +1,5 @@
 import { apiFetch } from './auth'
+import type { StockSnapshot } from './inventory'
 import type { IntakeOrderStatus } from './intakeOrders'
 
 export type ProductionStatus =
@@ -129,6 +130,9 @@ export type StageEntry = {
   issuedStoneCount: number
   /** TL đá xuất thêm có cân (g). */
   issuedStoneWeight: string | null
+  /** Túi đá thợ trả giữa khâu (đổi size): TL / viên — đã trừ khỏi đá phát cho thợ. */
+  stoneReturnedEarlyWeight: string | null
+  stoneReturnedEarlyCount: number | null
   /** Từng dòng NVL đã xuất vào khâu — lúc giao hoặc thợ xin thêm. */
   issuedLines: Array<{
     atHandover: boolean
@@ -162,6 +166,8 @@ export type StageEntry = {
   stoneWeight: string | null
   /** Khâu Vào đá: số viên đá thợ trả lại. */
   returnedStoneCount: number | null
+  /** Khâu Vào đá của phiếu con: đá giữ chỗ theo mã (cấp lúc chỉ định + thợ xin thêm). */
+  stoneLines: StoneLine[]
   btpRecoveredWeight: string | null
   silverRecoveredWeight: string | null
   /** Nguội / Vào đá: SL hàng lỗi, S999 thừa; thủ kho xác nhận (null = chưa) rồi mới nhập kho. */
@@ -185,6 +191,34 @@ export type StageEntry = {
   stoneLossPercent: string | null
   laborCost: string | null
   note: string | null
+}
+
+/**
+ * Đá giữ chỗ của khâu Vào đá, gộp theo mã. Chưa xuất kho: KCS cân gói thừa, thủ kho xác nhận thì
+ * xuất = SL cấp × (TL cấp − TL thừa) / TL cấp.
+ */
+export type StoneLine = {
+  materialId: string
+  sku: string | null
+  name: string
+  unit: string
+  /** SL cấp theo đơn vị của mã. */
+  qty: string
+  /** Số viên theo nhãn gói (còn đang giữ); null = đá tính theo ct / g không đếm viên. */
+  stoneCount: number | null
+  /** TL gói đang giữ (g); null = có dòng cấp cũ không cân gói. */
+  weight: string | null
+  /** Túi thợ trả giữa khâu (đổi size) — đã nhả khỏi giữ chỗ. */
+  earlyReturnedWeight: string | null
+  earlyReturnedCount: number | null
+  /** TL gói thừa KCS cân (g). */
+  returnedWeight: string | null
+  /** Viên thừa quy theo tỷ lệ TL. */
+  returnedCount: number | null
+  /** Viên đã xuất kho — có khi thủ kho đã xác nhận. */
+  usedCount: number | null
+  /** Số lần thợ xin thêm mã này. */
+  extraCount: number
 }
 
 export type MaterialRequestStatus = 'PENDING' | 'ISSUED' | 'REJECTED' | 'CANCELLED'
@@ -222,18 +256,22 @@ export type MaterialRequest = {
   issuedQty: string | null
   issuedWeight: string | null
   issuedStoneCount: number | null
+  /** Đá xin thêm ở Vào đá: HELD đang giữ chỗ (chưa xuất) · CONSUMED đã xuất · RELEASED thừa hết. */
+  holdStatus: 'HELD' | 'CONSUMED' | 'RELEASED' | null
   handledByName: string | null
   handledAt: string | null
   rejectReason: string | null
 }
 
 /** Dòng ở hàng chờ xuất của kho. */
-export type MaterialRequestQueueItem = MaterialRequest & {
-  orderDescription: string
-  craftsmanName: string
-  suggestedKind: MaterialRequestKind
-  stockQty: string
-}
+export type MaterialRequestQueueItem = MaterialRequest &
+  StockSnapshot & {
+    orderDescription: string
+    craftsmanName: string
+    suggestedKind: MaterialRequestKind
+    /** Số ghi trên sổ tồn — so đủ / thiếu theo `availableQty`. */
+    stockQty: string
+  }
 
 /** NVL đã xuất cho một phiếu và hao hụt cả phiếu (chỉ các khâu KCS đã nhận lại). */
 export type TicketMaterials = {
@@ -516,8 +554,10 @@ export type ReturnPayload = {
   stoneCount?: number | null
   /** Khâu Vào đá: TL đá gắn lên (g). */
   stoneWeight?: string | null
-  /** Khâu Vào đá: số viên đá thợ trả lại. */
+  /** Khâu Vào đá: số viên đá thợ trả lại — chỉ cho dòng cấp cũ không cân gói. */
   returnedStoneCount?: number | null
+  /** Khâu Vào đá của phiếu con: TL gói đá thừa theo mã (g); mã không gửi = không thừa. */
+  returnedStones?: Array<{ materialId: string; weight: string }>
   /** Nguội / Vào đá của phiếu con: SL hàng lỗi KCS tách ra. */
   defectQty?: number | null
   /** Nguội / Vào đá: TL nguyên liệu thừa S999 (g). */
@@ -882,6 +922,16 @@ export function confirmStageApi(code: string, stageId: string) {
   return orderFetch(orderPath(code, `/stages/${stageId}/confirm`), { method: 'POST', body: '{}' })
 }
 
+/** Thủ kho nhận lại túi đá thợ trả giữa khâu Vào đá (đổi size) — cân cả túi, nhả giữ chỗ phần trả. */
+export type EarlyStoneReturnPayload = { materialId: string; weight: string; note?: string }
+
+export function returnStoneEarlyApi(code: string, stageId: string, payload: EarlyStoneReturnPayload) {
+  return orderFetch(orderPath(code, `/stages/${stageId}/stone-returns`), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 /** KCS sửa lại kết quả đã nhận ở Nguội / Vào đá (tối đa 3 lần, trước khi thủ kho xác nhận). */
 export function reviseReturnApi(code: string, stageId: string, payload: ReturnPayload) {
   return orderFetch(orderPath(code, `/stages/${stageId}/return`), {
@@ -987,11 +1037,12 @@ export type FinishedProductBomLine = {
   imageUrl: string | null
 }
 
-export type NvlOption = {
+export type NvlOption = Partial<StockSnapshot> & {
   id: string
   sku: string | null
   name: string
   unit: string
+  /** Số ghi trên sổ tồn — tồn thực / khả dụng xem `onHandQty` / `availableQty`. */
   qty: string
   shape: string | null
   color: string | null
@@ -1107,7 +1158,7 @@ export function assignSubTicketApi(
     stage?: StageCode
     craftsmanUserId: string
     /** Khâu Vào đá: đá thủ kho cấp (giữ chỗ, xuất kho khi xác nhận sau KCS). */
-    stones?: Array<{ materialId: string; stoneCount: number; weight?: string | null }>
+    stones?: Array<{ materialId: string; stoneCount?: number | null; weight: string }>
   },
 ) {
   return orderFetch(ticketPath(code, no, '/assign'), {

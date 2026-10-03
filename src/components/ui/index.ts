@@ -94,3 +94,6 @@ export {
   TabsSkeleton,
   TicketDetailSkeleton,
 } from './Skeletons'
+
+export { ConfirmDialogHost, confirmDialog } from './ConfirmDialog'
+export type { ConfirmOptions } from './ConfirmDialog'

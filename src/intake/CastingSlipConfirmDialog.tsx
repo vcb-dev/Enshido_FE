@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -21,6 +22,10 @@ import { formatQty, parseQtyInput } from "../api/inventory";
 import type { OrderImage } from "../api/productionOrders";
 import { QtyTextField } from "../components/ui/QtyTextField";
 import { ImageUploadField } from "../orders/ImageUploadField";
+import { SILVER_LOSS_LIMITS, silverLossLevel } from "../orders/catalog";
+import { confirmWeights, ratioWarning } from "../orders/weightSanity";
+
+const LOSS_SEVERITY = { ok: "success", warn: "warning", high: "error" } as const;
 
 type Blank = { qty: string; weight: string; images: OrderImage[] };
 
@@ -81,7 +86,25 @@ export function CastingSlipConfirmDialog({
     setBlanks((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   }
 
-  function submit() {
+  /**
+   * Hao hụt cắt — cùng công thức các khâu: vào (cây sau đúc) − ra (phôi các đơn) − thu hồi
+   * (phần cây còn lại về kho NVL); % tính trên cây sau đúc, màu theo ngưỡng hao hụt bạc.
+   */
+  const tree = Number(slip?.castTreeWeightGram ?? 0);
+  const blankTotal = (slip?.orders ?? []).reduce(
+    (sum, order) => sum + (positive(blanks[order.intakeOrderId]?.weight ?? "") ?? 0),
+    0,
+  );
+  const restValue = positive(restWeight, true) ?? 0;
+  const cutLoss = tree > 0 && blankTotal > 0
+    ? {
+        value: Math.round((tree - blankTotal - restValue) * 10000) / 10000,
+        percent: ((tree - blankTotal - restValue) / tree) * 100,
+      }
+    : null;
+  const cutLevel = cutLoss ? (silverLossLevel(cutLoss.percent.toFixed(2)) ?? "ok") : "ok";
+
+  async function submit() {
     if (!slip) return;
     const lines: ConfirmCastingSlipPayload["blanks"] = [];
     let total = 0;
@@ -125,6 +148,17 @@ export function CastingSlipConfirmDialog({
       );
     }
     setError("");
+    if (
+      !(await confirmWeights([
+        ratioWarning(total + rest, "Phôi + phần còn lại", tree, "cây sau đúc", {
+          min: 0.5,
+          max: 1,
+          note: "hao hụt cắt trên 50%",
+        }),
+      ]))
+    ) {
+      return;
+    }
     onSave({
       blanks: lines,
       restWeightGram: rest,
@@ -250,6 +284,18 @@ export function CastingSlipConfirmDialog({
                 readOnly={saving}
               />
             </Stack>
+          ) : null}
+          {cutLoss ? (
+            <Alert severity={LOSS_SEVERITY[cutLevel]} sx={{ py: 0.25 }}>
+              <Typography variant="body2">
+                Hao hụt cắt: <b>{formatQty(String(cutLoss.value))} g</b> (
+                {cutLoss.percent.toFixed(2)}%) = cây sau đúc {formatQty(String(tree))} g − phôi{" "}
+                {formatQty(String(blankTotal))} g − phần còn lại {formatQty(String(restValue))} g
+                {cutLevel !== "ok"
+                  ? ` — vượt ngưỡng ${cutLevel === "high" ? SILVER_LOSS_LIMITS.warn : SILVER_LOSS_LIMITS.ok}%, cân lại phôi / phần còn lại trước khi lưu`
+                  : ""}
+              </Typography>
+            </Alert>
           ) : null}
           {error ? (
             <Typography color="error" variant="body2">

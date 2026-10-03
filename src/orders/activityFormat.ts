@@ -39,6 +39,7 @@ export const ACTION_LABEL: Record<string, string> = {
   MATERIAL_REQUEST: 'Thợ xin xuất NVL',
   MATERIAL_CANCEL: 'Thợ huỷ yêu cầu xuất',
   MATERIAL_ISSUE: 'Xuất NVL cho thợ',
+  STONE_RETURN_EARLY: 'Thủ kho nhận lại túi đá giữa khâu',
   MATERIAL_REJECT: 'Không xuất NVL',
   TICKET_OUTCOME: 'Chốt kết cục phiếu con',
   TICKET_CLEAR_OUTCOME: 'Gỡ kết cục phiếu con',

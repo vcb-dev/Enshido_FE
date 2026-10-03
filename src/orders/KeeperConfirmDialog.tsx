@@ -17,6 +17,7 @@ import {
 import type { StageEntry } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { formatDateShort, STAGE_LABEL } from './catalog'
+import { stoneReturnPreview } from './stoneReturn'
 
 const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const
 
@@ -25,7 +26,7 @@ type Line = { label: string; qty: string; weight: string; warehouse: string; sho
 /**
  * Thủ kho xác nhận sau khi KCS nhận lại khâu Nguội / Vào đá (mô tả luồng bước 13–15, 18). Bấm xác
  * nhận là hệ thống nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
- * đá còn xuất kho số đá đã dùng (số cấp − đá thừa trả lại).
+ * đá còn xuất kho đá đã dùng theo từng mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
  */
 export function KeeperConfirmDialog({
   entry,
@@ -139,7 +140,73 @@ export function KeeperConfirmDialog({
               </Table>
             )}
 
-            {stoneStage && stoneUsed != null ? (
+            {stoneStage && entry.stoneLines.length ? (
+              <Stack spacing={0.5}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Đá xuất kho NVL (theo TL gói thừa KCS cân)
+                </Typography>
+                <Table size="small" sx={{ '& td, & th': { px: 1, py: 0.5 } }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Mã đá</TableCell>
+                      <TableCell sx={NUM}>Cấp</TableCell>
+                      <TableCell sx={NUM}>Gói thừa</TableCell>
+                      <TableCell sx={NUM}>Xuất</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {entry.stoneLines.map((line) => {
+                      const preview = stoneReturnPreview(line, Number(line.returnedWeight ?? 0))
+                      const used =
+                        Number(line.qty) <= 0
+                          ? `0 ${line.unit}`
+                          : preview != null
+                            ? `${formatQty(String(preview.usedQty))} ${line.unit}`
+                            : `${(line.stoneCount ?? 0) - (line.returnedCount ?? 0)} viên`
+                      return (
+                        <TableRow key={line.materialId}>
+                          <TableCell>
+                            {line.sku || line.name}
+                            {line.extraCount ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                gồm {line.extraCount} lần thợ xin thêm
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell sx={NUM}>
+                            {formatQty(line.qty)} {line.unit}
+                            {line.weight ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {formatQty(line.weight)} g
+                              </Typography>
+                            ) : null}
+                            {line.earlyReturnedWeight ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                đã trả giữa khâu {formatQty(line.earlyReturnedWeight)} g
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell sx={NUM}>
+                            {line.returnedWeight != null ? `${formatQty(line.returnedWeight)} g` : '—'}
+                            {line.returnedCount != null ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                ≈ {line.returnedCount} viên
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell sx={NUM}>
+                            <b>{used}</b>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+                <Typography variant="caption" color="text.secondary">
+                  Đá thừa vẫn nằm trong kho — chỉ phần đã dùng (gắn lên + mất) bị trừ tồn.
+                </Typography>
+              </Stack>
+            ) : stoneStage && stoneUsed != null ? (
               <Stack spacing={0.25}>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>
                   Đá xuất kho

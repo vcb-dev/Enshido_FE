@@ -47,7 +47,7 @@ export function IntakeCastingTreeDialog({
     }
   }, [order])
 
-  function submit() {
+  async function submit() {
     const parsed = parseQtyInput(weight.trim())
     const grams = parsed ? Number(parsed) : NaN
     if (!parsed || !Number.isFinite(grams) || grams <= 0) {
@@ -63,9 +63,9 @@ export function IntakeCastingTreeDialog({
     // Cây thông = mẫu sáp in ở bước 4 + ống rót: nặng hơn mẫu nhưng không lệch cả trăm lần.
     const printed = Number(order?.productWeightGram ?? 0)
     if (
-      !confirmWeights([
+      !(await confirmWeights([
         ratioWarning(grams, 'Cây thông', printed, 'mẫu sáp đã in', { min: 0.5, max: 100 }),
-      ])
+      ]))
     ) {
       return
     }

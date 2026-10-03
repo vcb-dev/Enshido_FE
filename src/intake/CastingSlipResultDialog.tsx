@@ -46,7 +46,7 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
     setError('')
   }, [slip])
 
-  function submit() {
+  async function submit() {
     const castTreeWeightGram = gram(tree, false)
     const silverUsedGram = gram(silver, true)
     const plasterUsedGram = gram(plaster, true)

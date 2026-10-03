@@ -96,6 +96,7 @@ import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../or
 import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
@@ -245,15 +246,13 @@ export function ProductionOrdersPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: !isIntakePendingView && productionListParams !== null,
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.list),
   })
   const intakePipelineCounts = useQuery({
     queryKey: ['intake-orders', 'pipeline-counts'],
     queryFn: getIntakePipelineCountsApi,
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    ...liveRefresh(LIVE_REFRESH_MS.background),
   })
   const intakePipe = intakePipelineCounts.data ?? {}
   const isIntakeWarehouseKeeper = canConfirmIntakeWarehouse(user)

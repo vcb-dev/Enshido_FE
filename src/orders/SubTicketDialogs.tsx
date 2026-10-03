@@ -219,7 +219,9 @@ export function SubTicketFormDialog({
   }, [open, ticket, remaining, form])
 
   const locked = Boolean(ticket && ticket.entryCount > 0)
-  const title = ticket ? `Sửa phiếu con ${ticket.code}` : `Tạo phiếu con cho đơn ${order.code}`
+  const title = ticket
+    ? `Sửa phiếu${order.subTickets.length > 1 ? ' con' : ''} ${ticket.code}`
+    : `Tạo phiếu con cho đơn ${order.code}`
 
   return (
     <CrudDialogShell<TicketValues>
@@ -339,7 +341,7 @@ export function AssignWorkerDialog({
     ticket: SubTicket
     stage: StageCode
     craftsmanUserId: string
-    stones: Array<{ materialId: string; stoneCount: number; weight: string | null }>
+    stones: Array<{ materialId: string; stoneCount: number | null; weight: string }>
   }) => void
 }) {
   const form = useForm<AssignValues>({ defaultValues: { stage: '', craftsmanUserId: '', stones: [] } })
@@ -360,7 +362,7 @@ export function AssignWorkerDialog({
     if (stoneStage && stones.fields.length === 0) stones.append({ ...EMPTY_STONE_LINE })
   }, [stoneStage, stones])
   const lines = useWatch({ control: form.control, name: 'stones' }) ?? []
-  /** Mã tính theo ct / gram thì thủ kho nhập thêm TL để quy ra số lượng; mã tính theo viên chỉ cần số viên. */
+  /** Mã tính theo ct / gram thì SL cấp suy từ TL gói; mã tính theo viên lấy số viên theo nhãn gói. */
   const byUnit = (index: number) => {
     const unit = (nvl.data ?? []).find((item) => item.id === lines[index]?.materialId)?.unit
     return unit && !['viên', 'vien'].includes(unit.trim().toLowerCase()) ? unit : null
@@ -384,8 +386,8 @@ export function AssignWorkerDialog({
             values.stage === 'STONE_SETTING'
               ? values.stones.map((line) => ({
                   materialId: line.materialId,
-                  stoneCount: Number(line.stoneCount),
-                  weight: line.weight || null,
+                  stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
+                  weight: line.weight,
                 }))
               : [],
         })
@@ -423,7 +425,8 @@ export function AssignWorkerDialog({
               Đá cấp cho thợ
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Chỉ giữ chỗ trong tồn, chưa xuất kho. Thủ kho xác nhận sau KCS thì xuất = số cấp − đá thừa trả lại.
+              Chỉ giữ chỗ trong tồn, chưa xuất kho. Cân cả gói lúc cấp; KCS cân gói thừa khi nhận lại, thủ kho xác nhận
+              thì xuất phần đã dùng theo tỷ lệ TL.
             </Typography>
           </Box>
           {stones.fields.map((field, index) => (
@@ -456,12 +459,24 @@ export function AssignWorkerDialog({
                                   {option.sku ?? '—'}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                                  Tồn {formatQty(option.qty)} {option.unit}
+                                  Khả dụng {formatQty(option.availableQty ?? option.qty)} {option.unit}
                                 </Typography>
                               </Stack>
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                                 {option.name}
                               </Typography>
+                              {Number(option.heldQty) > 0 || option.ledgerMismatch ? (
+                                <Typography variant="caption" color="warning.main" sx={{ display: 'block' }}>
+                                  {[
+                                    Number(option.heldQty) > 0
+                                      ? `Tồn thực ${formatQty(option.onHandQty ?? '0')} · đang giữ chỗ ${formatQty(option.heldQty ?? '0')}`
+                                      : null,
+                                    option.ledgerMismatch ? `Sổ ghi ${formatQty(option.qty)} — cần kiểm kê` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </Typography>
+                              ) : null}
                             </Box>
                           )
                         }}
@@ -494,20 +509,25 @@ export function AssignWorkerDialog({
                 <FormRow columns={2}>
                   <FormTextField<AssignValues>
                     name={`stones.${index}.stoneCount` as 'stones'}
-                    label="Số viên"
+                    label="Số viên (theo nhãn gói)"
                     type="number"
-                    required
+                    // Mã tính tồn theo viên phải biết số viên; ct / g chỉ cần TL gói.
+                    required={byUnit(index) == null}
+                    helperText={byUnit(index) ? 'Không bắt buộc — đá tính theo TL' : 'Mã tính tồn theo viên'}
                     slotProps={{ htmlInput: { min: 1, step: 1 } }}
                   />
-                  {byUnit(index) ? (
-                    <FormTextField<AssignValues>
-                      name={`stones.${index}.weight` as 'stones'}
-                      label="TL (g)"
-                      type="number"
-                      required
-                      helperText={`Mã tính theo ${byUnit(index)} — nhập TL của số viên cấp`}
-                    />
-                  ) : null}
+                  <FormTextField<AssignValues>
+                    name={`stones.${index}.weight` as 'stones'}
+                    label="TL cả gói (g)"
+                    type="number"
+                    required
+                    slotProps={{ htmlInput: { min: 0, step: 'any' } }}
+                    helperText={
+                      byUnit(index)
+                        ? `Mã tính theo ${byUnit(index)} — SL cấp suy từ TL gói`
+                        : 'KCS cân gói thừa để tính đá đã dùng'
+                    }
+                  />
                 </FormRow>
               </Stack>
             </Paper>
