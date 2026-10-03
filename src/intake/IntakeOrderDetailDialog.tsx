@@ -1,4 +1,5 @@
 import {
+  Alert,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -11,7 +12,7 @@ import { intakeImageStageSections } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 import { IntakeStatusChip } from './IntakeStatusChip'
 import { RequestTypeChip } from '../orders/OrderChips'
-import { formatDateShort } from '../orders/catalog'
+import { formatDateShort, formatDateTime } from '../orders/catalog'
 
 type IntakeOrderDetailDialogProps = {
   order: IntakeOrder | null
@@ -46,6 +47,21 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
                 <Typography variant="body2">{order.description}</Typography>
               ) : null}
             </Stack>
+
+            {order.status === 'REJECTED' ? (
+              <Alert severity="error" sx={{ py: 0.25 }}>
+                <Typography variant="body2">
+                  <strong>Lý do từ chối:</strong> {order.rejectReason?.trim() || 'Không ghi lý do'}
+                </Typography>
+                {order.rejectedByName || order.rejectedAt ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {[order.rejectedByName, order.rejectedAt ? formatDateTime(order.rejectedAt) : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Typography>
+                ) : null}
+              </Alert>
+            ) : null}
 
             <Divider />
 

@@ -299,7 +299,19 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
     returnedSilverWeight: done ? returnedSilver : null,
     btpRecoveredWeight: done ? btp : null,
     silverRecoveredWeight: done ? silverRecovered : null,
+    defectQty: done ? sumCounts(entries.map((entry) => entry.defectQty)) : null,
+    scrapS999Weight: done ? sumWeights(entries.map((entry) => entry.scrapS999Weight)) : null,
+    confirmedAt: null,
+    confirmedByName: null,
+    kcsRevisionCount: 0,
+    outputMaterialId: null,
+    defectReportedAt: null,
+    defectReportedByName: null,
+    defectNote: null,
     returnedStoneCount: done ? sumCounts(entries.map((entry) => entry.returnedStoneCount)) : null,
+    stoneLines: [],
+    stoneReturnedEarlyWeight: null,
+    stoneReturnedEarlyCount: null,
     silverLoss: loss != null ? String(loss) : null,
     silverLossPercent: lossPercent,
     stonesIn,
@@ -349,14 +361,16 @@ export function outcomeLines(
   ticket?: SubTicket,
 ): string[] {
   if (ticket) {
-    if (ticket.outcome !== outcome) return []
-    return [
+    const partial = outcome === 'DEFECT' ? partialDefectLines(order, ticket.id) : []
+    if (ticket.outcome !== outcome) return partial
+    const closed = [
       outcome === 'DEFECT' && ticket.outcomeStage ? `Khâu ${STAGE_LABEL[ticket.outcomeStage]}` : '',
       formatDateShort(ticket.outcomeAt, ''),
       ticket.outcomeByName ?? '',
       outcome === 'FINISH' && ticket.outcomeQty != null ? `Vào kho: ${ticket.outcomeQty}` : '',
       ticket.outcomeNote ? `Lý do: ${ticket.outcomeNote}` : '',
     ].filter(Boolean)
+    return partial.length ? [...partial, '', ...closed] : closed
   }
 
   if (outcome === 'FINISH') {
@@ -369,13 +383,42 @@ export function outcomeLines(
     ]
   }
 
+  // Tổng hợp cả đơn: hàng lỗi một phần của mọi phiếu con, ghi kèm mã phiếu.
+  const partial = order.subTickets.flatMap((item) =>
+    partialDefectLines(order, item.id).map((line) => (line.startsWith('Lý do:') ? line : `${item.code} · ${line}`)),
+  )
   // Lần ghi lỗi gần nhất — giữ lại cả khi đơn đã được làm lại, để phiếu còn dấu vết lỗi.
   const log = order.statusLogs.find((item) => item.toStatus === 'DEFECT')
-  if (!log) return []
+  if (!log) return partial
   return [
+    ...partial,
+    ...(partial.length ? [''] : []),
     log.fromStatus ? `Khâu ${STATUS_META[log.fromStatus].label}` : '',
     formatDateShort(log.changedAt),
     log.changedBy ?? '',
     log.note ? `Lý do: ${log.note}` : '',
   ].filter(Boolean)
+}
+
+/**
+ * Hàng lỗi một phần KCS tách ra ở Nguội / Vào đá: phiếu vẫn đi tiếp với hàng đạt, phần lỗi
+ * về kho NVL (sau khi thủ kho xác nhận) và có thể làm phiếu bù — ghi lại ở cột Lỗi.
+ */
+function partialDefectLines(order: ProductionOrderDetail, ticketId: string): string[] {
+  return order.stages
+    .filter((entry) => entry.subTicketId === ticketId && entry.returnedAt && (entry.defectQty ?? 0) > 0)
+    .flatMap((entry) => {
+      const rework = order.reworks?.find((item) => item.entryId === entry.id)
+      const head = [
+        `${STAGE_LABEL[entry.stage]}: ${entry.defectQty} sp lỗi`,
+        entry.btpRecoveredWeight ? `${formatQty(entry.btpRecoveredWeight)} g` : '',
+        entry.confirmedAt ? '' : 'chờ thủ kho',
+        rework ? `phiếu bù ${rework.code}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+      // Lý do KCS ghi lúc nhận lại; không có thì lấy lý do lúc báo lỗi khâu.
+      const reason = entry.defectReason?.trim() || entry.defectNote?.trim()
+      return reason ? [head, `Lý do: ${reason}`] : [head]
+    })
 }

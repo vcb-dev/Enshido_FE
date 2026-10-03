@@ -26,6 +26,9 @@ import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialReques
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { TicketMatrix } from '../orders/TicketMatrix'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
+import { DefectDialog } from '../orders/OutcomeDialogs'
+import { useOrderMutation } from '../orders/useOrderMutation'
+import { reportStageDefectApi, clearStageDefectApi } from '../api/productionOrders'
 import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 import {
   dueInfo,
@@ -36,6 +39,7 @@ import {
   StickyActions,
   TicketThumb,
 } from '../worker/WorkerUi'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 /** Phiếu mẹ (đơn chưa chia) và phiếu con quy về cùng một dạng để dùng chung một màn. */
 type TicketModel = {
@@ -70,14 +74,14 @@ export function SubTicketPage() {
     queryFn: () => getSubTicketOrderApi(ticketCode),
     enabled: Boolean(orderCode),
     staleTime: 30_000,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    ...liveRefresh(LIVE_REFRESH_MS.ticket),
   })
 
   if (detail.isLoading) return <TicketDetailSkeleton />
   const order = detail.data
-  const model = order ? toModel(order, parsed?.no ?? null) : null
+  // Đơn chỉ có một phiếu thì mã phiếu chính là mã đơn — mở bằng mã đơn vẫn ra phiếu đó.
+  const no = parsed?.no ?? (order?.subTickets.length === 1 ? order.subTickets[0].no : null)
+  const model = order ? toModel(order, no) : null
   if (!order || !model) {
     // Mất mạng mà phiếu này chưa từng được tải về: nói đúng lý do, đừng để thợ tưởng là
     // quét nhầm mã. Phiếu thuộc phần việc của mình thì màn "Phiếu của tôi" đã kéo sẵn.
@@ -168,8 +172,20 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   // ngoài xưởng không phải đứng đợi vạch sóng. Xem orders/subTicketActions.ts.
   const claim = useSubTicketAction('claim')
   const unclaim = useSubTicketAction('unclaim')
+  const accept = useSubTicketAction('accept')
   const submit = useSubTicketAction('submit')
   const unsubmit = useSubTicketAction('unsubmit')
+  const [defectOpen, setDefectOpen] = useState(false)
+  const reportDefect = useOrderMutation(
+    order.code,
+    (note: string) => reportStageDefectApi(order.code, model.no as number, note),
+    'Đã báo lỗi khâu — mang hàng tới KCS cân lại',
+  )
+  const clearDefect = useOrderMutation(
+    order.code,
+    () => clearStageDefectApi(order.code, model.no as number),
+    'Đã bỏ báo lỗi',
+  )
   const queued = useQueuedSubTickets().get(model.code)
   // Đang gửi lên máy chủ thì nút quay; nằm chờ mạng thì chỉ khoá — chip "Chờ gửi" đã nói rõ.
   const sending = (action: SubTicketAction) => queued?.action === action && !queued.waiting
@@ -207,7 +223,10 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       { label: 'Số lượng', value: `${model.availableQty} sp` },
       { label: 'Bạc hiện có', value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—' },
     ]
-    if (isWorker) {
+    if (model.no != null) {
+      // Phiếu con không còn tự nhận: thủ kho chỉ định thợ rồi thợ bấm "Nhận hàng".
+      hint = 'Phiếu con do thủ kho chỉ định thợ — nhờ thủ kho chỉ định lại khâu này.'
+    } else if (isWorker) {
       actions.push(
         <Button key="claim" variant="contained" size="large" disabled={busy} loading={sending('claim')} onClick={() => claim.mutate(vars)}>
           Nhận phiếu · {STAGE_LABEL[model.pendingStage]}
@@ -218,12 +237,25 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     }
   } else if (model.state === 'CLAIMED' && model.pendingStage) {
     headline = `${mine ? 'Bạn' : `Thợ ${model.claimedByName ?? ''}`} đã nhận khâu ${STAGE_LABEL[model.pendingStage]}`
-    hint = `Chờ người giao ${stageIssuesStock(model.pendingStage) ? 'xuất NVL, ' : ''}cân bạc và xác nhận giao.`
+    // Nguội: thợ quét QR bấm nhận là xong (hệ thống tự xuất phôi). Khâu khác chờ người giao.
+    const selfAccept = model.pendingStage === 'FILING' || model.pendingStage === 'STONE_SETTING'
+    hint = selfAccept
+      ? mine
+        ? 'Nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất phôi khỏi kho.'
+        : 'Chờ thợ được chỉ định quét QR nhận hàng.'
+      : `Chờ người giao ${stageIssuesStock(model.pendingStage) ? 'xuất NVL, ' : ''}cân bạc và xác nhận giao.`
     facts = [
       { label: 'Nhận lúc', value: formatDateShort(model.claimedAt) },
       { label: 'Số lượng', value: `${model.availableQty} sp` },
       { label: 'Bạc hiện có', value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—' },
     ]
+    if (mine && selfAccept) {
+      actions.push(
+        <Button key="accept" variant="contained" size="large" disabled={busy} loading={sending('accept')} onClick={() => accept.mutate(vars)}>
+          Nhận hàng · {STAGE_LABEL[model.pendingStage]}
+        </Button>,
+      )
+    }
     if (mine) {
       actions.push(
         <Button key="unclaim" variant="outlined" color="inherit" size="large" disabled={busy} loading={sending('unclaim')} onClick={() => unclaim.mutate(vars)}>
@@ -248,6 +280,22 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       { label: 'Bạc vào khâu', value: openEntry.silverIn ? `${formatQty(openEntry.silverIn)} g` : '—' },
       { label: 'Người giao', value: openEntry.handedByName },
     ]
+    if (openEntry.defectReportedAt) {
+      hint = `Đã báo lỗi khâu ${STAGE_LABEL[openEntry.stage]}: ${openEntry.defectNote ?? ''} — mang hàng tới KCS cân lại.`
+      if (workingIsMine) {
+        actions.push(
+          <Button key="clear-defect" variant="outlined" color="inherit" size="large" disabled={busy || clearDefect.isPending} onClick={() => clearDefect.mutate(undefined)}>
+            Bỏ báo lỗi
+          </Button>,
+        )
+      }
+    } else if (workingIsMine && model.no != null) {
+      actions.push(
+        <Button key="defect" variant="outlined" color="error" size="large" disabled={busy} onClick={() => setDefectOpen(true)}>
+          Báo lỗi · {STAGE_LABEL[openEntry.stage]}
+        </Button>,
+      )
+    }
     if (workingIsMine && model.state === 'WORKING') {
       actions.push(
         <Button key="submit" variant="contained" size="large" disabled={busy} loading={sending('submit')} onClick={() => submit.mutate(vars)}>
@@ -377,6 +425,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
                   ticket={order.subTickets.find((item) => item.no === model.no)!}
                   isAdmin={isAdmin}
                   showHeader={false}
+                  showQr={false}
                 />
               )}
             </Box>
@@ -401,6 +450,13 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       </Box>
 
       {actions.length ? <StickyActions>{actions}</StickyActions> : null}
+      <DefectDialog
+        open={defectOpen}
+        ticketCode={model.code}
+        saving={reportDefect.isPending}
+        onClose={() => setDefectOpen(false)}
+        onSave={(note) => reportDefect.mutate(note, { onSuccess: () => setDefectOpen(false) })}
+      />
     </Stack>
   )
 }

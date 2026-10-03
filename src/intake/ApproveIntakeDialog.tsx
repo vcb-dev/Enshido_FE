@@ -1,16 +1,10 @@
-import { useEffect, useState } from 'react'
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { useEffect } from 'react'
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
+import { useForm, useWatch } from 'react-hook-form'
 import type { IntakeOrder } from '../api/intakeOrders'
+import { DialogForm, FormCheckbox } from '../components/ui'
+
+type Values = { hasMold: boolean }
 
 type ApproveIntakeDialogProps = {
   order: IntakeOrder | null
@@ -20,52 +14,40 @@ type ApproveIntakeDialogProps = {
 }
 
 export function ApproveIntakeDialog({ order, saving, onClose, onConfirm }: ApproveIntakeDialogProps) {
-  const [hasMold, setHasMold] = useState(false)
+  const form = useForm<Values>({ defaultValues: { hasMold: false } })
+  const hasMold = useWatch({ control: form.control, name: 'hasMold' })
 
   useEffect(() => {
-    if (order) setHasMold(false)
-  }, [order])
+    if (order) form.reset({ hasMold: false })
+  }, [order, form])
 
   return (
     <Dialog open={Boolean(order)} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Duyệt đơn {order?.code ?? ''}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            Xác nhận chuyển đơn từ <strong>Chờ duyệt</strong> sang{' '}
-            <strong>Đã duyệt · Chờ sản xuất</strong>.
-          </Typography>
-          {order ? (
-            <Typography variant="body2">
-              Sản phẩm: <strong>{order.productName?.trim() || '—'}</strong>
-              {order.qty ? ` · SL ${order.qty}` : null}
+      <DialogForm form={form} onSubmit={(values) => onConfirm(values.hasMold)}>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {order ? (
+              <Typography variant="body2">
+                Sản phẩm: <strong>{order.productName?.trim() || '—'}</strong>
+                {order.qty ? ` · SL ${order.qty}` : null}
+              </Typography>
+            ) : null}
+            <FormCheckbox<Values> name="hasMold" label="Đã có khuôn" disabled={saving} />
+            <Typography variant="body2" color="text.secondary">
+              {hasMold ? 'Bỏ qua bước 3D.' : 'Cần vẽ 3D trước khi đúc.'}
             </Typography>
-          ) : null}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={hasMold}
-                onChange={(_, checked) => setHasMold(checked)}
-                disabled={saving}
-              />
-            }
-            label="Đã có khuôn"
-          />
-          <Typography variant="body2" color="text.secondary">
-            {hasMold
-              ? 'Có khuôn — bỏ qua bước vẽ 3D, đơn sang thẳng Chờ SX · Đã có 3D / khuôn (C) để thợ sáp bơm sáp.'
-              : 'Chưa có khuôn (mặc định) — cần vẽ 3D để in resin trước khi đúc.'}
-          </Typography>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button variant="contained" disabled={saving || !order} onClick={() => onConfirm(hasMold)}>
-          {saving ? 'Đang duyệt…' : 'Xác nhận duyệt'}
-        </Button>
-      </DialogActions>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="contained" disabled={saving || !order}>
+            {saving ? 'Đang duyệt…' : 'Xác nhận duyệt'}
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }

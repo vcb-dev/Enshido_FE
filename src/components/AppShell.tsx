@@ -33,7 +33,6 @@ import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
-import ContentCutIcon from '@mui/icons-material/ContentCut'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import NorthIcon from '@mui/icons-material/North'
@@ -48,11 +47,11 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, canAny, Permission } from '../auth/permissions'
+import { can, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets } from '../intake/intake3dAccess'
 import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
-import { WAREHOUSES, WAREHOUSE_SECTIONS, warehousePath, type WarehouseDef } from '../warehouses/catalog'
+import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
 const SIDEBAR_OPEN_KEY = 'enshido.sidebarOpen'
@@ -359,7 +358,6 @@ function DrawerNav({
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
-  const { user } = useAuth()
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box
@@ -387,9 +385,6 @@ function DrawerNav({
         ) : null}
         {showCastingOrders ? (
           <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
-        ) : null}
-        {canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC) ? (
-          <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
         ) : null}
         {showMyTickets ? (
           <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
@@ -494,7 +489,7 @@ function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
       </ListItemButton>
       <Collapse in={open} timeout="auto" unmountOnExit>
         <List dense disablePadding sx={{ pl: 2 }}>
-          {WAREHOUSE_SECTIONS.map((s) => (
+          {sectionsOf(warehouse).map((s) => (
             <NavItem
               key={s.code}
               to={warehousePath(warehouse, s.code)}

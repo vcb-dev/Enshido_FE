@@ -36,10 +36,11 @@ import {
   IssueMaterialDialog,
   KIND_LABEL,
   RejectMaterialDialog,
-  REQUEST_STATUS_META,
+  requestStatusMeta,
 } from '../orders/MaterialRequests'
 import { seedProductionOrder } from '../orders/orderCache'
 import { removeMaterialRequestFromCache } from '../orders/materialRequestsCache'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 const TABS: Array<{ value: MaterialRequestStatus; label: string }> = [
   { value: 'PENDING', label: 'Chờ xuất' },
@@ -62,9 +63,7 @@ export function MaterialRequestsPage() {
     queryKey: ['material-requests', status],
     queryFn: () => listMaterialRequestsApi(status),
     staleTime: 30_000,
-    refetchInterval: status === 'PENDING' ? 45_000 : false,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    ...liveRefresh(status === 'PENDING' ? LIVE_REFRESH_MS.list : false),
   })
 
   function afterMaterialRequestHandled(
@@ -147,14 +146,14 @@ export function MaterialRequestsPage() {
                   <TableCell>Thợ</TableCell>
                   <TableCell>Mã NVL</TableCell>
                   <TableCell align="right">Xin</TableCell>
-                  <TableCell align="right">{status === 'PENDING' ? 'Tồn kho' : 'Đã xuất'}</TableCell>
+                  <TableCell align="right">{status === 'PENDING' ? 'Khả dụng' : 'Đã xuất'}</TableCell>
                   <TableCell>{status === 'PENDING' ? 'Thao tác' : 'Xử lý'}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.map((row) => {
                   const own = row.requestedByUserId === user?.id
-                  const short = Number(row.stockQty) < Number(row.requestedQty)
+                  const short = Number(row.availableQty) < Number(row.requestedQty)
                   return (
                     <TableRow key={row.id} hover>
                       <TableCell>{formatDateShort(row.requestedAt)}</TableCell>
@@ -186,7 +185,21 @@ export function MaterialRequestsPage() {
                             color={short ? 'error.main' : undefined}
                             sx={{ fontSize: 'inherit' }}
                           >
-                            {formatQty(row.stockQty)} {row.material.unit}
+                            {formatQty(row.availableQty)} {row.material.unit}
+                            <Typography
+                              variant="caption"
+                              color={row.ledgerMismatch ? 'warning.main' : 'text.secondary'}
+                              sx={{ display: 'block' }}
+                            >
+                              {[
+                                Number(row.heldQty) > 0
+                                  ? `thực ${formatQty(row.onHandQty)} − giữ chỗ ${formatQty(row.heldQty)}`
+                                  : 'khả dụng',
+                                row.ledgerMismatch ? `sổ ghi ${formatQty(row.stockQty)}, cần kiểm kê` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </Typography>
                           </Typography>
                         ) : row.status === 'ISSUED' ? (
                           <>
@@ -230,8 +243,8 @@ export function MaterialRequestsPage() {
                             <Chip
                               size="small"
                               variant="outlined"
-                              color={REQUEST_STATUS_META[row.status].color}
-                              label={REQUEST_STATUS_META[row.status].label}
+                              color={requestStatusMeta(row).color}
+                              label={requestStatusMeta(row).label}
                             />
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                               {row.handledByName} · {formatDateShort(row.handledAt)}

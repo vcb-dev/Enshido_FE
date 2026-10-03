@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   clearSubTicketOutcomeApi,
-  setSubTicketOutcomeApi,
+  finishSubTicketApi,
   type ProductionOrderDetail,
   type SubTicket,
 } from '../api/productionOrders'
-import { LAST_STAGE, lastStageDone, STAGE_LABEL } from './catalog'
+import { LAST_STAGE, lastStageDone, STAGE_LABEL, subTicketUrl } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
-import { DefectDialog, FinishDialog } from './OutcomeDialogs'
+import { FinishDialog } from './OutcomeDialogs'
 import { TicketMatrix } from './TicketMatrix'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -25,6 +26,7 @@ export function SubTicketMatrixCard({
   isAdmin,
   linkToTicket = false,
   showHeader = true,
+  showQr = true,
   embedded = false,
 }: {
   order: ProductionOrderDetail
@@ -34,16 +36,16 @@ export function SubTicketMatrixCard({
   linkToTicket?: boolean
   /** Trang phiếu con đã có tên phiếu ở đầu trang nên bỏ dòng tiêu đề này. */
   showHeader?: boolean
+  /** Mã QR của chính phiếu con này — thợ quét để vào phiếu, nhận việc và báo xong từng khâu. */
+  showQr?: boolean
   /** Dùng bên trong accordion/card cha thì bỏ nền, viền và khoảng đệm lồng nhau. */
   embedded?: boolean
 }) {
-  const [defectOpen, setDefectOpen] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
 
   const outcome = useOrderMutation(
     order.code,
-    (vars: { outcome: 'DEFECT' | 'FINISH'; note?: string }) =>
-      setSubTicketOutcomeApi(order.code, ticket.no, vars.outcome, vars.note),
+    (vars: { note?: string }) => finishSubTicketApi(order.code, ticket.no, vars.note),
     `Đã chốt phiếu ${ticket.code}`,
   )
   const clear = useOrderMutation(
@@ -57,13 +59,12 @@ export function SubTicketMatrixCard({
   const settled = ticket.outcome != null
   const idle = ticket.state === 'IDLE'
   const delivered = order.status === 'DELIVERED'
-  // Chốt Lỗi / Hoàn thiện là việc của KCS.
+  // Hoàn thiện là việc của KCS; Lỗi tự chốt khi KCS nhận lại 0 sản phẩm ở một khâu.
   const { user } = useAuth()
   const isQc = can(user, Permission.PRODUCTION_QC)
   const canFinish = isQc && idle && ticket.entryCount > 0 && !delivered
   // Hoàn thiện phải đi hết phiếu: chưa có khâu Xi được KCS nhận lại thì nút còn khoá.
   const finishReady = lastStageDone(order.stages.filter((entry) => entry.subTicketId === ticket.id))
-  const canDefect = isQc && idle && !delivered
   const shipped = (order.finishedGoods?.shippedQty ?? 0) > 0
 
   return (
@@ -71,26 +72,43 @@ export function SubTicketMatrixCard({
       elevation={embedded ? 0 : 1}
       sx={embedded ? { p: 0, bgcolor: 'transparent' } : { p: { xs: 1, md: 1.5 } }}
     >
-      {showHeader ? (
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {linkToTicket ? (
-              <Box component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ color: 'inherit' }}>
-                Phiếu {ticket.code}
+      {showHeader || showQr ? (
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+            {showHeader ? (
+              <>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  {linkToTicket ? (
+                    <Box component={RouterLink} to={`/tickets/${ticket.code}`} sx={{ color: 'inherit' }}>
+                      Phiếu {ticket.code}
+                    </Box>
+                  ) : (
+                    `Phiếu ${ticket.code}`
+                  )}
+                </Typography>
+                <SubTicketStateChip state={ticket.state} />
+                <Typography variant="body2" color="text.secondary">
+                  {ticket.qty} sp
+                  {ticket.note ? ` · ${ticket.note}` : ''}
+                </Typography>
+              </>
+            ) : null}
+          </Stack>
+          {showQr ? (
+            <Stack spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
+              <Box
+                component={RouterLink}
+                to={`/tickets/${ticket.code}`}
+                aria-label={`Mở phiếu ${ticket.code}`}
+                sx={{ p: 0.75, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1, lineHeight: 0 }}
+              >
+                <QRCodeSVG value={subTicketUrl(ticket.code)} size={88} marginSize={0} />
               </Box>
-            ) : (
-              `Phiếu ${ticket.code}`
-            )}
-          </Typography>
-          <SubTicketStateChip state={ticket.state} />
-          <Typography variant="body2" color="text.secondary">
-            {ticket.qty} sp
-            {ticket.note ? ` · ${ticket.note}` : ''}
-          </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                {ticket.code}
+              </Typography>
+            </Stack>
+          ) : null}
         </Stack>
       ) : null}
 
@@ -116,10 +134,6 @@ export function SubTicketMatrixCard({
                 Gỡ ghi lỗi
               </Button>
             ) : null
-          ) : canDefect ? (
-            <Button size="small" variant="outlined" color="error" onClick={() => setDefectOpen(true)}>
-              Ghi lỗi
-            </Button>
           ) : null,
           FINISH: settled ? (
             ticket.outcome === 'FINISH' && isAdmin && !shipped ? (
@@ -157,15 +171,6 @@ export function SubTicketMatrixCard({
         }}
       />
 
-      <DefectDialog
-        open={defectOpen}
-        ticketCode={ticket.code}
-        saving={outcome.isPending}
-        onClose={() => setDefectOpen(false)}
-        onSave={(note) =>
-          outcome.mutate({ outcome: 'DEFECT', note }, { onSuccess: () => setDefectOpen(false) })
-        }
-      />
       <FinishDialog
         open={finishOpen}
         ticketCode={ticket.code}
@@ -173,7 +178,7 @@ export function SubTicketMatrixCard({
         saving={outcome.isPending}
         onClose={() => setFinishOpen(false)}
         onSave={(note) =>
-          outcome.mutate({ outcome: 'FINISH', note }, { onSuccess: () => setFinishOpen(false) })
+          outcome.mutate({ note }, { onSuccess: () => setFinishOpen(false) })
         }
       />
     </Paper>

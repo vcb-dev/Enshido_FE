@@ -38,13 +38,13 @@ export type { PageHeaderProps } from './PageHeader'
 export { FILTER_FIELD_SX, PanelToolbar } from './PanelToolbar'
 export type { PanelToolbarProps } from './PanelToolbar'
 
-export { Form, FormActions, FormRow } from './form/Form'
+export { DialogForm, Form, FormActions, FormRow } from './form/Form'
 export type { FormProps } from './form/Form'
 
 export { CrudDialogShell } from './form/CrudDialogShell'
 export type { CrudDialogShellProps } from './form/CrudDialogShell'
 
-export { EditReasonBlock } from './form/EditReasonBlock'
+export { EditReasonBlock, FormEditReasonBlock } from './form/EditReasonBlock'
 export type { EditLogTarget } from './form/EditReasonBlock'
 
 export { FormTextField } from './form/FormTextField'
@@ -94,3 +94,6 @@ export {
   TabsSkeleton,
   TicketDetailSkeleton,
 } from './Skeletons'
+
+export { ConfirmDialogHost, confirmDialog } from './ConfirmDialog'
+export type { ConfirmOptions } from './ConfirmDialog'

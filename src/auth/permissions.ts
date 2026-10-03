@@ -17,7 +17,7 @@ export const Permission = {
   PRODUCTION_WORKER: 'production.worker',
   /** Bước 1: tạo đơn. */
   INTAKE_CREATE: 'intake.create',
-  /** Bước 2: quản lý sản xuất duyệt / từ chối / sửa / xoá đơn. */
+  /** Bước 2: thủ kho duyệt / từ chối / sửa / xoá đơn. */
   INTAKE_APPROVE: 'intake.approve',
   /** Bước 3–4: thợ 3D gắn link 3D, in sáp resin. */
   PRODUCTION_MODEL3D: 'production.model3d',
@@ -25,12 +25,10 @@ export const Permission = {
   PRODUCTION_WAX: 'production.wax',
   /** Bước 8–9: thợ đúc bắt đầu đúc và nhập kết quả. */
   PRODUCTION_CAST: 'production.cast',
-  /** Thủ kho: xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây, chia phiếu, duyệt xuất NVL. */
+  /** Thủ kho: xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây thông (cân phôi), chia phiếu, duyệt xuất NVL. */
   WAREHOUSE_KEEPER: 'warehouse.keeper',
-  /** KCS: cắt cây, nhận lại hàng, chốt Lỗi / Hoàn thiện. */
+  /** KCS: nhận lại hàng, chốt Lỗi / Hoàn thiện. */
   PRODUCTION_QC: 'production.qc',
-  /** Quản lý xưởng: kiêm quản lý SX + thủ kho + KCS (BE tự mở rộng thành 4 quyền trên). */
-  PRODUCTION_MANAGER: 'production.manager',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]

@@ -110,7 +110,8 @@ export function FinishedGoodsPage({
   section?: WarehouseSectionCode
   hideHeader?: boolean
 } = {}) {
-  const tab: TabCode = section ?? 'stock'
+  // Kho thành phẩm không có mục Xuất nháp.
+  const tab: TabCode = section && section !== 'drafts' ? section : 'stock'
   const warehouse = warehouseByCode(THANH_PHAM_WAREHOUSE)
 
   return (
