@@ -12,6 +12,9 @@ export type CastingSlipOrderLine = {
   qty: number
   status: string
   productionOrderCode: string | null
+  /** Số liệu phôi đã cắt; có thể có trên phiếu cũ thiếu trọng lượng cây còn lại. */
+  blankQty?: number | null
+  blankWeightGram?: string | null
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
 }
@@ -256,7 +259,12 @@ export function confirmCastingSlipApi(id: string) {
 export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/cut`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      blanks: payload.blanks,
+      restWeightGram: payload.restWeightGram,
+      restMaterialId: payload.restMaterialId,
+      restImages: payload.restImages,
+    }),
   })
 }
 
@@ -273,4 +281,13 @@ export function listRestMaterialOptionsApi() {
 /** Thủ kho báo lỗi đúc — trả về phiếu làm lại (Chờ đúc). */
 export function rejectCastingSlipApi(id: string) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/reject-cast`, { method: 'POST', body: '{}' })
+}
+
+export type CutCastingSlipItem = ConfirmCastingSlipPayload & { slipId: string }
+
+export function cutCastingSlipsApi(items: CutCastingSlipItem[]) {
+  return apiFetch<CastingSlip[]>('/casting-slips/cut-many', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  })
 }
