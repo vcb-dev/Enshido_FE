@@ -306,7 +306,7 @@ export function ProductionOrderDetailPage() {
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
       <PageHeader
-        title={`Lệnh ${order.code}`}
+        title={`Lệnh ${order.intakeSxCode || order.code}`}
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
             <StatusChip status={order.status} size="medium" />
@@ -320,7 +320,7 @@ export function ProductionOrderDetailPage() {
             <Link component={RouterLink} to="/orders" underline="hover" color="inherit">
               Lệnh sản xuất
             </Link>
-            <Typography color="text.primary">{order.code}</Typography>
+            <Typography color="text.primary">{order.intakeSxCode || order.code}</Typography>
           </Breadcrumbs>
         }
         actions={

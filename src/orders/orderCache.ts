@@ -151,6 +151,8 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
   return {
     id: order.id,
     code: order.code,
+    intakeOrderCode: order.intakeOrderCode,
+    intakeSxCode: order.intakeSxCode,
     status: order.status,
     source: order.source,
     btpSku: order.btp?.sku ?? order.btpSku ?? null,

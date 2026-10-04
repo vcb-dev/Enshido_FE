@@ -17,14 +17,14 @@ export function patchIntakePipelineCounts(
   from: IntakeOrderStatus | undefined,
   to: IntakeOrderStatus | undefined,
 ) {
-  if (!from || !to || from === to) return
+  if (from === to) return
   queryClient.setQueriesData<IntakePipelineCounts>(
     { queryKey: ['intake-orders', 'pipeline-counts'] },
     (old) => {
       if (!old) return old
       const next = { ...old }
-      if (from in next) next[from] = Math.max(0, (next[from] ?? 0) - 1)
-      next[to] = (next[to] ?? 0) + 1
+      if (from && from in next) next[from] = Math.max(0, (next[from] ?? 0) - 1)
+      if (to) next[to] = (next[to] ?? 0) + 1
       return next
     },
   )
