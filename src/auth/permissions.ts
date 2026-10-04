@@ -27,7 +27,7 @@ export const Permission = {
   PRODUCTION_CAST: 'production.cast',
   /** Thủ kho: xác nhận sáp / đúc xong, lên phiếu đúc, cắt cây thông (cân phôi), chia phiếu, duyệt xuất NVL. */
   WAREHOUSE_KEEPER: 'warehouse.keeper',
-  /** KCS: nhận lại hàng, chốt Lỗi / Hoàn thiện. */
+  /** QC: nhận lại hàng, chốt Lỗi / Hoàn thiện. */
   PRODUCTION_QC: 'production.qc',
 } as const
 

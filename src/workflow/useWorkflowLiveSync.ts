@@ -28,6 +28,7 @@ function applyRevisionDelta(
   if (prev.production !== next.production) {
     void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
+    void queryClient.invalidateQueries({ queryKey: ['qc-tickets'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['production-order'], refetchType: 'active' })
   }

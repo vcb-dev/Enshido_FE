@@ -21,17 +21,17 @@ export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'worker_wax', label: 'Thợ sáp' },
   { value: 'worker_casting', label: 'Thợ đúc' },
   { value: 'warehouse', label: 'Thủ kho' },
-  { value: 'kcs', label: 'KCS' },
+  { value: 'kcs', label: 'QC' },
 ]
 
 const HIDDEN_STAFF_JOB_PRESETS = new Set<StaffJobPreset>(['staff'])
 
-/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, KCS, các loại thợ). */
+/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, QC, các loại thợ). */
 export function staffJobSelectOptions() {
   return STAFF_JOB_OPTIONS.filter((o) => !HIDDEN_STAFF_JOB_PRESETS.has(o.value))
 }
 
-/** Tài khoản Nhân viên cũ — mở form sửa thì chọn sẵn KCS, admin đổi vai trò mới. */
+/** Tài khoản Nhân viên cũ — mở form sửa thì chọn sẵn QC, admin đổi vai trò mới. */
 export function staffJobPresetForEditForm(preset: StaffJobPreset): StaffJobPreset {
   return HIDDEN_STAFF_JOB_PRESETS.has(preset) ? 'kcs' : preset
 }
@@ -64,7 +64,7 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
   }
 }
 
-/** Quyền theo việc — gắn với Vai trò (Thủ kho / KCS / Thợ 3D / sáp / đúc / SX), không tick trên form màn hình. */
+/** Quyền theo việc — gắn với Vai trò (Thủ kho / QC / Thợ 3D / sáp / đúc / SX), không tick trên form màn hình. */
 export const STAGE_ROLE_PERMISSIONS: PermissionCode[] = [
   Permission.PRODUCTION_MODEL3D,
   Permission.PRODUCTION_WAX,

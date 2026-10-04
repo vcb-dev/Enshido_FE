@@ -4,7 +4,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import EventIcon from '@mui/icons-material/Event'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import ScaleIcon from '@mui/icons-material/Scale'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { can, isWorkerOnly, Permission } from '../auth/permissions'
@@ -24,11 +24,19 @@ import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from 
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
+import { CollapsibleMatrix } from '../orders/CollapsibleMatrix'
 import { TicketMatrix } from '../orders/TicketMatrix'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { DefectDialog } from '../orders/OutcomeDialogs'
 import { useOrderMutation } from '../orders/useOrderMutation'
-import { reportStageDefectApi, clearStageDefectApi } from '../api/productionOrders'
+import {
+  clearStageDefectApi,
+  reportStageDefectApi,
+  returnStageApi,
+  reviseReturnApi,
+  type ReturnPayload,
+} from '../api/productionOrders'
+import { KcsReturnDialog } from '../orders/StageDialogs'
 import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 import {
   dueInfo,
@@ -40,6 +48,7 @@ import {
   TicketThumb,
 } from '../worker/WorkerUi'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
+import { KcsImages } from '../orders/KcsImages'
 
 /** Phiếu mẹ (đơn chưa chia) và phiếu con quy về cùng một dạng để dùng chung một màn. */
 type TicketModel = {
@@ -141,7 +150,11 @@ function toModel(order: ProductionOrderDetail, no: number | null): TicketModel |
     entries: order.stages.filter((entry) => entry.subTicketId === ticket.id),
     note: ticket.note,
     outcome: ticket.outcome
-      ? { label: ticket.outcome === 'DEFECT' ? 'Lỗi' : 'Hoàn thiện', at: ticket.outcomeAt, by: ticket.outcomeByName }
+      ? {
+          label: ticket.outcome === 'DEFECT' ? 'Lỗi' : 'Hoàn thiện',
+          at: ticket.outcomeAt,
+          by: ticket.outcomeByName,
+        }
       : null,
   }
 }
@@ -176,10 +189,20 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const submit = useSubTicketAction('submit')
   const unsubmit = useSubTicketAction('unsubmit')
   const [defectOpen, setDefectOpen] = useState(false)
+  // QC cân lại / sửa lại ngay trên chi tiết phiếu (cùng hộp thoại với màn Phiếu QC).
+  const canQc = isAdmin || can(user, Permission.PRODUCTION_QC)
+  const queryClient = useQueryClient()
+  const [qcEntry, setQcEntry] = useState<StageEntry | null>(null)
+  const saveReturn = useOrderMutation(
+    order.code,
+    ({ entry, payload }: { entry: StageEntry; payload: ReturnPayload }) =>
+      entry.returnedAt ? reviseReturnApi(order.code, entry.id, payload) : returnStageApi(order.code, entry.id, payload),
+    'Đã lưu kết quả QC',
+  )
   const reportDefect = useOrderMutation(
     order.code,
     (note: string) => reportStageDefectApi(order.code, model.no as number, note),
-    'Đã báo lỗi khâu — mang hàng tới KCS cân lại',
+    'Đã báo lỗi khâu — mang hàng tới QC cân lại',
   )
   const clearDefect = useOrderMutation(
     order.code,
@@ -221,7 +244,10 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     headline = `Khâu ${STAGE_LABEL[model.pendingStage]} đang chờ thợ nhận`
     facts = [
       { label: 'Số lượng', value: `${model.availableQty} sp` },
-      { label: 'Bạc hiện có', value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—' },
+      {
+        label: 'Bạc hiện có',
+        value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—',
+      },
     ]
     if (model.no != null) {
       // Phiếu con không còn tự nhận: thủ kho chỉ định thợ rồi thợ bấm "Nhận hàng".
@@ -247,7 +273,10 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     facts = [
       { label: 'Nhận lúc', value: formatDateShort(model.claimedAt) },
       { label: 'Số lượng', value: `${model.availableQty} sp` },
-      { label: 'Bạc hiện có', value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—' },
+      {
+        label: 'Bạc hiện có',
+        value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—',
+      },
     ]
     if (mine && selfAccept) {
       actions.push(
@@ -270,18 +299,21 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
         : `${workingIsMine ? 'Bạn' : `Thợ ${openEntry.craftsmanName}`} đang làm khâu ${STAGE_LABEL[openEntry.stage]}`
     hint =
       model.state === 'SUBMITTED'
-        ? `Báo xong lúc ${formatDateShort(openEntry.submittedAt)} — mang hàng tới KCS cân lại.`
+        ? `Báo xong lúc ${formatDateShort(openEntry.submittedAt)} — mang hàng tới QC cân lại.`
         : workingIsMine
-          ? 'Làm xong thì bấm "Đã làm xong" rồi mang hàng tới KCS cân lại.'
+          ? 'Làm xong thì bấm "Đã làm xong" rồi mang hàng tới QC cân lại.'
           : null
     facts = [
       { label: 'Bắt đầu', value: formatDateShort(openEntry.handedAt) },
       { label: 'SL nhận', value: `${openEntry.handedQty ?? '—'} sp` },
-      { label: 'Bạc vào khâu', value: openEntry.silverIn ? `${formatQty(openEntry.silverIn)} g` : '—' },
+      {
+        label: 'Bạc vào khâu',
+        value: openEntry.silverIn ? `${formatQty(openEntry.silverIn)} g` : '—',
+      },
       { label: 'Người giao', value: openEntry.handedByName },
     ]
     if (openEntry.defectReportedAt) {
-      hint = `Đã báo lỗi khâu ${STAGE_LABEL[openEntry.stage]}: ${openEntry.defectNote ?? ''} — mang hàng tới KCS cân lại.`
+      hint = `Đã báo lỗi khâu ${STAGE_LABEL[openEntry.stage]}: ${openEntry.defectNote ?? ''} — mang hàng tới QC cân lại.`
       if (workingIsMine) {
         actions.push(
           <Button key="clear-defect" variant="outlined" color="inherit" size="large" disabled={busy || clearDefect.isPending} onClick={() => clearDefect.mutate(undefined)}>
@@ -289,7 +321,8 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           </Button>,
         )
       }
-    } else if (workingIsMine && model.no != null) {
+    } else if ((workingIsMine || canQc) && model.no != null && model.state !== 'SUBMITTED') {
+      // Thợ đã báo xong thì QC ghi hàng lỗi ngay trong hộp "QC cân lại" — không cần nút báo lỗi riêng.
       actions.push(
         <Button key="defect" variant="outlined" color="error" size="large" disabled={busy} onClick={() => setDefectOpen(true)}>
           Báo lỗi · {STAGE_LABEL[openEntry.stage]}
@@ -298,15 +331,64 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     }
     if (workingIsMine && model.state === 'WORKING') {
       actions.push(
-        <Button key="submit" variant="contained" size="large" disabled={busy} loading={sending('submit')} onClick={() => submit.mutate(vars)}>
-          Đã làm xong · nộp KCS
+        <Button
+          key="submit"
+          variant="contained"
+          size="large"
+          disabled={busy}
+          loading={sending('submit')}
+          onClick={() => submit.mutate(vars)}
+        >
+          Đã làm xong · nộp QC
         </Button>,
       )
+    }
+    // QC cân lại khi thợ đã báo xong hoặc khâu đã bị báo lỗi — khớp điều kiện ở BE.
+    if (canQc && (model.state === 'SUBMITTED' || openEntry.defectReportedAt)) {
+      if (openEntry.pendingRequestCount > 0) {
+        hint = `Còn ${openEntry.pendingRequestCount} yêu cầu xuất NVL chờ kho xử lý — xử lý xong QC mới cân được.`
+      } else {
+        actions.push(
+          <Button
+            key="qc-return"
+            variant="contained"
+            size="large"
+            color={openEntry.defectReportedAt ? 'error' : 'primary'}
+            disabled={busy}
+            onClick={() => setQcEntry(openEntry)}
+          >
+            {openEntry.defectReportedAt ? 'QC cân hàng lỗi' : 'QC cân lại'}
+          </Button>,
+        )
+      }
     }
     if (workingIsMine && model.state === 'SUBMITTED') {
       actions.push(
         <Button key="unsubmit" variant="outlined" color="inherit" size="large" disabled={busy} loading={sending('unsubmit')} onClick={() => unsubmit.mutate(vars)}>
           Bỏ báo xong
+        </Button>,
+      )
+    }
+  } else if (model.state === 'CONFIRMING' && last) {
+    headline = `QC đã cân khâu ${STAGE_LABEL[last.stage]} — có hàng lỗi`
+    hint = 'Chờ thủ kho kiểm tra và xác nhận lỗi. Trong lúc chờ QC còn sửa lại được.'
+    facts = [
+      { label: 'QC cân lúc', value: formatDateShort(last.returnedAt) },
+      { label: 'Đạt', value: `${last.returnedQty ?? '—'} sp` },
+      { label: 'Lỗi', value: `${last.defectQty ?? 0} sp` },
+      { label: 'Người QC', value: last.returnedByName ?? '—' },
+    ]
+    if (canQc) {
+      actions.push(
+        <Button
+          key="qc-revise"
+          variant="outlined"
+          color="inherit"
+          size="large"
+          disabled={busy || last.kcsRevisionCount >= 3}
+          onClick={() => setQcEntry(last)}
+        >
+          QC sửa lại ({last.kcsRevisionCount}/3)
         </Button>,
       )
     }
@@ -325,7 +407,13 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           <TicketThumb url={order.images.find((image) => image.kind === 'PRODUCT')?.url ?? order.images[0]?.url} size={72} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 800,
+                  fontSize: { xs: '1.25rem', md: '1.5rem' },
+                }}
+              >
                 {model.heading}
               </Typography>
               <SubTicketStateChip state={model.state} />
@@ -370,7 +458,10 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
         sx={{
           display: 'grid',
           gap: { xs: 1.5, md: 2 },
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.65fr) minmax(300px, 1fr)' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: 'minmax(0, 1.65fr) minmax(300px, 1fr)',
+          },
           alignItems: 'start',
         }}
       >
@@ -416,19 +507,21 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           />
 
           <SectionCard title="Quá trình sản xuất">
-            <Box sx={{ overflowX: 'auto' }}>
-              {model.no == null ? (
-                <TicketMatrix order={order} />
-              ) : (
-                <SubTicketMatrixCard
-                  order={order}
-                  ticket={order.subTickets.find((item) => item.no === model.no)!}
-                  isAdmin={isAdmin}
-                  showHeader={false}
-                  showQr={false}
-                />
-              )}
-            </Box>
+            <CollapsibleMatrix>
+              <Box sx={{ overflowX: 'auto' }}>
+                {model.no == null ? (
+                  <TicketMatrix order={order} />
+                ) : (
+                  <SubTicketMatrixCard
+                    order={order}
+                    ticket={order.subTickets.find((item) => item.no === model.no)!}
+                    isAdmin={isAdmin}
+                    showHeader={false}
+                    showQr={false}
+                  />
+                )}
+              </Box>
+            </CollapsibleMatrix>
           </SectionCard>
 
           <SectionCard title="Lịch sử các khâu">
@@ -450,6 +543,27 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       </Box>
 
       {actions.length ? <StickyActions>{actions}</StickyActions> : null}
+      {qcEntry ? (
+        <KcsReturnDialog
+          order={order}
+          entry={qcEntry}
+          saving={saveReturn.isPending}
+          onClose={() => setQcEntry(null)}
+          onSave={(payload) =>
+            saveReturn.mutate(
+              { entry: qcEntry, payload },
+              {
+                onSuccess: () => {
+                  setQcEntry(null)
+                  void queryClient.invalidateQueries({
+                    queryKey: ['qc-tickets'],
+                  })
+                },
+              },
+            )
+          }
+        />
+      ) : null}
       <DefectDialog
         open={defectOpen}
         ticketCode={model.code}
@@ -470,7 +584,14 @@ function ProductCard({ order, model }: { order: ProductionOrderDetail; model: Ti
   return (
     <SectionCard title="Thông số sản phẩm" sx={{ position: { md: 'sticky' }, top: { md: 0 } }}>
       {shown.length ? (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1, mb: 2 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 1,
+            mb: 2,
+          }}
+        >
           {shown.map((image, index) => (
             <ZoomThumb
               key={image.id}
@@ -497,9 +618,15 @@ function ProductCard({ order, model }: { order: ProductionOrderDetail; model: Ti
       <FactGrid
         columns={{ xs: 2 }}
         items={[
-          { label: model.no == null ? 'Số lượng đơn' : 'Phiếu con', value: `${model.qty} ${order.qtyUnit ?? 'sp'}` },
+          {
+            label: model.no == null ? 'Số lượng đơn' : 'Phiếu con',
+            value: `${model.qty} ${order.qtyUnit ?? 'sp'}`,
+          },
           { label: 'Hiện có', value: `${model.availableQty} sp` },
-          { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
+          {
+            label: 'Ngày cần trả',
+            value: order.dueDate ? formatStockedDate(order.dueDate) : null,
+          },
           { label: 'Size', value: order.sizeLabel },
           { label: 'Chất liệu', value: order.mainMaterial },
           { label: 'Màu xi', value: order.platingColor },
@@ -541,26 +668,36 @@ function EntryRow({ entry, lastRow }: { entry: StageEntry; lastRow: boolean }) {
           người giao {entry.handedByName}
         </Typography>
         {done ? (
-          <Typography variant="body2" color="text.secondary">
-            KCS {entry.returnedByName ?? '—'} nhận lại {formatDateShort(entry.returnedAt)} · {entry.returnedQty ?? '—'} sp ·{' '}
-            {entry.returnedSilverWeight ? formatQty(entry.returnedSilverWeight) : '—'} g
-            {entry.silverLoss != null ? (
-              <Box
-                component="span"
-                sx={
-                  level
-                    ? { ml: 0.5, px: 0.5, borderRadius: 0.5, bgcolor: SILVER_LOSS_TONE[level].bg, color: SILVER_LOSS_TONE[level].fg, fontWeight: 600 }
-                    : { ml: 0.5 }
-                }
-              >
-                hao hụt {formatQty(entry.silverLoss)} g
-                {entry.silverLossPercent != null ? ` (${formatQty(entry.silverLossPercent)}%)` : ''}
-              </Box>
-            ) : null}
-          </Typography>
+          <>
+            <Typography variant="body2" color="text.secondary">
+              QC {entry.returnedByName ?? '—'} nhận lại {formatDateShort(entry.returnedAt)} · {entry.returnedQty ?? '—'}{' '}
+              sp · {entry.returnedSilverWeight ? formatQty(entry.returnedSilverWeight) : '—'} g
+              {entry.silverLoss != null ? (
+                <Box
+                  component="span"
+                  sx={
+                    level
+                      ? {
+                          ml: 0.5,
+                          px: 0.5,
+                          borderRadius: 0.5,
+                          bgcolor: SILVER_LOSS_TONE[level].bg,
+                          color: SILVER_LOSS_TONE[level].fg,
+                          fontWeight: 600,
+                        }
+                      : { ml: 0.5 }
+                  }
+                >
+                  hao hụt {formatQty(entry.silverLoss)} g
+                  {entry.silverLossPercent != null ? ` (${formatQty(entry.silverLossPercent)}%)` : ''}
+                </Box>
+              ) : null}
+            </Typography>
+            <KcsImages images={entry.images} />
+          </>
         ) : (
           <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600 }}>
-            Đang làm — chưa được KCS nhận lại
+            Đang làm — chưa được QC nhận lại
           </Typography>
         )}
       </Box>

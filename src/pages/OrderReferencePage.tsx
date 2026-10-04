@@ -201,7 +201,7 @@ function WorkerOverview({ order }: { order: OrderReference }) {
   let detail = 'Trang chỉ để xem thông số. Chờ người giao mở khâu cho phiếu con.'
   if (count('WORKING') > 0) {
     title = `${count('WORKING')} phiếu đang được làm`
-    detail = 'Mở đúng phiếu của bạn; làm xong thì báo hoàn thành và nộp hàng cho KCS.'
+    detail = 'Mở đúng phiếu của bạn; làm xong thì báo hoàn thành và nộp hàng cho QC.'
   } else if (count('CLAIMED') > 0) {
     title = `${count('CLAIMED')} phiếu đã có thợ nhận`
     detail = 'Chờ người giao cân bạc và xác nhận giao trước khi bắt đầu làm.'
@@ -210,7 +210,7 @@ function WorkerOverview({ order }: { order: OrderReference }) {
     detail = 'Chọn phiếu đúng khâu của bạn và bấm nhận phiếu.'
   } else if (count('SUBMITTED') > 0) {
     title = `${count('SUBMITTED')} phiếu đã báo xong`
-    detail = 'Mang hàng tới KCS và chờ cân nhận lại.'
+    detail = 'Mang hàng tới QC và chờ cân nhận lại.'
   }
 
   return (

@@ -29,7 +29,7 @@ import {
   type MaterialRequestQueueItem,
   type MaterialRequestStatus,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { formatCt, formatQty } from '../api/inventory'
 import { PageHeader, STICKY_END_CELL_SX, STICKY_END_HEAD_SX, TableSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import {
@@ -208,7 +208,11 @@ export function MaterialRequestsPage() {
                             {formatQty(row.issuedQty ?? '0')} {row.material.unit}
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                               {[
-                                row.issuedWeight ? `${formatQty(row.issuedWeight)} g` : null,
+                                row.issuedWeight
+                                  ? row.kind === 'STONE'
+                                    ? formatCt(row.issuedWeight)
+                                    : `${formatQty(row.issuedWeight)} g`
+                                  : null,
                                 row.issuedStoneCount ? `${row.issuedStoneCount} viên` : null,
                                 KIND_LABEL[row.kind],
                               ]

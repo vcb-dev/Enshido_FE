@@ -13,7 +13,7 @@ import { useOrderMutation } from './useOrderMutation'
 
 /**
  * Thanh chia phiếu con trên tab Sản xuất: chia số lượng, thêm phiếu, hủy chia. Mọi thao tác của
- * từng phiếu (chỉ định thợ, KCS, thủ kho, báo lỗi, sửa / xoá, lịch sử) nằm ngay trên phiếu con đó
+ * từng phiếu (chỉ định thợ, QC, thủ kho, báo lỗi, sửa / xoá, lịch sử) nằm ngay trên phiếu con đó
  * — xem SubTicketWorkActions.
  */
 export function SubTicketToolbar({

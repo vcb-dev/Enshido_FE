@@ -1,5 +1,5 @@
 import type { ProductionOrderDetail, StageCode, StageEntry, SubTicket } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { formatCt, formatQty, gramToCt } from '../api/inventory'
 import {
   formatDateShort,
   silverLossLevel,
@@ -35,15 +35,19 @@ export const TICKET_TONE_BG: Record<TicketRowTone, string> = {
 export const TICKET_HEADER_BG = '#fff34d'
 
 const weight = (value: string | null) => (value != null ? formatQty(value) : '')
+/** TL đá: lưu g, in theo ct. */
+const carat = (value: string | null) => (value != null ? formatQty(gramToCt(value)) : '')
 
-/** Các dòng NVL đã xuất vào khâu, vd "00001 2 chiếc (1.000 g)". */
+/** Các dòng NVL đã xuất vào khâu, vd "00001 2 chiếc (1.000 g)" — đá ghi TL theo ct. */
 function issuedText(entry: StageEntry, atHandover: boolean) {
   return (entry.issuedLines ?? [])
     .filter((line) => line.atHandover === atHandover)
     .map(
       (line) =>
         `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}` +
-        (line.weight ? ` (${formatQty(line.weight)} g)` : '') +
+        (line.weight
+          ? ` (${line.kind === 'STONE' ? formatCt(line.weight) : `${formatQty(line.weight)} g`})`
+          : '') +
         (line.stoneCount && line.unit !== 'viên' ? ` · ${line.stoneCount} viên` : ''),
     )
     .join('; ')
@@ -95,9 +99,9 @@ export const TICKET_ROWS: TicketRow[] = [
   {
     key: 'handedStoneWeight',
     label: 'Trọng lượng đá giao',
-    hint: '(g)',
+    hint: '(ct)',
     numeric: true,
-    value: (e) => weight(e.handedStoneWeight),
+    value: (e) => carat(e.handedStoneWeight),
   },
   {
     key: 'issuedStones',
@@ -115,9 +119,9 @@ export const TICKET_ROWS: TicketRow[] = [
   {
     key: 'stoneWeight',
     label: 'Trọng lượng đá gắn',
-    hint: '(g)',
+    hint: '(ct)',
     numeric: true,
-    value: (e) => weight(e.stoneWeight),
+    value: (e) => carat(e.stoneWeight),
   },
   {
     key: 'returnedStoneCount',
@@ -126,17 +130,17 @@ export const TICKET_ROWS: TicketRow[] = [
     value: (e) => (e.returnedStoneCount != null ? String(e.returnedStoneCount) : ''),
   },
   { key: 'craftsman', label: 'Người chế tác (Thợ)', tone: 'craftsman', value: (e) => e.craftsmanName },
-  { key: 'kcs', label: 'Người KCS', tone: 'kcs', value: (e) => e.returnedByName ?? '' },
+  { key: 'kcs', label: 'Người QC', tone: 'kcs', value: (e) => e.returnedByName ?? '' },
   { key: 'returnedAt', label: 'Thời gian nhận lại', value: (e) => formatDateShort(e.returnedAt, '') },
   {
     key: 'returnedQty',
-    label: 'Số lượng nhận lại',
+    label: 'Số lượng sản phẩm đạt',
     numeric: true,
     value: (e) => (e.returnedAt && e.returnedQty != null ? String(e.returnedQty) : ''),
   },
   {
     key: 'returnedWeight',
-    label: 'Trọng lượng nhận lại (bạc)',
+    label: 'Trọng lượng sản phẩm đạt',
     hint: '(t - chỉ)',
     numeric: true,
     value: (e) => (e.returnedAt ? weight(e.returnedSilverWeight) : ''),
@@ -181,7 +185,7 @@ export type StageColumn = {
   entry: StageEntry | undefined
   /** Các lần giao đang hiện trong cột — phần còn lại là lịch sử làm lại. */
   entries: StageEntry[]
-  /** Cột cộng từ phiếu con: bao nhiêu phiếu đã được KCS nhận lại. */
+  /** Cột cộng từ phiếu con: bao nhiêu phiếu đã được QC nhận lại. */
   tickets: { done: number; total: number } | null
 }
 
@@ -233,7 +237,7 @@ function latest(entries: StageEntry[]) {
 
 /**
  * Cộng các phiếu con của một khâu thành một cột cho phiếu mẹ. Số nhận lại / thu hồi / hao hụt
- * chỉ hiện khi mọi phiếu con đã được KCS nhận lại, tránh đọc nhầm số dở dang là số cả đơn.
+ * chỉ hiện khi mọi phiếu con đã được QC nhận lại, tránh đọc nhầm số dở dang là số cả đơn.
  */
 function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
   const done = entries.every((entry) => entry.returnedAt)
@@ -401,7 +405,7 @@ export function outcomeLines(
 }
 
 /**
- * Hàng lỗi một phần KCS tách ra ở Nguội / Vào đá: phiếu vẫn đi tiếp với hàng đạt, phần lỗi
+ * Hàng lỗi một phần QC tách ra ở Nguội / Vào đá: phiếu vẫn đi tiếp với hàng đạt, phần lỗi
  * về kho NVL (sau khi thủ kho xác nhận) và có thể làm phiếu bù — ghi lại ở cột Lỗi.
  */
 function partialDefectLines(order: ProductionOrderDetail, ticketId: string): string[] {
@@ -417,7 +421,7 @@ function partialDefectLines(order: ProductionOrderDetail, ticketId: string): str
       ]
         .filter(Boolean)
         .join(' · ')
-      // Lý do KCS ghi lúc nhận lại; không có thì lấy lý do lúc báo lỗi khâu.
+      // Lý do QC ghi lúc nhận lại; không có thì lấy lý do lúc báo lỗi khâu.
       const reason = entry.defectReason?.trim() || entry.defectNote?.trim()
       return reason ? [head, `Lý do: ${reason}`] : [head]
     })

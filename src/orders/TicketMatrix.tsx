@@ -86,7 +86,7 @@ export function TicketMatrix({
                   {column.entry && column.entry.attempt > 1 ? ` (lần ${column.entry.attempt})` : ''}
                   {column.tickets ? (
                     <Typography component="span" variant="caption" sx={{ display: 'block', fontWeight: 400 }}>
-                      KCS nhận {column.tickets.done}/{column.tickets.total} phiếu
+                      QC nhận {column.tickets.done}/{column.tickets.total} phiếu
                     </Typography>
                   ) : null}
                 </TableCell>
@@ -201,7 +201,7 @@ function StageCards({
             <Box sx={{ bgcolor: TICKET_HEADER_BG, px: 1, py: 0.6, fontWeight: 700, fontSize: '0.86rem' }}>
               {STAGE_LABEL[stage]}
               {entry.attempt > 1 ? ` (lần ${entry.attempt})` : ''}
-              {column.tickets ? ` · KCS nhận ${column.tickets.done}/${column.tickets.total} phiếu` : ''}
+              {column.tickets ? ` · QC nhận ${column.tickets.done}/${column.tickets.total} phiếu` : ''}
             </Box>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 0.25, px: 1, py: 0.75 }}>
               {rows.map(({ row, value }) => {

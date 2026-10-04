@@ -8,7 +8,7 @@ import {
 } from './staffJobPresets'
 
 describe('vai trò ở màn Nhân sự', () => {
-  it('chọn được Thợ sản xuất, mở form sửa thợ cũ không bị đổi sang KCS', () => {
+  it('chọn được Thợ sản xuất, mở form sửa thợ cũ không bị đổi sang QC', () => {
     expect(staffJobSelectOptions().map((o) => o.value)).toContain('worker_sx')
     const worker = { roleCode: 'WORKER' as const, allowedScreens: [Permission.SCREEN_MY_TICKETS] }
     expect(staffJobPresetForEditForm(inferStaffJobPreset(worker))).toBe('worker_sx')

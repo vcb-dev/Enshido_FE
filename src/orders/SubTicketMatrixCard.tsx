@@ -1,18 +1,13 @@
-import { useState } from 'react'
-import { useAuth } from '../auth/AuthContext'
-import { can, Permission } from '../auth/permissions'
-import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   clearSubTicketOutcomeApi,
-  finishSubTicketApi,
   type ProductionOrderDetail,
   type SubTicket,
 } from '../api/productionOrders'
-import { LAST_STAGE, lastStageDone, STAGE_LABEL, subTicketUrl } from './catalog'
+import { STAGE_LABEL, subTicketUrl } from './catalog'
 import { SubTicketStateChip } from './OrderChips'
-import { FinishDialog } from './OutcomeDialogs'
 import { TicketMatrix } from './TicketMatrix'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -41,30 +36,16 @@ export function SubTicketMatrixCard({
   /** Dùng bên trong accordion/card cha thì bỏ nền, viền và khoảng đệm lồng nhau. */
   embedded?: boolean
 }) {
-  const [finishOpen, setFinishOpen] = useState(false)
-
-  const outcome = useOrderMutation(
-    order.code,
-    (vars: { note?: string }) => finishSubTicketApi(order.code, ticket.no, vars.note),
-    `Đã chốt phiếu ${ticket.code}`,
-  )
   const clear = useOrderMutation(
     order.code,
     () => clearSubTicketOutcomeApi(order.code, ticket.no),
     `Đã gỡ kết cục phiếu ${ticket.code}`,
   )
-  const busy = outcome.isPending || clear.isPending
+  const busy = clear.isPending
 
-  // Chỉ chốt được khi phiếu không còn khâu nào đang chạy — KCS cân lại xong mới phán đạt / lỗi.
+  // Chỉ chốt được khi phiếu không còn khâu nào đang chạy — QC cân lại xong mới phán đạt / lỗi.
   const settled = ticket.outcome != null
-  const idle = ticket.state === 'IDLE'
-  const delivered = order.status === 'DELIVERED'
-  // Hoàn thiện là việc của KCS; Lỗi tự chốt khi KCS nhận lại 0 sản phẩm ở một khâu.
-  const { user } = useAuth()
-  const isQc = can(user, Permission.PRODUCTION_QC)
-  const canFinish = isQc && idle && ticket.entryCount > 0 && !delivered
-  // Hoàn thiện phải đi hết phiếu: chưa có khâu Xi được KCS nhận lại thì nút còn khoá.
-  const finishReady = lastStageDone(order.stages.filter((entry) => entry.subTicketId === ticket.id))
+  // Hoàn thiện là việc của QC ở màn Phiếu QC; Lỗi tự chốt khi QC nhận lại 0 sản phẩm ở một khâu.
   const shipped = (order.finishedGoods?.shippedQty ?? 0) > 0
 
   return (
@@ -147,39 +128,8 @@ export function SubTicketMatrixCard({
                 Gỡ hoàn thiện
               </Button>
             ) : null
-          ) : canFinish ? (
-            <Tooltip
-              title={
-                finishReady
-                  ? ''
-                  : `Chưa xong khâu ${STAGE_LABEL[LAST_STAGE]} — làm hết phiếu rồi mới hoàn thiện được`
-              }
-            >
-              <span>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="success"
-                  disabled={!finishReady}
-                  onClick={() => setFinishOpen(true)}
-                >
-                  Xác nhận hoàn thiện
-                </Button>
-              </span>
-            </Tooltip>
           ) : null,
         }}
-      />
-
-      <FinishDialog
-        open={finishOpen}
-        ticketCode={ticket.code}
-        qty={ticket.availableQty}
-        saving={outcome.isPending}
-        onClose={() => setFinishOpen(false)}
-        onSave={(note) =>
-          outcome.mutate({ note }, { onSuccess: () => setFinishOpen(false) })
-        }
       />
     </Paper>
   )

@@ -53,7 +53,7 @@ export const STAGES: StageCode[] = ['FILING', 'STONE_SETTING', 'ENGRAVING', 'POL
 export const LAST_STAGE: StageCode = STAGES[STAGES.length - 1]
 
 /**
- * Phiếu đã đi hết đến khâu cuối chưa: khâu gần nhất phải là Xi và đã được KCS nhận lại. Chưa
+ * Phiếu đã đi hết đến khâu cuối chưa: khâu gần nhất phải là Xi và đã được QC nhận lại. Chưa
  * tới thì chưa chốt Hoàn thiện được — khâu giữa bỏ qua được, nhưng sửa lại khâu nào sau khi đã
  * xi thì phải xi lại mới chốt. Cùng luật với BE.
  */
@@ -112,7 +112,7 @@ export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK
 
 /**
  * Ngưỡng cảnh báo hao hụt bạc của một khâu (%). Đổi hai số này là đổi màu ở cả phiếu trên
- * màn hình, phiếu in lẫn hộp thoại KCS nhận lại.
+ * màn hình, phiếu in lẫn hộp thoại QC nhận lại.
  */
 export const SILVER_LOSS_LIMITS = { ok: 2, warn: 5 }
 
@@ -124,7 +124,7 @@ export const SILVER_LOSS_TONE: Record<SilverLossLevel, { bg: string; fg: string 
   high: { bg: '#fdecea', fg: '#b3261e' },
 }
 
-/** Hao hụt âm = nhận lại nhiều hơn giao, coi như bất thường (đỏ) để KCS cân lại. */
+/** Hao hụt âm = nhận lại nhiều hơn giao, coi như bất thường (đỏ) để QC cân lại. */
 export function silverLossLevel(percent: string | null | undefined): SilverLossLevel | null {
   if (percent == null || percent === '') return null
   const value = Number(percent)
@@ -246,7 +246,7 @@ export function fromDateTimeInput(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-/** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / KCS cập nhật khâu ngay. */
+/** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / QC cập nhật khâu ngay. */
 export function orderTicketUrl(code: string) {
   return `${window.location.origin}/orders/${code}?tab=production`
 }
@@ -267,8 +267,8 @@ export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
   WAITING: { label: 'Chờ thợ nhận', bg: '#fff4d6', fg: '#8a6100' },
   CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
   WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },
-  SUBMITTED: { label: 'Chờ KCS cân lại', bg: '#fff4d6', fg: '#8a6100' },
-  CONFIRMING: { label: 'Chờ thủ kho xác nhận', bg: '#e3f2fd', fg: '#1565c0' },
+  SUBMITTED: { label: 'Chờ QC cân lại', bg: '#fff4d6', fg: '#8a6100' },
+  CONFIRMING: { label: 'Chờ thủ kho xác nhận lỗi', bg: '#e3f2fd', fg: '#1565c0' },
   DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
   FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }

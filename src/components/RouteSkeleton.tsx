@@ -39,7 +39,9 @@ function SkeletonFor({ pathname, workerOnly }: { pathname: string; workerOnly: b
     return workerOnly ? <TicketDetailSkeleton maxWidth={820} /> : <OrderDetailSkeleton />
   }
   if (pathname.startsWith('/tickets/')) return <TicketDetailSkeleton />
-  if (pathname === '/my-tickets') return <CardsPageSkeleton groups={2} count={2} media />
+  if (pathname === '/my-tickets' || pathname === '/qc-tickets') {
+    return <CardsPageSkeleton groups={2} count={2} media />
+  }
   if (pathname.startsWith('/finished-goods/shipments/')) return <ShipmentDetailSkeleton />
   if (pathname === '/settings/catalogs') {
     return (

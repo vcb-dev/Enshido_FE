@@ -4,7 +4,7 @@ import { DialogForm, FormTextField } from '../components/ui'
 
 type NoteValues = { note: string }
 
-/** Báo lỗi khâu đang làm của một phiếu con — lý do bắt buộc, KCS cân lại hàng sau đó. */
+/** Báo lỗi khâu đang làm của một phiếu con — lý do bắt buộc, QC cân lại hàng sau đó. */
 export function DefectDialog({
   open,
   ticketCode,
@@ -94,7 +94,7 @@ export function FinishDialog({
       <DialogForm form={form} onSubmit={(values) => onSave(values.note.trim() || undefined)}>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
           <Typography variant="body2" color="text.secondary">
-            {/* Số lượng lấy đúng số KCS nhận lại ở khâu cuối, không phải số đặt hàng. */}
+            {/* Số lượng lấy đúng số QC nhận lại ở khâu cuối, không phải số đặt hàng. */}
             {qty} sản phẩm chuyển kho thành phẩm.
           </Typography>
           <FormTextField<NoteValues>

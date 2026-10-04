@@ -26,7 +26,7 @@ import type {
   SubTicket,
   SubTicketPayload,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { ctToGram, formatQty } from '../api/inventory'
 import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
 import { isInStage, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
@@ -313,7 +313,7 @@ const EMPTY_STONE_LINE: StoneLineValues = { materialId: '', stoneCount: '', weig
 /**
  * Thủ kho chỉ định thợ cho một khâu của phiếu con. Chưa giao hàng: thợ quét QR bấm nhận —
  * Nguội tự xuất phôi, Vào đá tự xuất BTP đã nguội. Khâu Vào đá kèm đá cấp cho thợ: chỉ giữ
- * chỗ trong tồn, xuất kho khi thủ kho xác nhận sau KCS (số cấp − đá thừa trả lại).
+ * chỗ trong tồn, xuất kho khi thủ kho xác nhận sau QC (số cấp − đá thừa trả lại).
  * Khâu khác người giao cân bạc rồi bấm "Xác nhận giao".
  */
 export function AssignWorkerDialog({
@@ -381,7 +381,8 @@ export function AssignWorkerDialog({
               ? values.stones.map((line) => ({
                   materialId: line.materialId,
                   stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
-                  weight: line.weight,
+                  // Ô TL gói nhập theo ct, API nhận g.
+                  weight: ctToGram(line.weight),
                 }))
               : [],
         })
@@ -507,14 +508,14 @@ export function AssignWorkerDialog({
                   />
                   <FormTextField<AssignValues>
                     name={`stones.${index}.weight` as 'stones'}
-                    label="TL cả gói (g)"
+                    label="TL cả gói (ct)"
                     type="number"
                     required
                     slotProps={{ htmlInput: { min: 0, step: 'any' } }}
                     helperText={
                       byUnit(index)
                         ? `Mã tính theo ${byUnit(index)} — SL cấp suy từ TL gói`
-                        : 'KCS cân gói thừa để tính đá đã dùng'
+                        : 'QC cân gói thừa để tính đá đã dùng'
                     }
                   />
                 </FormRow>

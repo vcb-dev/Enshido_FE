@@ -22,7 +22,7 @@ describe('lastStageDone — đã đi hết tới khâu cuối chưa', () => {
     expect(lastStageDone([entry('FILING'), entry('PLATING', null)])).toBe(false)
   })
 
-  it('KCS nhận lại khâu Xi thì tới, dù khâu giữa bị bỏ', () => {
+  it('QC nhận lại khâu Xi thì tới, dù khâu giữa bị bỏ', () => {
     expect(lastStageDone([entry('FILING'), entry('PLATING')])).toBe(true)
   })
 

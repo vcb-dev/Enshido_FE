@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { capAt, lossOf } from './StageDialogs'
 
-describe('capAt — KCS không nhập quá số đã giao', () => {
+describe('capAt — QC không nhập quá số đã giao', () => {
   it('cắt số lượng vượt về đúng số giao', () => {
     expect(capAt(200)('203')).toBe('200')
   })

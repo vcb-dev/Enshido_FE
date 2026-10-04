@@ -41,6 +41,8 @@ import {
   pasteIntoQty,
   stockSummary,
   typedDecimalAsComma,
+  ctToGram,
+  formatCt,
   type StockSnapshot,
 } from '../api/inventory'
 import {
@@ -314,7 +316,7 @@ export function IssueMaterialDialog({
   const countUnit = COUNT_UNITS.has(unit.trim().toLowerCase())
   const blankQty = request?.blankLeft?.qty != null ? Number(request.blankLeft.qty) : null
   const blankWeight = request?.blankLeft?.weight != null ? Number(request.blankLeft.weight) : null
-  /** Đá ở Vào đá của phiếu con: chỉ giữ chỗ, KCS cân gói thừa, thủ kho xác nhận mới xuất kho (khớp BE). */
+  /** Đá ở Vào đá của phiếu con: chỉ giữ chỗ, QC cân gói thừa, thủ kho xác nhận mới xuất kho (khớp BE). */
   const holdMode = kind === 'STONE' && request?.stage === 'STONE_SETTING' && request.subTicketNo != null
 
   useEffect(() => {
@@ -334,13 +336,15 @@ export function IssueMaterialDialog({
     }
   }, [kind, qty, unit, form])
 
-  // Cấp đá tính theo ct / g: số lượng suy từ TL gói (1 ct = 0,2 g) — kho chỉ cần cân, vẫn sửa được.
+  // Đá cân TL theo ct (gửi API đổi ra g). Cấp đá tính theo ct / g: số lượng suy từ TL gói —
+  // kho chỉ cần cân, vẫn sửa được.
+  const stoneKind = kind === 'STONE'
   const weight = useWatch({ control: form.control, name: 'weight' })
   const unitKey = unit.trim().toLowerCase()
   useEffect(() => {
     if (!holdMode || !(Number(weight) > 0)) return
-    if (unitKey === 'ct') form.setValue('qty', String(Math.round((Number(weight) / 0.2) * 10_000) / 10_000))
-    else if (['g', 'gr', 'gram', 'gam'].includes(unitKey)) form.setValue('qty', weight)
+    if (unitKey === 'ct') form.setValue('qty', weight)
+    else if (['g', 'gr', 'gram', 'gam'].includes(unitKey)) form.setValue('qty', ctToGram(weight))
   }, [holdMode, weight, unitKey, form])
 
   const title = request ? `${holdMode ? 'Cấp đá' : 'Xuất NVL'} cho phiếu ${request.ticketCode}` : ''
@@ -354,7 +358,7 @@ export function IssueMaterialDialog({
         onSave({
           kind: values.kind,
           qty: values.qty,
-          weight: values.weight || null,
+          weight: (values.kind === 'STONE' ? ctToGram(values.weight) : values.weight) || null,
           stoneCount: values.stoneCount ? Number(values.stoneCount) : null,
         })
       }
@@ -404,7 +408,7 @@ export function IssueMaterialDialog({
       <FormRow columns={2}>
         <FormQtyField<IssueValues>
           name="weight"
-          label={holdMode ? 'TL cả gói đá (g)' : 'TL cân lúc xuất (g)'}
+          label={holdMode ? 'TL cả gói đá (ct)' : `TL cân lúc xuất (${stoneKind ? 'ct' : 'g'})`}
           required={kind === 'METAL' || holdMode}
           helperText={
             blankWeight != null
@@ -412,7 +416,7 @@ export function IssueMaterialDialog({
               : kind === 'METAL'
                 ? 'Cộng vào bạc vào khâu'
                 : holdMode
-                  ? 'Mốc để tính đá đã dùng khi KCS cân gói thừa'
+                  ? 'Mốc để tính đá đã dùng khi QC cân gói thừa'
                   : 'Không bắt buộc'
           }
           rules={{
@@ -597,7 +601,7 @@ export function MaterialRequestsCard({
           value={Number(materials.issuedMetalWeight) ? `${formatQty(materials.issuedMetalWeight)} g` : '—'}
         />
         <Stat
-          label="Hao hụt bạc (khâu đã KCS)"
+          label="Hao hụt bạc (khâu đã QC)"
           value={
             materials.silverLoss != null ? (
               <LossText loss={materials.silverLoss} percent={materials.silverLossPercent} unit="g" />
@@ -633,7 +637,7 @@ export function MaterialRequestsCard({
             .map(
               (line) =>
                 `${materialLabel(line)} ${formatQty(line.qty)} ${line.unit}` +
-                (line.weight ? ` (${formatQty(line.weight)} g)` : '') +
+                (line.weight ? ` (${line.kind === 'STONE' ? formatCt(line.weight) : `${formatQty(line.weight)} g`})` : '') +
                 (line.times > 1 ? ` · ${line.times} lần` : ''),
             )
             .join('; ')}
@@ -708,7 +712,11 @@ export function MaterialRequestsCard({
                           {formatQty(request.issuedQty ?? '0')} {request.material.unit}
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             {[
-                              request.issuedWeight ? `${formatQty(request.issuedWeight)} g` : null,
+                              request.issuedWeight
+                                ? request.kind === 'STONE'
+                                  ? formatCt(request.issuedWeight)
+                                  : `${formatQty(request.issuedWeight)} g`
+                                : null,
                               request.issuedStoneCount ? `${request.issuedStoneCount} viên` : null,
                               KIND_LABEL[request.kind],
                             ]
@@ -840,6 +848,11 @@ function suggestKindOf(unit: string, metalKind: string | null | undefined): Mate
   if (stone || COUNT_UNITS.has(key) || key === 'ct') return 'STONE'
   if (GRAM_UNITS.has(key) || metalKind) return 'METAL'
   return 'OTHER'
+}
+
+/** TL gửi API (g) của một dòng giao: dòng đá nhập theo ct. */
+export function handoverLineGram(line: Pick<HandoverMaterialLine, 'kind' | 'weight'>) {
+  return (line.kind === 'STONE' ? ctToGram(line.weight) : line.weight) || null
 }
 
 /** Tổng gram bạc / kim loại của các dòng — cộng vào TL hàng để ra bạc vào khâu. */
@@ -1073,13 +1086,13 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   }}
                   render={({ field: input, fieldState }) => (
                     <TextInput
-                      label="TL cân (g)"
+                      label={line.kind === 'STONE' ? 'TL cân (ct)' : 'TL cân (g)'}
                       required={line.kind === 'METAL'}
                       value={formatQtyInput(String(input.value ?? ''))}
                       inputRef={input.ref}
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
-                      helperText={gramReadout(String(input.value ?? '')) || undefined}
+                      helperText={line.kind === 'STONE' ? undefined : gramReadout(String(input.value ?? '')) || undefined}
                       onChange={(event) =>
                         input.onChange(
                           parseQtyInput(typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data)),

@@ -23,6 +23,9 @@ import { toast } from 'sonner'
 import {
   formatMoney,
   formatQty,
+  formatCt,
+  ctToGram,
+  isStoneMaterial,
   getInventoryLookupsApi,
   getWarehouseStockApi,
   qtyFromApi,
@@ -208,9 +211,9 @@ export function WarehouseDetailPage() {
 }
 
 
-/** Mã tính theo gram: SL chính là TL — không cần cân TL tồn riêng. */
+/** Mã tính theo gram / ct: TL suy thẳng từ SL — không cần cân TL tồn riêng. */
 const isGramUnitName = (name: string | undefined) =>
-  ['g', 'gr', 'gram', 'grams', 'gam'].includes((name ?? '').trim().toLowerCase())
+  ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((name ?? '').trim().toLowerCase())
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
 const split = { borderLeft: '2px solid #6b4513' }
@@ -928,14 +931,14 @@ function stockColumns(
     },
     {
       key: 'gramOnHand',
-      header: 'TL tồn (g)',
+      header: 'TL tồn',
       group: STOCK_GROUPS.real,
       headSx: { bgcolor: groupHead.real.bgcolor },
       align: 'right',
       cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
       render: (row) =>
         row.gramOnHand != null ? (
-          formatQty(row.gramOnHand)
+          isStoneMaterial(row) ? formatCt(row.gramOnHand) : `${formatQty(row.gramOnHand)} g`
         ) : (
           <Tooltip title="Chưa cân TL tồn — sửa dòng tồn, nhập số cân để bắt đầu theo dõi">
             <Box component="span" sx={{ color: 'text.disabled' }}>
@@ -1376,7 +1379,10 @@ function StockEditDialog({
       .map((item) => ({
         ...stockPayloadFromItem(item, profile, categoryOptions),
         // Chỉ gửi khi kho vừa cân — gửi lại số cũ sẽ dời mốc cân sang lúc lưu.
-        ...(row && item.gramBase ? { gramBase: item.gramBase } : {}),
+        // Đá cân theo ct, API nhận g.
+        ...(row && item.gramBase
+          ? { gramBase: isStoneMaterial(row) ? ctToGram(item.gramBase) : item.gramBase }
+          : {}),
         editReason: editReason || undefined,
       }))
     if (!payloads.length) return
@@ -1832,7 +1838,8 @@ function StockItemFields({
               <Typography variant="body2" sx={{ alignSelf: 'center', px: 0.25 }}>
                 {row.gramOnHand != null ? (
                   <>
-                    TL tồn hiện tại: <b>{formatQty(row.gramOnHand)} g</b>
+                    TL tồn hiện tại:{' '}
+                    <b>{isStoneMaterial(row) ? formatCt(row.gramOnHand) : `${formatQty(row.gramOnHand)} g`}</b>
                     {row.gramBaseAt ? ` (cân lúc ${new Date(row.gramBaseAt).toLocaleString('vi-VN')})` : ''}
                   </>
                 ) : (
@@ -1841,7 +1848,7 @@ function StockItemFields({
               </Typography>
               <FormQtyField<StockDialogValues>
                 name={`items.${index}.gramBase`}
-                label="Cân lại TL tồn (g)"
+                label={isStoneMaterial(row) ? 'Cân lại TL tồn (ct)' : 'Cân lại TL tồn (g)'}
                 helperText="Để trống nếu không cân"
               />
             </FormRow>

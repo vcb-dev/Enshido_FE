@@ -16,13 +16,10 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   cancelSubTicketPendingApi,
-  acceptSubTicketApi,
-  clearStageDefectApi,
   createReworkApi,
   deleteSubTicketApi,
   updateSubTicketApi,
   type SubTicketPayload,
-  reportStageDefectApi,
   unclaimSubTicketApi,
   type ProductionOrderDetail,
   type StageCode,
@@ -31,14 +28,13 @@ import {
 } from '../api/productionOrders'
 import { INTAKE_STATUS_META } from '../intake/catalog'
 import { STAGE_LABEL } from './catalog'
-import { DefectDialog } from './OutcomeDialogs'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
 import { WorkHistoryTable } from './WorkHistory'
 import { useOrderMutation } from './useOrderMutation'
 
 /**
- * Thao tác của MỘT phiếu con, đặt ngay trên phiếu đó: chỉ định thợ, xác nhận giao, KCS cân lại,
- * thủ kho xác nhận và nút Báo lỗi theo khâu. Trước đây nằm gộp ở bảng tổng "Phiếu con cho thợ".
+ * Thao tác của MỘT phiếu con, đặt ngay trên phiếu đó: chỉ định thợ, xác nhận giao, QC cân lại,
+ * thủ kho xác nhận. Trước đây nằm gộp ở bảng tổng "Phiếu con cho thợ".
  */
 export function SubTicketWorkActions({
   order,
@@ -51,8 +47,6 @@ export function SubTicketWorkActions({
   undoingEntryId,
   onConfirm,
   onAssign,
-  onReturn,
-  onEditHandover,
   onUndoReturn,
   onKeeperConfirm,
 }: {
@@ -67,15 +61,11 @@ export function SubTicketWorkActions({
   undoingEntryId?: string | null
   onConfirm: (ticket: SubTicket) => void
   onAssign: (ticket: SubTicket, stages: StageCode[]) => void
-  onReturn: (entry: StageEntry) => void
-  onEditHandover: (entry: StageEntry) => void
   onUndoReturn: (entry: StageEntry) => void
   onKeeperConfirm: (entry: StageEntry) => void
 }) {
   const { user } = useAuth()
-  const canQc = can(user, Permission.PRODUCTION_QC)
   const canKeeper = can(user, Permission.WAREHOUSE_KEEPER) || isAdmin
-  const [defectOpen, setDefectOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -96,17 +86,6 @@ export function SubTicketWorkActions({
     () => unclaimSubTicketApi(order.code, ticket.no),
     'Đã gỡ thợ nhận',
   )
-  // Báo lỗi chỉ khi khâu đang làm và KCS chưa cân lại (thợ giữ khâu / KCS / admin); bỏ báo lỗi khi báo nhầm.
-  const reportDefect = useOrderMutation(
-    order.code,
-    (note: string) => reportStageDefectApi(order.code, ticket.no, note),
-    'Đã báo lỗi khâu — KCS cân lại hàng lỗi',
-  )
-  const clearDefect = useOrderMutation(
-    order.code,
-    () => clearStageDefectApi(order.code, ticket.no),
-    'Đã bỏ báo lỗi',
-  )
   const save = useOrderMutation(
     order.code,
     (payload: SubTicketPayload) => updateSubTicketApi(order.code, ticket.no, payload),
@@ -117,14 +96,9 @@ export function SubTicketWorkActions({
     () => deleteSubTicketApi(order.code, ticket.no),
     'Đã xoá phiếu con',
   )
-  // Nguội / Vào đá: thợ được chỉ định tự bấm "Nhận hàng" (admin bấm thay được) — không xác nhận giao tay.
-  const accept = useOrderMutation(
-    order.code,
-    () => acceptSubTicketApi(order.code, ticket.no),
-    'Đã nhận hàng — hệ thống ghi giao khâu và xuất kho',
-  )
+  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Nhận hàng" — không xác nhận giao tay.
   const selfAccept = ticket.pendingStage === 'FILING' || ticket.pendingStage === 'STONE_SETTING'
-  // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần KCS nhận,
+  // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần QC nhận,
   // đơn bù đi lại từ bước sáp rồi thành phiếu con mới của đơn này.
   const reworks = (order.reworks ?? []).filter((item) => item.ticketNo === ticket.no)
   const reworkable = entries.find(
@@ -140,23 +114,12 @@ export function SubTicketWorkActions({
   )
   const pending = busy || cancel.isPending || unclaim.isPending
 
-  const isHolder = openEntry?.craftsmanUserId != null && openEntry.craftsmanUserId === user?.id
-  const canReportOpen = active && openEntry != null && !openEntry.defectReportedAt && (isHolder || canQc || isAdmin)
 
   return (
     <Stack spacing={1}>
       {openEntry?.defectReportedAt ? (
-        <Alert
-          severity="error"
-          sx={{ py: 0.25 }}
-          action={
-            openEntry.returnedAt == null && (isAdmin || canQc || isHolder) ? (
-              <Button color="inherit" size="small" disabled={clearDefect.isPending} onClick={() => clearDefect.mutate(undefined)}>
-                Bỏ báo lỗi
-              </Button>
-            ) : undefined
-          }
-        >
+        // Báo / bỏ báo lỗi làm ở màn Phiếu QC (hoặc thợ trên phiếu của mình) — ở đây chỉ hiện.
+        <Alert severity="error" sx={{ py: 0.25 }}>
           Báo lỗi khâu {STAGE_LABEL[openEntry.stage]} bởi {openEntry.defectReportedByName ?? '—'}: {openEntry.defectNote}
         </Alert>
       ) : null}
@@ -193,21 +156,9 @@ export function SubTicketWorkActions({
             chờ người lên đơn chọn NVL và giao
           </Typography>
         ) : ticket.state === 'CLAIMED' && active && selfAccept ? (
-          <>
-            <Typography variant="caption" color="text.secondary">
-              chờ {ticket.claimedByName ?? 'thợ'} quét QR nhận hàng
-            </Typography>
-            {isAdmin ? (
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={accept.isPending}
-                onClick={() => accept.mutate(undefined)}
-              >
-                {accept.isPending ? 'Đang nhận…' : 'Nhận hàng thay thợ'}
-              </Button>
-            ) : null}
-          </>
+          <Typography variant="caption" color="text.secondary">
+            chờ {ticket.claimedByName ?? 'thợ'} quét QR nhận hàng
+          </Typography>
         ) : ticket.state === 'CLAIMED' && active ? (
           <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
             Xác nhận giao
@@ -228,21 +179,15 @@ export function SubTicketWorkActions({
         ) : null}
         {openEntry ? (
           <>
-            {/* KCS chỉ nhận lại khi thợ đã báo làm xong (hoặc đã báo lỗi) — khớp luật ở BE. */}
+            {/* QC cân lại ở màn Phiếu QC — chi tiết lệnh chỉ hiện trạng thái. */}
             {ticket.state === 'SUBMITTED' && openEntry.pendingRequestCount > 0 ? (
               <Typography variant="caption" color="warning.main">
                 còn {openEntry.pendingRequestCount} yêu cầu xuất NVL chờ xử lý
               </Typography>
             ) : ticket.state === 'SUBMITTED' ? (
-              canQc ? (
-                <Button size="small" variant="contained" onClick={() => onReturn(openEntry)}>
-                  {openEntry.defectReportedAt ? 'KCS cân hàng lỗi' : 'KCS cân lại & chuyển khâu'}
-                </Button>
-              ) : (
-                <Typography variant="caption" color="text.secondary">
-                  chờ KCS cân lại
-                </Typography>
-              )
+              <Typography variant="caption" color="text.secondary">
+                chờ QC cân lại (màn Phiếu QC)
+              </Typography>
             ) : (
               <Typography variant="caption" color="text.secondary">
                 chờ thợ báo xong
@@ -253,27 +198,16 @@ export function SubTicketWorkActions({
         {ticket.state === 'CONFIRMING' && last ? (
           canKeeper ? (
             <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
-              Thủ kho xác nhận
+              Thủ kho xác nhận lỗi
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              chờ thủ kho xác nhận
+              chờ thủ kho xác nhận lỗi
             </Typography>
           )
         ) : null}
 
-        {canReportOpen && openEntry ? (
-          <Button size="small" variant="outlined" color="error" onClick={() => setDefectOpen(true)}>
-            Báo lỗi · {STAGE_LABEL[openEntry.stage]}
-          </Button>
-        ) : null}
 
-        {/* Khâu đã báo lỗi thì thông tin giao đã chốt — chỉ còn bước KCS cân hàng lỗi. */}
-        {openEntry && !openEntry.defectReportedAt ? (
-          <Button size="small" variant="outlined" color="inherit" onClick={() => onEditHandover(openEntry)}>
-            Sửa thông tin giao
-          </Button>
-        ) : null}
         {ticket.state === 'CLAIMED' ? (
           <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => unclaim.mutate(undefined)}>
             {unclaim.isPending ? 'Đang gỡ thợ…' : 'Gỡ thợ nhận'}
@@ -282,18 +216,6 @@ export function SubTicketWorkActions({
         {ticket.state === 'WAITING' || ticket.state === 'CLAIMED' ? (
           <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => cancel.mutate(undefined)}>
             {cancel.isPending ? 'Đang huỷ…' : 'Huỷ mở khâu'}
-          </Button>
-        ) : null}
-        {/* KCS sửa lại kết quả đã nhận (Nguội / Vào đá): tối đa 3 lần, hết khi thủ kho đã xác nhận. */}
-        {ticket.state === 'CONFIRMING' && last && canQc && active ? (
-          <Button
-            size="small"
-            variant="outlined"
-            color="inherit"
-            disabled={last.kcsRevisionCount >= 3}
-            onClick={() => onReturn(last)}
-          >
-            KCS sửa lại ({last.kcsRevisionCount}/3)
           </Button>
         ) : null}
         {/* Gỡ nhận lại chỉ còn cho các khâu không qua thủ kho; Nguội / Vào đá khoá khi thủ kho đã xác nhận. */}
@@ -360,13 +282,6 @@ export function SubTicketWorkActions({
         onConfirm={() => remove.mutate(undefined, { onSuccess: () => setDeleteOpen(false) })}
       />
 
-      <DefectDialog
-        open={defectOpen}
-        ticketCode={ticket.code}
-        saving={reportDefect.isPending}
-        onClose={() => setDefectOpen(false)}
-        onSave={(note) => reportDefect.mutate(note, { onSuccess: () => setDefectOpen(false) })}
-      />
     </Stack>
   )
 }

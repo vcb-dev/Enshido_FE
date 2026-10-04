@@ -1235,7 +1235,7 @@ function sliceMergedPage(
 
 /**
  * Trạng thái của một phiếu con: khâu đang ở (cùng màu chip với trạng thái đơn ở dòng cha, để
- * dò cột là thấy tiến độ), bên dưới là bước trong khâu — chờ thợ nhận, đang làm, chờ KCS…
+ * dò cột là thấy tiến độ), bên dưới là bước trong khâu — chờ thợ nhận, đang làm, chờ QC…
  */
 function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
   if (sub.state === 'FINISH') return <StatusChip status="FINISHING" />
@@ -1282,7 +1282,7 @@ function OrderStatus({ row }: { row: ProductionOrderRow }) {
       {row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT' ? (
         <SubTicketStateChip
           state={row.workState}
-          label={row.workState === 'IDLE' ? 'KCS đã nhận lại' : SUB_TICKET_STATE_META[row.workState].label}
+          label={row.workState === 'IDLE' ? 'QC đã nhận lại' : SUB_TICKET_STATE_META[row.workState].label}
         />
       ) : null}
     </Stack>
@@ -1301,7 +1301,7 @@ function orderStatusLabel(
   const lowerStage = stageName.toLocaleLowerCase('vi')
   if (state === 'WORKING') return `Đang ${lowerStage}`
   if (state === 'CLAIMED') return `Đã nhận ${lowerStage}`
-  if (state === 'SUBMITTED') return `Chờ KCS ${lowerStage}`
+  if (state === 'SUBMITTED') return `Chờ QC ${lowerStage}`
   return `Chờ ${lowerStage}`
 }
 

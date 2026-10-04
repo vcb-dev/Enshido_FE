@@ -1,4 +1,5 @@
 import { Autocomplete, TextField } from '@mui/material'
+import { isStoneMaterial, type LookupItem } from '../api/inventory'
 
 export type StockMaterialOption = {
   id: string
@@ -6,6 +7,8 @@ export type StockMaterialOption = {
   sku: string | null
   unitId: string
   unit: string
+  /** Loại kim loại — nhận diện đá (TL nhập theo ct). */
+  metalKind?: string | null
   qty?: string
   locationCode?: string | null
   otherClassId?: string | null
@@ -129,4 +132,17 @@ export function MaterialNameField({
       )}
     />
   )
+}
+
+/** Dòng phiếu là đá: TL nhập theo ct, gửi API theo g. */
+export function lineIsStone(
+  line: { materialId?: string | null; unitId?: string } | undefined,
+  materials: StockMaterialOption[],
+  units: LookupItem[],
+) {
+  const material = materials.find((item) => item.id === line?.materialId)
+  return isStoneMaterial({
+    unit: units.find((unit) => unit.id === line?.unitId)?.name ?? material?.unit,
+    metalKind: material?.metalKind,
+  })
 }

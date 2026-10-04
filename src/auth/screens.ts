@@ -71,6 +71,14 @@ export function hasAnyWarehouse(user: PermissionUser | undefined | null) {
 
 export function firstAllowedPath(user: PermissionUser | undefined | null): string {
   if (isWorkerOnly(user)) return '/my-tickets'
+  // Tài khoản QC (không kiêm thủ kho / admin) vào thẳng màn Phiếu QC.
+  if (
+    user?.roleCode !== 'ADMIN' &&
+    can(user, Permission.PRODUCTION_QC) &&
+    !can(user, Permission.WAREHOUSE_KEEPER)
+  ) {
+    return '/qc-tickets'
+  }
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
   if (canSeeIntakeOrdersMenu(user)) return '/intake-orders'
   if (canAccessProductionOrdersPage(user)) return '/orders'

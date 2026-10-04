@@ -10,6 +10,10 @@ import {
   formatMoney,
   formatPriceOrDash,
   formatQty,
+  formatCt,
+  ctToGram,
+  gramToCt,
+  isStoneMaterial,
   formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseOutboundsApi,
@@ -49,7 +53,7 @@ import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { OutboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
-import { matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
+import { lineIsStone, matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
 import { stockProfile } from './catalog'
@@ -184,6 +188,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         sku: item.sku,
         unitId: item.unitId,
         unit: item.unit,
+        metalKind: item.metalKind,
         qty: item.qty,
         priceLayers: item.priceLayers,
       })),
@@ -337,6 +342,13 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const columns = useMemo(() => {
     const stockOf = (row: OutboundGroup | OutboundRow) =>
       row.materialId ? stockById.get(row.materialId) : undefined
+    // Đá hiện TL theo ct, mã khác theo g.
+    const weightText = (row: OutboundGroup | OutboundRow) =>
+      !row.gramQty
+        ? '—'
+        : isStoneMaterial({ unit: row.unit, metalKind: stockOf(row)?.metalKind })
+          ? formatCt(row.gramQty)
+          : `${formatQty(row.gramQty)} g`
     const lineActions = (row: OutboundRow) => (
       <RowActions
         onView={() => openView(row)}
@@ -442,12 +454,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         ? [
             {
               key: 'gramQty',
-              header: 'Số gram',
+              header: 'TL',
               width: 110,
               numeric: true,
-              render: (row: OutboundGroup) =>
-                row.lines.length > 1 ? null : row.gramQty ? formatQty(row.gramQty) : '—',
-              renderSub: (line: OutboundRow) => (line.gramQty ? formatQty(line.gramQty) : '—'),
+              render: (row: OutboundGroup) => (row.lines.length > 1 ? null : weightText(row)),
+              renderSub: (line: OutboundRow) => weightText(line),
             } satisfies Column<OutboundGroup, OutboundRow>,
           ]
         : []),
@@ -774,7 +785,14 @@ function OutboundDialog({
                   units[0]?.id ??
                   '',
                 qty: qtyFromApi(row.qty),
-                gramQty: row.gramQty ? qtyFromApi(row.gramQty) : '',
+                gramQty: !row.gramQty
+                  ? ''
+                  : isStoneMaterial({
+                        unit: row.unit,
+                        metalKind: materials.find((item) => item.id === row.materialId)?.metalKind,
+                      })
+                    ? gramToCt(row.gramQty)
+                    : qtyFromApi(row.gramQty),
               },
             ],
           }
@@ -797,6 +815,15 @@ function OutboundDialog({
   }))
   const fullScreen = useIsMobile()
 
+  const isCaratLine = (line: OutboundLineValues | undefined) =>
+    units.find((unit) => unit.id === line?.unitId)?.name.trim().toLowerCase() === 'ct'
+
+  /** TL xuất (g) gửi API: mã ct suy từ SL, đá nhập theo ct, mã khác nhập g. */
+  function outboundGramOf(line: OutboundLineValues) {
+    if (isCaratLine(line)) return ctToGram(line.qty) || null
+    return (lineIsStone(line, materials, units) ? ctToGram(line.gramQty) : line.gramQty) || null
+  }
+
   function submit(values: OutboundFormValues) {
     if (readOnly) return
     const payloads = values.lines
@@ -809,7 +836,7 @@ function OutboundDialog({
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
-        gramQty: warehouseCode === 'nvl-chinh' ? line.gramQty || null : undefined,
+        gramQty: warehouseCode === 'nvl-chinh' ? outboundGramOf(line) : undefined,
         stockUnitPrice: '0',
         inboundUnitPrice: '0',
         amount: '0',
@@ -987,15 +1014,15 @@ function OutboundDialog({
                         },
                       }}
                     />
-                    {warehouseCode === 'nvl-chinh' ? (
+                    {warehouseCode === 'nvl-chinh' && !isCaratLine(line) ? (
                       <FormQtyField<OutboundFormValues>
                         name={`lines.${index}.gramQty`}
-                        label="Số gram"
+                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'Số gram'}
                         required
                         readOnly={readOnly}
-                        placeholder="Nhập số gram…"
+                        placeholder={lineIsStone(line, materials, units) ? 'Nhập TL ct…' : 'Nhập số gram…'}
                         rules={{
-                          validate: (value) => (Number(value) || 0) > 0 || 'Số gram phải lớn hơn 0',
+                          validate: (value) => (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
                         }}
                       />
                     ) : null}

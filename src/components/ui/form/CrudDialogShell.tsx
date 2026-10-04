@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
+import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, type ButtonProps } from '@mui/material'
 import { useController } from 'react-hook-form'
 import type { FieldValues, Path, PathValue, SubmitHandler, UseFormReturn } from 'react-hook-form'
 import { useIsMobile } from '../../../hooks/useBreakpoint'
@@ -25,6 +25,8 @@ export type CrudDialogShellProps<T extends FieldValues> = {
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   /** Ghi đè nhãn nút submit (mặc định "Thêm" / "Lưu" theo `kind`). */
   submitLabel?: string
+  /** Màu nút submit — vd. `error` cho thao tác dừng / chốt lỗi. */
+  submitColor?: ButtonProps['color']
   /**
    * Nhãn nút lúc đang gửi. Mặc định "Đang lên đơn…" / "Đang lưu…" theo `kind` — hộp thoại
    * nào đổi `submitLabel` sang việc khác (giao thợ, xác nhận…) thì nên đổi cả nhãn này.
@@ -52,6 +54,7 @@ export function CrudDialogShell<T extends FieldValues>({
   onExited,
   maxWidth = 'md',
   submitLabel,
+  submitColor,
   pendingLabel,
   editLog,
   children,
@@ -174,6 +177,7 @@ export function CrudDialogShell<T extends FieldValues>({
               <Button
                 type="submit"
                 variant="contained"
+                color={submitColor}
                 disabled={pending || submitDisabled}
                 startIcon={pending ? <CircularProgress color="inherit" size={16} /> : undefined}
               >

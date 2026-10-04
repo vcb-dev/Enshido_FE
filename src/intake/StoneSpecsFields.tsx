@@ -1,13 +1,15 @@
 import { Stack, Typography } from '@mui/material'
+import { ctToGram, gramToCt } from '../api/inventory'
 import { FormQtyField, FormTextField } from '../components/ui'
 
-export type StoneSpecs = { stoneCount3d: string; stoneWeight3dGram: string }
+/** TL đá nhập theo ct; API (`stoneWeight3dGram`) vẫn theo g. */
+export type StoneSpecs = { stoneCount3d: string; stoneWeight3dCt: string }
 
-export const EMPTY_STONE_SPECS: StoneSpecs = { stoneCount3d: '', stoneWeight3dGram: '' }
+export const EMPTY_STONE_SPECS: StoneSpecs = { stoneCount3d: '', stoneWeight3dCt: '' }
 
 /**
  * Đá theo file 3D của cả đơn — để trống nếu chưa biết, 0 viên = đơn không có đá (bỏ qua Vào đá).
- * Đặt trong `<Form>` có hai field `stoneCount3d` / `stoneWeight3dGram` (xem `StoneSpecs`).
+ * Đặt trong `<Form>` có hai field `stoneCount3d` / `stoneWeight3dCt` (xem `StoneSpecs`).
  */
 export function StoneSpecsFields({ disabled }: { disabled?: boolean }) {
   return (
@@ -27,8 +29,8 @@ export function StoneSpecsFields({ disabled }: { disabled?: boolean }) {
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
         />
         <FormQtyField<StoneSpecs>
-          name="stoneWeight3dGram"
-          label="Tổng TL đá (g)"
+          name="stoneWeight3dCt"
+          label="Tổng TL đá (ct)"
           helperText="Mốc tính hao hụt khâu Vào đá"
           size="small"
           fullWidth
@@ -42,7 +44,7 @@ export function StoneSpecsFields({ disabled }: { disabled?: boolean }) {
 export function stoneSpecsPayload(value: StoneSpecs) {
   return {
     stoneCount3d: value.stoneCount3d === '' ? null : Number(value.stoneCount3d),
-    stoneWeight3dGram: value.stoneWeight3dGram === '' ? null : Number(value.stoneWeight3dGram),
+    stoneWeight3dGram: value.stoneWeight3dCt === '' ? null : Number(ctToGram(value.stoneWeight3dCt)),
   }
 }
 
@@ -52,6 +54,6 @@ export function stoneSpecsOf(order: {
 } | null): StoneSpecs {
   return {
     stoneCount3d: order?.stoneCount3d != null ? String(order.stoneCount3d) : '',
-    stoneWeight3dGram: order?.stoneWeight3dGram != null ? String(Number(order.stoneWeight3dGram)) : '',
+    stoneWeight3dCt: gramToCt(order?.stoneWeight3dGram),
   }
 }

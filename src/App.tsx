@@ -34,6 +34,9 @@ const CastingOrdersPage = lazy(() =>
 const IntakeOrdersPage = lazy(() =>
   import('./pages/IntakeOrdersPage').then((m) => ({ default: m.IntakeOrdersPage })),
 )
+const CastingCutsPage = lazy(() =>
+  import('./pages/CastingCutsPage').then((m) => ({ default: m.CastingCutsPage })),
+)
 const CastingSlipPrintPage = lazy(() =>
   import('./pages/CastingSlipPrintPage').then((m) => ({ default: m.CastingSlipPrintPage })),
 )
@@ -48,6 +51,9 @@ const ProductionTicketPrintPage = lazy(() =>
 )
 const MyTicketsPage = lazy(() =>
   import('./pages/MyTicketsPage').then((m) => ({ default: m.MyTicketsPage })),
+)
+const QcTicketsPage = lazy(() =>
+  import('./pages/QcTicketsPage').then((m) => ({ default: m.QcTicketsPage })),
 )
 const MaterialRequestsPage = lazy(() =>
   import('./pages/MaterialRequestsPage').then((m) => ({ default: m.MaterialRequestsPage })),
@@ -117,11 +123,13 @@ export default function App() {
           <Route path="/casting" element={<CastingOrdersPage />} />
           {/* Thợ đúc quét QR trên phiếu đúc giấy → mở thẳng phiếu (bước 8). */}
           <Route path="/casting/:code" element={<CastingOrdersPage />} />
+          <Route path="/casting-cuts" element={<CastingCutsPage />} />
           <Route path="/intake-orders" element={<IntakeOrdersPage />} />
           <Route path="/orders" element={<ProductionOrdersPage />} />
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}
           <Route path="/orders/:code" element={<OrderDetailRoute />} />
           <Route path="/my-tickets" element={<MyTicketsPage />} />
+          <Route path="/qc-tickets" element={<QcTicketsPage />} />
           <Route path="/material-requests" element={<MaterialRequestsPage />} />
           <Route path="/tickets/:ticketCode" element={<SubTicketPage />} />
           <Route path="/" element={<DashboardPage />} />

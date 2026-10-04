@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Box, Paper, Stack, Typography, type SxProps, type Theme } from '@mui/material'
+import { Box, Chip, Paper, Stack, Typography, type SxProps, type Theme } from '@mui/material'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import { cloudinaryThumb } from '../api/uploads'
 import type { StageCode } from '../api/productionOrders'
@@ -140,7 +140,7 @@ export function EmptyState({ icon, title, description }: { icon: ReactNode; titl
 }
 
 /**
- * Tiến độ các khâu của phiếu: khâu đã KCS nhận lại, khâu đang làm / đang mở, khâu còn lại.
+ * Tiến độ các khâu của phiếu: khâu đã QC nhận lại, khâu đang làm / đang mở, khâu còn lại.
  * Trên điện thoại cuộn ngang được thay vì co chữ.
  */
 export function StageProgress({ done, current }: { done: StageCode[]; current: StageCode | null }) {
@@ -271,5 +271,67 @@ export function StickyActions({ children }: { children: ReactNode }) {
     >
       <Stack spacing={1}>{children}</Stack>
     </Box>
+  )
+}
+
+export function TabLabel({ text, count, active }: { text: string; count: number; active: boolean }) {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+      <span>{text}</span>
+      <Box
+        component="span"
+        sx={{
+          minWidth: 20,
+          px: 0.75,
+          borderRadius: 99,
+          fontSize: 12,
+          fontWeight: 600,
+          lineHeight: '20px',
+          textAlign: 'center',
+          bgcolor: active ? 'primary.main' : 'action.selected',
+          color: active ? 'primary.contrastText' : 'text.secondary',
+        }}
+      >
+        {count}
+      </Box>
+    </Stack>
+  )
+}
+
+/** Bộ lọc dạng pill: nhãn + số đếm mờ, chọn thì tô màu chính. */
+export function FilterPill({
+  label,
+  count,
+  selected,
+  onClick,
+}: {
+  label: string
+  count: number
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <Chip
+      size="small"
+      clickable
+      onClick={onClick}
+      color={selected ? 'primary' : 'default'}
+      variant={selected ? 'filled' : 'outlined'}
+      label={
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <span>{label}</span>
+          <Box component="span" sx={{ opacity: selected ? 0.8 : 0.6, fontWeight: 500 }}>
+            {count}
+          </Box>
+        </Stack>
+      }
+      sx={{
+        height: 30,
+        borderRadius: 99,
+        fontWeight: 600,
+        px: 0.5,
+        bgcolor: selected ? undefined : 'background.paper',
+      }}
+    />
   )
 }
