@@ -1,3 +1,4 @@
+import { canCutCastingSlip } from '../casting/castingCuts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box,
@@ -20,7 +21,6 @@ import { toast } from 'sonner'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   confirmCastingSlipApi,
-  cutCastingSlipApi,
   rejectCastingSlipApi,
   createCastingSlipApi,
   issueCastingSlipApi,
@@ -32,7 +32,6 @@ import {
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
   type CastingSlipResultPayload,
-  type ConfirmCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
@@ -50,7 +49,6 @@ import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
 import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
-import { CastingSlipCutDialog } from '../intake/CastingSlipCutDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
@@ -62,7 +60,6 @@ import {
   applyCastingSlipUpdate,
 } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
-import { invalidateBtpStock } from '../orders/btpStock'
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
 const SLIP_STATUS_META: Record<CastingSlipStatus, { label: string; bg: string }> = {
@@ -91,9 +88,6 @@ const SLIP_FILTERS = {
   issueTotal: '',
 }
 
-function slipNeedsCut(slip: CastingSlip) {
-  return slip.status === 'DONE' && slip.orders.some((line) => !line.productionOrderCode)
-}
 
 function formatGram(value: string | null) {
   if (value == null || value === '') return '—'
@@ -111,7 +105,6 @@ export function CastingOrdersPage() {
   const [issueTarget, setIssueTarget] = useState<CastingSlip | null>(null)
   /** Phiếu đang mở hộp xem lại số liệu thợ đúc vừa nhập. */
   const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
-  const [cutTarget, setCutTarget] = useState<CastingSlip | null>(null)
   const [resultTarget, setResultTarget] = useState<CastingSlip | null>(null)
   // `?new=<id>`: mở từ nút "Lên lệnh đúc" trên một dòng Lệnh sản xuất.
   const preselectId = searchParams.get('new')
@@ -146,27 +139,9 @@ export function CastingOrdersPage() {
     if (issueFromOrders.error instanceof Error) toast.error(issueFromOrders.error.message)
   }, [issueFromOrders.error])
 
-  const cutFromOrders = useQuery({
-    queryKey: ['casting-slip', 'cut-param', cutCodeParam],
-    queryFn: () => getCastingSlipByCodeApi(cutCodeParam!),
-    enabled: Boolean(cutCodeParam),
-    staleTime: 0,
-  })
   useEffect(() => {
-    if (!cutCodeParam || !cutFromOrders.data) return
-    setCutTarget(cutFromOrders.data)
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('cut')
-        return next
-      },
-      { replace: true },
-    )
-  }, [cutCodeParam, cutFromOrders.data, setSearchParams])
-  useEffect(() => {
-    if (cutFromOrders.error instanceof Error) toast.error(cutFromOrders.error.message)
-  }, [cutFromOrders.error])
+    if (cutCodeParam) navigate('/casting-cuts', { replace: true })
+  }, [cutCodeParam, navigate])
 
   // `/casting/:code`: thợ đúc quét QR trên phiếu giấy → mở ngay phiếu đó (bước 8).
   const scanned = useQuery({
@@ -288,18 +263,6 @@ export function CastingOrdersPage() {
       toast.error(error.message)
     },
   })
-  const cut = useMutation({
-    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
-      cutCastingSlipApi(slip.id, payload),
-    onSuccess: (updated) => {
-      setCutTarget(null)
-      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã cắt cây thông — đơn sang Chờ nguội`)
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
-      invalidateBtpStock(queryClient)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
   const rejectCast = useMutation({
     mutationFn: (slip: CastingSlip) => rejectCastingSlipApi(slip.id),
     onSuccess: (redo, failedSlip) => {
@@ -370,9 +333,9 @@ export function CastingOrdersPage() {
             Nhập kết quả đúc
           </Button>
         ) : null}
-        {row.status === 'DONE' && canConfirm && slipNeedsCut(row) ? (
-          <Button size="small" variant="contained" onClick={() => setCutTarget(row)}>
-            Cắt cây thông
+        {row.status === 'DONE' && canConfirm && canCutCastingSlip(row) ? (
+          <Button size="small" variant="contained" onClick={() => navigate('/casting-cuts')}>
+            Vào mục Cắt cây thông
           </Button>
         ) : null}
         {row.status === 'PENDING_CONFIRMATION' && canConfirm ? (
@@ -404,7 +367,7 @@ export function CastingOrdersPage() {
       canCast,
       canConfirm,
       setConfirmTarget,
-      setCutTarget,
+      navigate,
       confirmingId,
       dialog.openView,
       rejectingId,
@@ -600,10 +563,7 @@ export function CastingOrdersPage() {
           closeView()
           setConfirmTarget(slip)
         }}
-        onCut={(slip) => {
-          closeView()
-          setCutTarget(slip)
-        }}
+        onCut={() => navigate('/casting-cuts')}
         onReject={askRejectCast}
         onEnterResult={setResultTarget}
         onClose={closeView}
@@ -619,12 +579,6 @@ export function CastingOrdersPage() {
         saving={confirm.isPending}
         onClose={() => setConfirmTarget(null)}
         onConfirm={() => confirmTarget && confirm.mutate(confirmTarget)}
-      />
-      <CastingSlipCutDialog
-        slip={cutTarget}
-        saving={cut.isPending}
-        onClose={() => setCutTarget(null)}
-        onSave={(payload) => cutTarget && cut.mutate({ slip: cutTarget, payload })}
       />
       <CastingSlipIssueDialog
         slip={issueTarget}
@@ -834,7 +788,7 @@ export function CastingSlipViewDialog({
             Nhập kết quả đúc
           </Button>
         ) : null}
-        {slip && canConfirm && slipNeedsCut(slip) ? (
+        {slip && canConfirm && canCutCastingSlip(slip) ? (
           <Button variant="contained" onClick={() => onCut(slip)}>
             Cắt cây thông
           </Button>

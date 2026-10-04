@@ -873,10 +873,10 @@ function renderIntakeWorkflowAction(
         size="small"
         variant="contained"
         component={RouterLink}
-        to={order.castingSlip?.code ? `/casting?cut=${encodeURIComponent(order.castingSlip.code)}` : '/casting'}
+        to="/casting-cuts"
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
-        Cắt cây thông
+        Vào mục “Cắt cây thông” cập nhật số liệu
       </Button>
     )
   }
