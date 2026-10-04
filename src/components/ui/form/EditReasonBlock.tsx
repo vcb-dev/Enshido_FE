@@ -1,7 +1,10 @@
 import { Box, TextField, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
+import { useController } from 'react-hook-form'
+import type { FieldValues } from 'react-hook-form'
 import { listEditLogsApi } from '../../../api/editLogs'
 import { formatDateTime } from '../../../orders/catalog'
+import type { FormFieldBaseProps } from './field'
 
 export type EditLogTarget = {
   entityType: string
@@ -92,5 +95,37 @@ export function EditReasonBlock({
         )}
       </Box>
     </Box>
+  )
+}
+
+/**
+ * `EditReasonBlock` nối với react-hook-form qua Controller: lý do là một field của form, bắt buộc
+ * khi `required` (chỉ khoảng trắng cũng tính là trống).
+ */
+export function FormEditReasonBlock<T extends FieldValues>({
+  name,
+  control,
+  required,
+  entityType,
+  entityId,
+  readOnly,
+}: Pick<FormFieldBaseProps<T>, 'name' | 'control' | 'required'> & EditLogTarget & { readOnly?: boolean }) {
+  const { field, fieldState } = useController({
+    name,
+    control,
+    rules: required
+      ? { validate: (value: string | undefined) => (value?.trim() ? true : 'Nhập lý do chỉnh sửa') }
+      : undefined,
+  })
+  return (
+    <EditReasonBlock
+      entityType={entityType}
+      entityId={entityId}
+      reason={(field.value as string | undefined) ?? ''}
+      onReasonChange={field.onChange}
+      required={required}
+      error={fieldState.error?.message}
+      readOnly={readOnly}
+    />
   )
 }

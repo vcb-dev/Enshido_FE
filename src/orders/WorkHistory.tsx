@@ -144,7 +144,6 @@ export function WorkHistoryTable({
               ? `Hao hụt ${g(entry.silverLoss)}${entry.silverLossPercent != null ? ` (${entry.silverLossPercent}%)` : ''}`
               : '',
             recovered,
-            entry.laborCost ? `Tiền công ${formatQty(entry.laborCost)}` : '',
             entry.note ? `Ghi chú: ${entry.note}` : '',
           ].filter(Boolean),
         })

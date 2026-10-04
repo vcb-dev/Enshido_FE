@@ -3,7 +3,7 @@
  * phải dựng react-query — phần nối với API nằm ở subTicketActions.ts.
  */
 
-export type SubTicketAction = 'claim' | 'unclaim' | 'submit' | 'unsubmit'
+export type SubTicketAction = 'claim' | 'unclaim' | 'accept' | 'submit' | 'unsubmit'
 
 export type SubTicketVars = {
   orderCode: string
@@ -29,6 +29,7 @@ export function subTicketMutationKey(action: SubTicketAction) {
 const WAITING_LABEL: Record<SubTicketAction, string> = {
   claim: 'Chờ gửi: nhận phiếu',
   unclaim: 'Chờ gửi: huỷ nhận',
+  accept: 'Chờ gửi: nhận hàng',
   submit: 'Chờ gửi: báo xong',
   unsubmit: 'Chờ gửi: bỏ báo xong',
 }

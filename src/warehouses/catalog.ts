@@ -2,7 +2,7 @@ export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 't
 
 export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
-export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound'
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -12,11 +12,23 @@ export type WarehouseDef = {
   sections?: boolean
 }
 
-export const WAREHOUSE_SECTIONS: Array<{ code: WarehouseSectionCode; name: string }> = [
+export const WAREHOUSE_SECTIONS: Array<{
+  code: WarehouseSectionCode
+  name: string
+  /** Chỉ hiện ở các kho này; bỏ trống = mọi kho có mục. */
+  only?: WarehouseCode[]
+}> = [
   { code: 'stock', name: 'Tồn' },
   { code: 'inbound', name: 'Nhập' },
   { code: 'outbound', name: 'Xuất' },
+  /** Phiếu xuất nháp — đá cấp cho khâu Vào đá, chưa trừ tồn. */
+  { code: 'drafts', name: 'Xuất nháp', only: ['nvl-chinh'] },
 ]
+
+/** Các mục của một kho (Xuất nháp chỉ có ở kho NVL chính). */
+export function sectionsOf(warehouse: WarehouseDef) {
+  return WAREHOUSE_SECTIONS.filter((s) => !s.only || s.only.includes(warehouse.code))
+}
 
 /** Mã mục kho trên URL cũ (/kho/nvl-chinh/ton) → mã hiện tại. */
 export const LEGACY_SECTION_CODES: Record<string, WarehouseSectionCode> = {

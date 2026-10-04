@@ -30,7 +30,7 @@ function today() {
 }
 const g = (value: string | null) => (value == null ? '—' : formatQty(value))
 
-/** Hao hụt đúc theo thợ và theo từng phiếu — phiếu đã được thủ kho xác nhận Đúc xong. */
+/** Hao hụt đúc theo thợ và theo từng phiếu — phiếu thủ kho đã cắt cây thông. */
 export function CastingLossDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const fullScreen = useIsMobile()
   const [from, setFrom] = useState(monthStart)
@@ -50,7 +50,7 @@ export function CastingLossDialog({ open, onClose }: { open: boolean; onClose: (
       <DialogContent dividers>
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            Hao hụt = bạc đã dùng − cây thông sau đúc. Chỉ tính phiếu thủ kho đã xác nhận Đúc xong, theo ngày xác nhận.
+            Hao hụt = bạc đã dùng − cây thông sau đúc. Chỉ tính phiếu thủ kho đã cắt cây thông, theo ngày cắt cây.
           </Typography>
           <Stack direction="row" spacing={2}>
             <TextField size="small" type="date" label="Từ ngày" value={from} onChange={(e) => setFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />

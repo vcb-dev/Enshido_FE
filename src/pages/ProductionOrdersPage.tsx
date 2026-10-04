@@ -80,6 +80,7 @@ import {
   formatDateTime,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
+  STAGE_LABEL,
   STATUS_META,
   STATUS_TABS,
   SUB_TICKET_STATE_META,
@@ -89,6 +90,7 @@ import { afterProductionOrderSaved } from '../orders/orderCache'
 import { deadlineWarning } from '../orders/deadline'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
@@ -256,8 +258,9 @@ export function ProductionOrdersPage() {
   const productionStatusCounts = useQuery({
     queryKey: ['production-orders', 'status-counts', productionCountFilters],
     queryFn: () => getProductionOrderStatusCountsApi(productionCountFilters),
-    staleTime: 120_000,
-    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+    // Badge tab đi cùng danh sách đang tự làm mới — không thì số trên tab lệch với dòng.
+    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.background),
     enabled: !isIntakePendingView,
   })
 
@@ -268,15 +271,13 @@ export function ProductionOrdersPage() {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: !isIntakePendingView && productionListParams !== null,
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.list),
   })
   const intakePipelineCounts = useQuery({
     queryKey: ['intake-orders', 'pipeline-counts'],
     queryFn: getIntakePipelineCountsApi,
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    ...liveRefresh(LIVE_REFRESH_MS.background),
   })
   const intakePipe = intakePipelineCounts.data ?? {}
   const isIntakeWarehouseKeeper = canConfirmIntakeWarehouse(user)
@@ -341,8 +342,15 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const attachModel3d = useMutation({
-    mutationFn: ({ id, model3dUrl }: { id: string; model3dUrl: string }) =>
-      attachIntakeModel3dApi(id, { model3dUrl }),
+    mutationFn: ({
+      id,
+      ...payload
+    }: {
+      id: string
+      model3dUrl: string
+      stoneCount3d: number | null
+      stoneWeight3dGram: number | null
+    }) => attachIntakeModel3dApi(id, payload),
     onSuccess: (order) => {
       setModel3dTarget(null)
       afterIntakeModel3dAttached(queryClient, order)
@@ -365,11 +373,15 @@ export function ProductionOrdersPage() {
       id,
       productWeightGram,
       images,
+      stoneCount3d,
+      stoneWeight3dGram,
     }: {
       id: string
       productWeightGram: number
       images: IntakeOrder['images']
-    }) => submitIntakeProductSpecsApi(id, { productWeightGram, images }),
+      stoneCount3d: number | null
+      stoneWeight3dGram: number | null
+    }) => submitIntakeProductSpecsApi(id, { productWeightGram, images, stoneCount3d, stoneWeight3dGram }),
     onSuccess: (order) => {
       setProductSpecsTarget(null)
       afterIntakeProductSpecsSubmitted(queryClient, order)
@@ -646,9 +658,12 @@ export function ProductionOrdersPage() {
           columns={columns}
           rows={tableRows}
           rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
-          onRowClick={(row) => {
-            if (row.kind === 'order') navigate(`/orders/${row.row.code}`)
-          }}
+          onRowClick={(row) =>
+            row.kind === 'intake'
+              ? setIntakeViewTarget(row.row)
+              : navigate(`/orders/${row.row.code}`)
+          }
+          onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}
           subRows={{
             get: (row) =>
               row.kind === 'intake'
@@ -771,9 +786,9 @@ export function ProductionOrdersPage() {
         order={model3dTarget}
         saving={attachModel3d.isPending}
         onClose={() => setModel3dTarget(null)}
-        onSave={(model3dUrl) => {
+        onSave={(payload) => {
           if (!model3dTarget) return
-          void attachModel3d.mutateAsync({ id: model3dTarget.id, model3dUrl })
+          void attachModel3d.mutateAsync({ id: model3dTarget.id, ...payload })
         }}
       />
       <WaxPrintBatchDialog
@@ -860,7 +875,7 @@ function renderIntakeWorkflowAction(
     </Typography>
   )
   if (order.status === 'PENDING_APPROVAL') {
-    if (!actions.can.approve) return waiting('quản lý SX duyệt')
+    if (!actions.can.approve) return waiting('thủ kho duyệt')
     return (
       <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
         <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
@@ -999,13 +1014,13 @@ function renderIntakeWorkflowAction(
     )
   }
   if (order.status === 'CAST_DONE') {
-    if (!actions.can.keeper && !actions.can.qc) return waiting('thủ kho cắt cây')
+    if (!actions.can.keeper) return waiting('thủ kho cắt cây thông')
     return (
       <Button
         size="small"
         variant="contained"
         component={RouterLink}
-        to="/casting-cuts"
+        to="/casting"
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
         Cắt cây thông
@@ -1345,59 +1360,75 @@ function sliceMergedPage(
 function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
   if (sub.state === 'FINISH') return <StatusChip status="FINISHING" />
   if (sub.state === 'DEFECT') return <StatusChip status="DEFECT" />
-  if (!sub.stage) return <SubTicketStateChip state="IDLE" label="Chưa giao khâu" />
+  if (!sub.stage) return <StatusChip status={sub.status} />
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      <StatusChip status={sub.stage} />
-      <SubTicketStateChip
-        state={sub.state}
-        label={sub.state === 'IDLE' ? 'KCS đã nhận lại' : undefined}
-      />
+      <StatusChip status={sub.status} label={orderStatusLabel(sub.status, sub.state, sub.stage)} />
+      {sub.state === 'IDLE' ? null : <SubTicketStateChip state={sub.state} />}
     </Stack>
   )
 }
 
 function OrderStatus({ row }: { row: ProductionOrderRow }) {
   if (row.subTickets.length) {
-    const counts = new Map<ProductionStatus, number>()
+    const counts = new Map<string, { status: ProductionStatus; label: string; count: number }>()
     for (const ticket of row.subTickets) {
       const status = subTicketListStatus(ticket)
-      if (status) counts.set(status, (counts.get(status) ?? 0) + 1)
+      if (status) {
+        const label = orderStatusLabel(status, ticket.state, ticket.stage)
+        const key = `${status}:${label}`
+        const current = counts.get(key)
+        counts.set(key, { status, label, count: (current?.count ?? 0) + 1 })
+      }
     }
     if (counts.size) {
       return (
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-          {STATUS_TABS.filter((status) => counts.has(status)).map((status) => (
+          {[...counts.values()].map(({ status, label, count }) => (
             <StatusChip
-              key={status}
+              key={`${status}:${label}`}
               status={status}
-              label={`${STATUS_META[status].label} · ${counts.get(status)}`}
+              label={`${label} · ${count}`}
             />
           ))}
         </Stack>
       )
     }
   }
-  const detail =
-    row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT'
-      ? row.workState === 'IDLE'
-        ? 'KCS đã nhận lại'
-        : SUB_TICKET_STATE_META[row.workState].label
-      : null
+  const label = orderStatusLabel(row.status, row.workState, row.workStage)
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      <StatusChip status={row.status} />
-      {detail ? (
-        <SubTicketStateChip state={row.workState!} label={detail} />
+      <StatusChip status={row.status} label={label} />
+      {row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT' ? (
+        <SubTicketStateChip
+          state={row.workState}
+          label={row.workState === 'IDLE' ? 'KCS đã nhận lại' : SUB_TICKET_STATE_META[row.workState].label}
+        />
       ) : null}
     </Stack>
   )
 }
 
+function orderStatusLabel(
+  status: ProductionStatus,
+  state: SubTicketSummary['state'] | ProductionOrderRow['workState'],
+  stage: SubTicketSummary['stage'] | ProductionOrderRow['workStage'],
+) {
+  const stageName = stage ? STAGE_LABEL[stage] : STATUS_META[status].label
+  const stageStatus = status === 'FILING' || status === 'STONE_SETTING' ||
+    status === 'ENGRAVING' || status === 'POLISHING' || status === 'PLATING'
+  if (!stageStatus) return STATUS_META[status].label
+  const lowerStage = stageName.toLocaleLowerCase('vi')
+  if (state === 'WORKING') return `Đang ${lowerStage}`
+  if (state === 'CLAIMED') return `Đã nhận ${lowerStage}`
+  if (state === 'SUBMITTED') return `Chờ KCS ${lowerStage}`
+  return `Chờ ${lowerStage}`
+}
+
 function subTicketListStatus(sub: SubTicketSummary): ProductionStatus | null {
   if (sub.state === 'FINISH') return 'FINISHING'
   if (sub.state === 'DEFECT') return 'DEFECT'
-  return sub.stage
+  return sub.status
 }
 
 const DEADLINE_TONE = {

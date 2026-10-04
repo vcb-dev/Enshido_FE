@@ -342,6 +342,17 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         sortable: true,
         render: (row: InboundRow) => formatQty(row.qty),
       },
+      ...(warehouseCode === 'nvl-chinh'
+        ? [
+            {
+              key: 'gramQty',
+              header: 'Số gram',
+              width: 110,
+              numeric: true,
+              render: (row: InboundRow) => (row.gramQty ? formatQty(row.gramQty) : '—'),
+            },
+          ]
+        : []),
       {
         key: 'unitPrice',
         header: 'Đơn giá',
@@ -550,6 +561,10 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 }
 
+/** Mã tính theo gram: SL chính là TL — không nhập số gram riêng. */
+const isGramUnit = (name: string | undefined) =>
+  ['g', 'gr', 'gram', 'grams', 'gam'].includes((name ?? '').trim().toLowerCase())
+
 type InboundLineValues = {
   name: string
   sku: string
@@ -557,6 +572,8 @@ type InboundLineValues = {
   unitId: string
   otherClassId: string
   qty: string
+  /** Kho NVL chính: trọng lượng nhập (g) — mã tính theo gram thì lấy bằng SL. */
+  gramQty: string
   unitPrice: string
 }
 
@@ -576,6 +593,7 @@ const EMPTY_INBOUND_LINE: InboundLineValues = {
   unitId: '',
   otherClassId: '',
   qty: '',
+  gramQty: '',
   unitPrice: '',
 }
 
@@ -660,6 +678,7 @@ function InboundDialog({
                 otherClassId:
                   materials.find((item) => item.id === row.materialId)?.otherClassId ?? '',
                 qty: qtyFromApi(row.qty),
+                gramQty: row.gramQty ? qtyFromApi(row.gramQty) : '',
                 unitPrice: moneyDigitsFromApi(
                   Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice,
                 ),
@@ -705,6 +724,7 @@ function InboundDialog({
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
+        gramQty: warehouseCode === 'nvl-chinh' ? line.gramQty || null : undefined,
         stockUnitPrice: '0',
         unitPrice: line.unitPrice || '0',
         amount: String(Math.round((Number(line.qty) || 0) * (Number(line.unitPrice) || 0))),
@@ -861,6 +881,21 @@ function InboundDialog({
                       readOnly
                     />
                   </FormRow>
+                  {warehouseCode === 'nvl-chinh' && !isGramUnit(units.find((unit) => unit.id === line?.unitId)?.name) ? (
+                    <FormRow columns={4}>
+                      <FormQtyField<InboundFormValues>
+                        name={`lines.${index}.gramQty`}
+                        label="Số gram"
+                        required
+                        readOnly={readOnly}
+                        placeholder="Cân cả lô nhập…"
+                        helperText="Cộng vào TL tồn của mã"
+                        rules={{
+                          validate: (value) => (Number(value) || 0) > 0 || 'Số gram phải lớn hơn 0',
+                        }}
+                      />
+                    </FormRow>
+                  ) : null}
                 </Box>
                 {kind === 'create' ? (
                   <LineActions
@@ -1070,6 +1105,7 @@ function inboundOptimisticRow(
     unit: extra.unit,
     unitId: payload.unitId ?? null,
     qty: payload.qty,
+    gramQty: payload.gramQty ?? null,
     stockUnitPrice: payload.stockUnitPrice ?? '0',
     unitPrice: payload.unitPrice ?? '0',
     amount: payload.amount ?? '0',

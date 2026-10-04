@@ -29,6 +29,7 @@ import {
   type CastingSlipImage,
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
+  type ConfirmCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { formatQty } from '../api/inventory'
@@ -44,6 +45,7 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
+import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
@@ -53,6 +55,9 @@ import {
   applyCastingSlipUpdate,
 } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
+import { invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlWarehouse } from '../orders/nvlStock'
+import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -60,7 +65,7 @@ const SLIP_STATUS_META: Record<CastingSlipStatus, { label: string; bg: string }>
   PENDING_ISSUE: { label: 'Chờ cấp vật tư', bg: '#8d6e63' },
   WAIT_CASTING: { label: 'Chờ đúc', bg: '#283593' },
   CASTING: { label: 'Đang đúc', bg: '#c62828' },
-  PENDING_CONFIRMATION: { label: 'Chờ thủ kho xác nhận', bg: '#e65100' },
+  PENDING_CONFIRMATION: { label: 'Chờ thủ kho kiểm tra đúc / cắt cây', bg: '#e65100' },
   DONE: { label: 'Đúc xong', bg: '#00695c' },
   CAST_FAILED: { label: 'Lỗi đúc', bg: '#636e72' },
 }
@@ -96,6 +101,8 @@ export function CastingOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [createOpen, setCreateOpen] = useState(false)
   const [issueTarget, setIssueTarget] = useState<CastingSlip | null>(null)
+  /** Phiếu đang mở hộp "Cắt cây thông" (cân phôi từng đơn + phần cây còn lại). */
+  const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
   // `?new=<id>`: mở từ nút "Lên lệnh đúc" trên một dòng Lệnh sản xuất.
   const preselectId = searchParams.get('new')
   /** `?issue=<mã phiếu>`: từ Lệnh sản xuất — sang Lệnh đúc và mở form cấp vật tư. */
@@ -171,8 +178,9 @@ export function CastingOrdersPage() {
         pageSize: params.pageSize,
       }),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+    // Thợ đúc nhận / báo xong và thủ kho xác nhận trên máy khác — danh sách phải tự cập nhật.
+    ...liveRefresh(LIVE_REFRESH_MS.list),
   })
 
   // Đổi trạng thái phiếu kéo theo trạng thái đơn tạo (G, H) nên làm mới cả hai danh sách.
@@ -217,10 +225,19 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  // Cắt cây thông: chia phôi từng đơn, sinh lệnh SX (Chờ nguội), phôi vào kho BTP,
+  // phần cây còn lại vào kho NVL.
   const confirm = useMutation({
-    mutationFn: (slip: CastingSlip) => confirmCastingSlipApi(slip.id),
-    onSuccess: (updated) =>
-      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã xác nhận Đúc xong`),
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
+      confirmCastingSlipApi(slip.id, payload),
+    onSuccess: (updated) => {
+      setConfirmTarget(null)
+      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã tạo ${updated.orders.length} lệnh sản xuất, chuyển Nguội`)
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
+      invalidateBtpStock(queryClient)
+      invalidateNvlWarehouse(queryClient)
+    },
     onError: (error: Error) => toast.error(error.message),
   })
   const rejectCast = useMutation({
@@ -239,7 +256,7 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const confirmingId = confirm.isPending ? confirm.variables?.id : null
+  const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
   const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
 
   const askRejectCast = useCallback(
@@ -247,7 +264,7 @@ export function CastingOrdersPage() {
       const orders = slip.orders.map((line) => line.code).join(', ')
       if (
         !window.confirm(
-          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc (F) để thợ làm lại.`,
+          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc để thợ làm lại.`,
         )
       ) {
         return
@@ -276,9 +293,9 @@ export function CastingOrdersPage() {
               variant="contained"
               color="success"
               disabled={confirmingId === row.id || rejectingId === row.id}
-              onClick={() => confirm.mutate(row)}
+              onClick={() => setConfirmTarget(row)}
             >
-              Xác nhận đúc xong
+              Cắt cây thông
             </Button>
             <Button
               size="small"
@@ -296,7 +313,7 @@ export function CastingOrdersPage() {
     [
       askRejectCast,
       canConfirm,
-      confirm.mutate,
+      setConfirmTarget,
       confirmingId,
       dialog.openView,
       rejectingId,
@@ -487,9 +504,15 @@ export function CastingOrdersPage() {
         canConfirm={canConfirm}
         busy={confirm.isPending}
         busyReject={rejectCast.isPending}
-        onConfirm={(slip) => confirm.mutate(slip)}
+        onConfirm={(slip) => setConfirmTarget(slip)}
         onReject={askRejectCast}
         onClose={closeView}
+      />
+      <CastingSlipConfirmDialog
+        slip={confirmTarget}
+        saving={confirm.isPending}
+        onClose={() => setConfirmTarget(null)}
+        onSave={(payload) => confirmTarget && confirm.mutate({ slip: confirmTarget, payload })}
       />
       <CastingSlipIssueDialog
         slip={issueTarget}
@@ -750,7 +773,7 @@ function CastingSlipViewDialog({
               Lỗi đúc
             </Button>
             <Button variant="contained" disabled={busy || busyReject} onClick={() => onConfirm(slip)}>
-              Xác nhận đúc xong
+              Cắt cây thông
             </Button>
           </>
         ) : null}

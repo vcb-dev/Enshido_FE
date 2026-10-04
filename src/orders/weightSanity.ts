@@ -1,4 +1,5 @@
 import { formatQty } from '../api/inventory'
+import { confirmDialog } from '../components/ui/ConfirmDialog'
 
 /**
  * Kiểm tra chéo các số gram trong cùng một form — không dùng mốc tối đa cố định. Nhầm dấu
@@ -19,11 +20,15 @@ export function ratioWarning(
   return `${valueLabel} ${formatQty(String(value))} g ${times} ${baseLabel} ${formatQty(String(base))} g${range.note ? ` (${range.note})` : ''}`
 }
 
-/** Có số bất thường thì hỏi lại trước khi lưu; không có thì cho qua. */
-export function confirmWeights(warnings: Array<string | null>): boolean {
+/** Có số bất thường thì hỏi lại trước khi lưu (hộp xác nhận của hệ thống); không có thì cho qua. */
+export async function confirmWeights(warnings: Array<string | null>): Promise<boolean> {
   const list = warnings.filter((item): item is string => Boolean(item))
   if (!list.length) return true
-  return window.confirm(
-    `Kiểm tra lại số liệu — có thể nhầm dấu chấm / phẩy (dấu phẩy là thập phân: 12,5 g):\n\n• ${list.join('\n• ')}\n\nVẫn lưu?`,
-  )
+  return confirmDialog({
+    title: 'Kiểm tra lại số liệu',
+    message: 'Có thể nhầm dấu chấm / phẩy (dấu phẩy là thập phân: 12,5 g).',
+    items: list,
+    confirmLabel: 'Vẫn lưu',
+    cancelLabel: 'Quay lại sửa',
+  })
 }

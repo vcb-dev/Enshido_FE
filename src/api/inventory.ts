@@ -69,6 +69,13 @@ export type StockRow = {
   outAmount: string
   qty: string
   amount: string
+  /** Tồn thực / giữ chỗ / khả dụng — chỉ có ở danh sách tồn của kho. */
+  onHandQty?: string
+  heldQty?: string
+  availableQty?: string
+  ledgerMismatch?: boolean
+  gramOnHand?: string | null
+  gramBaseAt?: string | null
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
   materialTypeId: string | null
   materialType: string | null
@@ -313,6 +320,31 @@ export function stockStatusFromQty(qty: string) {
   if (n < 5) return { code: 'LOW' as const, label: 'Sắp hết hàng' }
   return { code: 'IN_STOCK' as const, label: 'Còn' }
 }
+/**
+ * Tồn thực = tồn đầu kỳ + phiếu nhập − phiếu xuất (đúng số BE dùng để chặn xuất); giữ chỗ = đá
+ * đang giữ cho phiếu Vào đá chờ thủ kho xác nhận; khả dụng = thực − giữ chỗ. `ledgerMismatch`:
+ * sổ tồn ghi khác tồn thực — cần kiểm kê.
+ */
+export type StockSnapshot = {
+  onHandQty: string
+  heldQty: string
+  availableQty: string
+  ledgerMismatch: boolean
+  /** TL tồn (g): mã gram = tồn thực; mã khác = TL kho cân + nhập − xuất sau đó; null = chưa cân. */
+  gramOnHand: string | null
+  /** Lúc kho cân TL tồn gần nhất (mã không tính theo gram). */
+  gramBaseAt: string | null
+}
+
+/** Dòng tóm tắt tồn khi chọn mã: "Khả dụng 1.507 viên · giữ chỗ 20 · sổ ghi 2.962 — cần kiểm kê". */
+export function stockSummary(item: Partial<StockSnapshot> & { qty: string; unit: string }) {
+  if (item.availableQty == null) return `Tồn ${formatQty(item.qty)} ${item.unit}`
+  const parts = [`Khả dụng ${formatQty(item.availableQty)} ${item.unit}`]
+  if (Number(item.heldQty) > 0) parts.push(`giữ chỗ ${formatQty(item.heldQty ?? '0')}`)
+  if (item.ledgerMismatch) parts.push(`sổ ghi ${formatQty(item.qty)} — cần kiểm kê`)
+  return parts.join(' · ')
+}
+
 export function isQtyBalanced(row: Pick<StockRow, 'openingQty' | 'inQty' | 'outQty' | 'qty'>) {
   const left = Number(row.openingQty) + Number(row.inQty)
   const right = Number(row.outQty) + Number(row.qty)
@@ -343,6 +375,8 @@ export type UpdateStockPayload = {
   weight?: string | null
   images?: MaterialImage[]
   openingQty?: string
+  /** TL tồn vừa cân (g) — lấy làm mốc TL tồn từ lúc lưu. Chỉ gửi khi kho vừa cân. */
+  gramBase?: string | null
   openingAmount?: string
   stockUnitPrice?: string
   inQty?: string
@@ -388,6 +422,8 @@ export type InboundRow = {
   unit: string
   unitId: string | null
   qty: string
+  /** Trọng lượng nhập (g) — kho NVL chính; mã tính theo gram thì bằng SL. */
+  gramQty?: string | null
   stockUnitPrice: string
   unitPrice: string
   amount: string
@@ -420,6 +456,8 @@ export type CreateInboundPayload = {
   unitId?: string | null
   unitName?: string
   qty: string
+  /** Trọng lượng nhập (g) — kho NVL chính; mã tính theo gram BE tự lấy bằng SL. */
+  gramQty?: string | null
   stockUnitPrice?: string
   unitPrice?: string
   amount?: string
@@ -525,6 +563,38 @@ export type CreateOutboundPayload = {
 
 export function getWarehouseOutboundsApi(code: string) {
   return apiFetch<OutboundResponse>(`/warehouses/${code}/outbounds`)
+}
+
+/** Phiếu xuất nháp: đá cấp cho khâu Vào đá — chưa trừ tồn, trừ vào khả dụng. */
+export type OutboundDraftStatus = 'DRAFT' | 'POSTED' | 'VOID'
+
+export type OutboundDraftRow = {
+  id: string
+  stt: number
+  issuedAt: string
+  name: string
+  sku: string | null
+  unit: string
+  /** SL / TL gói còn đang giữ (đã trừ phần thợ trả giữa khâu). */
+  qty: string
+  gramQty: string | null
+  stoneCount: number | null
+  earlyReturnedWeight: string | null
+  status: OutboundDraftStatus
+  note: string | null
+  createdByName: string
+  orderCode: string
+  ticketCode: string
+  /** Thợ xin thêm (true) hay cấp lúc chỉ định thợ. */
+  fromRequest: boolean
+  /** Phiếu xuất thật khi thủ kho xác nhận. */
+  posted: { stt: number; qty: string; gramQty: string | null } | null
+  closedAt: string | null
+  closedByName: string | null
+}
+
+export function getWarehouseOutboundDraftsApi(code: string) {
+  return apiFetch<OutboundDraftRow[]>(`/warehouses/${code}/outbound-drafts`)
 }
 
 export function createWarehouseOutboundApi(code: string, payload: CreateOutboundPayload) {
