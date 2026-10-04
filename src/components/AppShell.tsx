@@ -34,7 +34,9 @@ import SouthIcon from '@mui/icons-material/South'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
 import WhatshotIcon from '@mui/icons-material/Whatshot'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
+import FactCheckIcon from '@mui/icons-material/FactCheck'
 import NorthIcon from '@mui/icons-material/North'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -47,9 +49,9 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, Permission } from '../auth/permissions'
+import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
-import { canAccessProductionOrdersPage, canUseMyTickets } from '../intake/intake3dAccess'
+import { canAccessProductionOrdersPage, canUseMyTickets, canUseQcTickets } from '../intake/intake3dAccess'
 import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
 import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
@@ -89,9 +91,11 @@ export function AppShell() {
     can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
   const showMyTickets = canUseMyTickets(user)
+  const showQcTickets = canUseQcTickets(user)
   const showIntakeOrders = canSeeIntakeOrdersMenu(user)
   const showProductionOrders = canAccessProductionOrdersPage(user)
   const showCastingOrders = canSeeCastingOrdersMenu(user)
+  const showCastingCuts = !isWorkerOnly(user) && can(user, Permission.WAREHOUSE_KEEPER)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
 
@@ -222,9 +226,11 @@ export function AppShell() {
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
             showMyTickets={showMyTickets}
+            showQcTickets={showQcTickets}
             showIntakeOrders={showIntakeOrders}
             showProductionOrders={showProductionOrders}
             showCastingOrders={showCastingOrders}
+            showCastingCuts={showCastingCuts}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -247,9 +253,11 @@ export function AppShell() {
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
             showMyTickets={showMyTickets}
+            showQcTickets={showQcTickets}
             showIntakeOrders={showIntakeOrders}
             showProductionOrders={showProductionOrders}
             showCastingOrders={showCastingOrders}
+            showCastingCuts={showCastingCuts}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -342,9 +350,11 @@ function DrawerNav({
   canSeeConfig,
   showDashboard,
   showMyTickets,
+  showQcTickets,
   showIntakeOrders,
   showProductionOrders,
   showCastingOrders,
+  showCastingCuts,
   showKho,
   warehouses,
 }: {
@@ -352,9 +362,11 @@ function DrawerNav({
   canSeeConfig: boolean
   showDashboard: boolean
   showMyTickets: boolean
+  showQcTickets: boolean
   showIntakeOrders: boolean
   showProductionOrders: boolean
   showCastingOrders: boolean
+  showCastingCuts: boolean
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
@@ -386,8 +398,14 @@ function DrawerNav({
         {showCastingOrders ? (
           <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
         ) : null}
+        {showCastingCuts ? (
+          <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
+        ) : null}
         {showMyTickets ? (
           <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
+        ) : null}
+        {showQcTickets ? (
+          <NavItem to="/qc-tickets" icon={<FactCheckIcon fontSize="small" />} label="Phiếu QC" />
         ) : null}
         {showKho ? (
           <>

@@ -142,6 +142,43 @@ export function formatQty(value: string) {
   return n.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
 }
 
+/**
+ * Đá nhập / hiện trọng lượng theo ct (1 ct = 0,2 g); DB và phép tính hao hụt (cộng với bạc)
+ * vẫn dùng g — quy đổi ngay ở ô nhập và lúc hiển thị.
+ */
+export const CT_PER_GRAM = 5
+
+const STONE_UNITS = ['viên', 'vien', 'ct']
+
+/** Mã là đá: loại Đá, hoặc đơn vị viên / ct (dữ liệu cũ gắn nhầm đá là Bạc). */
+export function isStoneMaterial(material: { unit?: string | null; metalKind?: string | null }) {
+  return (
+    material.metalKind === 'STONE' || STONE_UNITS.includes((material.unit ?? '').trim().toLowerCase())
+  )
+}
+
+const round4 = (n: number) => Math.round(n * 10000) / 10000
+
+/** TL g (từ API) → ct, dạng số chuỗi để điền vào ô nhập. Trống / không hợp lệ → ''. */
+export function gramToCt(gram: string | number | null | undefined) {
+  if (gram == null || gram === '') return ''
+  const n = Number(gram)
+  return Number.isFinite(n) ? String(round4(n * CT_PER_GRAM)) : ''
+}
+
+/** TL ct (ô nhập) → g để gửi API. Trống giữ trống. */
+export function ctToGram(ct: string | null | undefined) {
+  if (ct == null || ct === '') return ''
+  const n = Number(ct)
+  return Number.isFinite(n) ? String(round4(n / CT_PER_GRAM)) : ''
+}
+
+/** Hiện TL đá: "1,25 ct" từ số g của API. */
+export function formatCt(gram: string | number | null | undefined) {
+  const ct = gramToCt(gram)
+  return ct === '' ? '—' : `${formatQty(ct)} ct`
+}
+
 export function qtyFromApi(value: string) {
   const n = Number(value)
   if (!Number.isFinite(n)) return ''

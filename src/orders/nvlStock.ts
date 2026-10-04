@@ -5,6 +5,8 @@ export const NVL_WAREHOUSE_CODE = 'nvl-chinh'
 /** Làm mới tồn / phiếu xuất / picker NVL — không đụng kho thành phẩm. */
 export function invalidateNvlWarehouse(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', NVL_WAREHOUSE_CODE] })
+  void queryClient.invalidateQueries({ queryKey: ['warehouse-inbounds', NVL_WAREHOUSE_CODE] })
+  void queryClient.invalidateQueries({ queryKey: ['warehouse-outbound-drafts', NVL_WAREHOUSE_CODE] })
   void queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', NVL_WAREHOUSE_CODE] })
   void queryClient.invalidateQueries({ queryKey: ['nvl-options'] })
 }

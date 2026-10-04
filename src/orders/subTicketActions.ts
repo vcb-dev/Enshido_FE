@@ -63,7 +63,7 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
   submit: {
     run: (code, no) => (no == null ? submitOrderApi(code) : submitSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng báo xong phiếu ${code} — gửi lên khi có mạng`,
-    done: (code) => `Đã báo xong phiếu ${code} — mang hàng tới KCS cân lại`,
+    done: (code) => `Đã báo xong phiếu ${code} — mang hàng tới QC cân lại`,
   },
   unsubmit: {
     run: (code, no) => (no == null ? unsubmitOrderApi(code) : unsubmitSubTicketApi(code, no)),

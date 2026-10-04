@@ -15,16 +15,18 @@ import {
   Typography,
 } from '@mui/material'
 import type { StageEntry } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { formatCt, formatQty } from '../api/inventory'
 import { formatDateShort, STAGE_LABEL } from './catalog'
 import { stoneReturnPreview } from './stoneReturn'
+import { KcsImages } from './KcsImages'
 
 const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const
 
 type Line = { label: string; qty: string; weight: string; warehouse: string; show: boolean }
 
 /**
- * Thủ kho xác nhận sau khi KCS nhận lại khâu Nguội / Vào đá (mô tả luồng bước 13–15, 18). Bấm xác
+ * Thủ kho kiểm tra và xác nhận lỗi khi QC báo hàng lỗi ở Nguội / Vào đá (QC cân không lỗi thì hệ
+ * thống tự xác nhận, không qua đây — mô tả luồng bước 13–15, 18). Bấm xác
  * nhận là hệ thống nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
  * đá còn xuất kho đá đã dùng theo từng mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
  */
@@ -82,7 +84,7 @@ export function KeeperConfirmDialog({
   return (
     <Dialog open={entry != null} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        Thủ kho xác nhận — {stage ? STAGE_LABEL[stage] : ''} · phiếu {ticketCode}
+        Thủ kho xác nhận lỗi — {stage ? STAGE_LABEL[stage] : ''} · phiếu {ticketCode}
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         {entry ? (
@@ -93,7 +95,7 @@ export function KeeperConfirmDialog({
                 <b>{entry.handedQty ?? '—'}</b> · bạc vào khâu <b>{entry.silverIn ? formatQty(entry.silverIn) : '—'}</b> g
               </Typography>
               <Typography variant="body2">
-                KCS <b>{entry.returnedByName ?? '—'}</b> nhận lại {formatDateShort(entry.returnedAt)}
+                QC <b>{entry.returnedByName ?? '—'}</b> nhận lại {formatDateShort(entry.returnedAt)}
                 {entry.silverLoss != null ? (
                   <>
                     {' '}
@@ -102,6 +104,7 @@ export function KeeperConfirmDialog({
                   </>
                 ) : null}
               </Typography>
+              <KcsImages images={entry.images} size={64} />
             </Box>
 
             {entry.defectReportedAt ? (
@@ -115,7 +118,7 @@ export function KeeperConfirmDialog({
             </Typography>
             {visible.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                KCS không ghi hàng nào để nhập kho.
+                QC không ghi hàng nào để nhập kho.
               </Typography>
             ) : (
               <Table size="small" sx={{ '& td, & th': { px: 1, py: 0.5 } }}>
@@ -143,7 +146,7 @@ export function KeeperConfirmDialog({
             {stoneStage && entry.stoneLines.length ? (
               <Stack spacing={0.5}>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  Đá xuất kho NVL (theo TL gói thừa KCS cân)
+                  Đá xuất kho NVL (theo TL gói thừa QC cân)
                 </Typography>
                 <Table size="small" sx={{ '& td, & th': { px: 1, py: 0.5 } }}>
                   <TableHead>
@@ -177,17 +180,17 @@ export function KeeperConfirmDialog({
                             {formatQty(line.qty)} {line.unit}
                             {line.weight ? (
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                {formatQty(line.weight)} g
+                                {formatCt(line.weight)}
                               </Typography>
                             ) : null}
                             {line.earlyReturnedWeight ? (
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                đã trả giữa khâu {formatQty(line.earlyReturnedWeight)} g
+                                đã trả giữa khâu {formatCt(line.earlyReturnedWeight)}
                               </Typography>
                             ) : null}
                           </TableCell>
                           <TableCell sx={NUM}>
-                            {line.returnedWeight != null ? `${formatQty(line.returnedWeight)} g` : '—'}
+                            {line.returnedWeight != null ? formatCt(line.returnedWeight) : '—'}
                             {line.returnedCount != null ? (
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                                 ≈ {line.returnedCount} viên

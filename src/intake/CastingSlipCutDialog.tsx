@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import type { CastingSlip, CastingSlipImage, ConfirmCastingSlipPayload } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
@@ -56,6 +56,7 @@ export function CastingSlipCutDialog({
 }) {
   const [uploading, setUploading] = useState(false)
   const form = useForm<Values>({ defaultValues: { lines: [], rest: '0', restImages: [] } })
+  const rest = useWatch({ control: form.control, name: 'rest' })
 
   useEffect(() => {
     if (slip) form.reset(defaultValues(slip))
@@ -158,7 +159,8 @@ export function CastingSlipCutDialog({
                 name="restImages"
                 label="Ảnh cân phần cây còn lại"
                 kind="CASTING_TREE"
-                required={false}
+                required={Number(rest) > 0}
+                requiredMessage="Chụp ảnh cân phần cây còn lại"
                 onUploadingChange={setUploading}
                 readOnly={saving}
               />

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Alert, Box, Typography } from '@mui/material'
 import { useForm, useWatch } from 'react-hook-form'
 import type { EarlyStoneReturnPayload, StageEntry } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { ctToGram, CT_PER_GRAM, formatCt, formatQty, gramToCt } from '../api/inventory'
 import { CrudDialogShell, FormQtyField, FormRow, FormSelect, FormTextField } from '../components/ui'
 import { stoneReturnPreview } from './stoneReturn'
 
@@ -37,8 +37,10 @@ export function EarlyStoneReturnDialog({
 
   const [materialId, weight] = useWatch({ control: form.control, name: ['materialId', 'weight'] })
   const line = lines.find((item) => item.materialId === materialId)
+  // Ô cân theo ct, túi giữ chỗ lưu theo g.
   const returned = Number(weight) || 0
-  const preview = line && returned > 0 ? stoneReturnPreview(line, returned) : null
+  const heldCt = Number(gramToCt(line?.weight) || 0)
+  const preview = line && returned > 0 ? stoneReturnPreview(line, returned / CT_PER_GRAM) : null
   const backQty = line && preview ? Math.max(0, Number(line.qty) - preview.usedQty) : null
   const title = `Nhận lại túi đá · phiếu ${ticketCode}`
 
@@ -49,7 +51,7 @@ export function EarlyStoneReturnDialog({
       titles={{ create: title, edit: title, view: title }}
       form={form}
       onSubmit={(values) =>
-        onSave({ materialId: values.materialId, weight: values.weight, note: values.note.trim() || undefined })
+        onSave({ materialId: values.materialId, weight: ctToGram(values.weight), note: values.note.trim() || undefined })
       }
       saving={saving}
       submitLabel="Nhận lại vào kho"
@@ -67,20 +69,20 @@ export function EarlyStoneReturnDialog({
           required
           options={lines.map((item) => ({
             value: item.materialId,
-            label: `${[item.sku, item.name].filter(Boolean).join(' · ')} — đang giữ ${formatQty(item.qty)} ${item.unit}, ${formatQty(item.weight ?? '0')} g`,
+            label: `${[item.sku, item.name].filter(Boolean).join(' · ')} — đang giữ ${formatQty(item.qty)} ${item.unit}, ${formatCt(item.weight)}`,
           }))}
         />
       </FormRow>
       <FormRow columns={2}>
         <FormQtyField<Values>
           name="weight"
-          label="TL túi đá trả (g)"
+          label="TL túi đá trả (ct)"
           required
-          helperText={line ? `Tối đa ${formatQty(line.weight ?? '0')} g đang giữ` : undefined}
+          helperText={line ? `Tối đa ${formatCt(line.weight)} đang giữ` : undefined}
           rules={{
             validate: (value) => {
               if (!(Number(value) > 0)) return 'Cân túi đá trả'
-              if (line && Number(value) > Number(line.weight)) return `Không quá ${formatQty(line.weight ?? '0')} g`
+              if (line && Number(value) > heldCt) return `Không quá ${formatCt(line.weight)}`
               return true
             },
           }}

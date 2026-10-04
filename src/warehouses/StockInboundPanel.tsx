@@ -8,6 +8,10 @@ import {
   createWarehouseInboundApi,
   formatMoney,
   formatQty,
+  formatCt,
+  ctToGram,
+  gramToCt,
+  isStoneMaterial,
   formatInboundDateTime,
   getInventoryLookupsApi,
   getWarehouseInboundsApi,
@@ -44,7 +48,7 @@ import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { InboundView } from './MovementView'
 import { LineActions } from './LineActions'
 import { MaterialField } from './MaterialField'
-import { matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
+import { lineIsStone, matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
 import { CONSUMABLE_CATEGORIES, stockProfile, withFallback } from './catalog'
@@ -152,6 +156,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         sku: item.sku,
         unitId: item.unitId,
         unit: item.unit,
+        metalKind: item.metalKind,
         locationCode: item.locationCode,
         otherClassId: item.otherClassId,
       })),
@@ -346,10 +351,15 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         ? [
             {
               key: 'gramQty',
-              header: 'Số gram',
+              header: 'TL',
               width: 110,
               numeric: true,
-              render: (row: InboundRow) => (row.gramQty ? formatQty(row.gramQty) : '—'),
+              render: (row: InboundRow) =>
+                !row.gramQty
+                  ? '—'
+                  : isStoneMaterial({ unit: row.unit, metalKind: stockOf(row)?.metalKind })
+                    ? formatCt(row.gramQty)
+                    : `${formatQty(row.gramQty)} g`,
             },
           ]
         : []),
@@ -561,9 +571,10 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 }
 
-/** Mã tính theo gram: SL chính là TL — không nhập số gram riêng. */
+/** Mã tính theo gram / ct: TL suy từ SL — không nhập TL riêng. */
 const isGramUnit = (name: string | undefined) =>
-  ['g', 'gr', 'gram', 'grams', 'gam'].includes((name ?? '').trim().toLowerCase())
+  ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((name ?? '').trim().toLowerCase())
+
 
 type InboundLineValues = {
   name: string
@@ -678,7 +689,14 @@ function InboundDialog({
                 otherClassId:
                   materials.find((item) => item.id === row.materialId)?.otherClassId ?? '',
                 qty: qtyFromApi(row.qty),
-                gramQty: row.gramQty ? qtyFromApi(row.gramQty) : '',
+                gramQty: !row.gramQty
+                  ? ''
+                  : isStoneMaterial({
+                        unit: row.unit,
+                        metalKind: materials.find((item) => item.id === row.materialId)?.metalKind,
+                      })
+                    ? gramToCt(row.gramQty)
+                    : qtyFromApi(row.gramQty),
                 unitPrice: moneyDigitsFromApi(
                   Number(row.unitPrice) ? row.unitPrice : row.stockUnitPrice,
                 ),
@@ -724,7 +742,10 @@ function InboundDialog({
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
-        gramQty: warehouseCode === 'nvl-chinh' ? line.gramQty || null : undefined,
+        gramQty:
+          warehouseCode === 'nvl-chinh'
+            ? (lineIsStone(line, materials, units) ? ctToGram(line.gramQty) : line.gramQty) || null
+            : undefined,
         stockUnitPrice: '0',
         unitPrice: line.unitPrice || '0',
         amount: String(Math.round((Number(line.qty) || 0) * (Number(line.unitPrice) || 0))),
@@ -885,13 +906,13 @@ function InboundDialog({
                     <FormRow columns={4}>
                       <FormQtyField<InboundFormValues>
                         name={`lines.${index}.gramQty`}
-                        label="Số gram"
+                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'Số gram'}
                         required
                         readOnly={readOnly}
                         placeholder="Cân cả lô nhập…"
                         helperText="Cộng vào TL tồn của mã"
                         rules={{
-                          validate: (value) => (Number(value) || 0) > 0 || 'Số gram phải lớn hơn 0',
+                          validate: (value) => (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
                         }}
                       />
                     </FormRow>

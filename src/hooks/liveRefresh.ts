@@ -1,6 +1,6 @@
 /**
  * Hệ thống chưa có realtime (WebSocket / SSE): trạng thái phiếu do người khác đổi — thợ quét QR
- * nhận hàng, KCS cân, thủ kho xác nhận, thợ đúc báo xong — chỉ hiện khi màn tự làm mới. Mọi màn
+ * nhận hàng, QC cân, thủ kho xác nhận, thợ đúc báo xong — chỉ hiện khi màn tự làm mới. Mọi màn
  * theo dõi trạng thái dùng chung các mức dưới đây thay vì tự đặt số, để chỉnh một chỗ là đủ.
  * Thao tác trên chính máy đã vá cache tức thì (orderCache, useOrderMutation) — poll chỉ để thấy
  * thay đổi từ máy khác, nên các mức để thưa cho đỡ tải máy chủ.

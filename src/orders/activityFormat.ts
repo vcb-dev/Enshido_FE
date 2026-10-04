@@ -1,3 +1,4 @@
+import { gramToCt } from '../api/inventory'
 import { formatDateTime } from './catalog'
 
 /** Nhãn cho mã thao tác BE ghi (`ACTIVITY` trong activity-log.ts). Mã lạ thì hiện nguyên mã. */
@@ -23,11 +24,11 @@ export const ACTION_LABEL: Record<string, string> = {
   STAGE_HANDOVER_EDIT: 'Sửa thông tin giao',
   STAGE_SUBMIT: 'Thợ báo làm xong',
   STAGE_UNSUBMIT: 'Gỡ báo làm xong',
-  STAGE_RETURN: 'KCS nhận lại',
-  STAGE_UNDO_RETURN: 'Gỡ KCS nhận lại',
+  STAGE_RETURN: 'QC nhận lại',
+  STAGE_UNDO_RETURN: 'Gỡ QC nhận lại',
   STAGE_DEFECT: 'Báo lỗi khâu',
   STAGE_CLEAR_DEFECT: 'Bỏ báo lỗi khâu',
-  STAGE_CONFIRM: 'Thủ kho xác nhận nhập kho',
+  STAGE_CONFIRM: 'Xác nhận nhập kho',
   STAGE_LABOR: 'Sửa tiền công khâu',
   TICKET_SPLIT: 'Chia phiếu con',
   TICKET_CREATE: 'Thêm phiếu con',
@@ -61,15 +62,15 @@ const FIELD_LABEL: Record<string, string> = {
   handedQty: 'SL giao',
   handedSilverWeight: 'TL giao (g)',
   handedStoneCount: 'Đá giao (viên)',
-  handedStoneWeight: 'Đá giao (g)',
+  handedStoneWeight: 'Đá giao (ct)',
   submittedByName: 'Người báo xong',
   submittedAt: 'Giờ báo xong',
-  returnedByName: 'KCS',
+  returnedByName: 'QC',
   returnedAt: 'Giờ nhận lại',
-  returnedQty: 'SL nhận lại',
-  returnedSilverWeight: 'TL nhận lại (g)',
+  returnedQty: 'SL sản phẩm đạt',
+  returnedSilverWeight: 'TL sản phẩm đạt (g)',
   stoneCount: 'Đá gắn (viên)',
-  stoneWeight: 'Đá gắn (g)',
+  stoneWeight: 'Đá gắn (ct)',
   returnedStoneCount: 'Đá trả lại (viên)',
   btpRecoveredWeight: 'BTP thu hồi (g)',
   silverRecoveredWeight: 'Bạc thu hồi (g)',
@@ -115,12 +116,12 @@ export function describeChanges(before: unknown, after: unknown): string[] {
   if (hasBefore && hasAfter) {
     return Object.keys(a)
       .filter((key) => JSON.stringify(b[key] ?? null) !== JSON.stringify(a[key] ?? null))
-      .map((key) => `${FIELD_LABEL[key] ?? key}: ${formatValue(b[key])} → ${formatValue(a[key])}`)
+      .map((key) => `${FIELD_LABEL[key] ?? key}: ${fieldValue(key, b[key])} → ${fieldValue(key, a[key])}`)
   }
   const only = hasAfter ? a : b
   return Object.entries(only)
     .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => `${FIELD_LABEL[key] ?? key}: ${formatValue(value)}`)
+    .map(([key, value]) => `${FIELD_LABEL[key] ?? key}: ${fieldValue(key, value)}`)
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -133,8 +134,18 @@ function formatObject(value: unknown) {
   const record = asRecord(value)
   return Object.entries(record)
     .filter(([, v]) => v != null)
-    .map(([k, v]) => `${FIELD_LABEL[k] ?? k} ${formatValue(v)}`)
+    .map(([k, v]) => `${FIELD_LABEL[k] ?? k} ${fieldValue(k, v)}`)
     .join(' · ')
+}
+
+/** TL đá trong nhật ký lưu theo g — hiện theo ct cho khớp ô nhập. */
+const CARAT_FIELDS = new Set(['handedStoneWeight', 'stoneWeight'])
+
+function fieldValue(key: string, value: unknown) {
+  if (CARAT_FIELDS.has(key) && value != null && value !== '' && Number.isFinite(Number(value))) {
+    return gramToCt(String(value))
+  }
+  return formatValue(value)
 }
 
 function formatValue(value: unknown): string {

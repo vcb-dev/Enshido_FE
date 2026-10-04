@@ -3,6 +3,7 @@ import { Box, Chip, Link, Stack, ToggleButton, ToggleButtonGroup, Typography } f
 import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
 import {
+  formatCt,
   formatQty,
   getWarehouseOutboundDraftsApi,
   type OutboundDraftRow,
@@ -23,7 +24,7 @@ type Filter = OutboundDraftStatus | 'ALL'
 /**
  * Phiếu xuất nháp của kho NVL chính — đá cấp cho khâu Vào đá (lúc chỉ định thợ hoặc thợ xin
  * thêm). Chưa trừ tồn, chỉ trừ vào khả dụng. Hệ thống tự lập / thu nhỏ / đóng theo luồng sản
- * xuất nên màn này chỉ để xem: thủ kho xác nhận sau KCS thì phiếu thành phiếu xuất thật.
+ * xuất nên màn này chỉ để xem: thủ kho xác nhận sau QC thì phiếu thành phiếu xuất thật.
  */
 export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
   const [filter, setFilter] = useState<Filter>('DRAFT')
@@ -82,17 +83,18 @@ export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
       },
       {
         key: 'gramQty',
-        header: 'Số gram',
+        header: 'TL',
         width: 100,
         numeric: true,
-        render: (row) => (row.gramQty != null ? formatQty(row.gramQty) : '—'),
+        // Phiếu nháp chỉ có đá giữ chỗ Vào đá — TL theo ct.
+        render: (row) => formatCt(row.gramQty),
       },
       {
         key: 'earlyReturnedWeight',
-        header: 'Trả giữa khâu (g)',
+        header: 'Trả giữa khâu',
         width: 120,
         numeric: true,
-        render: (row) => (row.earlyReturnedWeight ? formatQty(row.earlyReturnedWeight) : '—'),
+        render: (row) => (row.earlyReturnedWeight ? formatCt(row.earlyReturnedWeight) : '—'),
       },
       {
         key: 'status',
@@ -104,7 +106,7 @@ export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
             {row.posted ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Phiếu xuất STT {row.posted.stt}: {formatQty(row.posted.qty)} {row.unit}
-                {row.posted.gramQty ? ` · ${formatQty(row.posted.gramQty)} g` : ''}
+                {row.posted.gramQty ? ` · ${formatCt(row.posted.gramQty)}` : ''}
               </Typography>
             ) : null}
             {row.closedByName ? (
@@ -125,7 +127,7 @@ export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
     <Stack spacing={1} sx={{ flex: { md: 1 }, minHeight: { md: 0 } }}>
       <Typography variant="body2" color="text.secondary">
         Đá cấp cho khâu Vào đá: chưa trừ tồn, chỉ trừ vào khả dụng. Thợ trả túi giữa khâu thì phiếu giảm; thủ kho xác
-        nhận sau KCS thì phiếu thành phiếu xuất thật với phần đã dùng. Hệ thống tự lập phiếu — không sửa tay.
+        nhận sau QC thì phiếu thành phiếu xuất thật với phần đã dùng. Hệ thống tự lập phiếu — không sửa tay.
       </Typography>
       <DataTable
         columns={columns}

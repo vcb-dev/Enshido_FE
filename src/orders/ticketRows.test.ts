@@ -114,7 +114,7 @@ describe('stageColumns — cột khâu trên phiếu', () => {
   it('phiếu mẹ cộng các phiếu con thành một cột', () => {
     const done = {
       returnedAt: '2026-09-19T12:00:00.000Z',
-      returnedByName: 'KCS',
+      returnedByName: 'QC',
       returnedQty: 3,
       returnedSilverWeight: '295',
     }
@@ -137,7 +137,7 @@ describe('stageColumns — cột khâu trên phiếu', () => {
     expect(column.tickets).toEqual({ done: 2, total: 2 })
   })
 
-  it('còn phiếu con chưa được KCS nhận lại thì KHÔNG hiện số nhận lại của cả đơn', () => {
+  it('còn phiếu con chưa được QC nhận lại thì KHÔNG hiện số nhận lại của cả đơn', () => {
     // Nếu hiện, người đọc dễ tưởng số dở dang là số chốt của cả đơn.
     const stages = [
       entry({
@@ -180,13 +180,13 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
     const t = ticket({
       outcome: 'DEFECT',
       outcomeAt: '2026-09-19T12:00:00.000Z',
-      outcomeByName: 'KCS Bình',
+      outcomeByName: 'QC Bình',
       outcomeStage: 'FILING',
       outcomeNote: 'gãy chấu',
     })
     const lines = outcomeLines(order(), 'DEFECT', t)
     expect(lines[0]).toBe('Khâu Nguội')
-    expect(lines).toContain('KCS Bình')
+    expect(lines).toContain('QC Bình')
     expect(lines).toContain('Lý do: gãy chấu')
     // Phiếu lỗi thì cột Hoàn thiện phải trống.
     expect(outcomeLines(order(), 'FINISH', t)).toEqual([])
@@ -196,7 +196,7 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
     const t = ticket({
       outcome: 'FINISH',
       outcomeAt: '2026-09-19T12:00:00.000Z',
-      outcomeByName: 'KCS Bình',
+      outcomeByName: 'QC Bình',
       outcomeStage: 'PLATING',
       outcomeQty: 5,
     })
@@ -242,7 +242,7 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
         completedQty: 9,
         pendingQty: 0,
         receivedAt: '2026-09-19T12:00:00.000Z',
-        receivedByName: 'KCS Bình',
+        receivedByName: 'QC Bình',
         shippedQty: 0,
         remainingQty: 9,
         shipments: [],

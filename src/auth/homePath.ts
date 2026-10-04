@@ -3,6 +3,7 @@ import {
   canAccessProductionOrdersPage,
   canSeeCastingSlipsPage,
   canUseMyTickets,
+  canUseQcTickets,
   isIntakePipelineScoped,
 } from '../intake/intake3dAccess'
 import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
@@ -36,6 +37,9 @@ export function canAccessPath(
     if (isWorkerOnly(user)) return false
     return canSeeIntakeOrdersMenu(user)
   }
+  if (p === '/casting-cuts') {
+    return !isWorkerOnly(user) && can(user, Permission.WAREHOUSE_KEEPER)
+  }
   if (p === '/casting' || p.startsWith('/casting/')) {
     if (isIntakePipelineScoped(user)) return false
     if (isWorkerOnly(user)) return false
@@ -44,6 +48,7 @@ export function canAccessPath(
   if (p.startsWith('/orders/')) return true
   if (p.startsWith('/tickets/')) return true
   if (p === '/my-tickets') return canUseMyTickets(user)
+  if (p === '/qc-tickets') return canUseQcTickets(user)
   if (p === '/finished-goods' || p.startsWith('/finished-goods/')) {
     if (isWorkerOnly(user)) return false
     return canSeeWarehouse(user, 'thanh-pham') || user?.roleCode === 'ADMIN'

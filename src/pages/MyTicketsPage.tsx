@@ -39,14 +39,14 @@ import {
   type CastingSlipStatus,
 } from '../api/castingSlips'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
-import { formatQty } from '../api/inventory'
+import { formatCt, formatQty } from '../api/inventory'
 import { applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { CardGroupSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '../orders/subTicketQueue'
-import { dueInfo, EmptyState, MetaItem, TicketThumb } from '../worker/WorkerUi'
+import { dueInfo, EmptyState, FilterPill, MetaItem, TabLabel, TicketThumb } from '../worker/WorkerUi'
 
 type TabKey = 'mine' | 'available' | 'recent'
 type MineFilter = 'all' | Extract<SubTicketState, 'WORKING' | 'CLAIMED' | 'SUBMITTED'>
@@ -234,7 +234,7 @@ export function MyTicketsPage() {
     { value: 'all', label: 'Tất cả', count: mineCount },
     { value: 'WORKING', label: 'Đang làm', count: count('WORKING') },
     { value: 'CLAIMED', label: 'Chờ giao bạc', count: count('CLAIMED') },
-    { value: 'SUBMITTED', label: 'Chờ KCS cân', count: count('SUBMITTED') },
+    { value: 'SUBMITTED', label: 'Chờ QC cân', count: count('SUBMITTED') },
   ]
 
   const sending = (item: MyTicketItem, action: SubTicketAction) => {
@@ -456,7 +456,7 @@ export function MyTicketsPage() {
                 description="Chỉ hiện phiếu đang mở ở khâu của bạn. Bấm làm mới để cập nhật."
               />
             ) : (
-              <EmptyState icon={<HistoryOutlinedIcon />} title="Chưa có phiếu nào được KCS nhận lại" />
+              <EmptyState icon={<HistoryOutlinedIcon />} title="Chưa có phiếu nào được QC nhận lại" />
             )
           ) : (
             <Box
@@ -625,79 +625,17 @@ function CastingSlipCard({
   )
 }
 
-function TabLabel({ text, count, active }: { text: string; count: number; active: boolean }) {
-  return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-      <span>{text}</span>
-      <Box
-        component="span"
-        sx={{
-          minWidth: 20,
-          px: 0.75,
-          borderRadius: 99,
-          fontSize: 12,
-          fontWeight: 600,
-          lineHeight: '20px',
-          textAlign: 'center',
-          bgcolor: active ? 'primary.main' : 'action.selected',
-          color: active ? 'primary.contrastText' : 'text.secondary',
-        }}
-      >
-        {count}
-      </Box>
-    </Stack>
-  )
-}
-
-/** Bộ lọc dạng pill: nhãn + số đếm mờ, chọn thì tô màu chính. */
-function FilterPill({
-  label,
-  count,
-  selected,
-  onClick,
-}: {
-  label: string
-  count: number
-  selected: boolean
-  onClick: () => void
-}) {
-  return (
-    <Chip
-      size="small"
-      clickable
-      onClick={onClick}
-      color={selected ? 'primary' : 'default'}
-      variant={selected ? 'filled' : 'outlined'}
-      label={
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <span>{label}</span>
-          <Box component="span" sx={{ opacity: selected ? 0.8 : 0.6, fontWeight: 500 }}>
-            {count}
-          </Box>
-        </Stack>
-      }
-      sx={{
-        height: 30,
-        borderRadius: 99,
-        fontWeight: 600,
-        px: 0.5,
-        bgcolor: selected ? undefined : 'background.paper',
-      }}
-    />
-  )
-}
-
 function statusLine(item: MyTicketItem, tab: TabKey) {
   if (tab === 'recent') {
     const loss =
       item.silverLoss != null
         ? ` · hao hụt ${formatQty(item.silverLoss)} g${item.silverLossPercent != null ? ` (${formatQty(item.silverLossPercent)}%)` : ''}`
         : ''
-    return `KCS ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${loss}`
+    return `QC ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${loss}`
   }
   if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
   if (item.state === 'CLAIMED') return `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
-  if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới KCS cân lại`
+  if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới QC cân lại`
   return `Bắt đầu ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
 }
 
@@ -813,14 +751,15 @@ function TicketCard({
   )
 }
 
-/** "Nhận: 00001 2 chiếc (1.000 g) · xin thêm: 00001 1 chiếc (500 g)". */
+/** "Nhận: 00001 2 chiếc (1.000 g) · xin thêm: MROW 5 ct (5 ct)" — đá ghi TL theo ct. */
 function issuedSummary(item: MyTicketItem) {
   const text = (atHandover: boolean) =>
     item.issuedLines
       .filter((line) => line.atHandover === atHandover)
       .map(
         (line) =>
-          `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}${line.weight ? ` (${formatQty(line.weight)} g)` : ''}`,
+          `${line.sku || line.name} ${formatQty(line.qty ?? '0')} ${line.unit}` +
+          (line.weight ? ` (${line.kind === 'STONE' ? formatCt(line.weight) : `${formatQty(line.weight)} g`})` : ''),
       )
       .join(', ')
   return [text(true) ? `Nhận: ${text(true)}` : '', text(false) ? `xin thêm: ${text(false)}` : '']

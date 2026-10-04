@@ -4,7 +4,7 @@ import { openableStages } from './SubTicketDialogs'
 
 const RETURNED = '2026-09-21T02:58:00.000Z'
 
-/** Khâu đã được KCS nhận lại của một phiếu con — chỉ các trường openableStages đọc tới. */
+/** Khâu đã được QC nhận lại của một phiếu con — chỉ các trường openableStages đọc tới. */
 function done(subTicketId: string, stage: StageEntry['stage']): StageEntry {
   return { id: `${subTicketId}-${stage}`, subTicketId, stage, returnedAt: RETURNED } as StageEntry
 }

@@ -78,7 +78,7 @@ const SLIP_STATUS_OPTIONS = (Object.keys(SLIP_STATUS_META) as CastingSlipStatus[
   name: SLIP_STATUS_META[id].label,
 }))
 
-function SlipStatusChip({ status }: { status: CastingSlipStatus }) {
+export function SlipStatusChip({ status }: { status: CastingSlipStatus }) {
   const meta = SLIP_STATUS_META[status]
   return <Chip size="small" label={meta.label} sx={{ bgcolor: meta.bg, color: '#fff', fontWeight: 600 }} />
 }
@@ -643,7 +643,7 @@ export function CastingOrdersPage() {
   )
 }
 
-function CastingSlipViewDialog({
+export function CastingSlipViewDialog({
   open,
   slip,
   canConfirm,

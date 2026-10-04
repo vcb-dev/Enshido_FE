@@ -18,7 +18,7 @@ import {
   type StageCode,
   type SubTicket,
 } from '../api/productionOrders'
-import { formatQty } from '../api/inventory'
+import { formatCt, formatQty } from '../api/inventory'
 import { ACTION_LABEL, describeChanges } from './activityFormat'
 import { STAGE_LABEL, formatDateTime } from './catalog'
 
@@ -49,9 +49,13 @@ type HistoryEvent = {
 
 const g = (value: string | null | undefined) => (value != null ? `${formatQty(value)} g` : '—')
 
+/** TL xuất của một yêu cầu: đá theo ct, bạc / khác theo g. */
+const requestWeight = (request: { kind: string; issuedWeight: string | null }) =>
+  request.kind === 'STONE' ? formatCt(request.issuedWeight) : g(request.issuedWeight)
+
 /**
  * Lịch sử thao tác của phiếu mẹ / cả đơn (`ticket` null) hoặc một phiếu con, thả xuống khi
- * bấm. Gồm mọi khâu đã qua (giao, báo xong, KCS nhận lại, xin / xuất NVL, kết cục — dựng từ dữ liệu
+ * bấm. Gồm mọi khâu đã qua (giao, báo xong, QC nhận lại, xin / xuất NVL, kết cục — dựng từ dữ liệu
  * khâu nên đơn cũ cũng có) và các thao tác chỉ nằm trong nhật ký (chỉ có từ khi bật nhật ký).
  */
 export function WorkHistory({
@@ -111,7 +115,7 @@ export function WorkHistoryTable({
         details: [
           `Thợ ${entry.craftsmanName} · SL ${entry.handedQty ?? '—'} · TL ${g(entry.handedSilverWeight)}`,
           entry.handedStoneCount != null || entry.handedStoneWeight != null
-            ? `Đá giao ${entry.handedStoneCount ?? '—'} viên · ${g(entry.handedStoneWeight)}`
+            ? `Đá giao ${entry.handedStoneCount ?? '—'} viên · ${formatCt(entry.handedStoneWeight)}`
             : '',
         ].filter(Boolean),
       })
@@ -136,7 +140,7 @@ export function WorkHistoryTable({
           key: `${entry.id}-return`,
           at: entry.returnedAt,
           stage: entry.stage,
-          action: `KCS nhận lại${lan}`,
+          action: `QC nhận lại${lan}`,
           actor: entry.returnedByName ?? '—',
           details: [
             `SL ${entry.returnedQty ?? '—'} · TL ${g(entry.returnedSilverWeight)}`,
@@ -163,7 +167,7 @@ export function WorkHistoryTable({
             [
               material,
               `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`,
-              request.issuedWeight ? g(request.issuedWeight) : '',
+              request.issuedWeight ? requestWeight(request) : '',
               request.issuedStoneCount ? `${request.issuedStoneCount} viên` : '',
             ]
               .filter(Boolean)
@@ -201,7 +205,7 @@ export function WorkHistoryTable({
                   [
                     material,
                     `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`,
-                    request.issuedWeight ? g(request.issuedWeight) : '',
+                    request.issuedWeight ? requestWeight(request) : '',
                     request.issuedStoneCount ? `${request.issuedStoneCount} viên` : '',
                   ]
                     .filter(Boolean)
