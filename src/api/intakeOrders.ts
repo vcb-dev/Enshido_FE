@@ -52,7 +52,7 @@ export type IntakeOrder = {
   rejectedAt?: string | null
   /** Phiếu đúc đang giữ đơn (kể cả phiếu chưa cấp vật tư). */
   castingSlip?: { code: string; status: string } | null
-  /** Lệnh SX (mã A) sinh lúc xác nhận đúc. */
+  /** Mã A… của cùng phiếu; trả về khi đã cắt cây và chuyển sang Nguội. */
   productionOrderCode?: string | null
   createdAt: string
   images: OrderImage[]

@@ -10,6 +10,7 @@ import {
   scheduleIntakePipelineCountsRefresh,
 } from './intakePipelineCountsRefresh'
 import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
+import { intakeHasEnteredProduction } from './intakeActions'
 
 const PIPELINE_LIST_STATUSES: IntakeOrderStatus[] = [
   'PENDING_APPROVAL',
@@ -51,7 +52,7 @@ function removeOrderFromPipelineLists(lists: IntakePipelineLists, orderId: strin
 
 function moveOrderInPipelineLists(lists: IntakePipelineLists, order: IntakeOrder): IntakePipelineLists {
   const without = removeOrderFromPipelineLists(lists, order.id)
-  if (order.productionOrderCode || !PIPELINE_LIST_STATUSES.includes(order.status)) return without
+  if (intakeHasEnteredProduction(order) || !PIPELINE_LIST_STATUSES.includes(order.status)) return without
   const bucket = without[order.status] ?? emptyList()
   const had = bucket.items.some((item) => item.id === order.id)
   const items = had
@@ -109,7 +110,7 @@ function isStatusListKey(queryKey: QueryKey) {
 }
 
 function statusListAllows(queryKey: QueryKey, order: IntakeOrder) {
-  if (order.productionOrderCode) return false
+  if (intakeHasEnteredProduction(order)) return false
   const statusFilter = String(queryKey[2] ?? '')
   if (statusFilter && statusFilter !== order.status) return false
   const search = String(queryKey[5] ?? '').trim().toLowerCase()
@@ -236,8 +237,8 @@ export function moveIntakeOrderInCaches(
   patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
   patchIntakePipelineCounts(
     queryClient,
-    prev?.productionOrderCode ? undefined : prev?.status,
-    order.productionOrderCode ? undefined : order.status,
+    prev && intakeHasEnteredProduction(prev) ? undefined : prev?.status,
+    intakeHasEnteredProduction(order) ? undefined : order.status,
   )
   scheduleIntakePipelineCountsRefresh(queryClient)
   if (!opts?.silent) notifyWorkflowChanged('intake')
@@ -273,11 +274,25 @@ export function applyIntakeLiveSnapshot(queryClient: QueryClient, liveItems: Int
   }
   lastIntakeLiveIds = new Set(liveById.keys())
 
+  let refreshCatalog = false
   for (const live of liveItems) {
     const prev = findIntakeOrderInCaches(queryClient, live.id)
+    if (
+      intakeHasEnteredProduction(live) &&
+      !live.productionOrderCode &&
+      prev && !intakeHasEnteredProduction(prev)
+    ) refreshCatalog = true
     if (prev && !intakeLiveFieldsChanged(prev, live)) continue
     moveIntakeOrderInCaches(queryClient, prev ? { ...prev, ...live, images: prev.images } : live, {
       silent: true,
+    })
+  }
+  // Snapshot không có mã A…: lấy lại bản đầy đủ để nút chi tiết mở đúng phiếu.
+  if (refreshCatalog) {
+    void queryClient.invalidateQueries({
+      queryKey: ['intake-orders'],
+      predicate: (query) => isCatalogListKey(query.queryKey),
+      refetchType: 'active',
     })
   }
 }
