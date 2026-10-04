@@ -12,17 +12,18 @@ function applyRevisionDelta(
   next: WorkflowRevision,
 ) {
   if (prev.intake !== next.intake) {
-    void getWorkflowIntakeLiveApi()
-      .then((live) => applyIntakeLiveSnapshot(queryClient, live.items))
-      .catch(() => undefined)
-    void queryClient.invalidateQueries({
-      queryKey: ['intake-orders', 'pipeline-counts'],
-      refetchType: 'active',
-    })
-    void queryClient.invalidateQueries({
-      queryKey: ['intake-orders', 'pending-list'],
-      refetchType: 'active',
-    })
+    const watchingIntake = queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ['intake-orders'], type: 'active' }).length
+    if (watchingIntake) {
+      void getWorkflowIntakeLiveApi()
+        .then((live) => applyIntakeLiveSnapshot(queryClient, live.items))
+        .catch(() => undefined)
+      void queryClient.invalidateQueries({
+        queryKey: ['intake-orders', 'status-list'],
+        refetchType: 'active',
+      })
+    }
   }
   if (prev.production !== next.production) {
     void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
@@ -45,8 +46,8 @@ export function useWorkflowLiveSync(enabled: boolean) {
     queryKey: ['workflow-revision'],
     queryFn: getWorkflowRevisionApi,
     enabled,
-    staleTime: 4_000,
-    refetchInterval: enabled ? 6_000 : false,
+    staleTime: 6_000,
+    refetchInterval: enabled ? 8_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })

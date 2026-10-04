@@ -50,6 +50,8 @@ import {
   FormSelect,
   FormTextField,
   SelectInput,
+  STICKY_END_CELL_SX,
+  STICKY_END_HEAD_SX,
   TextInput,
 } from '../components/ui'
 import { CatalogPicker, type CatalogPickerItem } from './CatalogPicker'
@@ -648,8 +650,11 @@ export function MaterialRequestsCard({
             size="small"
             sx={{
               minWidth: 720,
+              borderCollapse: 'separate',
+              borderSpacing: 0,
               '& td, & th': { px: 1, py: 0.6, fontSize: '0.82rem', borderColor: '#e9e0d4' },
               '& th': { fontWeight: 700, bgcolor: '#f8f3eb' },
+              '& .MuiTableRow-hover:hover .dt-sticky-end': { bgcolor: '#f8f1e5' },
             }}
           >
             <TableHead>
@@ -660,7 +665,9 @@ export function MaterialRequestsCard({
                 <TableCell align="right">Xin</TableCell>
                 <TableCell align="right">Đã xuất</TableCell>
                 <TableCell>Trạng thái</TableCell>
-                <TableCell>Thao tác</TableCell>
+                <TableCell className="dt-sticky-end" sx={STICKY_END_HEAD_SX}>
+                  Thao tác
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -726,7 +733,7 @@ export function MaterialRequestsCard({
                         </Typography>
                       ) : null}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="dt-sticky-end" sx={STICKY_END_CELL_SX}>
                       {pending ? (
                         <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
                           {canHandle && (!mine || isAdmin) ? (

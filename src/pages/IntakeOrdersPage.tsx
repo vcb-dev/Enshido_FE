@@ -48,8 +48,6 @@ import { IntakeStatusChip } from '../intake/IntakeStatusChip'
 import { ImageUploadField } from '../orders/ImageUploadField'
 import { formatDateShort, REQUEST_TYPES, REQUEST_TYPE_META } from '../orders/catalog'
 import { RequestTypeChip } from '../orders/OrderChips'
-import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
-
 type FormValues = {
   status: IntakeOrderStatus
   requestType: ProductionRequestType | ''
@@ -126,8 +124,6 @@ export function IntakeOrdersPage() {
       }),
     placeholderData: keepPreviousData,
     staleTime: 15_000,
-    // Đơn đi qua 3D → sáp → đúc → cắt cây do nhiều người làm — trạng thái phải tự cập nhật.
-    ...liveRefresh(LIVE_REFRESH_MS.list),
   })
 
   useEffect(() => {

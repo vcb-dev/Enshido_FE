@@ -73,6 +73,8 @@ export type Column<T, S = never> = {
   cardLabel?: ReactNode
   /** Ô lọc trên hàng filter, cùng cột với tiêu đề. */
   filter?: ReactNode
+  /** Ghim cột khi cuộn ngang. Cột `actions` tự ghim phải. */
+  sticky?: 'right'
 }
 
 /**
@@ -146,6 +148,58 @@ export type DataTableProps<T, S = never> = {
   tableSx?: SxProps<Theme>
 }
 
+function isStickyEnd<T, S>(column: Column<T, S>) {
+  return column.sticky === 'right' || column.key === 'actions' || column.card === 'actions'
+}
+
+function stickyClassName(column: { className?: string }, sticky: boolean) {
+  return [column.className, sticky ? 'dt-sticky-end' : null].filter(Boolean).join(' ') || undefined
+}
+
+/** Cột ghim phải — dùng cho bảng tự vẽ ngoài DataTable. */
+export const STICKY_END_CELL_SX = {
+  position: 'sticky',
+  right: 0,
+  zIndex: 2,
+  bgcolor: '#fffdfa',
+  backgroundColor: '#fffdfa',
+  backgroundImage: 'none',
+  backgroundClip: 'padding-box',
+  boxShadow: '-6px 0 8px -6px rgba(43, 36, 28, 0.22)',
+} as const
+
+export const STICKY_END_HEAD_SX = {
+  ...STICKY_END_CELL_SX,
+  zIndex: 4,
+  bgcolor: '#f8f3eb',
+  backgroundColor: '#f8f3eb',
+} as const
+
+const STICKY_END_FILTER_SX = {
+  ...STICKY_END_HEAD_SX,
+  zIndex: 5,
+  bgcolor: '#fff',
+  backgroundColor: '#fff',
+} as const
+
+const STICKY_TABLE_SX = {
+  borderCollapse: 'separate',
+  borderSpacing: 0,
+  '& .MuiTableRow-hover:hover .dt-sticky-end': { bgcolor: '#f8f1e5', backgroundColor: '#f8f1e5' },
+  '& .Mui-selected .dt-sticky-end': { bgcolor: '#f1e6d5', backgroundColor: '#f1e6d5' },
+  '& .dt-parent-open .dt-sticky-end': { bgcolor: '#f3e9da', backgroundColor: '#f3e9da' },
+  '& .dt-parent-open.MuiTableRow-hover:hover .dt-sticky-end': {
+    bgcolor: '#efe4d2',
+    backgroundColor: '#efe4d2',
+  },
+  '& .dt-sub-row .dt-sticky-end': { bgcolor: '#faf6f0', backgroundColor: '#faf6f0' },
+  '& .dt-sub-row.MuiTableRow-hover:hover .dt-sticky-end': {
+    bgcolor: '#f3ebe0',
+    backgroundColor: '#f3ebe0',
+  },
+  '& .col-filter-row .dt-sticky-end': { bgcolor: '#fff', backgroundColor: '#fff' },
+} as const
+
 const NUMERIC_SX = { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } as const
 
 const ELLIPSIS_SX = {
@@ -175,6 +229,10 @@ const GRID_TABLE_SX = {
     whiteSpace: 'normal',
     overflow: 'visible',
     boxShadow: 'none',
+  },
+  '& .col-filter-row .dt-sticky-end': {
+    overflow: 'hidden',
+    boxShadow: '-6px 0 8px -6px rgba(43, 36, 28, 0.22)',
   },
 } as const
 
@@ -331,6 +389,7 @@ export function DataTable<T, S = never>({
   }
   const colCount = columns.length + (leadCol ? 1 : 0)
   const showFilterRow = columns.some((column) => column.filter != null)
+  const hasStickyEnd = columns.some(isStickyEnd)
 
   function cellContent(column: Column<T, S>, row: T, index: number): ReactNode {
     return column.render
@@ -340,15 +399,17 @@ export function DataTable<T, S = never>({
 
   /** Một ô thân bảng — dùng chung cho dòng cha và dòng con để canh lề / cắt chữ giống nhau. */
   function bodyCell(column: Column<T, S>, content: ReactNode) {
+    const sticky = isStickyEnd(column)
     const cell = (
       <TableCell
         key={column.key}
         align={column.align ?? (column.numeric ? 'right' : undefined)}
-        className={column.className}
+        className={stickyClassName(column, sticky)}
         sx={{
           ...(column.numeric ? NUMERIC_SX : null),
           ...(column.ellipsis ? ELLIPSIS_SX : null),
           ...column.cellSx,
+          ...(sticky ? STICKY_END_CELL_SX : null),
         }}
       >
         {content}
@@ -400,12 +461,13 @@ export function DataTable<T, S = never>({
       ) : (
         column.header
       )
+    const sticky = isStickyEnd(column)
     return (
       <TableCell
         key={column.key}
         rowSpan={rowSpan}
         align={column.align ?? (column.numeric ? 'right' : undefined)}
-        className={column.className}
+        className={stickyClassName(column, sticky)}
         sortDirection={active ? sort.dir : false}
         sx={{
           width: column.width,
@@ -413,6 +475,7 @@ export function DataTable<T, S = never>({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           ...column.headSx,
+          ...(sticky ? STICKY_END_HEAD_SX : null),
         }}
       >
         {leading ? (
@@ -548,6 +611,7 @@ export function DataTable<T, S = never>({
               minWidth,
               ...(fixedLayout ? { tableLayout: 'fixed' } : null),
               ...(variant === 'grid' ? GRID_TABLE_SX : null),
+              ...(hasStickyEnd ? STICKY_TABLE_SX : null),
               ...tableSx,
             }}
           >
@@ -563,9 +627,18 @@ export function DataTable<T, S = never>({
               {showFilterRow ? (
                 <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
                   {leadCol ? <TableCell sx={leadColSx} /> : null}
-                  {columns.map((column) => (
-                    <TableCell key={column.key}>{column.filter}</TableCell>
-                  ))}
+                  {columns.map((column) => {
+                    const sticky = isStickyEnd(column)
+                    return (
+                      <TableCell
+                        key={column.key}
+                        className={sticky ? 'dt-sticky-end' : undefined}
+                        sx={sticky ? STICKY_END_FILTER_SX : undefined}
+                      >
+                        {column.filter}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ) : null}
               {grouped ? (
@@ -607,11 +680,19 @@ export function DataTable<T, S = never>({
               {showSkeleton
                 ? Array.from({ length: 5 }, (_, rowIndex) => (
                     <TableRow key={`skeleton-${rowIndex}`}>
-                      {Array.from({ length: colCount }, (_, cellIndex) => (
-                        <TableCell key={cellIndex}>
-                          <Skeleton variant="text" />
-                        </TableCell>
-                      ))}
+                      {Array.from({ length: colCount }, (_, cellIndex) => {
+                        const column = leadCol ? columns[cellIndex - 1] : columns[cellIndex]
+                        const sticky = column ? isStickyEnd(column) : false
+                        return (
+                          <TableCell
+                            key={cellIndex}
+                            className={sticky ? 'dt-sticky-end' : undefined}
+                            sx={sticky ? STICKY_END_CELL_SX : undefined}
+                          >
+                            <Skeleton variant="text" />
+                          </TableCell>
+                        )
+                      })}
                     </TableRow>
                   ))
                 : rows.flatMap((row, index) => {
@@ -622,6 +703,7 @@ export function DataTable<T, S = never>({
                       <TableRow
                         key={key}
                         hover
+                        className={open ? 'dt-parent-open' : undefined}
                         selected={isRowSelected?.(row) ?? false}
                         onClick={
                           onRowClick
@@ -682,6 +764,7 @@ export function DataTable<T, S = never>({
                         <TableRow
                           key={`${key}::${subRows.key(sub)}`}
                           hover
+                          className="dt-sub-row"
                           onClick={
                             onSubRowClick
                               ? (event) => {

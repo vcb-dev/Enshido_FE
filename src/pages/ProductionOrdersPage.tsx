@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Chip, Link, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { Box, Button, Chip, Link, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
@@ -7,20 +7,18 @@ import {
   attachIntakeModel3dApi,
   rejectIntakeOrderApi,
   confirmIntakeWarehouseApi,
-  waxPrintBatchApi,
   submitIntakeCastingTreeSpecsApi,
   submitIntakeProductSpecsApi,
-  getIntakePipelineCountsApi,
   getIntakePipelineListsApi,
   listIntakeOrdersApi,
   type IntakeOrder,
+  type IntakeOrderStatus,
 } from '../api/intakeOrders'
 import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
 import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
 import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
 import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
 import { WarehouseConfirmDialog } from '../intake/WarehouseConfirmDialog'
-import { WaxPrintBatchDialog } from '../intake/WaxPrintBatchDialog'
 import { IntakeCastingTreeDialog } from '../intake/IntakeCastingTreeDialog'
 import {
   intakeNeedsCastingSlip,
@@ -40,29 +38,19 @@ import {
   afterIntakeWarehouseConfirmed,
   afterIntakeCastingTreeUpdated,
   afterIntakeRejected,
-  afterIntakeBatchUpdated,
   mergeIntakeQueueItems,
 } from '../intake/intakeOrderCache'
 import { IntakeStatusChip } from '../intake/IntakeStatusChip'
-import { INTAKE_PENDING_TAB } from '../orders/intakePendingTab'
+import { INTAKE_STATUS_META, INTAKE_STATUSES } from '../intake/catalog'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
-  createProductionOrderApi,
-  getProductionOrderLookupsApi,
-  listBtpOptionsApi,
-  listFinishedProductOptionsApi,
-  listNvlOptionsApi,
-  getProductionOrderStatusCountsApi,
   listProductionOrdersApi,
-  updateProductionOrderApi,
-  type ProductionOrderDetail,
   type ProductionOrderRow,
   type ProductionRequestType,
   type ProductionStatus,
   type SubTicketSummary,
-  type UpsertProductionOrderPayload,
 } from '../api/productionOrders'
 import { formatStockedDate } from '../api/inventory'
 import {
@@ -86,11 +74,8 @@ import {
   SUB_TICKET_STATE_META,
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
-import { afterProductionOrderSaved } from '../orders/orderCache'
 import { deadlineWarning } from '../orders/deadline'
-import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
-import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
@@ -108,18 +93,52 @@ const actionTextButtonSx = {
   textTransform: 'none',
 } as const
 
+const INTAKE_STATUS_FILTER_PREFIX = 'intake:'
+
+const PRODUCTION_STATUS_FILTERS: ProductionStatus[] = ['NEW', 'REDO_3D', ...STATUS_TABS]
+
+function parseIntakeStatusFilter(value: string): IntakeOrderStatus | null {
+  if (value === 'INTAKE_PENDING') return 'PENDING_APPROVAL'
+  if (!value.startsWith(INTAKE_STATUS_FILTER_PREFIX)) return null
+  const status = value.slice(INTAKE_STATUS_FILTER_PREFIX.length) as IntakeOrderStatus
+  return INTAKE_STATUSES.includes(status) ? status : null
+}
+
+function parseProductionStatusFilter(value: string): ProductionStatus | '' {
+  return PRODUCTION_STATUS_FILTERS.includes(value as ProductionStatus)
+    ? (value as ProductionStatus)
+    : ''
+}
+
+function isCoolingStatusFilter(value: string) {
+  return value === 'WAIT_FILING' || value === `${INTAKE_STATUS_FILTER_PREFIX}WAIT_COOLING`
+}
+
+const STATUS_COLUMN_FILTER_OPTIONS = (() => {
+  const intakeOptions = INTAKE_STATUSES.filter((status) => status !== 'REJECTED').map((status) => ({
+    id: `${INTAKE_STATUS_FILTER_PREFIX}${status}`,
+    name: INTAKE_STATUS_META[status].label,
+  }))
+  const usedLabels = new Set(intakeOptions.map((item) => item.name))
+  const productionOptions = PRODUCTION_STATUS_FILTERS.filter((status) => {
+    if (status === 'WAIT_FILING') return false
+    return !usedLabels.has(STATUS_META[status].label)
+  }).map((status) => ({
+    id: status,
+    name: STATUS_META[status].label,
+  }))
+  return [...intakeOptions, ...productionOptions]
+})()
+
 export function ProductionOrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<ProductionOrderDetail | null>(null)
   const [approveTarget, setApproveTarget] = useState<IntakeOrder | null>(null)
   const [rejectTarget, setRejectTarget] = useState<IntakeOrder | null>(null)
   const [model3dTarget, setModel3dTarget] = useState<IntakeOrder | null>(null)
   const [productSpecsTarget, setProductSpecsTarget] = useState<IntakeOrder | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<IntakeOrder | null>(null)
-  const [waxBatchOpen, setWaxBatchOpen] = useState(false)
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
   const [productionViewTarget, setProductionViewTarget] = useState<ProductionOrderRow | null>(null)
@@ -133,13 +152,19 @@ export function ProductionOrdersPage() {
     },
   })
   const { params } = table
-  const isIntakePendingView = params.status === INTAKE_PENDING_TAB
-  const isAllView = !isIntakePendingView && params.status === ''
-  const statusTab: ProductionStatus | '' = isIntakePendingView
-    ? ''
-    : STATUS_TABS.includes(params.status as ProductionStatus)
-      ? (params.status as ProductionStatus)
-      : ''
+  const intakeStatusFilter = parseIntakeStatusFilter(params.status)
+  const isCoolingView = isCoolingStatusFilter(params.status)
+  const isIntakeOnlyView = intakeStatusFilter != null && !isCoolingView
+  const isAllView = params.status === ''
+  const isMergedView = isAllView || isCoolingView
+  const statusTab: ProductionStatus | '' = isCoolingView
+    ? 'WAIT_FILING'
+    : parseProductionStatusFilter(params.status)
+  const statusFilterValue = isCoolingView
+    ? `${INTAKE_STATUS_FILTER_PREFIX}WAIT_COOLING`
+    : params.status === 'INTAKE_PENDING'
+      ? `${INTAKE_STATUS_FILTER_PREFIX}PENDING_APPROVAL`
+      : params.status
   const search = useDebouncedValue(params.search, 300)
 
   const listBaseParams = {
@@ -151,15 +176,6 @@ export function ProductionOrdersPage() {
     sort: params.sort || undefined,
     dir: params.sort ? params.dir : undefined,
   }
-  const productionCountFilters = useMemo(
-    () => ({
-      requestType: params.requestType as ProductionRequestType | '',
-      search,
-      receivedDate: params.receivedDate,
-      dueDate: params.dueDate,
-    }),
-    [params.dueDate, params.receivedDate, params.requestType, search],
-  )
 
   const intakePipelineLists = useQuery({
     queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType],
@@ -238,13 +254,53 @@ export function ProductionOrdersPage() {
     castPendingTotal +
     castDoneTotal +
     waitCoolingTotal
+  const intakeListStatus: IntakeOrderStatus | null = isCoolingView
+    ? 'WAIT_COOLING'
+    : intakeStatusFilter
+  const intakeStatusList = useQuery({
+    queryKey: [
+      'intake-orders',
+      'status-list',
+      intakeListStatus,
+      isCoolingView ? 1 : params.page,
+      isCoolingView ? 120 : params.pageSize,
+      search,
+      params.requestType,
+    ],
+    queryFn: () =>
+      listIntakeOrdersApi({
+        status: intakeListStatus!,
+        requestType: params.requestType as ProductionRequestType | '',
+        search,
+        page: isCoolingView ? 1 : params.page,
+        pageSize: isCoolingView ? 120 : params.pageSize,
+      }),
+    placeholderData: keepPreviousData,
+    enabled: isIntakeOnlyView || isCoolingView,
+    staleTime: 15_000,
+  })
   const mergeSlice = useMemo(
-    () => sliceMergedPage(params.page, params.pageSize, intakeQueueItems, intakeQueueTotal),
-    [params.page, params.pageSize, intakeQueueItems, intakeQueueTotal],
+    () =>
+      sliceMergedPage(
+        params.page,
+        params.pageSize,
+        isCoolingView ? (intakeStatusList.data?.items ?? []) : intakeQueueItems,
+        isCoolingView ? (intakeStatusList.data?.total ?? 0) : intakeQueueTotal,
+      ),
+    [
+      isCoolingView,
+      intakeStatusList.data?.items,
+      intakeStatusList.data?.total,
+      params.page,
+      params.pageSize,
+      intakeQueueItems,
+      intakeQueueTotal,
+    ],
   )
 
   const productionListParams = useMemo(() => {
-    if (!isAllView) {
+    if (isIntakeOnlyView) return null
+    if (!isMergedView) {
       return {
         ...listBaseParams,
         page: params.page,
@@ -255,19 +311,18 @@ export function ProductionOrdersPage() {
     return {
       ...listBaseParams,
       page: 1,
-        pageSize: mergeSlice.prodTake,
+      pageSize: mergeSlice.prodTake,
       offset: mergeSlice.prodStart,
     }
-  }, [isAllView, listBaseParams, mergeSlice.prodStart, mergeSlice.prodTake, params.page, params.pageSize])
-
-  const productionStatusCounts = useQuery({
-    queryKey: ['production-orders', 'status-counts', productionCountFilters],
-    queryFn: () => getProductionOrderStatusCountsApi(productionCountFilters),
-    staleTime: 60_000,
-    // Badge tab đi cùng danh sách đang tự làm mới — không thì số trên tab lệch với dòng.
-    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.background),
-    enabled: !isIntakePendingView,
-  })
+  }, [
+    isIntakeOnlyView,
+    isMergedView,
+    listBaseParams,
+    mergeSlice.prodStart,
+    mergeSlice.prodTake,
+    params.page,
+    params.pageSize,
+  ])
 
   const list = useQuery({
     queryKey: ['production-orders', productionListParams],
@@ -275,67 +330,9 @@ export function ProductionOrdersPage() {
       listProductionOrdersApi({ ...productionListParams!, includeCounts: false }),
     placeholderData: keepPreviousData,
     staleTime: 60_000,
-    enabled: !isIntakePendingView && productionListParams !== null,
-    ...liveRefresh(isIntakePendingView ? false : LIVE_REFRESH_MS.list),
+    enabled: !isIntakeOnlyView && productionListParams !== null,
   })
-  const intakePipelineCounts = useQuery({
-    queryKey: ['intake-orders', 'pipeline-counts'],
-    queryFn: getIntakePipelineCountsApi,
-    staleTime: 30_000,
-    ...liveRefresh(LIVE_REFRESH_MS.background),
-  })
-  const intakePipe = intakePipelineCounts.data ?? {}
   const isIntakeWarehouseKeeper = canConfirmIntakeWarehouse(user)
-  const intakeList = useQuery({
-    queryKey: [
-      'intake-orders',
-      'pending-list',
-      params.page,
-      params.pageSize,
-      search,
-      params.requestType,
-    ],
-    queryFn: () =>
-      listIntakeOrdersApi({
-        status: 'PENDING_APPROVAL',
-        requestType: params.requestType as ProductionRequestType | '',
-        search,
-        page: params.page,
-        pageSize: params.pageSize,
-      }),
-    placeholderData: keepPreviousData,
-    enabled: isIntakePendingView,
-    staleTime: 15_000,
-  })
-  const lookups = useQuery({
-    queryKey: ['production-order-lookups'],
-    queryFn: getProductionOrderLookupsApi,
-    staleTime: 5 * 60_000,
-    enabled: formOpen,
-  })
-
-  const create = useMutation({
-    mutationFn: (payload: UpsertProductionOrderPayload) => createProductionOrderApi(payload),
-    onSuccess: (order) => {
-      afterProductionOrderSaved(queryClient, order)
-      setFormOpen(false)
-      toast.success(`Đã lên đơn ${order.code}`)
-      navigate(`/orders/${order.code}`)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const update = useMutation({
-    mutationFn: (payload: UpsertProductionOrderPayload) => {
-      if (!editing) throw new Error('Không tìm thấy đơn để sửa')
-      return updateProductionOrderApi(editing.code, payload)
-    },
-    onSuccess: (order) => {
-      afterProductionOrderSaved(queryClient, order, editing)
-      toast.success(`Đã lưu đơn ${order.code}`)
-      setFormOpen(false)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
   const approveIntake = useMutation({
     mutationFn: ({ id, hasMold }: { id: string; hasMold: boolean }) =>
       approveIntakeOrderApi(id, { hasMold }),
@@ -421,15 +418,6 @@ export function ProductionOrdersPage() {
     if (!code) return
     navigate(`/casting?issue=${encodeURIComponent(code)}`)
   }
-  const waxBatch = useMutation({
-    mutationFn: waxPrintBatchApi,
-    onSuccess: (result) => {
-      setWaxBatchOpen(false)
-      afterIntakeBatchUpdated(queryClient, result.items)
-      toast.success(`Đã in sáp ${result.items.length} đơn — chờ cấy cây thông`)
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
   const submitCastingTree = useMutation({
     mutationFn: ({
       id,
@@ -451,26 +439,6 @@ export function ProductionOrdersPage() {
   const requestTypeOptions = useMemo(
     () => REQUEST_TYPES.map((type) => ({ id: type, name: REQUEST_TYPE_META[type].label })),
     [],
-  )
-  const intakeColumns = useMemo(
-    () =>
-      intakePendingColumns({
-        onApprove: (row) => setApproveTarget(row),
-        onReject: (row) => setRejectTarget(row),
-        search: (
-          <ColumnHeaderSearch
-            value={params.search}
-            onChange={table.setSearch}
-            placeholder="Tìm mã đơn, mã SP…"
-          />
-        ),
-        requestType: {
-          valueId: params.requestType,
-          options: requestTypeOptions,
-          onChange: (id) => table.setFilter({ requestType: id }),
-        },
-      }),
-    [navigate, params.requestType, params.search, requestTypeOptions, table.setFilter, table.setSearch],
   )
 
   const columns = useMemo(
@@ -509,6 +477,11 @@ export function ProductionOrdersPage() {
               placeholder="Tìm mã SX, mô tả…"
             />
           ),
+          status: {
+            valueId: statusFilterValue,
+            options: STATUS_COLUMN_FILTER_OPTIONS,
+            onChange: (id) => table.setFilter({ status: id }),
+          },
           requestType: {
             valueId: params.requestType,
             options: requestTypeOptions,
@@ -538,46 +511,48 @@ export function ProductionOrdersPage() {
       params.receivedDate,
       params.requestType,
       params.search,
+      statusFilterValue,
       requestTypeOptions,
       table.setSearch,
       table.setFilter,
     ],
   )
-  const counts = productionStatusCounts.data?.statusCounts ?? list.data?.statusCounts
-  const intakeItems = intakeList.data?.items ?? []
   const prodPageItems = useMemo(() => {
-    if (!isAllView) return list.data?.items ?? []
+    if (!isMergedView) return list.data?.items ?? []
     if (productionListParams === null || !list.data?.items) return []
     if (mergeSlice.prodTake <= 0) return []
     return list.data.items
-  }, [isAllView, list.data?.items, mergeSlice.prodTake, productionListParams])
+  }, [isMergedView, list.data?.items, mergeSlice.prodTake, productionListParams])
   const tableRows: ProductionListRow[] = useMemo(() => {
-    if (!isAllView) return (list.data?.items ?? []).map((row) => ({ kind: 'order', row }))
+    if (isIntakeOnlyView) {
+      return (intakeStatusList.data?.items ?? []).map((row) => ({ kind: 'intake' as const, row }))
+    }
+    if (!isMergedView) return (list.data?.items ?? []).map((row) => ({ kind: 'order' as const, row }))
     return [
       ...mergeSlice.pendingOnPage.map((row) => ({ kind: 'intake' as const, row })),
       ...prodPageItems.map((row) => ({ kind: 'order' as const, row })),
     ]
-  }, [isAllView, list.data?.items, mergeSlice.pendingOnPage, prodPageItems])
-  const tableTotal = isAllView
-    ? intakeQueueTotal + (list.data?.total ?? 0)
-    : (list.data?.total ?? 0)
-  const allTabCount =
-    (counts?.ALL ?? 0) +
-    (intakePipe.PENDING_APPROVAL ?? 0) +
-    (intakePipe.APPROVED ?? 0) +
-    (intakePipe.READY_FOR_PRODUCTION ?? 0) +
-    (intakePipe.PENDING_WAREHOUSE_CONFIRMATION ?? 0) +
-    (intakePipe.WAX_PRINTED ?? 0) +
-    (intakePipe.WAX_CONFIRMED ?? 0) +
-    (intakePipe.WAIT_CASTING ?? 0) +
-    (intakePipe.CASTING ?? 0) +
-    (intakePipe.CAST_PENDING_CONFIRMATION ?? 0) +
-    (intakePipe.CAST_DONE ?? 0) +
-    (intakePipe.WAIT_COOLING ?? 0)
+  }, [
+    isIntakeOnlyView,
+    isMergedView,
+    intakeStatusList.data?.items,
+    list.data?.items,
+    mergeSlice.pendingOnPage,
+    prodPageItems,
+  ])
+  const tableTotal = isIntakeOnlyView
+    ? (intakeStatusList.data?.total ?? 0)
+    : isMergedView
+      ? (isCoolingView ? (intakeStatusList.data?.total ?? 0) : intakeQueueTotal) +
+        (list.data?.total ?? 0)
+      : (list.data?.total ?? 0)
   const columnFiltered = Boolean(
-    params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
+    params.status ||
+      params.requestType ||
+      params.search.trim() ||
+      params.receivedDate ||
+      params.dueDate,
   )
-  const narrowed = Boolean(statusTab || isIntakePendingView || columnFiltered)
 
   return (
     <Stack
@@ -588,197 +563,80 @@ export function ProductionOrdersPage() {
         title="Lệnh sản xuất"
         subtitle="Lên đơn, theo dõi trạng thái và in phiếu cho thợ."
         compactSubtitle
-        actions={
-          can(user, Permission.PRODUCTION_MODEL3D) ? (
-            <Button variant="outlined" onClick={() => setWaxBatchOpen(true)}>
-              In sáp nhiều đơn
+      />
+
+      <DataTable
+        columns={columns}
+        rows={tableRows}
+        rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
+        onRowClick={(row) =>
+          row.kind === 'intake'
+            ? setIntakeViewTarget(row.row)
+            : navigate(`/orders/${row.row.code}`)
+        }
+        onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}
+        subRows={{
+          get: (row) =>
+            row.kind === 'intake'
+              ? []
+              : statusTab
+                ? row.row.subTickets.filter((sub) => {
+                    const subStatus = subTicketListStatus(sub)
+                    return (
+                      subStatus === statusTab ||
+                      (subStatus == null && row.row.status === statusTab)
+                    )
+                  })
+                : row.row.subTickets,
+          key: (sub) => sub.code,
+          label: (count) => `${count} phiếu con`,
+          autoExpandKey: statusTab || undefined,
+        }}
+        loading={
+          (list.isLoading && !list.data) ||
+          (isAllView && intakePipelineLists.isLoading && !intakePipelineLists.data) ||
+          ((isIntakeOnlyView || isCoolingView) &&
+            intakeStatusList.isLoading &&
+            !intakeStatusList.data)
+        }
+        errorText={
+          (list.error ?? intakePipelineLists.error ?? intakeStatusList.error) instanceof Error
+            ? (list.error ?? intakePipelineLists.error ?? intakeStatusList.error)!.message
+            : undefined
+        }
+        emptyText={columnFiltered ? 'Không có đơn khớp bộ lọc.' : 'Chưa có lệnh sản xuất.'}
+        variant="grid"
+        fixedLayout
+        minWidth={1596}
+        sort={isMergedView || isIntakeOnlyView ? undefined : table.sortState}
+        onSortChange={isMergedView || isIntakeOnlyView ? undefined : table.toggleSort}
+        page={params.page}
+        pageSize={params.pageSize}
+        total={tableTotal}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        rowsLabel="đơn"
+        sx={{ flex: { md: 1 } }}
+        toolbar={
+          columnFiltered ? (
+            <Button
+              size="small"
+              onClick={() => {
+                table.setSearch('')
+                table.setFilter({
+                  status: '',
+                  requestType: '',
+                  receivedDate: '',
+                  dueDate: '',
+                })
+              }}
+            >
+              Xóa lọc
             </Button>
-          ) : undefined
+          ) : null
         }
       />
 
-      <Tabs
-        value={isIntakePendingView ? INTAKE_PENDING_TAB : statusTab}
-        onChange={(_, value: string) => table.setFilter({ status: value, page: 1 })}
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{
-          flexShrink: 0,
-          minHeight: 40,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          '& .MuiTab-root': { minHeight: 40, py: 0 },
-        }}
-      >
-        <Tab value="" label={tabLabel('Tất cả', allTabCount)} />
-        <Tab
-          value={INTAKE_PENDING_TAB}
-          label={tabLabel('Chờ duyệt', intakePipe.PENDING_APPROVAL)}
-        />
-        {!isIntakePendingView
-          ? STATUS_TABS.map((status) => (
-              <Tab
-                key={status}
-                value={status}
-                label={<StatusTabLabel status={status} count={counts?.[status]} />}
-              />
-            ))
-          : null}
-      </Tabs>
-
-      {isIntakePendingView ? (
-        <DataTable
-          columns={intakeColumns}
-          rows={intakeItems}
-          rowKey={(row) => row.id}
-          loading={intakeList.isLoading && !intakeList.data}
-          errorText={intakeList.error instanceof Error ? intakeList.error.message : undefined}
-          emptyText={
-            narrowed
-              ? 'Không có đơn chờ duyệt khớp bộ lọc.'
-              : 'Chưa có đơn chờ duyệt. Tạo đơn ở mục Tạo đơn.'
-          }
-          variant="grid"
-          fixedLayout
-          minWidth={1280}
-          page={params.page}
-          pageSize={params.pageSize}
-          total={intakeList.data?.total ?? 0}
-          onPageChange={table.setPage}
-          onPageSizeChange={table.setPageSize}
-          rowsLabel="đơn"
-          sx={{ flex: { md: 1 } }}
-          toolbar={
-            <>
-              {columnFiltered ? (
-                <Button
-                  size="small"
-                  onClick={() => {
-                    table.setSearch('')
-                    table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
-                  }}
-                >
-                  Xóa lọc
-                </Button>
-              ) : null}
-              <Box sx={{ flex: 1, minWidth: 8 }} />
-              <Button variant="contained" onClick={() => navigate('/intake-orders')}>
-                Tạo đơn mới
-              </Button>
-            </>
-          }
-        />
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={tableRows}
-          rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
-          onRowClick={(row) =>
-            row.kind === 'intake'
-              ? setIntakeViewTarget(row.row)
-              : navigate(`/orders/${row.row.code}`)
-          }
-          onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}
-          subRows={{
-            get: (row) =>
-              row.kind === 'intake'
-                ? []
-                : statusTab
-                  ? row.row.subTickets.filter((sub) => {
-                      const subStatus = subTicketListStatus(sub)
-                      return (
-                        subStatus === statusTab ||
-                        (subStatus == null && row.row.status === statusTab)
-                      )
-                    })
-                  : row.row.subTickets,
-            key: (sub) => sub.code,
-            label: (count) => `${count} phiếu con`,
-            autoExpandKey: statusTab || undefined,
-          }}
-          loading={
-            (list.isLoading && !list.data) ||
-            (isAllView && intakePipelineLists.isLoading && !intakePipelineLists.data)
-          }
-          errorText={
-            (list.error ?? intakePipelineLists.error) instanceof Error
-              ? (list.error ?? intakePipelineLists.error)!.message
-              : undefined
-          }
-          emptyText={narrowed ? 'Không có đơn khớp bộ lọc.' : 'Chưa có lệnh sản xuất.'}
-          variant="grid"
-          fixedLayout
-          minWidth={1596}
-          sort={isAllView ? undefined : table.sortState}
-          onSortChange={isAllView ? undefined : table.toggleSort}
-          page={params.page}
-          pageSize={params.pageSize}
-          total={tableTotal}
-          onPageChange={table.setPage}
-          onPageSizeChange={table.setPageSize}
-          rowsLabel="đơn"
-          sx={{ flex: { md: 1 } }}
-          toolbar={
-            <>
-              {columnFiltered ? (
-                <Button
-                  size="small"
-                  onClick={() => {
-                    table.setSearch('')
-                    table.setFilter({ requestType: '', receivedDate: '', dueDate: '' })
-                  }}
-                >
-                  Xóa lọc
-                </Button>
-              ) : null}
-              <Box sx={{ flex: 1, minWidth: 8 }} />
-              <Button
-                variant="contained"
-                onClick={() => {
-                  void queryClient.prefetchQuery({
-                    queryKey: ['production-order-lookups'],
-                    queryFn: getProductionOrderLookupsApi,
-                    staleTime: 5 * 60_000,
-                  })
-                  void queryClient.prefetchQuery({
-                    queryKey: ['nvl-options'],
-                    queryFn: () => listNvlOptionsApi(),
-                    staleTime: 60_000,
-                  })
-                  void queryClient.prefetchQuery({
-                    queryKey: ['finished-product-options'],
-                    queryFn: () => listFinishedProductOptionsApi(),
-                    staleTime: 60_000,
-                  })
-                  void queryClient.prefetchQuery({
-                    queryKey: ['btp-options'],
-                    queryFn: () => listBtpOptionsApi(),
-                    staleTime: 60_000,
-                  })
-                  setEditing(null)
-                  setFormOpen(true)
-                }}
-              >
-                Lên đơn mới
-              </Button>
-            </>
-          }
-        />
-      )}
-
-      {formOpen ? (
-        <ProductionOrderFormDialog
-          open
-          order={editing}
-          lookups={lookups.data}
-          saving={editing ? update.isPending : create.isPending}
-          onClose={() => {
-            setFormOpen(false)
-            setEditing(null)
-          }}
-          onSave={(payload) => (editing ? update.mutateAsync(payload) : create.mutateAsync(payload))}
-        />
-      ) : null}
       <ApproveIntakeDialog
         order={approveTarget}
         saving={approveIntake.isPending}
@@ -805,12 +663,6 @@ export function ProductionOrdersPage() {
           if (!model3dTarget) return
           void attachModel3d.mutateAsync({ id: model3dTarget.id, ...payload })
         }}
-      />
-      <WaxPrintBatchDialog
-        open={waxBatchOpen}
-        saving={waxBatch.isPending}
-        onClose={() => setWaxBatchOpen(false)}
-        onSave={(payload) => waxBatch.mutate(payload)}
       />
       <WarehouseConfirmDialog
         order={confirmTarget}
@@ -844,20 +696,6 @@ export function ProductionOrdersPage() {
         row={productionViewTarget}
         onClose={() => setProductionViewTarget(null)}
       />
-    </Stack>
-  )
-}
-
-function tabLabel(label: string, count: number | undefined) {
-  return count == null ? label : `${label} (${count})`
-}
-
-function StatusTabLabel({ status, count }: { status: ProductionStatus; count: number | undefined }) {
-  const meta = STATUS_META[status]
-  return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: meta.bg, flexShrink: 0 }} />
-      <span>{tabLabel(meta.label, count)}</span>
     </Stack>
   )
 }
@@ -1087,6 +925,11 @@ function orderColumns(
   },
   filters: {
     search: ReactNode
+    status: {
+      valueId: string
+      options: Array<{ id: string; name: string }>
+      onChange: (id: string) => void
+    }
     requestType: {
       valueId: string
       options: Array<{ id: string; name: string }>
@@ -1170,6 +1013,7 @@ function orderColumns(
       width: 220,
       sortable: true,
       card: 'meta',
+      filter: <ColumnHeaderFilter {...filters.status} />,
       render: (row) =>
         row.kind === 'intake' ? (
           <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
@@ -1472,111 +1316,6 @@ const DEADLINE_TONE = {
   today: { bg: '#ffebee', fg: '#b71c1c', border: '#e57373' },
   soon: { bg: '#fff4d6', fg: '#8a6100', border: '#f0c36d' },
 } as const
-
-function intakePendingColumns({
-  onApprove,
-  onReject,
-  search,
-  requestType,
-}: {
-  onApprove: (row: IntakeOrder) => void
-  onReject: (row: IntakeOrder) => void
-  search: ReactNode
-  requestType: {
-    valueId: string
-    options: Array<{ id: string; name: string }>
-    onChange: (id: string) => void
-  }
-}): Column<IntakeOrder>[] {
-  return [
-    {
-      key: 'sxCode',
-      header: 'Mã SX',
-      width: 92,
-      cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
-      filter: search,
-      render: (row) => row.sxCode,
-    },
-    {
-      key: 'createdDate',
-      header: 'Ngày tạo',
-      width: 110,
-      render: (row) => formatDateShort(row.createdAt),
-    },
-    {
-      key: 'status',
-      header: 'Trạng thái',
-      width: 130,
-      render: (row) => <IntakeStatusChip status={row.status} />,
-    },
-    {
-      key: 'code',
-      header: 'Mã đơn hàng',
-      width: 100,
-      cellSx: { fontWeight: 700 },
-      render: (row) => row.code,
-    },
-    {
-      key: 'productName',
-      header: 'Tên sản phẩm',
-      width: 160,
-      ellipsis: true,
-      render: (row) => row.productName?.trim() || '—',
-    },
-    {
-      key: 'requestType',
-      header: 'Yêu cầu làm hàng',
-      width: 140,
-      filter: <ColumnHeaderFilter {...requestType} />,
-      render: (row) => <RequestTypeChip type={row.requestType} />,
-    },
-    { key: 'qty', header: 'SL lên đơn', width: 100, align: 'right', render: (row) => row.qty },
-    {
-      key: 'dueDate',
-      header: 'Thời gian trả hàng',
-      width: 130,
-      render: (row) => (row.dueDate ? formatDateShort(row.dueDate) : '—'),
-    },
-    {
-      key: 'trackingCode',
-      header: 'Mã sản phẩm',
-      width: 120,
-      ellipsis: true,
-      render: (row) => row.trackingCode?.trim() || '—',
-    },
-    {
-      key: 'placedBy',
-      header: 'Người đặt đơn',
-      width: 120,
-      ellipsis: true,
-      render: (row) => row.placedBy,
-    },
-    {
-      key: 'description',
-      header: 'Mô tả / Yêu cầu',
-      width: 220,
-      ellipsis: true,
-      render: (row) => row.description || '—',
-    },
-    {
-      key: 'actions',
-      header: 'Hành động',
-      width: 180,
-      align: 'center',
-      card: 'actions',
-      render: (row) => (
-        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
-          <Button size="small" variant="contained" onClick={() => onApprove(row)}>
-            Duyệt
-          </Button>
-          <Button size="small" variant="outlined" color="error" onClick={() => onReject(row)}>
-            Từ chối
-          </Button>
-        </Stack>
-      ),
-    },
-  ]
-}
 
 function DeadlineCell({ row }: { row: ProductionOrderRow }) {
   const warning = deadlineWarning(row.dueDate, row.status)

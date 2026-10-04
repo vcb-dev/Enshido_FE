@@ -30,7 +30,7 @@ export type { SearchInputProps } from './SearchInput'
 export { ColumnHeaderDate, ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'
 export type { ColumnFilterOption } from './ColumnHeaderFilter'
 
-export { DataTable } from './DataTable'
+export { DataTable, STICKY_END_CELL_SX, STICKY_END_HEAD_SX } from './DataTable'
 export type { Column, ColumnGroup, DataTableProps } from './DataTable'
 
 export { PageHeader } from './PageHeader'

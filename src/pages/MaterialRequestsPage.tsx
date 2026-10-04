@@ -30,7 +30,7 @@ import {
   type MaterialRequestStatus,
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { PageHeader, TableSkeleton } from '../components/ui'
+import { PageHeader, STICKY_END_CELL_SX, STICKY_END_HEAD_SX, TableSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
 import {
   IssueMaterialDialog,
@@ -40,8 +40,6 @@ import {
 } from '../orders/MaterialRequests'
 import { seedProductionOrder } from '../orders/orderCache'
 import { removeMaterialRequestFromCache } from '../orders/materialRequestsCache'
-import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
-
 const TABS: Array<{ value: MaterialRequestStatus; label: string }> = [
   { value: 'PENDING', label: 'Chờ xuất' },
   { value: 'ISSUED', label: 'Đã xuất' },
@@ -63,7 +61,6 @@ export function MaterialRequestsPage() {
     queryKey: ['material-requests', status],
     queryFn: () => listMaterialRequestsApi(status),
     staleTime: 30_000,
-    ...liveRefresh(status === 'PENDING' ? LIVE_REFRESH_MS.list : false),
   })
 
   function afterMaterialRequestHandled(
@@ -135,8 +132,11 @@ export function MaterialRequestsPage() {
               size="small"
               sx={{
                 minWidth: 900,
+                borderCollapse: 'separate',
+                borderSpacing: 0,
                 '& td, & th': { px: 1, py: 0.75, fontSize: '0.84rem', borderColor: '#e9e0d4' },
                 '& th': { fontWeight: 700, bgcolor: '#f8f3eb' },
+                '& .MuiTableRow-hover:hover .dt-sticky-end': { bgcolor: '#f8f1e5' },
               }}
             >
               <TableHead>
@@ -147,7 +147,9 @@ export function MaterialRequestsPage() {
                   <TableCell>Mã NVL</TableCell>
                   <TableCell align="right">Xin</TableCell>
                   <TableCell align="right">{status === 'PENDING' ? 'Khả dụng' : 'Đã xuất'}</TableCell>
-                  <TableCell>{status === 'PENDING' ? 'Thao tác' : 'Xử lý'}</TableCell>
+                  <TableCell className="dt-sticky-end" sx={STICKY_END_HEAD_SX}>
+                    {status === 'PENDING' ? 'Thao tác' : 'Xử lý'}
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -218,7 +220,7 @@ export function MaterialRequestsPage() {
                           '—'
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="dt-sticky-end" sx={STICKY_END_CELL_SX}>
                         {status === 'PENDING' ? (
                           !isKeeper ? (
                             <Typography variant="caption" color="text.secondary">

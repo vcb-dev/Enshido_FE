@@ -29,7 +29,7 @@ function emptyList(pageSize = 200): IntakeOrderList {
   return { items: [], total: 0, page: 1, pageSize }
 }
 
-/** Tab Tất cả dùng pipeline-lists — phải patch riêng, không chỉ pending-list. */
+/** Danh sách gộp Lệnh sản xuất dùng pipeline-lists — phải patch riêng, không chỉ status-list. */
 function patchPipelineLists(queryClient: QueryClient, order: IntakeOrder) {
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders', 'pipeline-lists'] })) {
     const old = query.state.data as IntakePipelineLists | undefined
@@ -104,6 +104,26 @@ function isCatalogListKey(queryKey: QueryKey) {
   return typeof slot === 'string' && /^\d+$/.test(slot)
 }
 
+function isStatusListKey(queryKey: QueryKey) {
+  return queryKey[1] === 'status-list'
+}
+
+function statusListAllows(queryKey: QueryKey, order: IntakeOrder) {
+  const statusFilter = String(queryKey[2] ?? '')
+  if (statusFilter && statusFilter !== order.status) return false
+  const search = String(queryKey[5] ?? '').trim().toLowerCase()
+  if (search) {
+    const hay = [order.code, order.sxCode, order.productName, order.description, order.trackingCode]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    if (!hay.includes(search)) return false
+  }
+  const requestType = String(queryKey[6] ?? '')
+  if (requestType && requestType !== order.requestType) return false
+  return true
+}
+
 function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
   const statusFilter = String(queryKey[3] ?? '')
   if (statusFilter && statusFilter !== order.status) return false
@@ -124,7 +144,9 @@ function reconcileOrderInList(
   const inList = old.items.some((item) => item.id === order.id)
   const shouldBeHere = isCatalogListKey(queryKey)
     ? catalogListAllows(queryKey, order)
-    : listKeyMatchesStatus(queryKey, order.status)
+    : isStatusListKey(queryKey)
+      ? statusListAllows(queryKey, order)
+      : listKeyMatchesStatus(queryKey, order.status)
   if (inList && !shouldBeHere) {
     return {
       ...old,
@@ -138,6 +160,7 @@ function reconcileOrderInList(
   }
   // Đơn mới lên đầu trang 1 — trang sau để refetch, tránh nhảy sai trang.
   if (isCatalogListKey(queryKey) && Number(queryKey[1]) !== 1) return undefined
+  if (isStatusListKey(queryKey) && Number(queryKey[3]) !== 1) return undefined
   return { ...old, items: [order, ...old.items], total: old.total + 1 }
 }
 
