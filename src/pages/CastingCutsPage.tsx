@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Checkbox, Chip, Paper, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Button, Checkbox, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -10,7 +10,6 @@ import {
   listCastingSlipsApi,
   rejectCastingSlipApi,
   type CastingSlip,
-  type CastingSlipStatus,
   type ConfirmCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
@@ -33,14 +32,7 @@ import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutDat
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
-/** Xác nhận số liệu thợ trước, rồi cắt cây từ các phiếu Đúc xong. */
-const TABS: { value: CastingSlipStatus; label: string }[] = [
-  { value: 'PENDING_CONFIRMATION', label: 'Chờ xác nhận đúc' },
-  { value: 'DONE', label: 'Đúc xong / Cắt cây' },
-]
-
 const CUT_FILTERS = {
-  status: 'DONE',
   slipDate: '',
   batchOrderCodes: '',
 }
@@ -84,7 +76,7 @@ export function CastingCutsPage() {
   const [cutTarget, setCutTarget] = useState<CastingSlip | null>(null)
   const table = useTableParams({ pageSize: 25, filters: CUT_FILTERS })
   const { params } = table
-  const status = (params.status || 'DONE') as CastingSlipStatus
+  const status = 'DONE' as const
   const canConfirm = canConfirmIntakeWarehouse(user)
 
   const list = useQuery({
@@ -381,13 +373,6 @@ export function CastingCutsPage() {
         subtitle="Chọn các phiếu Đúc xong để cắt nhiều đơn cùng lần. Nhập số liệu từng đơn; tất cả đơn đã cắt chuyển sang Chờ nguội."
         compactSubtitle
       />
-      <Paper sx={{ px: 1.5 }}>
-        <Tabs value={status} onChange={(_, value: CastingSlipStatus) => { table.setFilter({ status: value }); setSelected([]) }}>
-          {TABS.map((tab) => (
-            <Tab key={tab.value} value={tab.value} label={tab.label} />
-          ))}
-        </Tabs>
-      </Paper>
       {status === 'DONE' && canConfirm ? <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <Button variant="contained" disabled={!selected.length || cutMany.isPending} onClick={() => setBulkTargets(selected)}>
           Cắt các đơn đã chọn ({selected.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn)
@@ -406,9 +391,7 @@ export function CastingCutsPage() {
         }}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText={
-          status === 'PENDING_CONFIRMATION' ? 'Không có phiếu đúc nào chờ xác nhận.' : 'Chưa có phiếu đúc xong.'
-        }
+        emptyText="Chưa có phiếu đúc xong."
         variant="grid"
         fixedLayout
         minWidth={900}
