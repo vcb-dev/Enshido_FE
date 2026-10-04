@@ -5,11 +5,23 @@ import type {
   StageCode,
   SubTicketState,
 } from '../api/productionOrders'
+import { INTAKE_STATUS_META } from '../intake/catalog'
 
 type ChipTone = { label: string; bg: string; fg: string }
 
 /** Màu bám theo view Lark Base "Đơn Sản xuất" để người dùng nhận ra ngay. */
 export const STATUS_META: Record<ProductionStatus, ChipTone> = {
+  PENDING_APPROVAL: INTAKE_STATUS_META.PENDING_APPROVAL,
+  REJECTED: INTAKE_STATUS_META.REJECTED,
+  APPROVED: INTAKE_STATUS_META.APPROVED,
+  READY_FOR_PRODUCTION: INTAKE_STATUS_META.READY_FOR_PRODUCTION,
+  WAX_PRINTED: INTAKE_STATUS_META.WAX_PRINTED,
+  PENDING_WAREHOUSE_CONFIRMATION: INTAKE_STATUS_META.PENDING_WAREHOUSE_CONFIRMATION,
+  WAX_CONFIRMED: INTAKE_STATUS_META.WAX_CONFIRMED,
+  WAIT_CASTING: INTAKE_STATUS_META.WAIT_CASTING,
+  CAST_PENDING_CONFIRMATION: INTAKE_STATUS_META.CAST_PENDING_CONFIRMATION,
+  CAST_DONE: INTAKE_STATUS_META.CAST_DONE,
+
   NEW: { label: 'Mới', bg: '#eee8df', fg: '#4a3d2f' },
   REDO_3D: { label: 'Sửa 3D', bg: '#f39c12', fg: '#ffffff' },
   CASTING: { label: 'Đúc', bg: '#8e44ad', fg: '#ffffff' },
