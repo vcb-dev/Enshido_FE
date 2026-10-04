@@ -74,7 +74,6 @@ import {
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { deadlineWarning } from '../orders/deadline'
-import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
@@ -142,7 +141,6 @@ export function ProductionOrdersPage() {
   const [confirmTarget, setConfirmTarget] = useState<IntakeOrder | null>(null)
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
-  const [productionViewTarget, setProductionViewTarget] = useState<ProductionOrderRow | null>(null)
   const table = useTableParams({
     pageSize: 25,
     filters: {
@@ -271,6 +269,7 @@ export function ProductionOrdersPage() {
     queryFn: () =>
       listIntakeOrdersApi({
         status: intakeListStatus!,
+        unlinkedOnly: true,
         requestType: params.requestType as ProductionRequestType | '',
         search,
         page: isCoolingView ? 1 : params.page,
@@ -446,7 +445,7 @@ export function ProductionOrdersPage() {
     () =>
       orderColumns(
         {
-          onView: (row) => setProductionViewTarget(row),
+          onView: (row) => navigate(`/orders/${row.code}`),
           onIntakeApprove: (row) => setApproveTarget(row),
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
@@ -580,7 +579,9 @@ export function ProductionOrdersPage() {
           get: (row) =>
             row.kind === 'intake'
               ? []
-              : statusTab
+              : row.row.subTickets.length < 2
+                ? []
+                : statusTab
                 ? row.row.subTickets.filter((sub) => {
                     const subStatus = subTicketListStatus(sub)
                     return (
@@ -692,10 +693,6 @@ export function ProductionOrdersPage() {
       <IntakeOrderDetailDialog
         order={intakeViewTarget}
         onClose={() => setIntakeViewTarget(null)}
-      />
-      <ProductionOrderViewDialog
-        row={productionViewTarget}
-        onClose={() => setProductionViewTarget(null)}
       />
     </Stack>
   )
@@ -954,15 +951,16 @@ function orderColumns(
           return row.row.sxCode
         }
         const order = row.row
-        const body = order.subTickets.length ? (
+        const displayCode = order.intakeSxCode || order.code
+        const body = order.subTickets.length > 1 ? (
           <>
-            {order.code}
+            {displayCode}
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
               {order.subTickets.length} phiếu con
             </Typography>
           </>
         ) : (
-          order.code
+          displayCode
         )
         return (
           <Link
@@ -1227,7 +1225,8 @@ function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
 }
 
 function OrderStatus({ row }: { row: ProductionOrderRow }) {
-  if (row.subTickets.length) {
+  if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} />
+  if (row.subTickets.length > 1) {
     const counts = new Map<string, { status: ProductionStatus; label: string; count: number }>()
     for (const ticket of row.subTickets) {
       const status = subTicketListStatus(ticket)

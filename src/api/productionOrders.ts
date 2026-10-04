@@ -57,6 +57,7 @@ export type ProductionOrderRow = {
   leadTime: string | null
   trackingCode: string | null
   /** Mã đơn tạo (DH…) khi lệnh sinh từ xác nhận đúc. */
+  intakeSxCode?: string | null
   intakeOrderCode?: string | null
   closedBy: string
   customerName: string | null
