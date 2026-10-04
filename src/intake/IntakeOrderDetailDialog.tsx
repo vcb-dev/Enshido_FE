@@ -4,10 +4,13 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Link,
   Stack,
   Typography,
 } from '@mui/material'
 import type { IntakeOrder } from '../api/intakeOrders'
+import { formatCt } from '../api/inventory'
+import { formatIntakeGram } from './intakeDisplay'
 import { intakeImageStageSections } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 import { IntakeStatusChip } from './IntakeStatusChip'
@@ -21,6 +24,9 @@ type IntakeOrderDetailDialogProps = {
 
 export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDialogProps) {
   const sections = order ? intakeImageStageSections(order) : []
+  const waxWeight = order ? formatIntakeGram(order.productWeightGram) : null
+  const treeWeight = order ? formatIntakeGram(order.castingTreeWeightGram) : null
+  const checkedWeight = order ? formatIntakeGram(order.waxCheckedWeightGram) : null
 
   return (
     <Dialog open={Boolean(order)} onClose={onClose} maxWidth="sm" fullWidth>
@@ -45,6 +51,54 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
               </Typography>
               {order.description?.trim() ? (
                 <Typography variant="body2">{order.description}</Typography>
+              ) : null}
+              {order.hasMold === true ? (
+                <Typography variant="body2" color="text.secondary">
+                  Đã có khuôn
+                </Typography>
+              ) : order.hasMold === false ? (
+                <Typography variant="body2" color="text.secondary">
+                  Cần vẽ 3D in resin
+                </Typography>
+              ) : null}
+              {order.model3dUrl?.trim() ? (
+                <Typography variant="body2">
+                  <strong>Link file 3D:</strong>{' '}
+                  {/^https?:\/\//i.test(order.model3dUrl.trim()) ? (
+                    <Link href={order.model3dUrl.trim()} target="_blank" rel="noreferrer">
+                      {order.model3dUrl.trim()}
+                    </Link>
+                  ) : (
+                    order.model3dUrl.trim()
+                  )}
+                </Typography>
+              ) : null}
+              {order.stoneCount3d != null || order.stoneWeight3dGram ? (
+                <Typography variant="body2">
+                  <strong>Đá theo 3D:</strong>{' '}
+                  {[
+                    order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
+                    order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || '—'}
+                </Typography>
+              ) : null}
+              {waxWeight ? (
+                <Typography variant="body2">
+                  <strong>Trọng lượng sáp:</strong> {waxWeight}
+                </Typography>
+              ) : null}
+              {treeWeight ? (
+                <Typography variant="body2">
+                  <strong>Trọng lượng cây thông:</strong> {treeWeight}
+                </Typography>
+              ) : null}
+              {checkedWeight ? (
+                <Typography variant="body2">
+                  <strong>TL thủ kho cân kiểm:</strong> {checkedWeight}
+                  {order.waxCheckedByName ? ` · ${order.waxCheckedByName}` : null}
+                </Typography>
               ) : null}
             </Stack>
 

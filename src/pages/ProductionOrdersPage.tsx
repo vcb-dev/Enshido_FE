@@ -27,7 +27,6 @@ import {
   intakeNeedsProductSpecs,
 } from '../intake/intakeActions'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
-import { intakeProductWeightCaption, intakeShowsProductWeight } from '../intake/intakeDisplay'
 import { intakeDetailImages, intakeProductionStageColumn } from '../intake/intakeImages'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
@@ -95,7 +94,9 @@ const actionTextButtonSx = {
 
 const INTAKE_STATUS_FILTER_PREFIX = 'intake:'
 
-const PRODUCTION_STATUS_FILTERS: ProductionStatus[] = ['NEW', 'REDO_3D', ...STATUS_TABS]
+const PRODUCTION_STATUS_FILTERS: ProductionStatus[] = STATUS_TABS.filter(
+  (status) => status !== 'CASTING',
+)
 
 function parseIntakeStatusFilter(value: string): IntakeOrderStatus | null {
   if (value === 'INTAKE_PENDING') return 'PENDING_APPROVAL'
@@ -1016,31 +1017,7 @@ function orderColumns(
       filter: <ColumnHeaderFilter {...filters.status} />,
       render: (row) =>
         row.kind === 'intake' ? (
-          <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-            <IntakeStatusChip status={row.row.status} />
-            {row.row.status === 'APPROVED' && row.row.hasMold != null ? (
-              <Typography variant="caption" color="text.secondary">
-                {row.row.hasMold ? 'Đã có khuôn' : 'Cần vẽ 3D in resin'}
-              </Typography>
-            ) : null}
-            {row.row.status === 'READY_FOR_PRODUCTION' && row.row.hasMold === true ? (
-              <Typography variant="caption" color="text.secondary">
-                Đã có khuôn
-              </Typography>
-            ) : null}
-            {row.row.status === 'READY_FOR_PRODUCTION' && row.row.model3dUrl ? (
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 200, display: 'block' }}>
-                {row.row.model3dUrl}
-              </Typography>
-            ) : null}
-            {row.kind === 'intake' &&
-            intakeShowsProductWeight(row.row) &&
-            intakeProductWeightCaption(row.row) ? (
-              <Typography variant="caption" color="text.secondary">
-                {intakeProductWeightCaption(row.row)}
-              </Typography>
-            ) : null}
-          </Stack>
+          <IntakeStatusChip status={row.row.status} />
         ) : (
           <OrderStatus row={row.row} />
         ),
