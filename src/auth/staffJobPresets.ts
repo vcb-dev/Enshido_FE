@@ -24,14 +24,14 @@ export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'kcs', label: 'KCS' },
 ]
 
-const HIDDEN_STAFF_JOB_PRESETS = new Set<StaffJobPreset>(['staff', 'worker_sx'])
+const HIDDEN_STAFF_JOB_PRESETS = new Set<StaffJobPreset>(['staff'])
 
-/** Vai trò chọn trên form thêm / sửa — không có Nhân viên & Thợ sản xuất. */
+/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, KCS, các loại thợ). */
 export function staffJobSelectOptions() {
   return STAFF_JOB_OPTIONS.filter((o) => !HIDDEN_STAFF_JOB_PRESETS.has(o.value))
 }
 
-/** Tài khoản cũ (nhân viên / thợ SX) — mở form sửa thì chọn sẵn KCS, admin đổi vai trò mới. */
+/** Tài khoản Nhân viên cũ — mở form sửa thì chọn sẵn KCS, admin đổi vai trò mới. */
 export function staffJobPresetForEditForm(preset: StaffJobPreset): StaffJobPreset {
   return HIDDEN_STAFF_JOB_PRESETS.has(preset) ? 'kcs' : preset
 }
@@ -46,25 +46,25 @@ const WAREHOUSE_SCREENS: PermissionCode[] = [
 export function staffJobPresetHint(preset: StaffJobPreset): string {
   switch (preset) {
     case 'admin':
-      return 'Tài khoản Admin luôn xem được mọi màn hình.'
+      return 'Xem được mọi màn hình.'
     case 'worker_sx':
-      return 'Chỉ dùng màn Phiếu của tôi — quyền thợ sản xuất đã kèm theo vai trò.'
+      return 'Màn Phiếu của tôi.'
     case 'worker_3d':
-      return 'Chỉ màn Lệnh sản xuất — cập nhật link 3D và các bước trước in sáp (không có Phiếu của tôi).'
+      return 'Lệnh sản xuất: link 3D, in sáp.'
     case 'worker_wax':
-      return 'Chỉ Lệnh sản xuất — số liệu sản phẩm, cây thông sáp (không gắn link 3D).'
+      return 'Lệnh sản xuất: bơm sáp, cây thông.'
     case 'worker_casting':
-      return 'Chỉ màn Lệnh đúc — nhận phiếu đúc được giao từ Lệnh sản xuất.'
+      return 'Màn Lệnh đúc.'
     case 'warehouse':
-      return 'Duyệt đơn mới (Chờ duyệt), các màn kho và xác nhận số liệu trên Lệnh sản xuất.'
+      return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
-      return 'Tổng quan và quản lý đơn sản xuất — KCS nhận lại hàng từ thợ.'
+      return 'Nhận lại hàng từ thợ.'
     case 'staff':
       return 'Chọn màn được xem ở bước chỉnh sửa nhân sự.'
   }
 }
 
-/** Quyền công đoạn — gắn với Vai trò (Thợ 3D / sáp / đúc / SX), không tick trên form màn hình. */
+/** Quyền theo việc — gắn với Vai trò (Thủ kho / KCS / Thợ 3D / sáp / đúc / SX), không tick trên form màn hình. */
 export const STAGE_ROLE_PERMISSIONS: PermissionCode[] = [
   Permission.PRODUCTION_MODEL3D,
   Permission.PRODUCTION_WAX,
@@ -72,6 +72,7 @@ export const STAGE_ROLE_PERMISSIONS: PermissionCode[] = [
   Permission.PRODUCTION_WORKER,
   Permission.WAREHOUSE_KEEPER,
   Permission.PRODUCTION_QC,
+  Permission.INTAKE_CREATE,
   Permission.INTAKE_APPROVE,
 ]
 
@@ -129,6 +130,7 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
           ...WAREHOUSE_SCREENS,
           Permission.SCREEN_PRODUCTION_ORDERS,
           Permission.WAREHOUSE_KEEPER,
+          Permission.INTAKE_CREATE,
           Permission.INTAKE_APPROVE,
         ],
       }

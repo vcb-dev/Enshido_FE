@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { CssBaseline, ThemeProvider } from '@mui/material'
 import { Toaster } from 'sonner'
+import { ConfirmDialogHost } from '../components/ui/ConfirmDialog'
 import { theme } from './theme'
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -8,6 +9,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {children}
+      <ConfirmDialogHost />
       <Toaster
         position="top-right"
         // Toast nằm fixed ở mép trên — lùi xuống dưới tai thỏ khi chạy như app đã cài.

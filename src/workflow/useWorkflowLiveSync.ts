@@ -4,7 +4,7 @@ import { getWorkflowIntakeLiveApi, getWorkflowRevisionApi, type WorkflowRevision
 import { applyIntakeLiveSnapshot } from '../intake/intakeOrderCache'
 import { subscribeWorkflowBroadcast } from './workflowBroadcast'
 
-const EMPTY: WorkflowRevision = { intake: '', production: '', casting: '', cut: '' }
+const EMPTY: WorkflowRevision = { intake: '', production: '', casting: '' }
 
 function applyRevisionDelta(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -33,11 +33,7 @@ function applyRevisionDelta(
   if (prev.casting !== next.casting) {
     void queryClient.invalidateQueries({ queryKey: ['casting-slips'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
-  }
-  if (prev.cut !== next.cut) {
-    void queryClient.invalidateQueries({ queryKey: ['casting-cuts'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['production-order'], refetchType: 'active' })
   }
 }
 
@@ -71,7 +67,7 @@ export function useWorkflowLiveSync(enabled: boolean) {
       const hasIntakeCache = queryClient
         .getQueryCache()
         .findAll({ queryKey: ['intake-orders', 'pipeline-lists'] }).length
-      if (hasIntakeCache) applyRevisionDelta(queryClient, EMPTY, { ...revision.data, production: '', casting: '', cut: '' })
+      if (hasIntakeCache) applyRevisionDelta(queryClient, EMPTY, { ...revision.data, production: '', casting: '' })
       return
     }
     applyRevisionDelta(queryClient, prev, revision.data)

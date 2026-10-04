@@ -503,9 +503,6 @@ function GenerateDialog({
         })
       }
     >
-      <Typography variant="body2" color="text.secondary">
-        Chỉ nhập Zone, số dãy, số tầng và số ô. Mã vị trí tự sinh, không cần gõ tay.
-      </Typography>
       <FormRow>
         <FormTextField<GenerateFormValues>
           name="zone"
@@ -629,8 +626,7 @@ function EditLocationDialog({
     >
       {row?.occupied ? (
         <Alert severity="warning">
-          Vị trí đang dùng trên Kho NVL chính. Đổi Zone / dãy / tầng / số sẽ tự đổi mã và cập nhật
-          cột Vị trí của NVL đang gắn.
+          Vị trí đang dùng — đổi sẽ cập nhật NVL đang gắn.
         </Alert>
       ) : (
         <Typography variant="body2" color="text.secondary">

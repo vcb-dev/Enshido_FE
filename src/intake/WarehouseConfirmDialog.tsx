@@ -22,7 +22,7 @@ export function WarehouseConfirmDialog({
       <DialogContent>
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Xác nhận đã kiểm và nhận sáp từ thợ sáp. Đơn chuyển sang trạng thái <strong>Đã có sáp</strong>.
+            Đơn chuyển sang <strong>Đã có sáp</strong>.
           </Typography>
           <Typography variant="body2">
             Thợ sáp báo: <strong>{declared ? `${formatQty(declared)} g` : '—'}</strong>

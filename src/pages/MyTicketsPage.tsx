@@ -12,12 +12,10 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import EventIcon from '@mui/icons-material/Event'
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined'
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import InboxIcon from '@mui/icons-material/Inbox'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -26,7 +24,6 @@ import ScaleIcon from '@mui/icons-material/Scale'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Link as RouterLink } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
 import {
   getMyTicketsApi,
   getSubTicketOrderApi,
@@ -52,6 +49,7 @@ import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '.
 import { dueInfo, EmptyState, MetaItem, TicketThumb } from '../worker/WorkerUi'
 
 type TabKey = 'mine' | 'available' | 'recent'
+type MineFilter = 'all' | Extract<SubTicketState, 'WORKING' | 'CLAIMED' | 'SUBMITTED'>
 
 /** Thứ tự việc đang giữ: đang làm lên đầu, rồi chờ giao, cuối cùng là đã báo xong. */
 const MINE_ORDER: Partial<Record<SubTicketState, number>> = { WORKING: 0, CLAIMED: 1, SUBMITTED: 2 }
@@ -66,18 +64,19 @@ const CASTING_SLIP_STATUS_LABEL: Record<CastingSlipStatus, string> = {
   PENDING_ISSUE: 'Chờ cấp vật tư',
   WAIT_CASTING: 'Chờ đúc',
   CASTING: 'Đang đúc',
-  PENDING_CONFIRMATION: 'Chờ thủ kho xác nhận',
+  PENDING_CONFIRMATION: 'Chờ thủ kho kiểm tra đúc / cắt cây',
   DONE: 'Đúc xong',
   CAST_FAILED: 'Lỗi đúc',
 }
 
 /** Màn của thợ: nhận phiếu đang mở ở khâu của mình, theo dõi việc đang giữ và vừa nộp. */
 export function MyTicketsPage() {
-  const { user } = useAuth()
   const queryClient = useQueryClient()
   const tickets = useQuery({
     queryKey: ['my-tickets'],
     queryFn: getMyTicketsApi,
+    // API my-tickets nặng (nhiều truy vấn) — không poll; thao tác trên máy đã vá cache, còn
+    // thay đổi từ máy khác hiện khi thợ quay lại tab.
     staleTime: 90_000,
     refetchOnWindowFocus: true,
   })
@@ -101,6 +100,7 @@ export function MyTicketsPage() {
   // Cache, thông báo và hàng chờ khi mất mạng nằm hết trong orders/subTicketActions.ts.
   const claim = useSubTicketAction('claim')
   const unclaim = useSubTicketAction('unclaim')
+  const accept = useSubTicketAction('accept')
   const submit = useSubTicketAction('submit')
   const unsubmit = useSubTicketAction('unsubmit')
   // Khoá theo từng phiếu, không khoá cả màn: mất mạng thì thao tác nằm chờ rất lâu, thợ
@@ -229,6 +229,13 @@ export function MyTicketsPage() {
   const recentCount = recent.length + castingRecent.length
 
   const count = (state: SubTicketState) => mine.filter((item) => item.state === state).length
+  const [mineFilter, setMineFilter] = useState<MineFilter>('all')
+  const mineFilters: { value: MineFilter; label: string; count: number }[] = [
+    { value: 'all', label: 'Tất cả', count: mineCount },
+    { value: 'WORKING', label: 'Đang làm', count: count('WORKING') },
+    { value: 'CLAIMED', label: 'Chờ giao bạc', count: count('CLAIMED') },
+    { value: 'SUBMITTED', label: 'Chờ KCS cân', count: count('SUBMITTED') },
+  ]
 
   const sending = (item: MyTicketItem, action: SubTicketAction) => {
     const entry = queued.get(item.ticketCode)
@@ -264,6 +271,30 @@ export function MyTicketsPage() {
         </Button>
       )
     }
+    if (item.state === 'CLAIMED' && (item.stage === 'FILING' || item.stage === 'STONE_SETTING')) {
+      return (
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="contained"
+            disabled={busy}
+            loading={sending(item, 'accept')}
+            onClick={() => accept.mutate(vars(item))}
+            sx={{ minWidth: 132 }}
+          >
+            Nhận hàng
+          </Button>
+          <Button
+            variant="outlined"
+            color="inherit"
+            disabled={busy}
+            loading={sending(item, 'unclaim')}
+            onClick={() => unclaim.mutate(vars(item))}
+          >
+            Huỷ nhận
+          </Button>
+        </Stack>
+      )
+    }
     if (item.state === 'CLAIMED') {
       return (
         <Button
@@ -293,10 +324,14 @@ export function MyTicketsPage() {
     return null
   }
 
-  const list = activeTab === 'mine' ? mine : activeTab === 'available' ? available : recent
+  // Lọc theo trạng thái chỉ áp cho phiếu con; phiếu đúc chỉ hiện ở "Tất cả".
+  const mineFiltered = mineFilter === 'all' ? mine : mine.filter((item) => item.state === mineFilter)
+  const list = activeTab === 'mine' ? mineFiltered : activeTab === 'available' ? available : recent
   const castingList =
     activeTab === 'mine'
-      ? castingMine
+      ? mineFilter === 'all'
+        ? castingMine
+        : []
       : activeTab === 'available'
         ? castingAvailable
         : activeTab === 'recent'
@@ -305,24 +340,16 @@ export function MyTicketsPage() {
 
   return (
     <Stack spacing={{ xs: 2, md: 2.5 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h5" sx={{ fontWeight: 700, fontSize: { xs: '1.35rem', md: '1.6rem' } }}>
             Phiếu của tôi
           </Typography>
-          <Stack direction="row" spacing={0.75} useFlexGap sx={{ mt: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Typography variant="body2" color="text.secondary">
-              {user?.fullName ? `${user.fullName} · ` : ''}Khâu của bạn:
+          {tickets.dataUpdatedAt ? (
+            <Typography variant="caption" color="text.secondary">
+              Cập nhật lúc {formatDateShort(new Date(tickets.dataUpdatedAt).toISOString())}
             </Typography>
-            {(data?.stages ?? []).map((stage) => (
-              <Chip
-                key={stage}
-                size="small"
-                label={STAGE_LABEL[stage]}
-                sx={{ borderRadius: 1, bgcolor: 'action.selected', color: 'primary.dark', fontWeight: 600 }}
-              />
-            ))}
-          </Stack>
+          ) : null}
         </Box>
         <Tooltip title={tickets.dataUpdatedAt ? `Cập nhật lúc ${formatDateShort(new Date(tickets.dataUpdatedAt).toISOString())}` : 'Làm mới'}>
           <IconButton
@@ -342,38 +369,6 @@ export function MyTicketsPage() {
         <Alert severity="error">{tickets.error instanceof Error ? tickets.error.message : 'Không tải được phiếu'}</Alert>
       ) : (
         <>
-          <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
-            <StatTile
-              label="Đang làm"
-              value={count('WORKING')}
-              icon={<AccessTimeIcon />}
-              accent="#6c5ce7"
-              onClick={() => setTab('mine')}
-            />
-            <StatTile
-              label="Chờ giao bạc"
-              value={count('CLAIMED')}
-              icon={<HourglassEmptyIcon />}
-              accent="#1565c0"
-              onClick={() => setTab('mine')}
-            />
-            <StatTile
-              label="Chờ KCS cân"
-              value={count('SUBMITTED')}
-              icon={<AssignmentTurnedInIcon />}
-              accent="#8a6100"
-              onClick={() => setTab('mine')}
-            />
-            <StatTile
-              label="Phiếu chờ nhận"
-              value={availableCount}
-              icon={<InboxIcon />}
-              accent="#6b4513"
-              highlight={availableCount > 0}
-              onClick={() => setTab('available')}
-            />
-          </Box>
-
           <Box
             sx={{
               position: 'sticky',
@@ -388,23 +383,63 @@ export function MyTicketsPage() {
             <Tabs
               value={activeTab}
               onChange={(_, value: TabKey) => setTab(value)}
-              variant="fullWidth"
+              variant="scrollable"
+              scrollButtons={false}
               sx={{
                 minHeight: 44,
                 borderBottom: '1px solid',
                 borderColor: 'divider',
-                maxWidth: { md: 560 },
-                '& .MuiTab-root': { minHeight: 44, fontWeight: 600, textTransform: 'none', px: 1 },
+                '& .MuiTab-root': {
+                  minHeight: 44,
+                  minWidth: 0,
+                  px: 0,
+                  mr: 3,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                },
               }}
             >
-              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mineCount} />} />
-              <Tab value="available" label={<TabLabel text="Chờ nhận" count={availableCount} />} />
-              <Tab value="recent" label={<TabLabel text="Đã nộp" count={recentCount} />} />
+              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mineCount} active={activeTab === 'mine'} />} />
+              <Tab
+                value="available"
+                label={<TabLabel text="Chờ nhận" count={availableCount} active={activeTab === 'available'} />}
+              />
+              <Tab value="recent" label={<TabLabel text="Đã nộp" count={recentCount} active={activeTab === 'recent'} />} />
             </Tabs>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', justifyContent: 'space-between', py: 1.25, minHeight: 52 }}
+            >
+              {activeTab === 'mine' && mineCount > 0 ? (
+                <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap', minWidth: 0 }}>
+                  {mineFilters.map((filter) => (
+                    <FilterPill
+                      key={filter.value}
+                      label={filter.label}
+                      count={filter.count}
+                      selected={mineFilter === filter.value}
+                      onClick={() => setMineFilter(filter.value)}
+                    />
+                  ))}
+                </Stack>
+              ) : (
+                <Box />
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {list.length + castingList.length} phiếu
+              </Typography>
+            </Stack>
           </Box>
 
           {list.length === 0 && castingList.length === 0 ? (
-            activeTab === 'mine' ? (
+            activeTab === 'mine' && mineFilter !== 'all' ? (
+              <EmptyState
+                icon={<AssignmentTurnedInIcon />}
+                title="Không có phiếu nào ở trạng thái này"
+                description="Chọn Tất cả để xem mọi phiếu bạn đang giữ."
+              />
+            ) : activeTab === 'mine' ? (
               <EmptyState
                 icon={<AssignmentTurnedInIcon />}
                 title="Bạn chưa giữ phiếu nào"
@@ -418,7 +453,7 @@ export function MyTicketsPage() {
               <EmptyState
                 icon={<InboxIcon />}
                 title="Chưa có phiếu nào chờ nhận"
-                description="Chỉ hiện phiếu đang mở ở khâu của bạn. Màn tự làm mới mỗi 10 giây."
+                description="Chỉ hiện phiếu đang mở ở khâu của bạn. Bấm làm mới để cập nhật."
               />
             ) : (
               <EmptyState icon={<HistoryOutlinedIcon />} title="Chưa có phiếu nào được KCS nhận lại" />
@@ -590,20 +625,22 @@ function CastingSlipCard({
   )
 }
 
-function TabLabel({ text, count }: { text: string; count: number }) {
+function TabLabel({ text, count, active }: { text: string; count: number; active: boolean }) {
   return (
     <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
       <span>{text}</span>
       <Box
         component="span"
         sx={{
-          minWidth: 22,
+          minWidth: 20,
           px: 0.75,
           borderRadius: 99,
           fontSize: 12,
+          fontWeight: 600,
           lineHeight: '20px',
-          bgcolor: count ? 'primary.main' : 'action.selected',
-          color: count ? 'primary.contrastText' : 'text.secondary',
+          textAlign: 'center',
+          bgcolor: active ? 'primary.main' : 'action.selected',
+          color: active ? 'primary.contrastText' : 'text.secondary',
         }}
       >
         {count}
@@ -612,65 +649,41 @@ function TabLabel({ text, count }: { text: string; count: number }) {
   )
 }
 
-function StatTile({
+/** Bộ lọc dạng pill: nhãn + số đếm mờ, chọn thì tô màu chính. */
+function FilterPill({
   label,
-  value,
-  icon,
-  accent,
-  highlight,
+  count,
+  selected,
   onClick,
 }: {
   label: string
-  value: number
-  icon: ReactNode
-  accent: string
-  highlight?: boolean
+  count: number
+  selected: boolean
   onClick: () => void
 }) {
   return (
-    <Paper
-      component="button"
-      type="button"
+    <Chip
+      size="small"
+      clickable
       onClick={onClick}
-      variant="outlined"
+      color={selected ? 'primary' : 'default'}
+      variant={selected ? 'filled' : 'outlined'}
+      label={
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <span>{label}</span>
+          <Box component="span" sx={{ opacity: selected ? 0.8 : 0.6, fontWeight: 500 }}>
+            {count}
+          </Box>
+        </Stack>
+      }
       sx={{
-        textAlign: 'left',
-        font: 'inherit',
-        cursor: 'pointer',
-        borderRadius: 2,
-        p: { xs: 1, md: 1.75 },
-        display: 'flex',
-        gap: 1.25,
-        alignItems: 'center',
-        borderColor: highlight ? accent : 'divider',
-        bgcolor: 'background.paper',
-        transition: 'border-color .15s, box-shadow .15s',
-        '&:hover': { borderColor: accent, boxShadow: '0 2px 10px rgba(62,42,14,.08)' },
-        '&:focus-visible': { outline: `2px solid ${accent}`, outlineOffset: 2 },
+        height: 30,
+        borderRadius: 99,
+        fontWeight: 600,
+        px: 0.5,
+        bgcolor: selected ? undefined : 'background.paper',
       }}
-    >
-      <Box
-        sx={{
-          width: { xs: 30, md: 36 },
-          height: { xs: 30, md: 36 },
-          flexShrink: 0,
-          borderRadius: 1.5,
-          display: 'grid',
-          placeItems: 'center',
-          color: accent,
-          bgcolor: `${accent}14`,
-          '& svg': { fontSize: 20 },
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.25rem', md: '1.45rem' }, lineHeight: 1.1 }}>{value}</Typography>
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-          {label}
-        </Typography>
-      </Box>
-    </Paper>
+    />
   )
 }
 

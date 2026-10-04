@@ -27,11 +27,23 @@ function entry(over: Partial<StageEntry> = {}): StageEntry {
     submittedByName: null,
     returnedByName: null,
     returnedAt: null,
+    defectQty: null,
+    scrapS999Weight: null,
+    confirmedAt: null,
+    confirmedByName: null,
+    kcsRevisionCount: 0,
+    outputMaterialId: null,
+    defectReportedAt: null,
+    defectReportedByName: null,
+    defectNote: null,
     returnedQty: null,
     returnedSilverWeight: null,
     stoneCount: null,
     stoneWeight: null,
     returnedStoneCount: null,
+    stoneLines: [],
+    stoneReturnedEarlyWeight: null,
+    stoneReturnedEarlyCount: null,
     btpRecoveredWeight: null,
     silverRecoveredWeight: null,
     silverLoss: null,
@@ -192,6 +204,35 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
     expect(lines).toContain('Vào kho: 5')
     expect(lines.some((line) => line.startsWith('Khâu'))).toBe(false)
     expect(outcomeLines(order(), 'DEFECT', t)).toEqual([])
+  })
+
+  it('lỗi một phần ở Nguội: ghi vào cột Lỗi dù phiếu vẫn đi tiếp', () => {
+    const t = ticket({ id: 't1', code: 'A012-1' })
+    const nguoi = entry({
+      id: 'e1',
+      subTicketId: 't1',
+      stage: 'FILING',
+      returnedAt: '2026-09-19T10:00:00.000Z',
+      defectQty: 150,
+      btpRecoveredWeight: '1000',
+      confirmedAt: '2026-09-19T11:00:00.000Z',
+      defectReason: 'rỗ bề mặt',
+    })
+    const o = order({
+      stages: [nguoi],
+      subTickets: [t],
+      reworks: [{ code: 'DH005', status: 'WAX_CONFIRMED', qty: 150, entryId: 'e1', ticketNo: 1 }],
+    })
+    expect(outcomeLines(o, 'DEFECT', t)).toEqual([
+      'Nguội: 150 sp lỗi · 1.000 g · phiếu bù DH005',
+      'Lý do: rỗ bề mặt',
+    ])
+    expect(outcomeLines(o, 'FINISH', t)).toEqual([])
+    // Tổng hợp cả đơn ghi kèm mã phiếu con.
+    expect(outcomeLines(o, 'DEFECT')).toEqual([
+      'A012-1 · Nguội: 150 sp lỗi · 1.000 g · phiếu bù DH005',
+      'Lý do: rỗ bề mặt',
+    ])
   })
 
   it('không truyền phiếu con thì đọc kết cục của cả đơn', () => {

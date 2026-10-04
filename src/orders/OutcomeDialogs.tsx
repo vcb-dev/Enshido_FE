@@ -1,8 +1,10 @@
-import { useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
-import { TextInput } from '../components/ui'
+import { useForm, useWatch } from 'react-hook-form'
+import { DialogForm, FormTextField } from '../components/ui'
 
-/** Ghi lỗi từ cột "Lỗi" của một phiếu con — lý do bắt buộc, phiếu đó dừng ở nhánh lỗi. */
+type NoteValues = { note: string }
+
+/** Báo lỗi khâu đang làm của một phiếu con — lý do bắt buộc, KCS cân lại hàng sau đó. */
 export function DefectDialog({
   open,
   ticketCode,
@@ -16,7 +18,8 @@ export function DefectDialog({
   onClose: () => void
   onSave: (note: string) => void
 }) {
-  const [note, setNote] = useState('')
+  const form = useForm<NoteValues>({ defaultValues: { note: '' } })
+  const note = useWatch({ control: form.control, name: 'note' })
 
   return (
     <Dialog
@@ -24,39 +27,37 @@ export function DefectDialog({
       onClose={saving ? undefined : onClose}
       fullWidth
       maxWidth="xs"
-      slotProps={{ transition: { onExited: () => setNote('') } }}
+      slotProps={{ transition: { onExited: () => form.reset({ note: '' }) } }}
     >
-      <DialogTitle>Ghi lỗi — phiếu {ticketCode}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          Riêng phiếu này dừng ở nhánh Lỗi; lý do hiện ở cột Lỗi cuối phiếu. Các phiếu con khác vẫn làm
-          tiếp. Đơn chỉ chuyển Sản xuất lỗi khi mọi phiếu con đều lỗi.
-        </Typography>
-        <TextInput
-          label="Lý do lỗi"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          required
-          multiline
-          minRows={3}
-          autoFocus
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          color="error"
-          disabled={!note.trim()}
-          loading={saving}
-          loadingPosition="start"
-          onClick={() => onSave(note.trim())}
-        >
-          Ghi lỗi
-        </Button>
-      </DialogActions>
+      <DialogTitle>Báo lỗi — phiếu {ticketCode}</DialogTitle>
+      <DialogForm form={form} onSubmit={(values) => onSave(values.note.trim())}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+          <FormTextField<NoteValues>
+            name="note"
+            label="Lý do lỗi"
+            required
+            rules={{ validate: (value) => (value.trim() ? true : 'Nhập lý do lỗi') }}
+            multiline
+            minRows={3}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            color="error"
+            disabled={!note.trim()}
+            loading={saving}
+            loadingPosition="start"
+          >
+            Báo lỗi
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }
@@ -79,7 +80,7 @@ export function FinishDialog({
   onClose: () => void
   onSave: (note: string | undefined) => void
 }) {
-  const [note, setNote] = useState('')
+  const form = useForm<NoteValues>({ defaultValues: { note: '' } })
 
   return (
     <Dialog
@@ -87,37 +88,31 @@ export function FinishDialog({
       onClose={saving ? undefined : onClose}
       fullWidth
       maxWidth="xs"
-      slotProps={{ transition: { onExited: () => setNote('') } }}
+      slotProps={{ transition: { onExited: () => form.reset({ note: '' }) } }}
     >
       <DialogTitle>Hoàn thiện — {scope === 'order' ? 'đơn' : 'phiếu'} {ticketCode}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        <Typography variant="body2" color="text.secondary">
-          {/* Cả hai đường chốt đều lấy số KCS nhận lại ở khâu cuối, không phải số đặt hàng. */}
-          {scope === 'order'
-            ? `Hàng đạt, đơn kết thúc: ${qty} sản phẩm chờ kho thành phẩm nhận. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`
-            : `Hàng đạt, phiếu này kết thúc: ${qty} sản phẩm chờ kho thành phẩm nhận, không chờ các phiếu con khác. Số lượng lấy đúng số KCS nhận lại ở khâu cuối; người xác nhận lấy từ tài khoản đang đăng nhập.`}
-        </Typography>
-        <TextInput
-          label="Ghi chú"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          multiline
-          minRows={2}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          loading={saving}
-          loadingPosition="start"
-          onClick={() => onSave(note.trim() || undefined)}
-        >
-          Hoàn thiện
-        </Button>
-      </DialogActions>
+      <DialogForm form={form} onSubmit={(values) => onSave(values.note.trim() || undefined)}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+          <Typography variant="body2" color="text.secondary">
+            {/* Số lượng lấy đúng số KCS nhận lại ở khâu cuối, không phải số đặt hàng. */}
+            {qty} sản phẩm chuyển kho thành phẩm.
+          </Typography>
+          <FormTextField<NoteValues>
+            name="note"
+            label="Ghi chú"
+            multiline
+            minRows={2}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="contained" loading={saving} loadingPosition="start">
+            Hoàn thiện
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }

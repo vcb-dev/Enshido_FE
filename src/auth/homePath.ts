@@ -1,4 +1,4 @@
-import { can, canAny, isWorkerOnly, Permission } from './permissions'
+import { can, isWorkerOnly, Permission } from './permissions'
 import {
   canAccessProductionOrdersPage,
   canSeeCastingSlipsPage,
@@ -40,9 +40,6 @@ export function canAccessPath(
     if (isIntakePipelineScoped(user)) return false
     if (isWorkerOnly(user)) return false
     return canSeeCastingOrdersMenu(user) || canSeeCastingSlipsPage(user)
-  }
-  if (p === '/casting-cuts') {
-    return !isWorkerOnly(user) && canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
   }
   if (p.startsWith('/orders/')) return true
   if (p.startsWith('/tickets/')) return true

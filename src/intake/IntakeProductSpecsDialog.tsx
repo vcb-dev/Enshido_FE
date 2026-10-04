@@ -1,24 +1,36 @@
 import { useEffect, useState } from 'react'
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
+import { useForm } from 'react-hook-form'
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
-import { formatQty, parseQtyInput, qtyFromApi } from '../api/inventory'
-import { QtyTextField } from '../components/ui/QtyTextField'
-import { ImageUploadField } from '../orders/ImageUploadField'
+import { formatQty, qtyFromApi } from '../api/inventory'
+import { DialogForm, FormQtyField } from '../components/ui'
+import { FormImageField } from '../orders/FormImageField'
+import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
 
 type IntakeProductSpecsDialogProps = {
   order: IntakeOrder | null
   saving: boolean
   onClose: () => void
-  onSave: (payload: { productWeightGram: number; images: OrderImage[] }) => void
+  onSave: (payload: {
+    productWeightGram: number
+    images: OrderImage[]
+    stoneCount3d: number | null
+    stoneWeight3dGram: number | null
+  }) => void
+}
+
+type Values = StoneSpecs & { weight: string; images: OrderImage[] }
+
+function valuesOf(order: IntakeOrder | null): Values {
+  return {
+    weight:
+      order?.productWeightGram != null && order.productWeightGram !== ''
+        ? qtyFromApi(String(order.productWeightGram))
+        : '',
+    images: [],
+    ...stoneSpecsOf(order),
+  }
 }
 
 export function IntakeProductSpecsDialog({
@@ -27,115 +39,62 @@ export function IntakeProductSpecsDialog({
   onClose,
   onSave,
 }: IntakeProductSpecsDialogProps) {
-  const [weight, setWeight] = useState('')
-  const [images, setImages] = useState<OrderImage[]>([])
   const [uploading, setUploading] = useState(false)
-  const [weightError, setWeightError] = useState('')
-  const [imagesError, setImagesError] = useState('')
+  const form = useForm<Values>({ defaultValues: valuesOf(null) })
 
   useEffect(() => {
-    if (order) {
-      setWeight(
-        order.productWeightGram != null && order.productWeightGram !== ''
-          ? qtyFromApi(String(order.productWeightGram))
-          : '',
-      )
-      setImages([])
-      setWeightError('')
-      setImagesError('')
-    }
-  }, [order])
-
-  function submit() {
-    const parsed = parseQtyInput(weight.trim())
-    const grams = parsed ? Number(parsed) : NaN
-    if (!parsed || !Number.isFinite(grams) || grams <= 0) {
-      setWeightError('Nhập cân nặng sản phẩm (gram)')
-      return
-    }
-    if (!images.length) {
-      setImagesError('Thêm ít nhất một ảnh (tải file hoặc Ctrl+V)')
-      return
-    }
-    setWeightError('')
-    setImagesError('')
-    onSave({ productWeightGram: grams, images })
-  }
+    if (order) form.reset(valuesOf(order))
+  }, [order, form])
 
   return (
     <Dialog open={Boolean(order)} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         {order?.hasMold ? 'Bơm sáp & cấy cây thông' : 'In sáp'} — {order?.code ?? ''}
       </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            {order?.hasMold ? (
-              <>
-                Đơn có khuôn: tìm khuôn theo mã sản phẩm, bơm sáp, cấy cây thông rồi chụp ảnh cân nặng. Lưu xong
-                mang cây sáp cho thủ kho <strong>xác nhận và cân kiểm</strong>.
-              </>
-            ) : (
-              <>
-                Chụp ảnh cân nặng sáp vừa in và điền lên hệ thống. Lưu xong đơn sang{' '}
-                <strong>Chờ SX · Đã in sáp (D)</strong>. In nhiều đơn một khay thì dùng nút{' '}
-                <strong>In sáp nhiều đơn</strong>.
-              </>
-            )}
-          </Typography>
-          {order ? (
-            <Typography variant="body2">
-              {order.productName?.trim() || '—'}
-              {order.qty ? ` · SL ${formatQty(String(order.qty))}` : null}
-            </Typography>
-          ) : null}
-          <QtyTextField
-            label="Cân nặng sản phẩm (g)"
-            value={weight}
-            onChange={(next) => {
-              setWeight(next)
-              if (next.trim()) setWeightError('')
-            }}
-            required
-            error={Boolean(weightError)}
-            helperText={weightError || 'VD: 1.250,5'}
-            size="small"
-            fullWidth
-            disabled={saving || uploading}
-            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-          />
-          <Stack spacing={0.5}>
-            <ImageUploadField
+      <DialogForm
+        form={form}
+        onSubmit={({ weight, images, ...stone }) =>
+          onSave({ productWeightGram: Number(weight), images, ...stoneSpecsPayload(stone) })
+        }
+      >
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {order ? (
+              <Typography variant="body2">
+                {order.productName?.trim() || '—'}
+                {order.qty ? ` · SL ${formatQty(String(order.qty))}` : null}
+              </Typography>
+            ) : null}
+            <FormQtyField<Values>
+              name="weight"
+              label="Cân nặng sản phẩm (g)"
+              required
+              rules={{ validate: (value) => (Number(value) > 0 ? true : 'Nhập cân nặng sản phẩm (gram)') }}
+              helperText="VD: 1.250,5"
+              size="small"
+              fullWidth
+              disabled={saving || uploading}
+            />
+            {order?.hasMold ? <StoneSpecsFields disabled={saving || uploading} /> : null}
+            <FormImageField<Values>
+              name="images"
               label={order?.hasMold ? 'Ảnh sản phẩm' : 'Ảnh sản phẩm / sáp'}
               kind="PRODUCT"
-              value={images}
-              onChange={(next) => {
-                setImages(next)
-                if (next.length) setImagesError('')
-              }}
+              required
               onUploadingChange={setUploading}
               readOnly={saving}
             />
-            {imagesError ? (
-              <Typography variant="caption" color="error">
-                {imagesError}
-              </Typography>
-            ) : null}
           </Stack>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving || uploading}>
-          Hủy
-        </Button>
-        <Button
-          variant="contained"
-          disabled={saving || uploading || !order}
-          onClick={submit}
-        >
-          {saving ? 'Đang lưu…' : 'Lưu'}
-        </Button>
-      </DialogActions>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving || uploading}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="contained" disabled={saving || uploading || !order}>
+            {saving ? 'Đang lưu…' : 'Lưu'}
+          </Button>
+        </DialogActions>
+      </DialogForm>
     </Dialog>
   )
 }

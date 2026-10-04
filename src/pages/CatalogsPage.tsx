@@ -29,7 +29,7 @@ import {
 import {
   CrudDialogShell,
   DataTable,
-  EditReasonBlock,
+  FormEditReasonBlock,
   Form,
   FormTextField,
   PencilIcon,
@@ -298,17 +298,13 @@ function ParentEditorDialog({
   const childDialog = useCrudDialog<CatalogItem>()
   const childForm = useForm<FormValues>({ defaultValues: EMPTY })
   const [childSearch, setChildSearch] = useState('')
-  const [parentReason, setParentReason] = useState('')
-  const [parentReasonError, setParentReasonError] = useState('')
 
   useEffect(() => {
     if (!parent) {
       setChildSearch('')
       return
     }
-    form.reset({ name: parent.name })
-    setParentReason('')
-    setParentReasonError('')
+    form.reset({ name: parent.name, editReason: '' })
   }, [parent, form])
 
   useEffect(() => {
@@ -324,8 +320,8 @@ function ParentEditorDialog({
   }, [parent?.children, childSearch])
 
   const saveParent = useMutation({
-    mutationFn: (name: string) =>
-      updateCatalogApi(parent!.id, { name, editReason: parentReason.trim() }),
+    mutationFn: ({ name, editReason }: { name: string; editReason: string }) =>
+      updateCatalogApi(parent!.id, { name, editReason }),
     onMutate: () => toast.success(copy.savedParent),
     onSuccess: () => {
       void onRefresh()
@@ -402,13 +398,9 @@ function ParentEditorDialog({
         >
           <Form
             form={form}
-            onSubmit={(values) => {
-              if (!parentReason.trim()) {
-                setParentReasonError('Nhập lý do chỉnh sửa')
-                return
-              }
-              saveParent.mutate(values.name.trim())
-            }}
+            onSubmit={(values) =>
+              saveParent.mutate({ name: values.name.trim(), editReason: (values.editReason ?? '').trim() })
+            }
           >
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ alignItems: { sm: 'flex-start' }, mt: 1 }}>
               <FormTextField<FormValues>
@@ -422,17 +414,7 @@ function ParentEditorDialog({
                 Lưu tên
               </Button>
             </Stack>
-            <EditReasonBlock
-              entityType="catalog"
-              entityId={parent?.id}
-              reason={parentReason}
-              onReasonChange={(value) => {
-                setParentReason(value)
-                if (value.trim()) setParentReasonError('')
-              }}
-              required
-              error={parentReasonError}
-            />
+            <FormEditReasonBlock<FormValues> name="editReason" entityType="catalog" entityId={parent?.id} required />
           </Form>
 
           <Stack spacing={1} sx={{ minHeight: 0, flex: 1 }}>

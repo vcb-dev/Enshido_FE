@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner'
 import { isNetworkError } from '../api/auth'
 import {
-  claimSubTicketApi,
+  acceptSubTicketApi,
   claimOrderApi,
   submitOrderApi,
   submitSubTicketApi,
@@ -38,7 +38,11 @@ type ActionDef = {
 
 const ACTIONS: Record<SubTicketAction, ActionDef> = {
   claim: {
-    run: (code, no) => (no == null ? claimOrderApi(code) : claimSubTicketApi(code, no)),
+    // Chỉ phiếu mẹ còn tự nhận; phiếu con do thủ kho chỉ định thợ rồi thợ bấm "Nhận hàng".
+    run: (code, no) => {
+      if (no != null) throw new Error('Phiếu con do thủ kho chỉ định thợ — không tự nhận được')
+      return claimOrderApi(code)
+    },
     queued: (code) =>
       `Đã xếp hàng nhận phiếu ${code} — gửi lên khi có mạng. Thợ khác nhận trước thì sẽ báo lại.`,
     done: (code) => `Đã nhận phiếu ${code} — chờ người giao cân bạc và xác nhận`,
@@ -47,6 +51,14 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
     run: (code, no) => (no == null ? unclaimOrderApi(code) : unclaimSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng huỷ nhận phiếu ${code} — gửi lên khi có mạng`,
     done: (code) => `Đã huỷ nhận phiếu ${code}`,
+  },
+  accept: {
+    run: (code, no) => {
+      if (no == null) throw new Error('Phiếu mẹ không có bước nhận hàng theo chỉ định')
+      return acceptSubTicketApi(code, no)
+    },
+    queued: (code) => `Đã xếp hàng nhận hàng phiếu ${code} — gửi lên khi có mạng`,
+    done: (code) => `Đã nhận hàng phiếu ${code} — bắt đầu làm`,
   },
   submit: {
     run: (code, no) => (no == null ? submitOrderApi(code) : submitSubTicketApi(code, no)),

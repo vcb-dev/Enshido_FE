@@ -5,7 +5,6 @@ export type WorkflowRevision = {
   intake: string
   production: string
   casting: string
-  cut: string
 }
 
 export function getWorkflowRevisionApi() {

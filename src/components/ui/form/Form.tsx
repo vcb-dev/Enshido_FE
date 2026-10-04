@@ -39,6 +39,19 @@ export function Form<T extends FieldValues>({
   )
 }
 
+/**
+ * `Form` đặt thẳng trong `<Dialog>` (giữa DialogTitle / DialogContent / DialogActions): form là
+ * cột flex nên DialogContent vẫn tự cuộn và hàng nút vẫn nằm dưới đáy như khi không có form.
+ */
+export function DialogForm<T extends FieldValues>({ style, ...props }: FormProps<T>) {
+  return (
+    <Form
+      {...props}
+      style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: '1 1 auto', ...style }}
+    />
+  )
+}
+
 /** Xếp các field thành lưới, tự xuống một cột trên màn hình hẹp. */
 export function FormRow({
   columns = 2,

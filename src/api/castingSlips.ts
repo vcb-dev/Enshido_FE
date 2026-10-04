@@ -11,6 +11,7 @@ export type CastingSlipOrderLine = {
   trackingCode: string | null
   qty: number
   status: string
+  productionOrderCode: string | null
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
 }
@@ -48,6 +49,9 @@ export type CastingSlip = {
   submittedByName: string | null
   confirmedAt: string | null
   confirmedByName: string | null
+  restWeightGram: string | null
+  cutLossGram: string | null
+  restImages: CastingSlipImage[]
   rejectedAt: string | null
   rejectedByName: string | null
   redoOfSlipId: string | null
@@ -72,6 +76,18 @@ export type CastingSlipResultPayload = {
   silverUsedGram: number
   plasterUsedGram: number
   images: CastingSlipImage[]
+}
+
+export type ConfirmCastingSlipPayload = {
+  blanks: Array<{
+    intakeOrderId: string
+    qty: number
+    weightGram: number
+    images: CastingSlipImage[]
+  }>
+  restWeightGram: number
+  restMaterialId?: string | null
+  restImages: CastingSlipImage[]
 }
 
 export type CastingSlipList = {
@@ -214,8 +230,21 @@ export function submitCastingSlipResultApi(id: string, payload: CastingSlipResul
   })
 }
 
-export function confirmCastingSlipApi(id: string) {
-  return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, { method: 'POST', body: '{}' })
+export function confirmCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Mã NVL (gram, kho NVL chính) nhận phần cây còn lại lúc xác nhận đúc. */
+export type RestMaterialOptions = {
+  defaultName: string
+  items: { id: string; sku: string | null; name: string }[]
+}
+
+export function listRestMaterialOptionsApi() {
+  return apiFetch<RestMaterialOptions>('/casting-slips/rest-material-options')
 }
 
 /** Thủ kho báo lỗi đúc — trả về phiếu làm lại (Chờ đúc). */

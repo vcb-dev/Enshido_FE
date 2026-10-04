@@ -5,7 +5,7 @@ import { DataTable, PageHeader, type Column } from '../components/ui'
 import { useAuth } from '../auth/AuthContext'
 import { visibleWarehouses } from '../auth/screens'
 import {
-  WAREHOUSE_SECTIONS,
+  sectionsOf,
   warehousePath,
   type WarehouseDef,
 } from '../warehouses/catalog'
@@ -24,7 +24,7 @@ export function WarehousesPage() {
         render: (warehouse) =>
           warehouse.sections ? (
             <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-              {WAREHOUSE_SECTIONS.map((section) => (
+              {sectionsOf(warehouse).map((section) => (
                 <Chip
                   key={section.code}
                   size="small"

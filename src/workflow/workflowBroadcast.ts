@@ -2,7 +2,7 @@ const CHANNEL = 'enshido-workflow'
 
 export type WorkflowBroadcast = {
   type: 'changed'
-  source?: 'intake' | 'production' | 'casting' | 'cut'
+  source?: 'intake' | 'production' | 'casting'
 }
 
 type Listener = (message: WorkflowBroadcast) => void
