@@ -333,11 +333,6 @@ export function CastingOrdersPage() {
             Nhập kết quả đúc
           </Button>
         ) : null}
-        {row.status === 'DONE' && canConfirm && canCutCastingSlip(row) ? (
-          <Button size="small" variant="contained" onClick={() => navigate('/casting-cuts')}>
-            Vào mục Cắt cây thông
-          </Button>
-        ) : null}
         {row.status === 'PENDING_CONFIRMATION' && canConfirm ? (
           <>
             <Button
@@ -367,7 +362,6 @@ export function CastingOrdersPage() {
       canCast,
       canConfirm,
       setConfirmTarget,
-      navigate,
       confirmingId,
       dialog.openView,
       rejectingId,
@@ -563,7 +557,6 @@ export function CastingOrdersPage() {
           closeView()
           setConfirmTarget(slip)
         }}
-        onCut={() => navigate('/casting-cuts')}
         onReject={askRejectCast}
         onEnterResult={setResultTarget}
         onClose={closeView}
@@ -617,7 +610,7 @@ export function CastingSlipViewDialog({
   busy: boolean
   busyReject: boolean
   onConfirm: (slip: CastingSlip) => void
-  onCut: (slip: CastingSlip) => void
+  onCut?: (slip: CastingSlip) => void
   onReject: (slip: CastingSlip) => void
   onEnterResult: (slip: CastingSlip) => void
   onClose: () => void
@@ -788,7 +781,7 @@ export function CastingSlipViewDialog({
             Nhập kết quả đúc
           </Button>
         ) : null}
-        {slip && canConfirm && canCutCastingSlip(slip) ? (
+        {slip && canConfirm && onCut && canCutCastingSlip(slip) ? (
           <Button variant="contained" onClick={() => onCut(slip)}>
             Cắt cây thông
           </Button>

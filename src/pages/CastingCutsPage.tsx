@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Checkbox, Chip, Paper, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -10,7 +10,6 @@ import {
   listCastingSlipsApi,
   rejectCastingSlipApi,
   type CastingSlip,
-  type CastingSlipStatus,
   type ConfirmCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
@@ -21,6 +20,7 @@ import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipCutDialog, CastingSlipsCutDialog } from '../intake/CastingSlipCutDialog'
+import { CastingCutSelectionDialog } from '../intake/CastingCutSelectionDialog'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import { applyCastingSlipRejected, applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
@@ -29,18 +29,11 @@ import { invalidateNvlWarehouse } from '../orders/nvlStock'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { CastingSlipViewDialog, SlipStatusChip } from './CastingOrdersPage'
 
-import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData } from '../casting/castingCuts'
+import { getCastingSlipCutBlockedReason, hasCastingSlipCutData } from '../casting/castingCuts'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
-/** Xác nhận số liệu thợ trước, rồi cắt cây từ các phiếu Đúc xong. */
-const TABS: { value: CastingSlipStatus; label: string }[] = [
-  { value: 'PENDING_CONFIRMATION', label: 'Chờ xác nhận đúc' },
-  { value: 'DONE', label: 'Đúc xong / Cắt cây' },
-]
-
 const CUT_FILTERS = {
-  status: 'DONE',
   slipDate: '',
   batchOrderCodes: '',
 }
@@ -53,7 +46,7 @@ function formatGram(value: string | null) {
 function renderCutStatus(slip: CastingSlip) {
   if (slip.status === 'DONE' && hasCastingSlipCutData(slip)) {
     return <>
-      <Chip size="small" label="Đã cắt cây" color="success" />
+      <Chip size="small" label="Chờ nguội" color="info" />
       {slip.restWeightGram == null ? <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
         Thiếu số liệu cây còn lại.
       </Typography> : null}
@@ -79,12 +72,12 @@ export function CastingCutsPage() {
   const { user } = useAuth()
   const dialog = useCrudDialog<CastingSlip>()
   const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
-  const [selected, setSelected] = useState<CastingSlip[]>([])
+  const [selecting, setSelecting] = useState(false)
   const [bulkTargets, setBulkTargets] = useState<CastingSlip[]>([])
   const [cutTarget, setCutTarget] = useState<CastingSlip | null>(null)
   const table = useTableParams({ pageSize: 25, filters: CUT_FILTERS })
   const { params } = table
-  const status = (params.status || 'DONE') as CastingSlipStatus
+  const status = 'DONE' as const
   const canConfirm = canConfirmIntakeWarehouse(user)
 
   const list = useQuery({
@@ -120,7 +113,6 @@ export function CastingCutsPage() {
       cutCastingSlipApi(slip.id, payload),
     onSuccess: (updated) => {
       setCutTarget(null)
-      setSelected((current) => current.filter((slip) => slip.id !== updated.id))
       dialog.close()
       toast.success(`Phiếu ${updated.code}: đã cắt cây thông, ${updated.orders.length} đơn chuyển Chờ nguội`)
       applyCastingSlipUpdate(queryClient, updated)
@@ -138,7 +130,6 @@ export function CastingCutsPage() {
     mutationFn: (items: CutCastingSlipItem[]) => cutCastingSlipsApi(items),
     onSuccess: (updated) => {
       setBulkTargets([])
-      setSelected([])
       toast.success(`Đã cắt cây thông: ${updated.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn chuyển Chờ nguội`)
       for (const slip of updated) applyCastingSlipUpdate(queryClient, slip)
       scheduleMyTicketsRefresh(queryClient)
@@ -150,11 +141,6 @@ export function CastingCutsPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const toggleSelected = (slip: CastingSlip) => setSelected((current) =>
-    current.some((item) => item.id === slip.id)
-      ? current.filter((item) => item.id !== slip.id)
-      : current.length < 25 ? [...current, slip] : current,
-  )
   const rejectCast = useMutation({
     mutationFn: (slip: CastingSlip) => rejectCastingSlipApi(slip.id),
     onSuccess: (redo, failedSlip) => {
@@ -167,7 +153,6 @@ export function CastingCutsPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const confirmingId = confirm.isPending ? confirm.variables?.id : null
-  const cuttingId = cut.isPending ? cut.variables?.slip.id : null
   const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
 
   const askRejectCast = useCallback(
@@ -191,16 +176,6 @@ export function CastingCutsPage() {
         <Button size="small" variant="outlined" onClick={() => dialog.openView(row)}>
           Xem chi tiết
         </Button>
-        {canCutCastingSlip(row) && canConfirm ? (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={cuttingId === row.id}
-            onClick={() => setCutTarget(row)}
-          >
-            Cắt cây thông
-          </Button>
-        ) : null}
         {row.status === 'PENDING_CONFIRMATION' && canConfirm ? (
           <>
             <Button
@@ -225,30 +200,11 @@ export function CastingCutsPage() {
         ) : null}
       </Stack>
     ),
-    [askRejectCast, canConfirm, confirmingId, cuttingId, dialog.openView, rejectingId],
+    [askRejectCast, canConfirm, confirmingId, dialog.openView, rejectingId],
   )
-
-  const renderSelection = (row: CastingSlip) => <Tooltip title={
-    getCastingSlipCutBlockedReason(row) ?? (list.isPlaceholderData ? 'Đang tải danh sách phiếu.' :
-      cutMany.isPending ? 'Đang lưu cắt cây.' :
-      selected.length >= 25 && !selected.some((item) => item.id === row.id) ? 'Chỉ chọn tối đa 25 phiếu.' : '')
-  }><span><Checkbox
-    checked={selected.some((item) => item.id === row.id)}
-    disabled={!canCutCastingSlip(row) || list.isPlaceholderData || cutMany.isPending ||
-      (selected.length >= 25 && !selected.some((item) => item.id === row.id))}
-    onChange={() => toggleSelected(row)}
-    slotProps={{ input: { 'aria-label': `Chọn phiếu ${row.code}, các đơn ${row.batchOrderCodes}` } }}
-  /></span></Tooltip>
 
   const columns = useMemo<Column<CastingSlip, CastingSlip>[]>(
     () => [
-      ...(status === 'DONE' && canConfirm ? [{
-        key: 'selection',
-        header: 'Chọn',
-        width: 65,
-        render: renderSelection,
-        renderSub: renderSelection,
-      }] : []),
       {
         key: 'code',
         header: 'Mã phiếu đúc',
@@ -368,7 +324,7 @@ export function CastingCutsPage() {
         renderSub: (sub) => renderActions(sub),
       },
     ],
-    [renderActions, params.slipDate, params.batchOrderCodes, table.setFilter, status, canConfirm, selected, list.isPlaceholderData, cutMany.isPending],
+    [renderActions, params.slipDate, params.batchOrderCodes, table.setFilter],
   )
 
   return (
@@ -380,21 +336,11 @@ export function CastingCutsPage() {
         title="Cắt cây thông"
         subtitle="Chọn các phiếu Đúc xong để cắt nhiều đơn cùng lần. Nhập số liệu từng đơn; tất cả đơn đã cắt chuyển sang Chờ nguội."
         compactSubtitle
+        actions={canConfirm ? <Button variant="contained" disabled={cut.isPending || cutMany.isPending}
+          onClick={() => setSelecting(true)}>
+          Cắt cây thông
+        </Button> : null}
       />
-      <Paper sx={{ px: 1.5 }}>
-        <Tabs value={status} onChange={(_, value: CastingSlipStatus) => { table.setFilter({ status: value }); setSelected([]) }}>
-          {TABS.map((tab) => (
-            <Tab key={tab.value} value={tab.value} label={tab.label} />
-          ))}
-        </Tabs>
-      </Paper>
-      {status === 'DONE' && canConfirm ? <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button variant="contained" disabled={!selected.length || cutMany.isPending} onClick={() => setBulkTargets(selected)}>
-          Cắt các đơn đã chọn ({selected.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn)
-        </Button>
-        {selected.length ? <Button onClick={() => setSelected([])}>Bỏ chọn</Button> : null}
-        <Typography variant="caption" color="text.secondary">Chọn phiếu là chọn toàn bộ đơn trong cây thông (tối đa 25 phiếu).</Typography>
-      </Stack> : null}
       <DataTable
         columns={columns}
         rows={list.data?.items ?? []}
@@ -406,9 +352,7 @@ export function CastingCutsPage() {
         }}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText={
-          status === 'PENDING_CONFIRMATION' ? 'Không có phiếu đúc nào chờ xác nhận.' : 'Chưa có phiếu đúc xong.'
-        }
+        emptyText="Chưa có phiếu đúc xong."
         variant="grid"
         fixedLayout
         minWidth={900}
@@ -445,6 +389,14 @@ export function CastingCutsPage() {
         onClose={() => setBulkTargets([])}
         onSave={(items) => cutMany.mutate(items)}
       />
+      {selecting ? <CastingCutSelectionDialog
+        initialSelection={[]}
+        onClose={() => setSelecting(false)}
+        onSelect={(slips) => {
+          setBulkTargets(slips)
+          setSelecting(false)
+        }}
+      /> : null}
       <CastingSlipCutDialog
         slip={cutTarget}
         saving={cut.isPending}
