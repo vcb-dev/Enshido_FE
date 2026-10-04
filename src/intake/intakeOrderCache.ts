@@ -51,7 +51,7 @@ function removeOrderFromPipelineLists(lists: IntakePipelineLists, orderId: strin
 
 function moveOrderInPipelineLists(lists: IntakePipelineLists, order: IntakeOrder): IntakePipelineLists {
   const without = removeOrderFromPipelineLists(lists, order.id)
-  if (!PIPELINE_LIST_STATUSES.includes(order.status)) return without
+  if (order.productionOrderCode || !PIPELINE_LIST_STATUSES.includes(order.status)) return without
   const bucket = without[order.status] ?? emptyList()
   const had = bucket.items.some((item) => item.id === order.id)
   const items = had
@@ -109,6 +109,7 @@ function isStatusListKey(queryKey: QueryKey) {
 }
 
 function statusListAllows(queryKey: QueryKey, order: IntakeOrder) {
+  if (order.productionOrderCode) return false
   const statusFilter = String(queryKey[2] ?? '')
   if (statusFilter && statusFilter !== order.status) return false
   const search = String(queryKey[5] ?? '').trim().toLowerCase()
@@ -233,7 +234,11 @@ export function moveIntakeOrderInCaches(
   const prev = findIntakeOrderInCaches(queryClient, order.id)
   patchPipelineLists(queryClient, order)
   patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
-  patchIntakePipelineCounts(queryClient, prev?.status, order.status)
+  patchIntakePipelineCounts(
+    queryClient,
+    prev?.productionOrderCode ? undefined : prev?.status,
+    order.productionOrderCode ? undefined : order.status,
+  )
   scheduleIntakePipelineCountsRefresh(queryClient)
   if (!opts?.silent) notifyWorkflowChanged('intake')
 }
@@ -241,6 +246,7 @@ export function moveIntakeOrderInCaches(
 function intakeLiveFieldsChanged(prev: IntakeOrder, next: IntakeOrder) {
   return (
     prev.status !== next.status ||
+    prev.productionOrderCode !== next.productionOrderCode ||
     prev.hasMold !== next.hasMold ||
     prev.model3dUrl !== next.model3dUrl ||
     prev.productWeightGram !== next.productWeightGram ||

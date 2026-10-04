@@ -81,6 +81,7 @@ export type UpsertIntakeOrderPayload = {
 
 export function listIntakeOrdersApi(params: {
   status?: IntakeOrderStatus | ''
+  unlinkedOnly?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
   page: number
@@ -88,6 +89,7 @@ export function listIntakeOrdersApi(params: {
 }) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
+  if (params.unlinkedOnly) query.set('unlinkedOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
   query.set('page', String(params.page))
