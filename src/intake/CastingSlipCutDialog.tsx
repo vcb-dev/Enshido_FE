@@ -140,7 +140,7 @@ export function CastingSlipsCutDialog({
     >
       <DialogTitle>
         Cắt cây thông —{' '}
-        {slips.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn
+        {slips.length} phiếu · {slips.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn
       </DialogTitle>
       <DialogForm
         form={form}
@@ -324,7 +324,7 @@ export function CastingSlipsCutDialog({
               slips.some((slip) => !canCutCastingSlip(slip))
             }
           >
-            {saving ? 'Đang cắt…' : 'Cắt cây thông'}
+            {saving ? 'Đang lưu…' : 'Lưu và chuyển Chờ nguội'}
           </Button>
         </DialogActions>
       </DialogForm>
