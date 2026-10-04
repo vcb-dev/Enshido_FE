@@ -160,6 +160,7 @@ export function MyTicketsPage() {
     },
     onSuccess: (slip) => {
       toast.success(`Phiếu ${slip.code}: đã nhận — đang đúc`)
+      applyCastingSlipUpdate(queryClient, slip)
       patchMyTickets((data) => ({
         ...data,
         castingMine: (data.castingMine ?? []).map((row) =>

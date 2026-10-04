@@ -1,6 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { CastingCut, CastingCutList } from '../api/castingCuts'
+import { getProductionOrderApi } from '../api/productionOrders'
 import { findIntakeOrderByCodeInCaches, moveIntakeOrderInCaches } from '../intake/intakeOrderCache'
+import { applyProductionOrderDetail } from '../orders/orderCache'
+import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
 function patchCastingCutLists(
   queryClient: QueryClient,
@@ -37,6 +40,14 @@ export function applyCastingCutCreated(queryClient: QueryClient, cut: CastingCut
   }
 
   void queryClient.invalidateQueries({ queryKey: ['casting-cut-slip-options'], refetchType: 'none' })
+  notifyWorkflowChanged('cut')
+
+  const codes = [...new Set(cut.lines.map((line) => line.order.code).filter(Boolean))]
+  for (const code of codes) {
+    void getProductionOrderApi(code)
+      .then((order) => applyProductionOrderDetail(queryClient, order))
+      .catch(() => undefined)
+  }
 }
 
 export function removeCastingCutFromCaches(queryClient: QueryClient, cutId: string) {

@@ -170,7 +170,7 @@ export function ProductionOrdersPage() {
     placeholderData: keepPreviousData,
     enabled: isAllView,
     staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
 
   const pendingTotal = intakePipelineLists.data?.PENDING_APPROVAL?.total ?? 0
@@ -270,7 +270,7 @@ export function ProductionOrdersPage() {
     enabled: !isIntakePendingView && productionListParams !== null,
     refetchInterval: false,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
   const intakePipelineCounts = useQuery({
     queryKey: ['intake-orders', 'pipeline-counts'],

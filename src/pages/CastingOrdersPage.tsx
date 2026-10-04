@@ -172,7 +172,7 @@ export function CastingOrdersPage() {
       }),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
 
   // Đổi trạng thái phiếu kéo theo trạng thái đơn tạo (G, H) nên làm mới cả hai danh sách.

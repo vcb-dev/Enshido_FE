@@ -14,6 +14,7 @@ import {
   patchProductionStatusCounts,
   scheduleProductionStatusCountsRefresh,
 } from './productionStatusCountsRefresh'
+import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
 /** Ghi cache chi tiết + vá danh sách để vào trang đơn ngay, không chờ refetch. */
 export function seedProductionOrder(queryClient: QueryClient, order: ProductionOrderDetail) {
@@ -35,6 +36,7 @@ export function applyProductionOrderDetail(
 ) {
   seedProductionOrder(queryClient, order)
   scheduleProductionStatusCountsRefresh(queryClient)
+  notifyWorkflowChanged('production')
 }
 
 export function removeProductionOrderFromLists(queryClient: QueryClient, orderId: string, code: string) {
@@ -74,6 +76,7 @@ export function afterProductionOrderSaved(
 ) {
   seedProductionOrder(queryClient, order)
   scheduleProductionStatusCountsRefresh(queryClient)
+  notifyWorkflowChanged('production')
   if (!previous) patchPickerStock(queryClient, order)
   scheduleIdle(() => {
     const wasBtp = previous?.source === 'BTP' || order.source === 'BTP'

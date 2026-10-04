@@ -9,6 +9,7 @@ import {
   patchIntakePipelineCounts,
   scheduleIntakePipelineCountsRefresh,
 } from './intakePipelineCountsRefresh'
+import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
 const PIPELINE_LIST_STATUSES: IntakeOrderStatus[] = [
   'PENDING_APPROVAL',
@@ -63,11 +64,6 @@ function moveOrderInPipelineLists(lists: IntakePipelineLists, order: IntakeOrder
       total: had ? bucket.total : bucket.total + 1,
     },
   }
-}
-
-function pendingListKey(key: QueryKey) {
-  const slot = key[1]
-  return slot === 'pending-for-all' || slot === 'pending-list' || slot === 'pending-count'
 }
 
 function isIntakeOrderList(data: unknown): data is IntakeOrderList {
@@ -181,29 +177,70 @@ export function findIntakeOrderInCaches(
 }
 
 /** Cập nhật trạng thái đơn trên mọi cache intake — cột Hành động / chip đổi ngay. */
-export function moveIntakeOrderInCaches(queryClient: QueryClient, order: IntakeOrder) {
+export function moveIntakeOrderInCaches(
+  queryClient: QueryClient,
+  order: IntakeOrder,
+  opts?: { silent?: boolean },
+) {
   const prev = findIntakeOrderInCaches(queryClient, order.id)
   patchPipelineLists(queryClient, order)
   patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
   patchIntakePipelineCounts(queryClient, prev?.status, order.status)
   scheduleIntakePipelineCountsRefresh(queryClient)
+  if (!opts?.silent) notifyWorkflowChanged('intake')
+}
+
+function intakeLiveFieldsChanged(prev: IntakeOrder, next: IntakeOrder) {
+  return (
+    prev.status !== next.status ||
+    prev.hasMold !== next.hasMold ||
+    prev.model3dUrl !== next.model3dUrl ||
+    prev.productWeightGram !== next.productWeightGram ||
+    prev.castingTreeWeightGram !== next.castingTreeWeightGram ||
+    prev.waxCheckedWeightGram !== next.waxCheckedWeightGram ||
+    prev.castingSlip?.code !== next.castingSlip?.code ||
+    prev.castingSlip?.status !== next.castingSlip?.status
+  )
+}
+
+/** Vá pipeline từ snapshot live — giữ ảnh cũ, đổi chip/nút ngay khi người khác thao tác. */
+export function applyIntakeLiveSnapshot(queryClient: QueryClient, liveItems: IntakeOrder[]) {
+  const liveById = new Map(liveItems.map((item) => [item.id, item]))
+  const cachedIds = new Set<string>()
+
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders'] })) {
+    if (query.queryKey[1] === 'pipeline-lists') {
+      const lists = query.state.data as IntakePipelineLists | undefined
+      if (!lists) continue
+      for (const status of PIPELINE_LIST_STATUSES) {
+        for (const item of lists[status]?.items ?? []) cachedIds.add(item.id)
+      }
+    } else {
+      const old = query.state.data
+      if (isIntakeOrderList(old)) {
+        for (const item of old.items) cachedIds.add(item.id)
+      }
+    }
+  }
+
+  for (const id of cachedIds) {
+    if (liveById.has(id)) continue
+    const prev = findIntakeOrderInCaches(queryClient, id)
+    if (!prev || !PIPELINE_LIST_STATUSES.includes(prev.status)) continue
+    removeIntakeOrderFromCaches(queryClient, id)
+  }
+
+  for (const live of liveItems) {
+    const prev = findIntakeOrderInCaches(queryClient, live.id)
+    if (prev && !intakeLiveFieldsChanged(prev, live)) continue
+    moveIntakeOrderInCaches(queryClient, prev ? { ...prev, ...live, images: prev.images } : live, {
+      silent: true,
+    })
+  }
 }
 
 export function refreshIntakeTabCounts(queryClient: QueryClient) {
   scheduleIntakePipelineCountsRefresh(queryClient)
-}
-
-function patchPendingRemove(old: IntakeOrderList, queryKey: QueryKey, orderId: string): IntakeOrderList | undefined {
-  if (!pendingListKey(queryKey)) return undefined
-  if (queryKey[1] === 'pending-count') {
-    return { ...old, total: Math.max(0, old.total - 1) }
-  }
-  if (!old.items.some((item) => item.id === orderId)) return undefined
-  return {
-    ...old,
-    items: old.items.filter((item) => item.id !== orderId),
-    total: Math.max(0, old.total - 1),
-  }
 }
 
 /** Gộp bucket cache thành một danh sách — sort cố định để đổi trạng thái không nhảy dòng. */
@@ -249,13 +286,8 @@ export function afterIntakeApproved(queryClient: QueryClient, order: IntakeOrder
 }
 
 export function afterIntakeRejected(queryClient: QueryClient, order: IntakeOrder) {
-  patchIntakeQueries(queryClient, (old, queryKey) => patchPendingRemove(old, queryKey, order.id))
-  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders', 'pipeline-lists'] })) {
-    const old = query.state.data as IntakePipelineLists | undefined
-    if (!old) continue
-    queryClient.setQueryData(query.queryKey, removeOrderFromPipelineLists(old, order.id))
-  }
-  refreshIntakeTabCounts(queryClient)
+  removeIntakeOrderFromCaches(queryClient, order.id)
+  notifyWorkflowChanged('intake')
 }
 
 export function afterIntakeModel3dAttached(queryClient: QueryClient, order: IntakeOrder) {

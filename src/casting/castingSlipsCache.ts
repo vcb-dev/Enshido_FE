@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { CastingSlip, CastingSlipList } from '../api/castingSlips'
 import type { IntakeOrderStatus } from '../api/intakeOrders'
 import { findIntakeOrderInCaches, moveIntakeOrderInCaches } from '../intake/intakeOrderCache'
+import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
 function patchCastingSlipLists(
   queryClient: QueryClient,
@@ -31,6 +32,7 @@ export function applyCastingSlipCreated(queryClient: QueryClient, slip: CastingS
   })
   syncIntakeFromSlip(queryClient, slip)
   void queryClient.invalidateQueries({ queryKey: ['casting-slip-candidates'] })
+  notifyWorkflowChanged('casting')
 }
 
 export function applyCastingSlipUpdate(queryClient: QueryClient, updated: CastingSlip) {
@@ -38,6 +40,7 @@ export function applyCastingSlipUpdate(queryClient: QueryClient, updated: Castin
     items.map((row) => updateSlipInTree(row, updated.id, updated)),
   )
   syncIntakeFromSlip(queryClient, updated)
+  notifyWorkflowChanged('casting')
 }
 
 /** Thủ kho báo lỗi đúc — phiếu lỗi + phiếu làm lại dưới phiếu gốc. */
@@ -66,6 +69,7 @@ export function applyCastingSlipRejected(
     }),
   )
   syncIntakeFromSlip(queryClient, redo)
+  notifyWorkflowChanged('casting')
 }
 
 export function syncIntakeFromSlip(queryClient: QueryClient, slip: CastingSlip) {
