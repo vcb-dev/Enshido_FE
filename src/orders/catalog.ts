@@ -219,7 +219,7 @@ export function formatDateShort(value: string | null | undefined, empty = '—')
   if (!value) return empty
   // Ngày thuần `YYYY-MM-DD` không có giờ — đừng parse UTC midnight (ra 07:00 VN).
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [year, month, day] = value.split('-')
+    const [, month, day] = value.split('-')
     return `${day}/${month}`
   }
   const date = new Date(value)
