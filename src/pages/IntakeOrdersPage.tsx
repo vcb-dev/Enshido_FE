@@ -190,7 +190,7 @@ export function IntakeOrdersPage() {
         key: 'createdDate',
         header: 'Ngày tạo',
         width: 110,
-        render: (row) => formatDateShort(row.createdDate),
+        render: (row) => formatDateShort(row.createdAt),
       },
       {
         key: 'status',

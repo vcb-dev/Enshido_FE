@@ -40,7 +40,7 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary">
-                Ngày tạo {formatDateShort(order.createdDate)}
+                Ngày tạo {formatDateShort(order.createdAt)}
                 {order.dueDate ? ` · Trả ${formatDateShort(order.dueDate)}` : null}
               </Typography>
               {order.description?.trim() ? (

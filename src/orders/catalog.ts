@@ -217,6 +217,11 @@ export function formatDateTime(value: string | null | undefined) {
 /** Ngày giờ gọn cho ô hẹp (bảng khâu, phiếu in): 14/09 16:32. Dùng chung để phiếu và màn hình khớp nhau. */
 export function formatDateShort(value: string | null | undefined, empty = '—') {
   if (!value) return empty
+  // Ngày thuần `YYYY-MM-DD` không có giờ — đừng parse UTC midnight (ra 07:00 VN).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-')
+    return `${day}/${month}`
+  }
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   const pad = (n: number) => String(n).padStart(2, '0')

@@ -52,6 +52,8 @@ export type IntakeOrder = {
   rejectedAt?: string | null
   /** Phiếu đúc đang giữ đơn (kể cả phiếu chưa cấp vật tư). */
   castingSlip?: { code: string; status: string } | null
+  /** Lệnh SX (mã A) sinh lúc xác nhận đúc. */
+  productionOrderCode?: string | null
   createdAt: string
   images: OrderImage[]
 }
@@ -159,6 +161,7 @@ export function submitIntakeProductSpecsApi(
   id: string,
   payload: {
     productWeightGram: number
+    castingTreeWeightGram?: number
     images: OrderImage[]
     stoneCount3d?: number | null
     stoneWeight3dGram?: number | null

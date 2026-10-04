@@ -74,7 +74,7 @@ export function can(
 ) {
   if (!roleOrUser) return false
   if (typeof roleOrUser === 'object') {
-    if (roleOrUser.roleCode === 'ADMIN') return true
+    if (roleOrUser.roleCode === 'ADMIN' || roleOrUser.extraRoles?.includes('ADMIN')) return true
     if (Array.isArray(roleOrUser.permissions)) {
       return roleOrUser.permissions.includes(permission)
     }

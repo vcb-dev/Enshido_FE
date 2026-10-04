@@ -16,6 +16,7 @@ export function intakeShowsProductWeight(row: IntakeOrder) {
     row.status === 'WAIT_CASTING' ||
     row.status === 'CASTING' ||
     row.status === 'CAST_PENDING_CONFIRMATION' ||
-    row.status === 'CAST_DONE'
+    row.status === 'CAST_DONE' ||
+    row.status === 'WAIT_COOLING'
   )
 }

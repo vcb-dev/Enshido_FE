@@ -56,6 +56,8 @@ export type ProductionOrderRow = {
   model3dUrl: string | null
   leadTime: string | null
   trackingCode: string | null
+  /** Mã đơn tạo (DH…) khi lệnh sinh từ xác nhận đúc. */
+  intakeOrderCode?: string | null
   closedBy: string
   customerName: string | null
   description: string

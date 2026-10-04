@@ -186,41 +186,46 @@ function Sheet({ slip, printedBy }: { slip: CastingSlip; printedBy: string }) {
 
       <table style={{ marginTop: '2mm' }}>
         <colgroup>
-          <col style={{ width: '40%' }} />
-          <col style={{ width: '30%' }} />
-          <col style={{ width: '30%' }} />
+          <col style={{ width: '28%' }} />
+          <col style={{ width: '24%' }} />
+          <col style={{ width: '24%' }} />
+          <col style={{ width: '24%' }} />
         </colgroup>
         <tbody>
           <tr>
             <Head> </Head>
-            <Head>Giao</Head>
+            <Head>Trọng lượng ước tính theo gram</Head>
+            <Head>Trọng lượng thực xuất</Head>
             <Head>Trả</Head>
           </tr>
           <tr>
-            <td>Trọng lượng bạc S999 (gram)</td>
+            <td>S999 (g)</td>
+            <td style={right}>{gram(slip.estimateS999Gram)}</td>
             <td style={right}>{gram(slip.issueS999Gram)}</td>
             <td style={crossed}>x</td>
           </tr>
           <tr>
-            <td>Trọng lượng Hội (gram)</td>
+            <td>Hội (g)</td>
+            <td style={right}>{gram(slip.estimateMasterAlloyGram)}</td>
             <td style={right}>{gram(slip.issueMasterAlloyGram)}</td>
             <td style={crossed}>x</td>
           </tr>
           <tr>
-            <td>Trọng lượng S925 (gram)</td>
+            <td>S925 (g)</td>
+            <td style={right}>{gram(slip.estimateS925Gram)}</td>
             <td style={right}>{gram(slip.issueS925Gram)}</td>
             <td style={crossed}>x</td>
           </tr>
           <tr>
             <td style={{ fontWeight: 700 }}>Tổng</td>
+            <td style={{ ...right, fontWeight: 700 }}>{gram(slip.estimateTotalGram)}</td>
             <td style={{ ...right, fontWeight: 700 }}>{formatQty(slip.issueTotalGram)}</td>
-            {/* Trả = cây thông sau đúc. Chưa đúc thì để trống cho thủ kho viết tay khi nhận lại. */}
             <td style={{ ...right, fontWeight: 700 }}>{gram(slip.returnTotalGram)}</td>
           </tr>
           {slip.castLossGram != null ? (
             <tr>
               <td>Hao hụt đúc (bạc đã dùng − cây thông)</td>
-              <td colSpan={2} style={{ ...right, fontWeight: 700 }}>
+              <td colSpan={3} style={{ ...right, fontWeight: 700 }}>
                 {gram(slip.castLossGram)}
                 {slip.castLossPercent != null ? ` (${slip.castLossPercent}%)` : ''}
               </td>

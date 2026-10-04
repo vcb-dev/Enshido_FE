@@ -24,6 +24,10 @@ export type CastingSlip = {
   waxWeightGram: string
   batchOrderCodes: string
   orders: CastingSlipOrderLine[]
+  estimateS999Gram: string | null
+  estimateMasterAlloyGram: string | null
+  estimateS925Gram: string | null
+  estimateTotalGram: string
   issueS999Gram: string | null
   issueMasterAlloyGram: string | null
   issueS925Gram: string | null
@@ -120,6 +124,9 @@ export type CreateCastingSlipPayload = {
   slipDate: string
   intakeOrderIds: string[]
   assignedUserId: string
+  estimateS999Gram?: number
+  estimateMasterAlloyGram?: number
+  estimateS925Gram?: number
   issueS999Gram?: number
   issueMasterAlloyGram?: number
   issueS925Gram?: number
@@ -172,11 +179,19 @@ export function createCastingSlipApi(payload: CreateCastingSlipPayload) {
   return apiFetch<CastingSlip>('/casting-slips', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-/** Bước 7b: chụp ảnh phiếu + vật tư đã cấp, Lưu → đơn Chờ đúc. */
-export function issueCastingSlipApi(id: string, images: CastingSlipImage[]) {
+/** Bước 7b: thực xuất (trống = ước tính) + ảnh phiếu, Lưu → đơn Chờ đúc. */
+export function issueCastingSlipApi(
+  id: string,
+  payload: {
+    images: CastingSlipImage[]
+    issueS999Gram?: number
+    issueMasterAlloyGram?: number
+    issueS925Gram?: number
+  },
+) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/issue`, {
     method: 'POST',
-    body: JSON.stringify({ images }),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -230,8 +245,16 @@ export function submitCastingSlipResultApi(id: string, payload: CastingSlipResul
   })
 }
 
-export function confirmCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload) {
+export function confirmCastingSlipApi(id: string) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+/** Cắt cây thông sau Đúc xong — chia phôi, sinh lệnh SX Chờ nguội. */
+export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}/cut`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

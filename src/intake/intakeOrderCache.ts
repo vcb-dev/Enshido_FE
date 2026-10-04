@@ -22,6 +22,7 @@ const PIPELINE_LIST_STATUSES: IntakeOrderStatus[] = [
   'CASTING',
   'CAST_PENDING_CONFIRMATION',
   'CAST_DONE',
+  'WAIT_COOLING',
 ]
 
 function emptyList(pageSize = 200): IntakeOrderList {
@@ -87,6 +88,7 @@ const LIST_SLOT_STATUS: Partial<Record<string, IntakeOrderStatus>> = {
   'casting-for-all': 'CASTING',
   'cast-pending-for-all': 'CAST_PENDING_CONFIRMATION',
   'cast-done-for-all': 'CAST_DONE',
+  'wait-cooling-for-all': 'WAIT_COOLING',
 }
 
 function listKeyMatchesStatus(queryKey: QueryKey, status: IntakeOrderStatus) {
@@ -95,13 +97,34 @@ function listKeyMatchesStatus(queryKey: QueryKey, status: IntakeOrderStatus) {
   return LIST_SLOT_STATUS[slot] === status
 }
 
+/** Màn Tạo đơn: `['intake-orders', page, pageSize, status, search]`. */
+function isCatalogListKey(queryKey: QueryKey) {
+  const slot = queryKey[1]
+  if (typeof slot === 'number') return true
+  return typeof slot === 'string' && /^\d+$/.test(slot)
+}
+
+function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
+  const statusFilter = String(queryKey[3] ?? '')
+  if (statusFilter && statusFilter !== order.status) return false
+  const search = String(queryKey[4] ?? '').trim().toLowerCase()
+  if (!search) return true
+  const hay = [order.code, order.sxCode, order.productName, order.description, order.trackingCode]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return hay.includes(search)
+}
+
 function reconcileOrderInList(
   old: IntakeOrderList,
   queryKey: QueryKey,
   order: IntakeOrder,
 ): IntakeOrderList | undefined {
   const inList = old.items.some((item) => item.id === order.id)
-  const shouldBeHere = listKeyMatchesStatus(queryKey, order.status)
+  const shouldBeHere = isCatalogListKey(queryKey)
+    ? catalogListAllows(queryKey, order)
+    : listKeyMatchesStatus(queryKey, order.status)
   if (inList && !shouldBeHere) {
     return {
       ...old,
@@ -113,7 +136,9 @@ function reconcileOrderInList(
   if (inList) {
     return { ...old, items: old.items.map((item) => (item.id === order.id ? order : item)) }
   }
-  return { ...old, items: [...old.items, order], total: old.total + 1 }
+  // Đơn mới lên đầu trang 1 — trang sau để refetch, tránh nhảy sai trang.
+  if (isCatalogListKey(queryKey) && Number(queryKey[1]) !== 1) return undefined
+  return { ...old, items: [order, ...old.items], total: old.total + 1 }
 }
 
 function patchIntakeQueries(
@@ -203,32 +228,21 @@ function intakeLiveFieldsChanged(prev: IntakeOrder, next: IntakeOrder) {
   )
 }
 
+/** Snapshot live lần trước — chỉ gỡ đơn đã từng thấy rồi biến mất, tránh xóa đơn vừa tạo. */
+let lastIntakeLiveIds: Set<string> | null = null
+
 /** Vá pipeline từ snapshot live — giữ ảnh cũ, đổi chip/nút ngay khi người khác thao tác. */
 export function applyIntakeLiveSnapshot(queryClient: QueryClient, liveItems: IntakeOrder[]) {
   const liveById = new Map(liveItems.map((item) => [item.id, item]))
-  const cachedIds = new Set<string>()
-
-  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders'] })) {
-    if (query.queryKey[1] === 'pipeline-lists') {
-      const lists = query.state.data as IntakePipelineLists | undefined
-      if (!lists) continue
-      for (const status of PIPELINE_LIST_STATUSES) {
-        for (const item of lists[status]?.items ?? []) cachedIds.add(item.id)
-      }
-    } else {
-      const old = query.state.data
-      if (isIntakeOrderList(old)) {
-        for (const item of old.items) cachedIds.add(item.id)
-      }
+  if (lastIntakeLiveIds) {
+    for (const id of lastIntakeLiveIds) {
+      if (liveById.has(id)) continue
+      const prev = findIntakeOrderInCaches(queryClient, id)
+      if (!prev || !PIPELINE_LIST_STATUSES.includes(prev.status)) continue
+      removeIntakeOrderFromCaches(queryClient, id)
     }
   }
-
-  for (const id of cachedIds) {
-    if (liveById.has(id)) continue
-    const prev = findIntakeOrderInCaches(queryClient, id)
-    if (!prev || !PIPELINE_LIST_STATUSES.includes(prev.status)) continue
-    removeIntakeOrderFromCaches(queryClient, id)
-  }
+  lastIntakeLiveIds = new Set(liveById.keys())
 
   for (const live of liveItems) {
     const prev = findIntakeOrderInCaches(queryClient, live.id)
@@ -255,6 +269,7 @@ export function mergeIntakeQueueItems(
   castingItems: IntakeOrder[] = [],
   castPendingConfirmItems: IntakeOrder[] = [],
   castDoneItems: IntakeOrder[] = [],
+  waitCoolingItems: IntakeOrder[] = [],
 ): IntakeOrder[] {
   const byId = new Map<string, IntakeOrder>()
   for (const item of pendingItems) byId.set(item.id, item)
@@ -267,6 +282,7 @@ export function mergeIntakeQueueItems(
   for (const item of castingItems) byId.set(item.id, item)
   for (const item of castPendingConfirmItems) byId.set(item.id, item)
   for (const item of castDoneItems) byId.set(item.id, item)
+  for (const item of waitCoolingItems) byId.set(item.id, item)
   return [...byId.values()].sort((a, b) => {
     const tb = Date.parse(b.createdAt) || 0
     const ta = Date.parse(a.createdAt) || 0

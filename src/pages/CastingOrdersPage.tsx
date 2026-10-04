@@ -20,18 +20,22 @@ import { toast } from 'sonner'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   confirmCastingSlipApi,
+  cutCastingSlipApi,
   rejectCastingSlipApi,
   createCastingSlipApi,
   issueCastingSlipApi,
   getCastingSlipByCodeApi,
   listCastingSlipsApi,
+  submitCastingSlipResultApi,
   type CastingSlip,
   type CastingSlipImage,
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
+  type CastingSlipResultPayload,
   type ConfirmCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import { formatQty } from '../api/inventory'
 import {
   ColumnHeaderDate,
@@ -46,7 +50,10 @@ import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
 import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
+import { CastingSlipCutDialog } from '../intake/CastingSlipCutDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
+import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
+import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import {
@@ -56,7 +63,6 @@ import {
 } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
 import { invalidateBtpStock } from '../orders/btpStock'
-import { invalidateNvlWarehouse } from '../orders/nvlStock'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
@@ -65,7 +71,7 @@ const SLIP_STATUS_META: Record<CastingSlipStatus, { label: string; bg: string }>
   PENDING_ISSUE: { label: 'Chờ cấp vật tư', bg: '#8d6e63' },
   WAIT_CASTING: { label: 'Chờ đúc', bg: '#283593' },
   CASTING: { label: 'Đang đúc', bg: '#c62828' },
-  PENDING_CONFIRMATION: { label: 'Chờ thủ kho kiểm tra đúc / cắt cây', bg: '#e65100' },
+  PENDING_CONFIRMATION: { label: 'Chờ thủ kho xác nhận', bg: '#e65100' },
   DONE: { label: 'Đúc xong', bg: '#00695c' },
   CAST_FAILED: { label: 'Lỗi đúc', bg: '#636e72' },
 }
@@ -87,6 +93,10 @@ const SLIP_FILTERS = {
   issueTotal: '',
 }
 
+function slipNeedsCut(slip: CastingSlip) {
+  return slip.status === 'DONE' && slip.orders.some((line) => !line.productionOrderCode)
+}
+
 function formatGram(value: string | null) {
   if (value == null || value === '') return '—'
   return formatQty(value)
@@ -101,12 +111,16 @@ export function CastingOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [createOpen, setCreateOpen] = useState(false)
   const [issueTarget, setIssueTarget] = useState<CastingSlip | null>(null)
-  /** Phiếu đang mở hộp "Cắt cây thông" (cân phôi từng đơn + phần cây còn lại). */
+  /** Phiếu đang mở hộp xem lại số liệu thợ đúc vừa nhập. */
   const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
+  const [cutTarget, setCutTarget] = useState<CastingSlip | null>(null)
+  const [resultTarget, setResultTarget] = useState<CastingSlip | null>(null)
   // `?new=<id>`: mở từ nút "Lên lệnh đúc" trên một dòng Lệnh sản xuất.
   const preselectId = searchParams.get('new')
   /** `?issue=<mã phiếu>`: từ Lệnh sản xuất — sang Lệnh đúc và mở form cấp vật tư. */
   const issueCodeParam = searchParams.get('issue')
+  /** `?cut=<mã phiếu>`: từ Lệnh sản xuất — mở form cắt cây thông. */
+  const cutCodeParam = searchParams.get('cut')
 
   useEffect(() => {
     if (preselectId) setCreateOpen(true)
@@ -133,6 +147,28 @@ export function CastingOrdersPage() {
   useEffect(() => {
     if (issueFromOrders.error instanceof Error) toast.error(issueFromOrders.error.message)
   }, [issueFromOrders.error])
+
+  const cutFromOrders = useQuery({
+    queryKey: ['casting-slip', 'cut-param', cutCodeParam],
+    queryFn: () => getCastingSlipByCodeApi(cutCodeParam!),
+    enabled: Boolean(cutCodeParam),
+    staleTime: 0,
+  })
+  useEffect(() => {
+    if (!cutCodeParam || !cutFromOrders.data) return
+    setCutTarget(cutFromOrders.data)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('cut')
+        return next
+      },
+      { replace: true },
+    )
+  }, [cutCodeParam, cutFromOrders.data, setSearchParams])
+  useEffect(() => {
+    if (cutFromOrders.error instanceof Error) toast.error(cutFromOrders.error.message)
+  }, [cutFromOrders.error])
 
   // `/casting/:code`: thợ đúc quét QR trên phiếu giấy → mở ngay phiếu đó (bước 8).
   const scanned = useQuery({
@@ -196,10 +232,11 @@ export function CastingOrdersPage() {
     mutationFn: (payload: CreateCastingSlipPayload) => createCastingSlipApi(payload),
     onSuccess: (slip) => {
       toast.success(
-        `Đã lên phiếu đúc ${slip.code} (${slip.orders.length} đơn) — chờ cấp vật tư, chụp ảnh rồi xác nhận cấp`,
+        `Đã lên phiếu đúc ${slip.code} (${slip.orders.length} đơn) — in phiếu, cấp vật tư rồi chụp ảnh`,
       )
       closeCreate()
       applyCastingSlipCreated(queryClient, slip)
+      window.open(`/casting/${slip.code}/print`, '_blank')
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -216,8 +253,19 @@ export function CastingOrdersPage() {
   }
 
   const issue = useMutation({
-    mutationFn: (vars: { slip: CastingSlip; images: CastingSlipImage[] }) =>
-      issueCastingSlipApi(vars.slip.id, vars.images),
+    mutationFn: (vars: {
+      slip: CastingSlip
+      images: CastingSlipImage[]
+      issueS999Gram?: number
+      issueMasterAlloyGram?: number
+      issueS925Gram?: number
+    }) =>
+      issueCastingSlipApi(vars.slip.id, {
+        images: vars.images,
+        issueS999Gram: vars.issueS999Gram,
+        issueMasterAlloyGram: vars.issueMasterAlloyGram,
+        issueS925Gram: vars.issueS925Gram,
+      }),
     onSuccess: (updated) => {
       setIssueTarget(null)
       toast.success(`Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn sang Chờ đúc`)
@@ -225,18 +273,34 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  // Cắt cây thông: chia phôi từng đơn, sinh lệnh SX (Chờ nguội), phôi vào kho BTP,
-  // phần cây còn lại vào kho NVL.
+  // Thủ kho xác nhận số liệu thợ vừa nhập → Đúc xong. Cắt cây thông là bước sau.
   const confirm = useMutation({
-    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
-      confirmCastingSlipApi(slip.id, payload),
-    onSuccess: (updated) => {
+    mutationFn: (slip: CastingSlip) => confirmCastingSlipApi(slip.id),
+    onMutate: (slip) => {
       setConfirmTarget(null)
-      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã tạo ${updated.orders.length} lệnh sản xuất, chuyển Nguội`)
+      applyCastingSlipUpdate(queryClient, {
+        ...slip,
+        status: 'DONE',
+        confirmedAt: new Date().toISOString(),
+      })
+    },
+    onSuccess: (updated) => {
+      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã xác nhận — Đúc xong`)
+    },
+    onError: (error: Error, slip) => {
+      applyCastingSlipUpdate(queryClient, slip)
+      toast.error(error.message)
+    },
+  })
+  const cut = useMutation({
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: ConfirmCastingSlipPayload }) =>
+      cutCastingSlipApi(slip.id, payload),
+    onSuccess: (updated) => {
+      setCutTarget(null)
+      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã cắt cây thông — đơn sang Chờ nguội`)
       void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
       void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
       invalidateBtpStock(queryClient)
-      invalidateNvlWarehouse(queryClient)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -256,9 +320,17 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
+  const submitResult = useMutation({
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: CastingSlipResultPayload }) =>
+      submitCastingSlipResultApi(slip.id, payload),
+    onSuccess: (updated) => {
+      setResultTarget(null)
+      afterSlipUpdated(updated, `Phiếu ${updated.code}: đã nhập kết quả — chờ thủ kho kiểm tra`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const confirmingId = confirm.isPending ? confirm.variables?.id : null
   const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
-
   const askRejectCast = useCallback(
     (slip: CastingSlip) => {
       const orders = slip.orders.map((line) => line.code).join(', ')
@@ -274,6 +346,7 @@ export function CastingOrdersPage() {
     [rejectCast.mutate],
   )
   const canConfirm = canConfirmIntakeWarehouse(user)
+  const canCast = can(user, Permission.PRODUCTION_CAST)
 
   const renderSlipActions = useCallback(
     (row: CastingSlip) => (
@@ -281,9 +354,29 @@ export function CastingOrdersPage() {
         <Button size="small" variant="outlined" onClick={() => dialog.openView(row)}>
           Xem chi tiết
         </Button>
+        {canConfirm ? (
+          <Button
+            size="small"
+            variant="outlined"
+            href={`/casting/${row.code}/print`}
+            target="_blank"
+          >
+            {row.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
+          </Button>
+        ) : null}
         {row.status === 'PENDING_ISSUE' && canConfirm ? (
           <Button size="small" variant="contained" onClick={() => setIssueTarget(row)}>
             Cấp vật tư
+          </Button>
+        ) : null}
+        {row.status === 'CASTING' && canCast ? (
+          <Button size="small" variant="contained" onClick={() => setResultTarget(row)}>
+            Nhập kết quả đúc
+          </Button>
+        ) : null}
+        {row.status === 'DONE' && canConfirm && slipNeedsCut(row) ? (
+          <Button size="small" variant="contained" onClick={() => setCutTarget(row)}>
+            Cắt cây thông
           </Button>
         ) : null}
         {row.status === 'PENDING_CONFIRMATION' && canConfirm ? (
@@ -295,7 +388,7 @@ export function CastingOrdersPage() {
               disabled={confirmingId === row.id || rejectingId === row.id}
               onClick={() => setConfirmTarget(row)}
             >
-              Cắt cây thông
+              Xác nhận
             </Button>
             <Button
               size="small"
@@ -312,8 +405,10 @@ export function CastingOrdersPage() {
     ),
     [
       askRejectCast,
+      canCast,
       canConfirm,
       setConfirmTarget,
+      setCutTarget,
       confirmingId,
       dialog.openView,
       rejectingId,
@@ -502,23 +597,44 @@ export function CastingOrdersPage() {
         open={dialog.open && dialog.kind === 'view'}
         slip={dialog.row}
         canConfirm={canConfirm}
+        canCast={canCast}
         busy={confirm.isPending}
         busyReject={rejectCast.isPending}
-        onConfirm={(slip) => setConfirmTarget(slip)}
+        onConfirm={(slip) => {
+          closeView()
+          setConfirmTarget(slip)
+        }}
+        onCut={(slip) => {
+          closeView()
+          setCutTarget(slip)
+        }}
         onReject={askRejectCast}
+        onEnterResult={setResultTarget}
         onClose={closeView}
+      />
+      <CastingSlipResultDialog
+        slip={resultTarget}
+        saving={submitResult.isPending}
+        onClose={() => setResultTarget(null)}
+        onSave={(payload) => resultTarget && submitResult.mutate({ slip: resultTarget, payload })}
       />
       <CastingSlipConfirmDialog
         slip={confirmTarget}
         saving={confirm.isPending}
         onClose={() => setConfirmTarget(null)}
-        onSave={(payload) => confirmTarget && confirm.mutate({ slip: confirmTarget, payload })}
+        onConfirm={() => confirmTarget && confirm.mutate(confirmTarget)}
+      />
+      <CastingSlipCutDialog
+        slip={cutTarget}
+        saving={cut.isPending}
+        onClose={() => setCutTarget(null)}
+        onSave={(payload) => cutTarget && cut.mutate({ slip: cutTarget, payload })}
       />
       <CastingSlipIssueDialog
         slip={issueTarget}
         saving={issue.isPending}
         onClose={() => setIssueTarget(null)}
-        onSave={(images) => issueTarget && issue.mutate({ slip: issueTarget, images })}
+        onSave={(payload) => issueTarget && issue.mutate({ slip: issueTarget, ...payload })}
       />
       <CastingSlipCreateDialog
         open={createOpen}
@@ -535,19 +651,25 @@ function CastingSlipViewDialog({
   open,
   slip,
   canConfirm,
+  canCast,
   busy,
   busyReject,
   onConfirm,
+  onCut,
   onReject,
+  onEnterResult,
   onClose,
 }: {
   open: boolean
   slip: CastingSlip | null
   canConfirm: boolean
+  canCast: boolean
   busy: boolean
   busyReject: boolean
   onConfirm: (slip: CastingSlip) => void
+  onCut: (slip: CastingSlip) => void
   onReject: (slip: CastingSlip) => void
+  onEnterResult: (slip: CastingSlip) => void
   onClose: () => void
 }) {
   const thumbs = useMemo(
@@ -574,8 +696,6 @@ function CastingSlipViewDialog({
       })),
     [slip?.resultImages],
   )
-
-  const disabledCell = { bgcolor: 'action.hover', color: 'text.disabled' } as const
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -635,94 +755,40 @@ function CastingSlipViewDialog({
                 </TableRow>
               </TableBody>
             </Table>
-            <Table
-              size="small"
-              sx={{
-                border: '2px solid',
-                borderColor: 'grey.600',
-                borderCollapse: 'collapse',
-                '& .MuiTableCell-root': {
-                  border: '1px solid',
-                  borderColor: 'grey.500',
-                  py: 1.25,
-                  px: 1.5,
-                },
-                '& .MuiTableHead-root .MuiTableCell-root': {
-                  bgcolor: 'grey.200',
-                  fontWeight: 700,
-                },
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  <TableCell />
-                  <TableCell align="center" sx={{ fontWeight: 700 }}>
-                    Giao
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700 }}>
-                    Trả
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell>S999 (g)</TableCell>
-                  <TableCell>{formatGram(slip.issueS999Gram)}</TableCell>
-                  <TableCell align="center" sx={disabledCell}>
-                    x
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Hội (g)</TableCell>
-                  <TableCell>{formatGram(slip.issueMasterAlloyGram)}</TableCell>
-                  <TableCell align="center" sx={disabledCell}>
-                    x
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>S925 (g)</TableCell>
-                  <TableCell>{formatGram(slip.issueS925Gram)}</TableCell>
-                  <TableCell align="center" sx={disabledCell}>
-                    x
-                  </TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 700 }}>Tổng</TableCell>
-                  <TableCell>{formatGram(slip.issueTotalGram)}</TableCell>
-                  {/* Trả = cây thông sau đúc + bạc giao chưa dùng (bạc + hội đã hoà nên không tách từng loại). */}
-                  <TableCell sx={{ fontWeight: 700 }}>
-                    {slip.returnTotalGram != null ? (
-                      formatGram(slip.returnTotalGram)
-                    ) : (
-                      <Typography component="span" variant="caption" color="text.secondary">
-                        chờ thợ đúc nhập kết quả
-                      </Typography>
-                    )}
-                  </TableCell>
-                </TableRow>
-                {slip.castLossGram != null ? (
+            <CastingSlipMetalTable
+              estimateS999Gram={slip.estimateS999Gram}
+              estimateMasterAlloyGram={slip.estimateMasterAlloyGram}
+              estimateS925Gram={slip.estimateS925Gram}
+              estimateTotalGram={slip.estimateTotalGram}
+              issueS999Gram={slip.issueS999Gram}
+              issueMasterAlloyGram={slip.issueMasterAlloyGram}
+              issueS925Gram={slip.issueS925Gram}
+              issueTotalGram={slip.issueTotalGram}
+              returnTotalGram={slip.returnTotalGram}
+              extraRows={
+                slip.castLossGram != null ? (
                   <>
                     <TableRow>
                       <TableCell>Trong đó: cây thông sau đúc</TableCell>
-                      <TableCell colSpan={2}>{formatGram(slip.castTreeWeightGram)}</TableCell>
+                      <TableCell colSpan={3}>{formatGram(slip.castTreeWeightGram)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>Trong đó: bạc giao chưa dùng (trả kho)</TableCell>
-                      <TableCell colSpan={2}>{formatGram(slip.leftoverGram)}</TableCell>
+                      <TableCell colSpan={3}>{formatGram(slip.leftoverGram)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 700 }}>
                         Hao hụt đúc{slip.startedByName ? ` — ${slip.startedByName}` : ''}
                       </TableCell>
-                      <TableCell colSpan={2} sx={{ fontWeight: 700, color: Number(slip.castLossGram) < 0 ? 'error.main' : undefined }}>
+                      <TableCell colSpan={3} sx={{ fontWeight: 700, color: Number(slip.castLossGram) < 0 ? 'error.main' : undefined }}>
                         {formatGram(slip.castLossGram)} g
                         {slip.castLossPercent != null ? ` (${slip.castLossPercent}% bạc đã dùng)` : ''}
                       </TableCell>
                     </TableRow>
                   </>
-                ) : null}
-              </TableBody>
-            </Table>
+                ) : null
+              }
+            />
             {thumbs.length ? (
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} gutterBottom>
@@ -762,6 +828,21 @@ function CastingSlipViewDialog({
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Đóng</Button>
+        {slip && canConfirm ? (
+          <Button variant="outlined" href={`/casting/${slip.code}/print`} target="_blank">
+            {slip.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
+          </Button>
+        ) : null}
+        {slip?.status === 'CASTING' && canCast ? (
+          <Button variant="contained" onClick={() => onEnterResult(slip)}>
+            Nhập kết quả đúc
+          </Button>
+        ) : null}
+        {slip && canConfirm && slipNeedsCut(slip) ? (
+          <Button variant="contained" onClick={() => onCut(slip)}>
+            Cắt cây thông
+          </Button>
+        ) : null}
         {slip?.status === 'PENDING_CONFIRMATION' && canConfirm ? (
           <>
             <Button
@@ -773,7 +854,7 @@ function CastingSlipViewDialog({
               Lỗi đúc
             </Button>
             <Button variant="contained" disabled={busy || busyReject} onClick={() => onConfirm(slip)}>
-              Cắt cây thông
+              Xác nhận
             </Button>
           </>
         ) : null}

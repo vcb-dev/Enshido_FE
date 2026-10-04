@@ -172,7 +172,7 @@ export function ProductionOrdersPage() {
     placeholderData: keepPreviousData,
     enabled: isAllView,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 
   const pendingTotal = intakePipelineLists.data?.PENDING_APPROVAL?.total ?? 0
@@ -195,6 +195,8 @@ export function ProductionOrdersPage() {
   const castPendingItems = intakePipelineLists.data?.CAST_PENDING_CONFIRMATION?.items ?? []
   const castDoneTotal = intakePipelineLists.data?.CAST_DONE?.total ?? 0
   const castDoneItems = intakePipelineLists.data?.CAST_DONE?.items ?? []
+  const waitCoolingTotal = intakePipelineLists.data?.WAIT_COOLING?.total ?? 0
+  const waitCoolingItems = intakePipelineLists.data?.WAIT_COOLING?.items ?? []
   const intakeQueueItems = useMemo(
     () =>
       mergeIntakeQueueItems(
@@ -208,6 +210,7 @@ export function ProductionOrdersPage() {
         castingItems,
         castPendingItems,
         castDoneItems,
+        waitCoolingItems,
       ),
     [
       pendingItems,
@@ -220,6 +223,7 @@ export function ProductionOrdersPage() {
       castingItems,
       castPendingItems,
       castDoneItems,
+      waitCoolingItems,
     ],
   )
   const intakeQueueTotal =
@@ -232,7 +236,8 @@ export function ProductionOrdersPage() {
     waitCastingTotal +
     castingTotal +
     castPendingTotal +
-    castDoneTotal
+    castDoneTotal +
+    waitCoolingTotal
   const mergeSlice = useMemo(
     () => sliceMergedPage(params.page, params.pageSize, intakeQueueItems, intakeQueueTotal),
     [params.page, params.pageSize, intakeQueueItems, intakeQueueTotal],
@@ -372,16 +377,25 @@ export function ProductionOrdersPage() {
     mutationFn: ({
       id,
       productWeightGram,
+      castingTreeWeightGram,
       images,
       stoneCount3d,
       stoneWeight3dGram,
     }: {
       id: string
       productWeightGram: number
+      castingTreeWeightGram?: number
       images: IntakeOrder['images']
       stoneCount3d: number | null
       stoneWeight3dGram: number | null
-    }) => submitIntakeProductSpecsApi(id, { productWeightGram, images, stoneCount3d, stoneWeight3dGram }),
+    }) =>
+      submitIntakeProductSpecsApi(id, {
+        productWeightGram,
+        castingTreeWeightGram,
+        images,
+        stoneCount3d,
+        stoneWeight3dGram,
+      }),
     onSuccess: (order) => {
       setProductSpecsTarget(null)
       afterIntakeProductSpecsSubmitted(queryClient, order)
@@ -558,7 +572,8 @@ export function ProductionOrdersPage() {
     (intakePipe.WAIT_CASTING ?? 0) +
     (intakePipe.CASTING ?? 0) +
     (intakePipe.CAST_PENDING_CONFIRMATION ?? 0) +
-    (intakePipe.CAST_DONE ?? 0)
+    (intakePipe.CAST_DONE ?? 0) +
+    (intakePipe.WAIT_COOLING ?? 0)
   const columnFiltered = Boolean(
     params.requestType || params.search.trim() || params.receivedDate || params.dueDate,
   )
@@ -912,7 +927,7 @@ function renderIntakeWorkflowAction(
           component="span"
           sx={{ whiteSpace: 'normal', lineHeight: 1.35, display: 'block', textAlign: 'center' }}
         >
-          Cập nhật số liệu sản phẩm
+          {order.hasMold ? 'Cập nhật số liệu cây thông' : 'Cập nhật số liệu sáp'}
         </Typography>
       </Button>
     )
@@ -1020,11 +1035,31 @@ function renderIntakeWorkflowAction(
         size="small"
         variant="contained"
         component={RouterLink}
-        to="/casting"
+        to={order.castingSlip?.code ? `/casting?cut=${encodeURIComponent(order.castingSlip.code)}` : '/casting'}
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
         Cắt cây thông
       </Button>
+    )
+  }
+  if (order.status === 'WAIT_COOLING') {
+    if (order.productionOrderCode) {
+      return (
+        <Button
+          size="small"
+          variant="outlined"
+          component={RouterLink}
+          to={`/orders/${order.productionOrderCode}`}
+          sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
+        >
+          Xem lệnh SX
+        </Button>
+      )
+    }
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Chờ nguội
+      </Typography>
     )
   }
   return (
@@ -1125,7 +1160,7 @@ function orderColumns(
       card: 'meta',
       render: (row) =>
         row.kind === 'intake'
-          ? formatDateShort(row.row.createdDate)
+          ? formatDateShort(row.row.createdAt)
           : formatDateTime(row.row.createdAt),
       renderSub: (sub) => formatDateTime(sub.createdAt),
     },
@@ -1217,7 +1252,8 @@ function orderColumns(
       header: 'Mã đơn hàng',
       width: 100,
       ellipsis: true,
-      render: (row) => (row.kind === 'intake' ? row.row.code : '—'),
+      render: (row) =>
+        row.kind === 'intake' ? row.row.code : row.row.intakeOrderCode?.trim() || '—',
     },
     {
       key: 'trackingCode',
@@ -1465,7 +1501,7 @@ function intakePendingColumns({
       key: 'createdDate',
       header: 'Ngày tạo',
       width: 110,
-      render: (row) => formatDateShort(row.createdDate),
+      render: (row) => formatDateShort(row.createdAt),
     },
     {
       key: 'status',

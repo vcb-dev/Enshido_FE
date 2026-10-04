@@ -66,9 +66,9 @@ export function IntakeCastingTreeDialog({
             ) : null}
             <FormQtyField<Values>
               name="weight"
-              label="Cân nặng sản phẩm (g)"
+              label="Trọng lượng cây thông (g)"
               required
-              rules={{ validate: (value) => (Number(value) > 0 ? true : 'Nhập cân nặng sản phẩm (gram)') }}
+              rules={{ validate: (value) => (Number(value) > 0 ? true : 'Nhập trọng lượng cây thông (gram)') }}
               helperText="VD: 1.250,5"
               size="small"
               fullWidth

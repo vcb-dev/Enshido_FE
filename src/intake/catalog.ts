@@ -6,7 +6,7 @@ type ChipTone = { label: string; bg: string; fg: string }
 export const INTAKE_STATUS_META: Record<IntakeOrderStatus, ChipTone> = {
   PENDING_APPROVAL: { label: 'Mới · Chờ duyệt', bg: '#f39c12', fg: '#ffffff' },
   APPROVED: { label: 'Đã duyệt · Chờ SX', bg: '#2563eb', fg: '#ffffff' },
-  READY_FOR_PRODUCTION: { label: 'Chờ SX · Đã có 3D / khuôn', bg: '#00897b', fg: '#ffffff' },
+  READY_FOR_PRODUCTION: { label: 'Chờ SX · Đã có 3D', bg: '#00897b', fg: '#ffffff' },
   WAX_PRINTED: { label: 'Chờ SX · Đã in sáp', bg: '#6a1b9a', fg: '#ffffff' },
   PENDING_WAREHOUSE_CONFIRMATION: {
     label: 'Chờ thủ kho xác nhận sáp',
@@ -17,7 +17,7 @@ export const INTAKE_STATUS_META: Record<IntakeOrderStatus, ChipTone> = {
   WAIT_CASTING: { label: 'Chờ đúc', bg: '#283593', fg: '#ffffff' },
   CASTING: { label: 'Đang đúc', bg: '#c62828', fg: '#ffffff' },
   CAST_PENDING_CONFIRMATION: {
-    label: 'Chờ thủ kho kiểm tra đúc / cắt cây',
+    label: 'Chờ thủ kho xác nhận',
     bg: '#e65100',
     fg: '#ffffff',
   },

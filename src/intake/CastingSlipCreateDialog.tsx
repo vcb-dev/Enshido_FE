@@ -24,7 +24,9 @@ import {
   type CastingSlipCandidate,
   type CreateCastingSlipPayload,
 } from '../api/castingSlips'
-import { DialogForm, FormAutocomplete, FormQtyField, FormTextField, SearchInput } from '../components/ui'
+import { DialogForm, FormAutocomplete, FormTextField, SearchInput } from '../components/ui'
+import { CastingSlipMetalTable } from './CastingSlipMetalTable'
+import { silverEstimateFromWax } from './castingEstimate'
 import { formatQty } from '../api/inventory'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { formatDateShort } from '../orders/catalog'
@@ -34,24 +36,18 @@ function todayIsoDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** Ô gram không bắt buộc (đã chuẩn hoá bởi FormQtyField): trống = undefined, sai định dạng = NaN. */
-function optionalGram(value: string): number | undefined {
-  if (!value.trim()) return undefined
-  const n = Number(value)
-  return Number.isFinite(n) && n >= 0 ? n : NaN
-}
-
 type Values = {
   picked: CastingSlipCandidate[]
   assignedUserId: string | null
   slipDate: string
-  s999: string
-  hoi: string
-  s925: string
 }
 
 function emptyValues(): Values {
-  return { picked: [], assignedUserId: null, slipDate: todayIsoDate(), s999: '', hoi: '', s925: '' }
+  return {
+    picked: [],
+    assignedUserId: null,
+    slipDate: todayIsoDate(),
+  }
 }
 
 /**
@@ -112,17 +108,17 @@ export function CastingSlipCreateDialog({
   }, [open, preselectId, candidates.data, form])
 
   const rows = candidates.data ?? []
-  const [picked, assignedUserId, s999, hoi, s925] = useWatch({
+  const [picked, assignedUserId] = useWatch({
     control: form.control,
-    name: ['picked', 'assignedUserId', 's999', 'hoi', 's925'],
+    name: ['picked', 'assignedUserId'],
   })
   const selected = useMemo(() => new Set(picked.map((row) => row.id)), [picked])
   const waxTotal = useMemo(
     () => picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
     [picked],
   )
-  const issueParts = [s999, hoi, s925].map(optionalGram)
-  const issueTotal = issueParts.reduce<number>((sum, n) => sum + (n != null && !Number.isNaN(n) ? n : 0), 0)
+  const estimateGram = silverEstimateFromWax(waxTotal)
+  const estimateText = estimateGram > 0 ? String(estimateGram) : null
   const allVisibleChecked = rows.length > 0 && rows.every((row) => selected.has(row.id))
   const formError = pickedField.fieldState.error?.message ?? form.formState.errors.root?.message
 
@@ -142,27 +138,22 @@ export function CastingSlipCreateDialog({
   }
 
   function submit(values: Values) {
-    const parts = [values.s999, values.hoi, values.s925].map(optionalGram)
-    if (parts.some((n) => n != null && Number.isNaN(n))) {
-      return form.setError('root', { message: 'Số gram giao không hợp lệ' })
-    }
-    const total = parts.reduce<number>((sum, n) => sum + (n != null && !Number.isNaN(n) ? n : 0), 0)
-    if (!(total > 0)) {
-      return form.setError('root', { message: 'Nhập số gram bạc / hội / S925 cấp cho lần đúc' })
-    }
+    const estimate = silverEstimateFromWax(
+      values.picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
+    )
     onSave({
       slipDate: values.slipDate,
       intakeOrderIds: values.picked.map((row) => row.id),
       assignedUserId: values.assignedUserId!,
-      issueS999Gram: parts[0],
-      issueMasterAlloyGram: parts[1],
-      issueS925Gram: parts[2],
+      estimateS999Gram: estimate || undefined,
+      estimateMasterAlloyGram: estimate || undefined,
+      estimateS925Gram: estimate || undefined,
     })
   }
 
   const busy = saving
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullScreen={fullScreen} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullScreen={fullScreen} fullWidth maxWidth="lg">
       <DialogTitle>Lên phiếu đúc</DialogTitle>
       <DialogForm form={form} onSubmit={submit}>
         <DialogContent dividers>
@@ -245,21 +236,23 @@ export function CastingSlipCreateDialog({
               noOptionsText="Không có thợ đúc"
             />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <FormTextField<Values>
-                name="slipDate"
-                size="small"
-                type="date"
-                label="Ngày phiếu"
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ minWidth: 170 }}
-              />
-              <FormQtyField<Values> name="s999" label="Bạc S999 giao (g)" size="small" fullWidth disabled={busy} />
-              <FormQtyField<Values> name="hoi" label="Hội giao (g)" size="small" fullWidth disabled={busy} />
-              <FormQtyField<Values> name="s925" label="S925 giao (g)" size="small" fullWidth disabled={busy} />
-            </Stack>
-            <Typography variant="body2">
-              Tổng giao: <strong>{formatQty(String(issueTotal))} g</strong>
+            <FormTextField<Values>
+              name="slipDate"
+              size="small"
+              type="date"
+              label="Ngày phiếu"
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 170, maxWidth: 220 }}
+            />
+            <CastingSlipMetalTable
+              estimateS999Gram={estimateText}
+              estimateMasterAlloyGram={estimateText}
+              estimateS925Gram={estimateText}
+              estimateTotalGram={estimateText}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Lưu và in phiếu trước. Thủ kho nhập trọng lượng thực xuất lúc cấp vật tư — để trống thì lấy số
+              ước tính.
             </Typography>
 
             {formError ? <Alert severity="error">{formError}</Alert> : null}

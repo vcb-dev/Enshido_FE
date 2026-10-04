@@ -32,7 +32,7 @@ const EMPTY: Values = { rows: {}, images: [] }
 
 /**
  * Bước 4: thợ 3D in sáp nhiều đơn một lần — chụp ảnh cả khay, rồi tách cân nặng từng đơn.
- * Chỉ đơn Chờ SX · Đã có 3D / khuôn (C) và không có khuôn (đơn có khuôn đi bước Bơm sáp).
+ * Chỉ đơn Chờ SX · Đã có 3D (C) và không có khuôn (đơn có khuôn đi bước Bơm sáp).
  */
 export function WaxPrintBatchDialog({
   open,

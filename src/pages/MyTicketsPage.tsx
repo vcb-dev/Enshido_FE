@@ -64,7 +64,7 @@ const CASTING_SLIP_STATUS_LABEL: Record<CastingSlipStatus, string> = {
   PENDING_ISSUE: 'Chờ cấp vật tư',
   WAIT_CASTING: 'Chờ đúc',
   CASTING: 'Đang đúc',
-  PENDING_CONFIRMATION: 'Chờ thủ kho kiểm tra đúc / cắt cây',
+  PENDING_CONFIRMATION: 'Chờ thủ kho xác nhận',
   DONE: 'Đúc xong',
   CAST_FAILED: 'Lỗi đúc',
 }

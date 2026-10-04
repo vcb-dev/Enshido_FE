@@ -33,7 +33,6 @@ function applyRevisionDelta(
   if (prev.casting !== next.casting) {
     void queryClient.invalidateQueries({ queryKey: ['casting-slips'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
   }
 }
 
