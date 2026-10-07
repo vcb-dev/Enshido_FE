@@ -1449,7 +1449,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
   ]
 
   const productFields: Array<[string, ReactNode]> = [
-    ['Tên bán thành phẩm', order.btpName ?? order.btp?.name],
+    ['Tên sản phẩm', order.productName ?? order.btp?.name],
     ['Size', order.sizeLabel],
     ['Kích thước', order.size],
     ['Chất liệu', order.mainMaterial],

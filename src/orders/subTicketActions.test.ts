@@ -33,7 +33,7 @@ const ORDER = { code: 'A012' } as ProductionOrderDetail
 /** Tầng API bù phiếu con / NVL cho máy chủ cũ chưa trả các trường này, nên bản vào cache có thêm khoá. */
 const CACHED_ORDER = {
   ...ORDER,
-  btpName: null,
+  productName: null,
   customerName: null,
   subTickets: [],
   subTicketTotals: { qty: 0 },

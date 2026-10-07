@@ -67,7 +67,7 @@ type FormValues = {
   mainMaterial: string
   platingColor: string
   btpCategory: string
-  btpName: string
+  productName: string
   productKind: string
   stoneColor: string
   nvlMainMaterial: string
@@ -121,7 +121,7 @@ const EMPTY: FormValues = {
   mainMaterial: '',
   platingColor: '',
   btpCategory: '',
-  btpName: '',
+  productName: '',
   productKind: '',
   stoneColor: '',
   nvlMainMaterial: '',
@@ -324,7 +324,7 @@ export function ProductionOrderFormDialog({
             mainMaterial: order.mainMaterial ?? '',
             platingColor: normalizePlatingColor(order.platingColor),
             btpCategory: order.btpCategory ?? '',
-            btpName: order.btpName ?? order.btp?.name ?? '',
+            productName: order.productName ?? order.btp?.name ?? '',
             productKind: order.productKind ?? '',
             stoneColor: order.stoneColor ?? '',
             stoneTypes: order.stoneTypes,
@@ -376,7 +376,7 @@ export function ProductionOrderFormDialog({
   }
 
   function applyBtpCatalog(next: BtpOption | undefined, previous: BtpOption | undefined) {
-    form.setValue('btpName', next?.name ?? '', { shouldDirty: true })
+    form.setValue('productName', next?.name ?? '', { shouldDirty: true })
     form.setValue('btpCategory', next?.category ?? '', { shouldDirty: true })
     form.setValue('mainMaterial', next?.bodyMetal ?? '', { shouldDirty: true })
     form.setValue('productKind', next?.productKind ?? '', { shouldDirty: true })
@@ -440,7 +440,7 @@ export function ProductionOrderFormDialog({
       mainMaterial: values.mainMaterial.trim(),
       platingColor: normalizePlatingColor(values.platingColor),
       btpCategory: values.btpCategory.trim(),
-      btpName: values.btpName.trim(),
+      productName: values.productName.trim(),
       productKind: values.productKind.trim(),
       stoneColor: values.stoneColor.trim(),
       stoneTypes: [],
@@ -493,7 +493,7 @@ export function ProductionOrderFormDialog({
                   values.source !== 'NVL' || Boolean(String(value ?? '').trim()) || 'Nhập mã sản xuất',
               }}
             />
-            <FormTextField<FormValues> name="btpName" label="Tên thành phẩm" />
+            <FormTextField<FormValues> name="productName" label="Tên sản phẩm" />
             <FormRow columns={3}>
               <FormTextField<FormValues> name="sizeLabel" label="Size" />
               <FormSelect<FormValues>
