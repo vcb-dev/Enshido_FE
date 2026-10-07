@@ -21,7 +21,7 @@ export function StatusChip({
     <Chip
       size={size}
       label={label ?? meta.label}
-      sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600, borderRadius: 1 }}
+      sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600 }}
     />
   )
 }
@@ -60,7 +60,7 @@ export function SubTicketStateChip({ state, label }: { state: SubTicketState; la
     <Chip
       size="small"
       label={label ?? meta.label}
-      sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600, borderRadius: 1, maxWidth: '100%' }}
+      sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600, maxWidth: '100%' }}
     />
   )
 }
