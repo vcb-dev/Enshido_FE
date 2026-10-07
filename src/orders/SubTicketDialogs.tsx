@@ -283,10 +283,9 @@ export function openableStages(order: ProductionOrderDetail) {
   for (const ticket of idle) {
     const last = lastStageOf(order, ticket)
     lastBy.set(ticket.no, last)
-    byTicket.set(
-      ticket.no,
-      !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last)),
-    )
+    const next = !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last))
+    // Thủ kho đã đánh dấu đơn không có đá: không gợi ý khâu Vào đá.
+    byTicket.set(ticket.no, order.stoneSkipped ? next.filter((stage) => stage !== 'STONE_SETTING') : next)
   }
   const stages = STAGES.filter((stage) => idle.some((ticket) => byTicket.get(ticket.no)?.includes(stage)))
   /** Các khâu phiếu này sẽ bị bỏ qua nếu mở `stage` — rỗng nghĩa là đúng khâu kế tiếp. */
@@ -361,6 +360,16 @@ export function AssignWorkerDialog({
     const unit = (nvl.data ?? []).find((item) => item.id === lines[index]?.materialId)?.unit
     return unit && !['viên', 'vien'].includes(unit.trim().toLowerCase()) ? unit : null
   }
+  /** Số viên chỉ bắt buộc khi đã chọn mã đá tính tồn theo viên; chưa chọn mã hoặc mã ct / g thì để trống được. */
+  const countRequired = (index: number) => {
+    const unit = (nvl.data ?? []).find((item) => item.id === lines[index]?.materialId)?.unit
+    return unit != null && ['viên', 'vien'].includes(unit.trim().toLowerCase())
+  }
+  // Đổi mã đá thì xoá lỗi "bắt buộc" cũ của ô số viên — lỗi đó thuộc mã đã chọn trước.
+  const materialKey = lines.map((line) => line?.materialId ?? '').join('|')
+  useEffect(() => {
+    form.clearErrors('stones')
+  }, [materialKey, form])
   const title = ticket ? `Chỉ định thợ · phiếu ${ticket.code}` : 'Chỉ định thợ'
 
   return (
@@ -501,9 +510,16 @@ export function AssignWorkerDialog({
                     name={`stones.${index}.stoneCount` as 'stones'}
                     label="Số viên (theo nhãn gói)"
                     type="number"
-                    // Mã tính tồn theo viên phải biết số viên; ct / g chỉ cần TL gói.
-                    required={byUnit(index) == null}
-                    helperText={byUnit(index) ? 'Không bắt buộc — đá tính theo TL' : 'Mã tính tồn theo viên'}
+                    // Chỉ mã tính tồn theo viên mới phải biết số viên; còn lại chỉ cần TL gói.
+                    required={countRequired(index)}
+                    // `required: false` ghi đè luật bắt buộc đã đăng ký lúc chưa chọn mã — react-hook-form giữ luật
+                    // cũ khi `required` đổi true → false; luật thật nằm trong `validate`, đọc lại mỗi lần render.
+                    rules={{
+                      required: false,
+                      validate: (value) =>
+                        !countRequired(index) || Boolean(value) || 'Mã tính tồn theo viên — nhập số viên',
+                    }}
+                    helperText={countRequired(index) ? 'Mã tính tồn theo viên — bắt buộc' : 'Không bắt buộc'}
                     slotProps={{ htmlInput: { min: 1, step: 1 } }}
                   />
                   <FormTextField<AssignValues>

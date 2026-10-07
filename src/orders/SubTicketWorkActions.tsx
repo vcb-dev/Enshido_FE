@@ -196,13 +196,14 @@ export function SubTicketWorkActions({
           </>
         ) : null}
         {ticket.state === 'CONFIRMING' && last ? (
+          // Vào đá không lỗi vẫn chờ thủ kho nhận hàng + túi đá thừa; Nguội chỉ dừng ở đây khi có lỗi.
           canKeeper ? (
             <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
-              Thủ kho xác nhận lỗi
+              {(last.defectQty ?? 0) > 0 ? 'Thủ kho xác nhận lỗi' : 'Thủ kho xác nhận'}
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              chờ thủ kho xác nhận lỗi
+              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho nhận hàng + đá thừa'}
             </Typography>
           )
         ) : null}

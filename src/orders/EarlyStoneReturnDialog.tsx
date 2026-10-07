@@ -9,9 +9,9 @@ import { stoneReturnPreview } from './stoneReturn'
 type Values = { materialId: string; weight: string; note: string }
 
 /**
- * Thủ kho nhận lại túi đá thợ trả giữa khâu Vào đá — đá không vừa sản phẩm, thợ đổi size. Cân cả
+ * Thợ trả lại túi đá cho thủ kho giữa khâu Vào đá — đá không vừa sản phẩm, thợ đổi size. Cân cả
  * túi trả: phần trả theo tỷ lệ TL nhả khỏi giữ chỗ ngay (cấp được cho việc khác), không còn tính
- * là đá đã phát cho thợ. Thợ xin túi size mới bằng "Xin xuất NVL" như thường.
+ * là đá đã phát cho thợ. Thợ xin túi size mới bằng "Xin xuất đá" như thường.
  */
 export function EarlyStoneReturnDialog({
   entry,
@@ -42,7 +42,7 @@ export function EarlyStoneReturnDialog({
   const heldCt = Number(gramToCt(line?.weight) || 0)
   const preview = line && returned > 0 ? stoneReturnPreview(line, returned / CT_PER_GRAM) : null
   const backQty = line && preview ? Math.max(0, Number(line.qty) - preview.usedQty) : null
-  const title = `Nhận lại túi đá · phiếu ${ticketCode}`
+  const title = `Trả lại túi đá cho thủ kho · phiếu ${ticketCode}`
 
   return (
     <CrudDialogShell<Values>
@@ -54,7 +54,7 @@ export function EarlyStoneReturnDialog({
         onSave({ materialId: values.materialId, weight: ctToGram(values.weight), note: values.note.trim() || undefined })
       }
       saving={saving}
-      submitLabel="Nhận lại vào kho"
+      submitLabel="Thủ kho nhận túi đá"
       maxWidth="sm"
       onClose={onClose}
       onExited={() => undefined}

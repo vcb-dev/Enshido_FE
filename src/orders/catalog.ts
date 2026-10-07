@@ -281,7 +281,7 @@ export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
   CLAIMED: { label: 'Thợ đã nhận', bg: '#e3f2fd', fg: '#1565c0' },
   WORKING: { label: 'Đang làm', bg: '#6c5ce7', fg: '#ffffff' },
   SUBMITTED: { label: 'Chờ QC cân lại', bg: '#fff4d6', fg: '#8a6100' },
-  CONFIRMING: { label: 'Chờ thủ kho xác nhận lỗi', bg: '#e3f2fd', fg: '#1565c0' },
+  CONFIRMING: { label: 'Chờ thủ kho xác nhận', bg: '#e3f2fd', fg: '#1565c0' },
   DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
   FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }

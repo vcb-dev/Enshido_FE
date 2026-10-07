@@ -44,7 +44,7 @@ type StageFilter = 'all' | StageCode
 const TABS: { value: TabKey; label: string }[] = [
   { value: 'working', label: 'Đang làm' },
   { value: 'pending', label: 'Chờ QC' },
-  { value: 'confirming', label: 'Chờ xác nhận lỗi' },
+  { value: 'confirming', label: 'Chờ thủ kho xác nhận' },
   { value: 'finishable', label: 'Chờ hoàn thiện' },
   { value: 'recent', label: 'Gần đây' },
 ]
@@ -53,8 +53,8 @@ const EMPTY: Record<TabKey, { title: string; description: string }> = {
   working: { title: 'Không có phiếu nào đang làm', description: 'Phiếu con thợ đang làm hiện ở đây — thấy hàng hỏng thì bấm Báo lỗi.' },
   pending: { title: 'Chưa có phiếu nào chờ QC', description: 'Thợ bấm "Đã làm xong" hoặc báo lỗi thì phiếu hiện ở đây.' },
   confirming: {
-    title: 'Không có phiếu lỗi nào chờ thủ kho',
-    description: 'QC báo hàng lỗi ở Nguội / Vào đá thì phiếu nằm đây tới khi thủ kho kiểm tra, xác nhận lỗi — trong lúc chờ QC còn sửa lại được.',
+    title: 'Không có phiếu nào chờ thủ kho',
+    description: 'Vào đá luôn chờ thủ kho nhận hàng + đá thừa; Nguội chỉ chờ khi QC báo hàng lỗi. Phiếu nằm đây tới khi thủ kho xác nhận — trong lúc chờ QC còn sửa lại được.',
   },
   finishable: { title: 'Chưa có phiếu nào chờ hoàn thiện', description: 'Phiếu xong khâu Xi thì hiện ở đây để QC chốt hoàn thiện.' },
   recent: { title: 'Chưa có lần QC nào', description: 'Các lần bạn cân lại gần nhất hiện ở đây.' },

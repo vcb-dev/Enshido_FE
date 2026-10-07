@@ -42,6 +42,7 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   changeProductionStatusApi,
+  type StatusLog,
   cancelOrderPendingApi,
   deleteProductionOrderApi,
   getProductionOrderApi,
@@ -94,6 +95,8 @@ import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
 import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
+import { StoneSkipBar } from '../orders/StoneSkipBar'
+import { ticketTimeline, TICKET_PHASE_STATUSES, type TicketTimelineRow } from '../orders/ticketTimeline'
 import { useOrderMutation } from '../orders/useOrderMutation'
 import { stageColumns } from '../orders/ticketRows'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
@@ -636,6 +639,7 @@ export function ProductionOrderDetailPage() {
                 </Box>
               ) : null}
               <SubTicketToolbar order={order} canManage={canManageTickets} locked={locked} />
+              <StoneSkipBar order={order} locked={locked} />
               {order.subTickets.length ? (() => {
                 const selectedTicket =
                   order.subTickets.find((ticket) => ticket.id === selectedSubTicketId) ??
@@ -819,7 +823,7 @@ export function ProductionOrderDetailPage() {
           ) : null}
 
           <Section title="Trạng thái đơn">
-            <StatusTimeline order={order} isBtp={isBtp} />
+            <StatusTimeline order={order} isBtp={isBtp} selectedTicketId={selectedSubTicketId} />
           </Section>
 
           {isBtp ? (
@@ -1138,10 +1142,25 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 /**
  * Quy trình đơn xếp dọc: mỗi lần đổi trạng thái là một dòng theo thứ tự thời gian (kể cả
  * làm lại / ghi lỗi), dòng cuối là trạng thái hiện tại; các bước chưa tới liệt kê mờ phía dưới.
+ *
+ * Đơn đã chia từ 2 phiếu con trở lên: nhật ký của cả đơn chỉ ghi phiếu đi xa nhất, nên tô dòng
+ * cuối là "hiện tại" sẽ làm phiếu chưa làm trông như đang ở khâu đó. Khi đó bảng theo phiếu
+ * con đang chọn ở tab bên cạnh: phần đầu của cả đơn + quy trình riêng của phiếu đó. Chưa chọn
+ * phiếu (tab "Tổng hợp cả đơn") thì không tô trạng thái nào.
  */
-function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp: boolean }) {
+function StatusTimeline({
+  order,
+  isBtp,
+  selectedTicketId,
+}: {
+  order: ProductionOrderDetail
+  isBtp: boolean
+  selectedTicketId: string | null
+}) {
   // API trả log mới nhất trước — đảo lại để đọc từ trên xuống theo thời gian.
   const logs = [...order.statusLogs].reverse()
+  const split = order.subTickets.length >= 2
+  const ticket = split ? order.subTickets.find((item) => item.id === selectedTicketId) : undefined
   // Đơn BTP không qua 3D và Đúc; Sản xuất lỗi là nhánh ngoài luồng nên chỉ hiện khi đã xảy ra.
   const flow = STATUS_TABS.filter(
     (status) =>
@@ -1150,14 +1169,53 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
       status !== 'STONE_DEFECT' &&
       !(isBtp && (status === 'REDO_3D' || status === 'CASTING')),
   )
-  const passed = new Set(logs.map((log) => log.toStatus))
-  // Đơn đang ở Sản xuất lỗi thì không nằm trong luồng — lấy mốc là bước trong luồng gần nhất đã qua.
+
+  const toRow = (log: StatusLog): TicketTimelineRow => ({
+    key: log.id,
+    status: log.toStatus,
+    label: STATUS_META[log.toStatus].label,
+    at: log.changedAt,
+    by: log.changedBy,
+    note: log.note,
+  })
+  // Đơn chia phiếu: dòng của cả đơn = trước khi phiếu nào vào khâu + kết cục chung (Lỗi / Hoàn thiện…).
+  const firstPhase = split ? logs.findIndex((log) => TICKET_PHASE_STATUSES.includes(log.toStatus)) : -1
+  const head = firstPhase >= 0 ? logs.slice(0, firstPhase) : logs
+  const tail =
+    firstPhase >= 0
+      ? logs
+          .slice(firstPhase)
+          .filter((log) => !TICKET_PHASE_STATUSES.includes(log.toStatus) && log.toStatus !== 'WAIT_FILING')
+      : []
+
+  let rows: TicketTimelineRow[]
+  let currentKey: string | undefined
+  if (!split) {
+    rows = logs.map(toRow)
+    currentKey = rows.at(-1)?.key
+  } else if (ticket) {
+    // Phiếu đã chọn: dòng Chờ nguội của cả đơn (kèm ghi chú đúc xong) là dòng đầu, bỏ dòng "start" lặp.
+    const startLog = logs.find((log) => log.toStatus === 'WAIT_FILING')
+    const own = ticketTimeline(ticket, order.stages, startLog)
+    rows = [...head.map(toRow), ...(startLog ? own.slice(1) : own)]
+    currentKey = own.at(-1)?.key
+  } else {
+    rows = [...head, ...tail].map(toRow)
+    currentKey = tail.length ? tail.at(-1)?.id : firstPhase >= 0 ? undefined : head.at(-1)?.id
+  }
+
+  const passed = new Set(rows.map((row) => row.status).filter((status) => status != null))
+  // Mốc các bước chưa tới: trạng thái của phiếu đang xem; đơn đang ở Sản xuất lỗi / chưa chọn phiếu
+  // thì lấy bước trong luồng gần nhất đã qua.
+  const reference = ticket ? ticket.status : order.status
   const anchor =
-    flow.indexOf(order.status) >= 0
-      ? order.status
-      : [...logs].reverse().find((log) => flow.includes(log.toStatus))?.toStatus
+    flow.indexOf(reference) >= 0
+      ? reference
+      : [...rows].reverse().find((row) => row.status != null && flow.includes(row.status))?.status
   const anchorIndex = anchor ? flow.indexOf(anchor) : -1
-  const pending = flow.filter((status, index) => index > anchorIndex && !passed.has(status))
+  const pending = !split || ticket
+    ? flow.filter((status, index) => index > anchorIndex && !passed.has(status))
+    : flow.filter((status, index) => index > (head.length ? flow.indexOf(head.at(-1)!.toStatus) : -1) && !passed.has(status))
 
   return (
     <Table
@@ -1173,6 +1231,13 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
       }}
     >
       <TableHead>
+        {split ? (
+          <TableRow>
+            <TableCell colSpan={3} sx={{ fontWeight: 700 }}>
+              {ticket ? `Phiếu ${ticket.code} · ${ticket.qty} sp` : 'Cả đơn'}
+            </TableCell>
+          </TableRow>
+        ) : null}
         <TableRow>
           <TableCell>Trạng thái</TableCell>
           <TableCell>Thời gian</TableCell>
@@ -1180,34 +1245,27 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
         </TableRow>
       </TableHead>
       <TableBody>
-        {logs.map((log, index) => {
-          const current = index === logs.length - 1
+        {rows.map((row) => {
+          const current = row.key === currentKey
           return (
-            <Fragment key={log.id}>
+            <Fragment key={row.key}>
               <TableRow
                 sx={{
                   ...(current ? { bgcolor: '#f6e9d4' } : null),
-                  ...(log.note ? { '& td': { borderBottom: 'none' } } : null),
+                  ...(row.note ? { '& td': { borderBottom: 'none' } } : null),
                 }}
               >
                 <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: current ? 700 : 400 }}>
-                  <StatusDot status={log.toStatus} />
-                  {STATUS_META[log.toStatus].label}
+                  {row.status ? <StatusDot status={row.status} /> : <Box component="span" sx={{ mr: 1.75 }} />}
+                  {row.label}
                 </TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateShort(log.changedAt)}</TableCell>
-                <TableCell>{log.changedBy ?? '—'}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateShort(row.at)}</TableCell>
+                <TableCell>{row.by ?? '—'}</TableCell>
               </TableRow>
-              {log.note ? (
+              {row.note ? (
                 <TableRow sx={current ? { bgcolor: '#f6e9d4' } : undefined}>
-                  <TableCell
-                    colSpan={3}
-                    sx={{
-                      pt: '0 !important',
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    {log.note}
+                  <TableCell colSpan={3} sx={{ pt: '0 !important', color: 'text.secondary', fontStyle: 'italic' }}>
+                    {row.note}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -1224,6 +1282,13 @@ function StatusTimeline({ order, isBtp }: { order: ProductionOrderDetail; isBtp:
             <TableCell />
           </TableRow>
         ))}
+        {split && !ticket ? (
+          <TableRow>
+            <TableCell colSpan={3} sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+              Đơn đã chia phiếu con — chọn một phiếu ở phần Điều hành sản xuất để xem trạng thái riêng của phiếu đó.
+            </TableCell>
+          </TableRow>
+        ) : null}
       </TableBody>
     </Table>
   )
