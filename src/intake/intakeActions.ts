@@ -19,3 +19,8 @@ export function intakeNeedsCastingTreeSpecs(row: IntakeOrder) {
 export function intakeNeedsCastingSlip(row: IntakeOrder) {
   return row.status === 'WAX_CONFIRMED'
 }
+
+/** Snapshot live có thể chỉ có trạng thái, chưa kèm mã A… của phiếu. */
+export function intakeHasEnteredProduction(row: Pick<IntakeOrder, 'status' | 'productionOrderCode'>) {
+  return row.status === 'WAIT_COOLING' || Boolean(row.productionOrderCode)
+}

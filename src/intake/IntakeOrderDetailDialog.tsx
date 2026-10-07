@@ -1,5 +1,6 @@
 import {
   Alert,
+  Button,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -8,6 +9,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { Link as RouterLink } from 'react-router-dom'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { formatCt } from '../api/inventory'
 import { formatIntakeGram } from './intakeDisplay'
@@ -115,6 +117,18 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
                   </Typography>
                 ) : null}
               </Alert>
+            ) : null}
+
+            {order.productionOrderCode ? (
+              <Button
+                component={RouterLink}
+                to={`/orders/${order.productionOrderCode}`}
+                variant="contained"
+                onClick={onClose}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Xem chi tiết phiếu sản xuất
+              </Button>
             ) : null}
 
             <Divider />

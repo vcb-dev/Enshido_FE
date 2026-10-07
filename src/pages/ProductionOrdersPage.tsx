@@ -454,7 +454,10 @@ export function ProductionOrdersPage() {
           // Bước 7 lên phiếu cho nhiều đơn cùng lúc ở màn Lệnh đúc — tích sẵn đơn này.
           onIntakeCastingSlip: (row) => navigate(`/casting?new=${row.id}`),
           onIntakeCastingSlipIssue: goCastingIssue,
-          onIntakeView: (row) => setIntakeViewTarget(row),
+          onIntakeView: (row) => {
+            if (row.productionOrderCode) navigate(`/orders/${row.productionOrderCode}`)
+            else setIntakeViewTarget(row)
+          },
           onIntakeWarehouseConfirm: (row) => setConfirmTarget(row),
           warehouseConfirmLoadingId: confirmWarehouse.isPending
             ? (confirmWarehouse.variables ?? null)
@@ -528,8 +531,11 @@ export function ProductionOrdersPage() {
       return (intakeStatusList.data?.items ?? []).map((row) => ({ kind: 'intake' as const, row }))
     }
     if (!isMergedView) return (list.data?.items ?? []).map((row) => ({ kind: 'order' as const, row }))
+    const productionIds = new Set(prodPageItems.map((row) => row.id))
     return [
-      ...mergeSlice.pendingOnPage.map((row) => ({ kind: 'intake' as const, row })),
+      ...mergeSlice.pendingOnPage
+        .filter((row) => !productionIds.has(row.id))
+        .map((row) => ({ kind: 'intake' as const, row })),
       ...prodPageItems.map((row) => ({ kind: 'order' as const, row })),
     ]
   }, [
@@ -568,10 +574,12 @@ export function ProductionOrdersPage() {
       <DataTable
         columns={columns}
         rows={tableRows}
-        rowKey={(row) => (row.kind === 'intake' ? `intake-${row.row.id}` : row.row.id)}
+        rowKey={(row) => row.row.id}
         onRowClick={(row) =>
           row.kind === 'intake'
-            ? setIntakeViewTarget(row.row)
+            ? row.row.productionOrderCode
+              ? navigate(`/orders/${row.row.productionOrderCode}`)
+              : setIntakeViewTarget(row.row)
             : navigate(`/orders/${row.row.code}`)
         }
         onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}

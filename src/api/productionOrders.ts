@@ -2,7 +2,20 @@ import { apiFetch } from './auth'
 import type { StockSnapshot } from './inventory'
 import type { IntakeOrderStatus } from './intakeOrders'
 
+export type PreProductionStatus =
+  | 'PENDING_APPROVAL'
+  | 'REJECTED'
+  | 'APPROVED'
+  | 'READY_FOR_PRODUCTION'
+  | 'WAX_PRINTED'
+  | 'PENDING_WAREHOUSE_CONFIRMATION'
+  | 'WAX_CONFIRMED'
+  | 'WAIT_CASTING'
+  | 'CAST_PENDING_CONFIRMATION'
+  | 'CAST_DONE'
+
 export type ProductionStatus =
+  | PreProductionStatus
   | 'NEW'
   | 'REDO_3D'
   | 'CASTING'
@@ -56,8 +69,9 @@ export type ProductionOrderRow = {
   model3dUrl: string | null
   leadTime: string | null
   trackingCode: string | null
-  /** Mã đơn tạo (DH…) khi lệnh sinh từ xác nhận đúc. */
+  /** Mã SX ban đầu của phiếu đi qua luồng tạo đơn. */
   intakeSxCode?: string | null
+  /** Mã đơn hàng DH… trên cùng phiếu sản xuất. */
   intakeOrderCode?: string | null
   closedBy: string
   customerName: string | null
