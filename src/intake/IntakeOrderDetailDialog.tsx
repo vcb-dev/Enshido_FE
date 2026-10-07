@@ -13,7 +13,7 @@ import { Link as RouterLink } from 'react-router-dom'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { formatCt } from '../api/inventory'
 import { formatIntakeGram } from './intakeDisplay'
-import { intakeImageStageSections } from './intakeImages'
+import { intakeCastingTreeImages, intakeDetailImages, intakeProductOnlyImages } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 import { IntakeStatusChip } from './IntakeStatusChip'
 import { RequestTypeChip } from '../orders/OrderChips'
@@ -25,10 +25,28 @@ type IntakeOrderDetailDialogProps = {
 }
 
 export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDialogProps) {
-  const sections = order ? intakeImageStageSections(order) : []
   const waxWeight = order ? formatIntakeGram(order.productWeightGram) : null
   const treeWeight = order ? formatIntakeGram(order.castingTreeWeightGram) : null
   const checkedWeight = order ? formatIntakeGram(order.waxCheckedWeightGram) : null
+  const stoneLine = order
+    ? [
+        order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
+        order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : ''
+  const detailImages = order ? intakeDetailImages(order.images) : []
+  const waxImages = order ? intakeProductOnlyImages(order.images) : []
+  const treeImages = order ? intakeCastingTreeImages(order.images) : []
+  const hasWaxSpecs = Boolean(
+    waxWeight ||
+      checkedWeight ||
+      stoneLine ||
+      order?.hasMold === true ||
+      order?.hasMold === false,
+  )
+  const hasStages = Boolean(detailImages.length || hasWaxSpecs || waxImages.length || treeWeight || treeImages.length)
 
   return (
     <Dialog open={Boolean(order)} onClose={onClose} maxWidth="sm" fullWidth>
@@ -54,15 +72,6 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
               {order.description?.trim() ? (
                 <Typography variant="body2">{order.description}</Typography>
               ) : null}
-              {order.hasMold === true ? (
-                <Typography variant="body2" color="text.secondary">
-                  Đã có khuôn
-                </Typography>
-              ) : order.hasMold === false ? (
-                <Typography variant="body2" color="text.secondary">
-                  Cần vẽ 3D in resin
-                </Typography>
-              ) : null}
               {order.model3dUrl?.trim() ? (
                 <Typography variant="body2">
                   <strong>Link file 3D:</strong>{' '}
@@ -73,33 +82,6 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
                   ) : (
                     order.model3dUrl.trim()
                   )}
-                </Typography>
-              ) : null}
-              {order.stoneCount3d != null || order.stoneWeight3dGram ? (
-                <Typography variant="body2">
-                  <strong>Đá theo 3D:</strong>{' '}
-                  {[
-                    order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
-                    order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '—'}
-                </Typography>
-              ) : null}
-              {waxWeight ? (
-                <Typography variant="body2">
-                  <strong>Trọng lượng sáp:</strong> {waxWeight}
-                </Typography>
-              ) : null}
-              {treeWeight ? (
-                <Typography variant="body2">
-                  <strong>Trọng lượng cây thông:</strong> {treeWeight}
-                </Typography>
-              ) : null}
-              {checkedWeight ? (
-                <Typography variant="body2">
-                  <strong>TL thủ kho cân kiểm:</strong> {checkedWeight}
-                  {order.waxCheckedByName ? ` · ${order.waxCheckedByName}` : null}
                 </Typography>
               ) : null}
             </Stack>
@@ -133,18 +115,72 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
 
             <Divider />
 
-            {sections.length ? (
-              sections.map((section) => (
-                <Stack key={section.status} spacing={1}>
-                  <IntakeStatusChip status={section.status} />
-                  <IntakeImageThumbs label={section.title} images={section.images} />
-                </Stack>
-              ))
-            ) : (
+            {detailImages.length ? (
+              <Stack spacing={1}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Chờ duyệt — ảnh chi tiết
+                </Typography>
+                <IntakeImageThumbs label="Ảnh chi tiết" images={detailImages} />
+              </Stack>
+            ) : null}
+
+            {hasWaxSpecs || waxImages.length ? (
+              <Stack spacing={1}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Số liệu sáp / sản phẩm
+                </Typography>
+                {order.hasMold === true ? (
+                  <Typography variant="body2">
+                    <strong>Khuôn:</strong> Đã có khuôn
+                  </Typography>
+                ) : order.hasMold === false ? (
+                  <Typography variant="body2">
+                    <strong>Khuôn:</strong> Cần vẽ 3D in resin
+                  </Typography>
+                ) : null}
+                {waxWeight ? (
+                  <Typography variant="body2">
+                    <strong>Trọng lượng sáp:</strong> {waxWeight}
+                  </Typography>
+                ) : null}
+                {stoneLine ? (
+                  <Typography variant="body2">
+                    <strong>Đá theo 3D:</strong> {stoneLine}
+                  </Typography>
+                ) : null}
+                {checkedWeight ? (
+                  <Typography variant="body2">
+                    <strong>TL thủ kho cân kiểm:</strong> {checkedWeight}
+                    {order.waxCheckedByName ? ` · ${order.waxCheckedByName}` : null}
+                  </Typography>
+                ) : null}
+                {waxImages.length ? <IntakeImageThumbs label="Số liệu sáp / sản phẩm" images={waxImages} /> : null}
+              </Stack>
+            ) : null}
+
+            {treeWeight || treeImages.length ? (
+              <Stack spacing={1}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Cấy cây thông
+                </Typography>
+                {treeWeight ? (
+                  <Typography variant="body2">
+                    <strong>Trọng lượng cây thông:</strong> {treeWeight}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Chưa có số liệu.
+                  </Typography>
+                )}
+                {treeImages.length ? <IntakeImageThumbs label="Cấy cây thông" images={treeImages} /> : null}
+              </Stack>
+            ) : null}
+
+            {!hasStages ? (
               <Typography variant="body2" color="text.secondary">
-                Chưa có ảnh công đoạn nào.
+                Chưa có số liệu hay ảnh công đoạn.
               </Typography>
-            )}
+            ) : null}
           </Stack>
         ) : null}
       </DialogContent>

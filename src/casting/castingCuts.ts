@@ -30,6 +30,11 @@ function asProductionStatus(value: string | null | undefined): ProductionStatus 
   return value in STATUS_META ? (value as ProductionStatus) : null
 }
 
+/** Trạng thái hiện tại của một đơn trên phiếu đúc / sau cắt cây. */
+export function slipOrderStatus(line: CastingSlip['orders'][number]): ProductionStatus | null {
+  return asProductionStatus(line.orderStatus ?? line.status)
+}
+
 /** Trạng thái lộ trình các đơn trên phiếu — sau cắt cây hiện từ Chờ nguội trở đi. */
 export function slipJourneyStatuses(slip: CastingSlip): ProductionStatus[] {
   const seen = new Set<ProductionStatus>()

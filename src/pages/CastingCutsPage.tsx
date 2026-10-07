@@ -110,7 +110,6 @@ export function CastingCutsPage() {
       toast.success(`Phiếu ${updated.code}: đã xác nhận — Đúc xong`)
       applyCastingSlipUpdate(queryClient, updated)
       scheduleMyTicketsRefresh(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -123,10 +122,7 @@ export function CastingCutsPage() {
       toast.success(`Phiếu ${updated.code}: đã cắt cây thông, ${updated.orders.length} đơn chuyển Chờ nguội`)
       applyCastingSlipUpdate(queryClient, updated)
       scheduleMyTicketsRefresh(queryClient)
-      // Cập nhật phiếu và lệnh sản xuất sau khi cắt cây.
-      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
       invalidateBtpStock(queryClient)
       invalidateNvlWarehouse(queryClient)
     },
@@ -139,9 +135,7 @@ export function CastingCutsPage() {
       toast.success(`Đã cắt cây thông: ${updated.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn chuyển Chờ nguội`)
       for (const slip of updated) applyCastingSlipUpdate(queryClient, slip)
       scheduleMyTicketsRefresh(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['production-order-lookups'] })
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
       invalidateBtpStock(queryClient)
       invalidateNvlWarehouse(queryClient)
     },
@@ -153,7 +147,6 @@ export function CastingCutsPage() {
       toast.success(`Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc).`)
       applyCastingSlipRejected(queryClient, { ...failedSlip, status: 'CAST_FAILED' }, redo)
       scheduleMyTicketsRefresh(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
       dialog.close()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -369,10 +362,12 @@ export function CastingCutsPage() {
         onPageSizeChange={table.setPageSize}
         rowsLabel="phiếu"
         sx={{ flex: { md: 1 } }}
+        onRowClick={(row) => dialog.openView(row)}
       />
       <CastingSlipViewDialog
         open={dialog.open && dialog.kind === 'view'}
         slip={dialog.row}
+        variant="cut"
         canConfirm={canConfirm}
         canCast={false}
         busy={confirm.isPending || cut.isPending}

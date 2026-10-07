@@ -17,7 +17,7 @@ export function CastingCutSelectionDialog({ initialSelection, onClose, onSelect 
     queryKey: ['casting-slips', 'cut-selection', 'awaiting-cut', search, page],
     queryFn: () => listCastingSlipsApi({ status: 'DONE', awaitingCut: true, search, page, pageSize: 25 }),
     placeholderData: keepPreviousData,
-    staleTime: 0,
+    staleTime: 15_000,
   })
   const rows = (list.data?.items ?? []).flatMap((slip) => [slip, ...(slip.redos ?? [])])
     .filter((slip) => canCutCastingSlip(slip))

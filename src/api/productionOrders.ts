@@ -421,6 +421,13 @@ export type ProductionOrderDetail = Omit<
   stoneCount: number | null
   stoneWeight: string | null
   weight: string | null
+  hasMold?: boolean | null
+  /** TL sáp người dùng nhập ở bước số liệu sáp / sản phẩm. */
+  productWeightGram?: string | null
+  /** TL cây thông lúc cấy cây. */
+  castingTreeWeightGram?: string | null
+  waxCheckedWeightGram?: string | null
+  waxCheckedByName?: string | null
   laserEngraving: string | null
   otherRequirements: string | null
   nvlLines: ProductionNvlWorkLine[]
@@ -434,6 +441,9 @@ export type ProductionOrderDetail = Omit<
     cutAt: string
     qty: number
     weight: string
+    /** Phần cây còn lại về NVL — cùng form cắt cây thông. */
+    restWeightGram?: string | null
+    restImages?: Array<Pick<OrderImage, 'url' | 'publicId' | 'width' | 'height'>>
     /** Mã phôi trên kho BTP và phần phôi của đơn chưa xuất cho thợ. */
     btpMaterialId: string | null
     leftQty: string | null

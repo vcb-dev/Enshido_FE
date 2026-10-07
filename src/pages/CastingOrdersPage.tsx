@@ -1,9 +1,10 @@
-import { canCutCastingSlip } from '../casting/castingCuts'
+import { canCutCastingSlip, slipJourneyStatuses, slipOrderStatus } from '../casting/castingCuts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -21,6 +22,7 @@ import { toast } from 'sonner'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   confirmCastingSlipApi,
+  getCastingSlipApi,
   rejectCastingSlipApi,
   createCastingSlipApi,
   issueCastingSlipApi,
@@ -53,6 +55,7 @@ import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
+import { StatusChip } from '../orders/OrderChips'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import {
   applyCastingSlipCreated,
@@ -590,6 +593,89 @@ export function CastingOrdersPage() {
   )
 }
 
+function slipImageThumbs(images: CastingSlipImage[], kind: 'PRODUCT' | 'CASTING_TREE' | 'CUT_BLANK') {
+  return images.map((image, index) => ({
+    kind,
+    url: image.url,
+    publicId: image.publicId,
+    width: image.width,
+    height: image.height,
+    sortOrder: index,
+  }))
+}
+
+function hasCutData(slip: CastingSlip) {
+  return slip.restWeightGram != null || slip.orders.some((line) => line.blankQty != null)
+}
+
+/** Các trường đúng form cắt cây thông: số phôi, TL phôi, ảnh cân phôi, phần cây còn lại, ảnh cây còn lại. */
+export function CastingSlipCutFields({ slip }: { slip: CastingSlip }) {
+  if (!hasCutData(slip)) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        Chưa cắt cây thông.
+      </Typography>
+    )
+  }
+  return (
+    <Stack spacing={2}>
+      {slip.orders.map((line) => {
+        const blankImages = line.blankImages ?? []
+        const status = slipOrderStatus(line)
+        return (
+          <Stack
+            key={line.intakeOrderId}
+            spacing={0.75}
+            sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+          >
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="subtitle2">
+                {line.code}
+                {line.productName ? ` · ${line.productName}` : ''}
+              </Typography>
+              {status ? <StatusChip status={status} /> : null}
+            </Stack>
+            <Typography variant="body2">
+              <strong>Số phôi:</strong> {line.blankQty ?? '—'}
+            </Typography>
+            <Typography variant="body2">
+              <strong>Trọng lượng phôi:</strong>{' '}
+              {line.blankWeightGram != null && line.blankWeightGram !== ''
+                ? `${formatGram(line.blankWeightGram)} g`
+                : '—'}
+            </Typography>
+            {blankImages.length ? (
+              <IntakeImageThumbs label="Ảnh cân phôi" images={slipImageThumbs(blankImages, 'CUT_BLANK')} />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Chưa có ảnh cân phôi.
+              </Typography>
+            )}
+          </Stack>
+        )
+      })}
+      <Stack spacing={0.75}>
+        <Typography variant="body2">
+          <strong>Phần cây còn lại:</strong>{' '}
+          {slip.restWeightGram != null && slip.restWeightGram !== ''
+            ? `${formatGram(slip.restWeightGram)} g`
+            : '—'}
+        </Typography>
+        {slip.restImages.length ? (
+          <IntakeImageThumbs
+            label="Ảnh cân phần cây còn lại"
+            images={slipImageThumbs(slip.restImages, 'CASTING_TREE')}
+          />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Chưa có ảnh cân phần cây còn lại.
+          </Typography>
+        )}
+      </Stack>
+    </Stack>
+  )
+}
+
 export function CastingSlipViewDialog({
   open,
   slip,
@@ -602,6 +688,7 @@ export function CastingSlipViewDialog({
   onReject,
   onEnterResult,
   onClose,
+  variant = 'full',
 }: {
   open: boolean
   slip: CastingSlip | null
@@ -614,7 +701,16 @@ export function CastingSlipViewDialog({
   onReject: (slip: CastingSlip) => void
   onEnterResult: (slip: CastingSlip) => void
   onClose: () => void
+  /** `cut` = chỉ số liệu form cắt cây thông (màn Cắt cây thông). */
+  variant?: 'full' | 'cut'
 }) {
+  const fresh = useQuery({
+    queryKey: ['casting-slip', slip?.id],
+    queryFn: () => getCastingSlipApi(slip!.id),
+    enabled: open && Boolean(slip?.id),
+    staleTime: 30_000,
+  })
+  const view = fresh.data ?? slip
   const thumbs = useMemo(
     () =>
       (slip?.images ?? []).map((image, index) => ({
@@ -643,10 +739,22 @@ export function CastingSlipViewDialog({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ textAlign: 'center', fontWeight: 800 }}>
-        PHIẾU ĐÚC — {slip?.code ?? ''}
+        {variant === 'cut' ? 'CẮT CÂY THÔNG' : 'PHIẾU ĐÚC'} — {view?.code ?? slip?.code ?? ''}
       </DialogTitle>
       <DialogContent>
-        {slip ? (
+        {view && variant === 'cut' ? (
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              {slipJourneyStatuses(view).length
+                ? slipJourneyStatuses(view).map((status) => (
+                    <StatusChip key={status} status={status} />
+                  ))
+                : <SlipStatusChip status={view.status} />}
+              {fresh.isFetching && !fresh.data ? <CircularProgress size={16} /> : null}
+            </Stack>
+            <CastingSlipCutFields slip={view} />
+          </Stack>
+        ) : view ? (
           <Stack spacing={2}>
             <Box>
               <SlipStatusChip status={slip.status} />
@@ -771,7 +879,7 @@ export function CastingSlipViewDialog({
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Đóng</Button>
-        {slip && canConfirm ? (
+        {slip && canConfirm && variant !== 'cut' ? (
           <Button variant="outlined" href={`/casting/${slip.code}/print`} target="_blank">
             {slip.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
           </Button>

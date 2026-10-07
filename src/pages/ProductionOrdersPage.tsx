@@ -73,6 +73,7 @@ import {
   SUB_TICKET_STATE_META,
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
+import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
 import { deadlineWarning } from '../orders/deadline'
 
 type ProductionListRow =
@@ -141,6 +142,7 @@ export function ProductionOrdersPage() {
   const [confirmTarget, setConfirmTarget] = useState<IntakeOrder | null>(null)
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
+  const [orderViewTarget, setOrderViewTarget] = useState<ProductionOrderRow | null>(null)
   const table = useTableParams({
     pageSize: 25,
     filters: {
@@ -445,7 +447,10 @@ export function ProductionOrdersPage() {
     () =>
       orderColumns(
         {
-          onView: (row) => navigate(`/orders/${row.code}`),
+          onView: (row) => {
+            if (row.status === 'WAIT_FILING') setOrderViewTarget(row)
+            else navigate(`/orders/${row.code}`)
+          },
           onIntakeApprove: (row) => setApproveTarget(row),
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
@@ -454,10 +459,7 @@ export function ProductionOrdersPage() {
           // Bước 7 lên phiếu cho nhiều đơn cùng lúc ở màn Lệnh đúc — tích sẵn đơn này.
           onIntakeCastingSlip: (row) => navigate(`/casting?new=${row.id}`),
           onIntakeCastingSlipIssue: goCastingIssue,
-          onIntakeView: (row) => {
-            if (row.productionOrderCode) navigate(`/orders/${row.productionOrderCode}`)
-            else setIntakeViewTarget(row)
-          },
+          onIntakeView: (row) => setIntakeViewTarget(row),
           onIntakeWarehouseConfirm: (row) => setConfirmTarget(row),
           warehouseConfirmLoadingId: confirmWarehouse.isPending
             ? (confirmWarehouse.variables ?? null)
@@ -701,6 +703,10 @@ export function ProductionOrdersPage() {
       <IntakeOrderDetailDialog
         order={intakeViewTarget}
         onClose={() => setIntakeViewTarget(null)}
+      />
+      <ProductionOrderViewDialog
+        row={orderViewTarget}
+        onClose={() => setOrderViewTarget(null)}
       />
     </Stack>
   )
@@ -956,6 +962,21 @@ function orderColumns(
       filter: filters.search,
       render: (row) => {
         if (row.kind === 'intake') {
+          const productionCode = row.row.productionOrderCode
+          if (row.row.status === 'WAIT_COOLING' && productionCode) {
+            return (
+              <Link
+                component={RouterLink}
+                to={`/orders/${productionCode}`}
+                underline="hover"
+                color="inherit"
+                sx={{ fontWeight: 700 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.row.sxCode}
+              </Link>
+            )
+          }
           return row.row.sxCode
         }
         const order = row.row

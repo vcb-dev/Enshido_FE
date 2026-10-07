@@ -47,8 +47,8 @@ export function useWorkflowLiveSync(enabled: boolean) {
     queryKey: ['workflow-revision'],
     queryFn: getWorkflowRevisionApi,
     enabled,
-    staleTime: 6_000,
-    refetchInterval: enabled ? 8_000 : false,
+    staleTime: 10_000,
+    refetchInterval: enabled ? 12_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })

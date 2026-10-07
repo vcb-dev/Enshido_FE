@@ -24,6 +24,7 @@ function updateSlipInTree(slip: CastingSlip, slipId: string, next: CastingSlip):
 }
 
 export function applyCastingSlipCreated(queryClient: QueryClient, slip: CastingSlip) {
+  queryClient.setQueryData(['casting-slip', slip.id], slip)
   patchCastingSlipLists(queryClient, (items) => {
     if (items.some((row) => row.id === slip.id)) {
       return items.map((row) => (row.id === slip.id ? slip : row))
@@ -36,6 +37,7 @@ export function applyCastingSlipCreated(queryClient: QueryClient, slip: CastingS
 }
 
 export function applyCastingSlipUpdate(queryClient: QueryClient, updated: CastingSlip) {
+  queryClient.setQueryData(['casting-slip', updated.id], updated)
   patchCastingSlipLists(queryClient, (items) =>
     items.map((row) => updateSlipInTree(row, updated.id, updated)),
   )

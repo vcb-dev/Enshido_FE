@@ -17,6 +17,8 @@ export type CastingSlipOrderLine = {
   /** Số liệu phôi đã cắt; có thể có trên phiếu cũ thiếu trọng lượng cây còn lại. */
   blankQty?: number | null
   blankWeightGram?: string | null
+  /** Ảnh cân phôi lúc cắt cây thông. */
+  blankImages?: CastingSlipImage[]
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
 }
