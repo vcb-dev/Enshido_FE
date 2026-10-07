@@ -43,6 +43,7 @@ import {
   typedDecimalAsComma,
   ctToGram,
   formatCt,
+  gramToCt,
   type StockSnapshot,
 } from '../api/inventory'
 import {
@@ -58,6 +59,7 @@ import {
 } from '../components/ui'
 import { CatalogPicker, type CatalogPickerItem } from './CatalogPicker'
 import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from './catalog'
+import { stoneAmountText, stoneQtyFromCt, stoneUnitKind } from './stoneInput'
 import { EarlyStoneReturnDialog } from './EarlyStoneReturnDialog'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -100,6 +102,23 @@ export function stageSources(stage: StageCode | null | undefined): StockSource[]
   if (stage === 'FILING') return ['BTP']
   if (stage === 'STONE_SETTING') return ['NVL', 'BTP']
   return []
+}
+
+/**
+ * Kho thợ được xin thêm: Nguội xin phôi BTP, Vào đá chỉ xin đá (kho NVL chính) — BTP đã nguội
+ * xuất lúc giao khâu nên không xin lại.
+ */
+function requestSources(stage: StageCode | null | undefined): StockSource[] {
+  if (stage === 'FILING') return ['BTP']
+  if (stage === 'STONE_SETTING') return ['NVL']
+  return []
+}
+
+/** Tên thứ được xin theo khâu — nhãn nút / hộp xin thêm. */
+function requestNoun(stage: StageCode | null | undefined) {
+  if (stage === 'STONE_SETTING') return 'đá'
+  if (stage === 'FILING') return 'BTP'
+  return 'NVL'
 }
 
 /** Khâu có xuất kho cho thợ (và thợ được xin thêm) hay không. */
@@ -170,8 +189,8 @@ export function TicketMaterialsCell({ materials }: { materials: TicketMaterials 
 
 // ---------------------------------------------------------------- Thợ xin xuất
 
-type RequestValues = { materialId: string; qty: string; note: string }
-const EMPTY_REQUEST: RequestValues = { materialId: '', qty: '', note: '' }
+type RequestValues = { materialId: string; qty: string; weight: string; note: string }
+const EMPTY_REQUEST: RequestValues = { materialId: '', qty: '', weight: '', note: '' }
 
 type StockPick = { id: string; unit: string; item: CatalogPickerItem }
 
@@ -195,7 +214,9 @@ export function MaterialRequestDialog({
   const materialId = useWatch({ control: form.control, name: 'materialId' })
 
   const stageLabel = stage ? STAGE_LABEL[stage] : null
-  const sources = stageSources(stage)
+  const sources = requestSources(stage)
+  const noun = requestNoun(stage)
+  const stoneOnly = stage === 'STONE_SETTING'
   const nvlOptions = useQuery({
     queryKey: ['nvl-options'],
     queryFn: () => listNvlOptionsApi(),
@@ -225,20 +246,26 @@ export function MaterialRequestDialog({
       },
     })
     return [
-      ...(sources.includes('NVL') ? (nvlOptions.data ?? []) : []).map((item) =>
-        pick('Kho NVL chính', item, item.images),
-      ),
+      ...(sources.includes('NVL') ? (nvlOptions.data ?? []) : [])
+        // Vào đá chỉ xin đá: bỏ các mã bạc / NVL khác của kho NVL chính.
+        .filter((item) => !stoneOnly || suggestKindOf(item.unit, item.metalKind) === 'STONE')
+        .map((item) => pick('Kho NVL chính', item, item.images)),
       ...(sources.includes('BTP') ? (btpOptions.data ?? []) : []).map((item) => pick('Kho BTP', item, item.images)),
     ]
-  }, [nvlOptions.data, btpOptions.data, sources.join()])
+  }, [nvlOptions.data, btpOptions.data, sources.join(), stoneOnly])
   const pickerItems = useMemo(() => picks.map((pick) => pick.item), [picks])
   const selected = picks.find((pick) => pick.id === materialId)
+  // Đá (Vào đá): mã ct / g chỉ nhập TL; mã viên nhập cả số viên lẫn TL. Khâu Nguội xin BTP theo số lượng.
+  const stoneUnit = stoneOnly ? stoneUnitKind(selected?.unit) : null
+  const weightOnly = stoneUnit === 'weight'
+  const needsWeight = stoneOnly
+  const needsQty = !weightOnly
 
   useEffect(() => {
     if (open) form.reset(EMPTY_REQUEST)
   }, [open, form])
 
-  const title = `Xin xuất NVL — phiếu ${ticketCode}`
+  const title = `Xin xuất ${noun} — phiếu ${ticketCode}`
   return (
     <CrudDialogShell<RequestValues>
       open={open}
@@ -246,7 +273,13 @@ export function MaterialRequestDialog({
       titles={{ create: title, edit: title, view: title }}
       form={form}
       onSubmit={(values) =>
-        onSave({ materialId: values.materialId, qty: values.qty, note: values.note.trim() || undefined })
+        onSave({
+          materialId: values.materialId,
+          // Đá ct / g chỉ gửi TL (BE suy số lượng); đá viên gửi cả hai; BTP chỉ số lượng.
+          ...(needsQty ? { qty: values.qty } : {}),
+          ...(needsWeight ? { weight: ctToGram(values.weight) } : {}),
+          note: values.note.trim() || undefined,
+        })
       }
       saving={saving}
       submitLabel="Gửi yêu cầu"
@@ -255,7 +288,7 @@ export function MaterialRequestDialog({
       onExited={() => undefined}
     >
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Xin thêm bạc / đá cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}.{sourcesNote(stage)}
+        Xin thêm {noun} cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}.{sourcesNote(stage)}
       </Typography>
       <Controller
         control={form.control}
@@ -265,7 +298,7 @@ export function MaterialRequestDialog({
           <CatalogPicker
             value={field.value}
             options={pickerItems}
-            label="Mã NVL"
+            label={`Mã ${noun}`}
             placeholder="Tìm theo mã hoặc tên"
             loadingText="Đang tải kho…"
             noOptionsText="Không có mã còn tồn"
@@ -279,12 +312,40 @@ export function MaterialRequestDialog({
         )}
       />
       <FormRow columns={2}>
-        <FormQtyField<RequestValues>
-          name="qty"
-          label={`Số lượng xin${selected ? ` (${selected.unit})` : ''}`}
-          required
-          rules={{ validate: (value) => Number(value) > 0 || 'Số lượng phải lớn hơn 0' }}
-        />
+        {needsQty ? (
+          <FormQtyField<RequestValues>
+            name="qty"
+            label={
+              stoneUnit === 'count'
+                ? 'Số viên xin (theo nhãn gói)'
+                : `Số lượng xin${selected ? ` (${selected.unit})` : ''}`
+            }
+            required
+            rules={{
+              validate: (value) =>
+                !(Number(value) > 0)
+                  ? 'Số lượng phải lớn hơn 0'
+                  : stoneUnit === 'count' && !Number.isInteger(Number(value))
+                    ? 'Số viên phải là số nguyên'
+                    : true,
+            }}
+          />
+        ) : null}
+        {needsWeight ? (
+          <FormQtyField<RequestValues>
+            name="weight"
+            label="TL xin (ct)"
+            required
+            helperText={
+              weightOnly
+                ? `Đá tính theo ${selected?.unit} — chỉ nhập trọng lượng`
+                : stoneUnit === 'count'
+                  ? 'Đá tính theo viên — nhập cả số viên lẫn TL'
+                  : undefined
+            }
+            rules={{ validate: (value) => Number(value) > 0 || 'Trọng lượng phải lớn hơn 0' }}
+          />
+        ) : null}
         <FormTextField<RequestValues> name="note" label="Ghi chú" placeholder="vd thiếu bạc hàn khoá" />
       </FormRow>
     </CrudDialogShell>
@@ -313,20 +374,23 @@ export function IssueMaterialDialog({
   const kind = useWatch({ control: form.control, name: 'kind' })
   const qty = useWatch({ control: form.control, name: 'qty' })
   const unit = request?.material.unit ?? ''
-  const countUnit = COUNT_UNITS.has(unit.trim().toLowerCase())
   const blankQty = request?.blankLeft?.qty != null ? Number(request.blankLeft.qty) : null
   const blankWeight = request?.blankLeft?.weight != null ? Number(request.blankLeft.weight) : null
   /** Đá ở Vào đá của phiếu con: chỉ giữ chỗ, QC cân gói thừa, thủ kho xác nhận mới xuất kho (khớp BE). */
   const holdMode = kind === 'STONE' && request?.stage === 'STONE_SETTING' && request.subTicketNo != null
-  /** Cấp đá tính theo ct / g: chỉ nhập TL gói, số lượng cấp tự suy từ TL (không có ô Số lượng). */
-  const weightOnly = holdMode && !countUnit
+  const stoneKind = kind === 'STONE'
+  /** Đá tính theo ct / g: chỉ nhập TL (ct), số lượng tự suy từ TL (không có ô Số lượng). */
+  const weightOnly = stoneKind && stoneUnitKind(unit) === 'weight'
+  /** Đá tính theo viên: nhập cả số viên (số lượng) lẫn TL; số viên theo nhãn gói chính là số lượng. */
+  const countStone = stoneKind && stoneUnitKind(unit) === 'count'
 
   useEffect(() => {
     if (!request) return
     form.reset({
       kind: suggestedKind ?? request.kind,
       qty: request.requestedQty,
-      weight: '',
+      // Thợ đã xin kèm TL (đá) thì điền sẵn, kho cân lại sửa được; TL lưu theo g, ô nhập theo ct.
+      weight: request.requestedWeight ? gramToCt(request.requestedWeight) : '',
       stoneCount: '',
     })
   }, [request, suggestedKind, form])
@@ -338,16 +402,12 @@ export function IssueMaterialDialog({
     }
   }, [kind, qty, unit, form])
 
-  // Đá cân TL theo ct (gửi API đổi ra g). Cấp đá tính theo ct / g: số lượng suy từ TL gói —
-  // kho chỉ cần cân, vẫn sửa được.
-  const stoneKind = kind === 'STONE'
+  // Đá cân TL theo ct (gửi API đổi ra g). Đá tính theo ct / g: số lượng suy từ TL — kho chỉ cần cân.
   const weight = useWatch({ control: form.control, name: 'weight' })
-  const unitKey = unit.trim().toLowerCase()
   useEffect(() => {
-    if (!holdMode || !(Number(weight) > 0)) return
-    if (unitKey === 'ct') form.setValue('qty', weight)
-    else if (['g', 'gr', 'gram', 'gam'].includes(unitKey)) form.setValue('qty', ctToGram(weight))
-  }, [holdMode, weight, unitKey, form])
+    if (!weightOnly || !(Number(weight) > 0)) return
+    form.setValue('qty', stoneQtyFromCt(unit, weight))
+  }, [weightOnly, weight, unit, form])
 
   const title = request ? `${holdMode ? 'Cấp đá' : 'Xuất NVL'} cho phiếu ${request.ticketCode}` : ''
   return (
@@ -372,7 +432,10 @@ export function IssueMaterialDialog({
     >
       {request ? (
         <Alert severity="info" sx={{ mt: 1 }}>
-          {request.requestedByName} xin <b>{formatQty(request.requestedQty)} {unit}</b>{' '}
+          {request.requestedByName} xin{' '}
+          <b>
+            {stoneAmountText({ qty: request.requestedQty, weight: request.requestedWeight, unit })}
+          </b>{' '}
           {materialLabel(request.material)} ({request.material.warehouseName})
           {request.stage ? ` cho khâu ${STAGE_LABEL[request.stage]}` : ''}.
           {request.note ? ` Ghi chú: ${request.note}` : ''}
@@ -396,13 +459,17 @@ export function IssueMaterialDialog({
         ) : (
           <FormQtyField<IssueValues>
             name="qty"
-            label={holdMode ? 'Số viên cấp (theo nhãn gói)' : `Số lượng xuất (${unit})`}
+            label={
+              countStone
+                ? `Số viên ${holdMode ? 'cấp' : 'xuất'} (theo nhãn gói)`
+                : `Số lượng ${holdMode ? 'cấp' : 'xuất'} (${unit})`
+            }
             required
             helperText={blankQty != null ? `Phôi của đơn còn ${formatQty(String(blankQty))} ${unit}` : undefined}
             rules={{
               validate: (value) => {
                 if (!(Number(value) > 0)) return 'Số lượng phải lớn hơn 0'
-                if (holdMode && !Number.isInteger(Number(value))) return 'Số viên phải là số nguyên'
+                if (countStone && !Number.isInteger(Number(value))) return 'Số viên phải là số nguyên'
                 if (blankQty != null && Number(value) > blankQty) {
                   return `Phôi của đơn chỉ còn ${formatQty(String(blankQty))} ${unit}`
                 }
@@ -415,8 +482,8 @@ export function IssueMaterialDialog({
       <FormRow columns={2}>
         <FormQtyField<IssueValues>
           name="weight"
-          label={holdMode ? 'TL cả gói đá (ct)' : `TL cân lúc xuất (${stoneKind ? 'ct' : 'g'})`}
-          required={kind === 'METAL' || holdMode}
+          label={stoneKind ? (holdMode ? 'TL cả gói đá (ct)' : 'TL đá xuất (ct)') : 'TL cân lúc xuất (g)'}
+          required={kind === 'METAL' || stoneKind}
           helperText={
             blankWeight != null
               ? `Phôi của đơn còn ${formatQty(String(blankWeight))} g`
@@ -426,14 +493,16 @@ export function IssueMaterialDialog({
                   ? `Đá tính theo ${unit} — SL cấp ${formatQty(qty || '0')} ${unit} suy từ TL gói`
                   : holdMode
                     ? 'Mốc để tính đá đã dùng khi QC cân gói thừa'
-                    : 'Không bắt buộc'
+                    : stoneKind
+                      ? 'Đá luôn cân TL — mã tính theo viên nhập cả số viên lẫn TL'
+                      : 'Không bắt buộc'
           }
           rules={{
             // `required` đổi theo loại NVL — ghi đè luật cũ react-hook-form còn giữ; luật thật nằm trong validate.
             required: false,
             validate: (value) => {
               if (kind === 'METAL' && !(Number(value) > 0)) return 'Bạc phải cân TL xuất'
-              if (holdMode && !(Number(value) > 0)) return 'Cân cả gói đá trước khi cấp'
+              if (stoneKind && !(Number(value) > 0)) return holdMode ? 'Cân cả gói đá trước khi cấp' : 'Cân đá trước khi xuất'
               if (blankWeight != null && Number(value) > blankWeight) {
                 return `Phôi của đơn chỉ còn ${formatQty(String(blankWeight))} g`
               }
@@ -441,13 +510,13 @@ export function IssueMaterialDialog({
             },
           }}
         />
-        {kind === 'STONE' && !(holdMode && countUnit) ? (
+        {stoneKind && !countStone ? (
           <FormTextField<IssueValues>
             name="stoneCount"
             label="Số viên đá (theo nhãn gói)"
             type="number"
-            placeholder={countUnit ? `mặc định = số lượng xuất` : 'Không bắt buộc'}
-            helperText={countUnit ? undefined : 'Đá tính theo TL — không đếm viên thì để trống'}
+            placeholder="Không bắt buộc"
+            helperText="Đá tính theo TL — không đếm viên thì để trống"
             rules={{
               validate: (value) =>
                 !value || (Number.isInteger(Number(value)) && Number(value) > 0) || 'Số viên phải từ 1',
@@ -543,7 +612,7 @@ export function MaterialRequestsCard({
   const create = useOrderMutation(
     code,
     (payload: MaterialRequestPayload) => requestMaterialApi(code, ticketNo, payload),
-    'Đã gửi yêu cầu xuất NVL',
+    `Đã gửi yêu cầu xuất ${requestNoun(openEntry?.stage)}`,
   )
   const cancel = useOrderMutation(code, (id: string) => cancelMaterialRequestApi(id), 'Đã huỷ yêu cầu')
   const issue = useOrderMutation(
@@ -560,7 +629,7 @@ export function MaterialRequestsCard({
   const returnStone = useOrderMutation(
     code,
     (payload: EarlyStoneReturnPayload) => returnStoneEarlyApi(code, openEntry?.id ?? '', payload),
-    'Đã nhận lại túi đá — phần trả về kho đã nhả giữ chỗ',
+    'Đã ghi trả lại túi đá cho thủ kho — phần trả về kho đã nhả giữ chỗ',
   )
 
   const holder = openEntry && !openEntry.submittedAt && (openEntry.craftsmanUserId === userId || isAdmin)
@@ -587,12 +656,12 @@ export function MaterialRequestsCard({
         <Stack direction="row" spacing={1}>
           {canReturnStone ? (
             <Button size="small" variant="outlined" onClick={() => setReturningStone(true)}>
-              Nhận lại túi đá
+              Trả lại túi đá cho thủ kho
             </Button>
           ) : null}
           {canRequest ? (
             <Button size="small" variant="contained" onClick={() => setRequesting(true)}>
-              Xin xuất NVL
+              Xin xuất {requestNoun(openEntry?.stage)}
             </Button>
           ) : null}
         </Stack>
@@ -713,7 +782,11 @@ export function MaterialRequestsCard({
                         </Typography>
                       ) : (
                         <>
-                          {formatQty(request.requestedQty)} {request.material.unit}
+                          {stoneAmountText({
+                            qty: request.requestedQty,
+                            weight: request.requestedWeight,
+                            unit: request.material.unit,
+                          })}
                         </>
                       )}
                     </TableCell>
@@ -988,7 +1061,10 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
           const line = values[index] ?? EMPTY_HANDOVER_LINE
           const selected = picks.find((pick) => pick.id === line.materialId)
           const unit = selected?.unit ?? ''
-          const countUnit = COUNT_UNITS.has(unit.trim().toLowerCase())
+          // Đá: mã ct / g chỉ nhập TL (số lượng suy từ TL), mã viên nhập cả số viên lẫn TL.
+          const stoneUnit = line.kind === 'STONE' ? stoneUnitKind(unit) : null
+          const weightOnly = stoneUnit === 'weight'
+          const countStone = stoneUnit === 'count'
           const name = (key: keyof HandoverMaterialLine) => `materials.${index}.${key}` as const
           return (
             <Box
@@ -1018,6 +1094,10 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                       if (chosen) {
                         const kind = chosen.kind === 'STONE' && !stoneStage ? 'OTHER' : chosen.kind
                         setValue(name('kind'), kind)
+                        const typed = values[index]?.weight
+                        if (kind === 'STONE' && stoneUnitKind(chosen.unit) === 'weight' && Number(typed) > 0) {
+                          setValue(name('qty'), stoneQtyFromCt(chosen.unit, typed))
+                        }
                       }
                     }}
                   />
@@ -1043,52 +1123,60 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                     />
                   )}
                 />
-                <Controller
-                  control={control}
-                  name={name('qty')}
-                  rules={{
-                    validate: (value) => {
-                      if (!(Number(value) > 0)) return 'SL phải lớn hơn 0'
-                      if (blank && line.materialId === blank.materialId && blankTotals.qty > blank.leftQty) {
-                        return `Phôi của đơn chỉ còn ${formatQty(String(blank.leftQty))} ${unit || 'chiếc'}`
-                      }
-                      return true
-                    },
-                  }}
-                  render={({ field: input, fieldState }) => (
-                    <TextInput
-                      label={`SL xuất${unit ? ` (${unit})` : ''}`}
-                      required
-                      value={formatQtyInput(String(input.value ?? ''))}
-                      inputRef={input.ref}
-                      slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                      errorText={fieldState.error?.message}
-                      onChange={(event) => {
-                        const next = parseQtyInput(
-                          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
-                        )
-                        input.onChange(next)
-                        if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
-                          setValue(name('weight'), next)
+                {weightOnly ? (
+                  <Box />
+                ) : (
+                  <Controller
+                    control={control}
+                    name={name('qty')}
+                    rules={{
+                      validate: (value) => {
+                        if (!(Number(value) > 0)) return 'SL phải lớn hơn 0'
+                        if (countStone && !Number.isInteger(Number(value))) return 'Số viên phải là số nguyên'
+                        if (blank && line.materialId === blank.materialId && blankTotals.qty > blank.leftQty) {
+                          return `Phôi của đơn chỉ còn ${formatQty(String(blank.leftQty))} ${unit || 'chiếc'}`
                         }
-                      }}
-                      onPaste={(event) => {
-                        event.preventDefault()
-                        const next = pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text'))
-                        input.onChange(next)
-                        if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
-                          setValue(name('weight'), next)
-                        }
-                      }}
-                    />
-                  )}
-                />
+                        return true
+                      },
+                    }}
+                    render={({ field: input, fieldState }) => (
+                      <TextInput
+                        label={countStone ? 'Số viên' : `SL xuất${unit ? ` (${unit})` : ''}`}
+                        required
+                        value={formatQtyInput(String(input.value ?? ''))}
+                        inputRef={input.ref}
+                        slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                        errorText={fieldState.error?.message}
+                        onChange={(event) => {
+                          const next = parseQtyInput(
+                            typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
+                          )
+                          input.onChange(next)
+                          if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
+                            setValue(name('weight'), next)
+                          }
+                        }}
+                        onPaste={(event) => {
+                          event.preventDefault()
+                          const next = pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text'))
+                          input.onChange(next)
+                          if (line.kind === 'METAL' && GRAM_UNITS.has(unit.trim().toLowerCase())) {
+                            setValue(name('weight'), next)
+                          }
+                        }}
+                      />
+                    )}
+                  />
+                )}
                 <Controller
                   control={control}
                   name={name('weight')}
                   rules={{
+                    // `required` đổi theo loại NVL — ghi đè luật cũ react-hook-form còn giữ; luật thật nằm trong validate.
+                    required: false,
                     validate: (value) => {
                       if (line.kind === 'METAL' && !(Number(value) > 0)) return 'Bạc phải cân TL'
+                      if (line.kind === 'STONE' && !(Number(value) > 0)) return 'Đá phải cân TL (ct)'
                       if (blank && line.materialId === blank.materialId && blankTotals.weight > blank.leftWeight) {
                         return `Phôi của đơn chỉ còn ${formatQty(String(blank.leftWeight))} g`
                       }
@@ -1098,25 +1186,35 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   render={({ field: input, fieldState }) => (
                     <TextInput
                       label={line.kind === 'STONE' ? 'TL cân (ct)' : 'TL cân (g)'}
-                      required={line.kind === 'METAL'}
+                      required={line.kind === 'METAL' || line.kind === 'STONE'}
                       value={formatQtyInput(String(input.value ?? ''))}
                       inputRef={input.ref}
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
-                      helperText={line.kind === 'STONE' ? undefined : gramReadout(String(input.value ?? '')) || undefined}
-                      onChange={(event) =>
-                        input.onChange(
-                          parseQtyInput(typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data)),
-                        )
+                      helperText={
+                        weightOnly
+                          ? `Đá tính theo ${unit} — chỉ nhập TL`
+                          : line.kind === 'STONE'
+                            ? undefined
+                            : gramReadout(String(input.value ?? '')) || undefined
                       }
+                      onChange={(event) => {
+                        const next = parseQtyInput(
+                          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
+                        )
+                        input.onChange(next)
+                        if (weightOnly) setValue(name('qty'), stoneQtyFromCt(unit, next))
+                      }}
                       onPaste={(event) => {
                         event.preventDefault()
-                        input.onChange(pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text')))
+                        const next = pasteIntoQty(event.target as HTMLInputElement, event.clipboardData.getData('text'))
+                        input.onChange(next)
+                        if (weightOnly) setValue(name('qty'), stoneQtyFromCt(unit, next))
                       }}
                     />
                   )}
                 />
-                {line.kind === 'STONE' ? (
+                {line.kind === 'STONE' && !countStone ? (
                   <Controller
                     control={control}
                     name={name('stoneCount')}
@@ -1128,7 +1226,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                     render={({ field: input, fieldState }) => (
                       <TextInput
                         label="Số viên"
-                        placeholder={countUnit ? '= SL xuất' : 'Không bắt buộc'}
+                        placeholder="Không bắt buộc"
                         value={input.value}
                         inputRef={input.ref}
                         slotProps={{ htmlInput: { inputMode: 'numeric' } }}

@@ -268,6 +268,8 @@ export type MaterialRequest = {
     warehouseName: string
   }
   requestedQty: string
+  /** Đá: TL thợ xin (g) — mã ct / g chỉ có số này, mã viên có cả số viên lẫn TL. */
+  requestedWeight: string | null
   note: string | null
   requestedByUserId: string | null
   requestedByName: string
@@ -1345,8 +1347,10 @@ export function unsubmitOrderApi(code: string) {
 export type MaterialRequestPayload = {
   /** Mã trong kho NVL chính hoặc kho BTP. */
   materialId: string
-  /** Số xin xuất, theo đơn vị của mã. */
-  qty: string
+  /** Số xin xuất, theo đơn vị của mã. Đá tính theo ct / g không gửi — chỉ gửi `weight`. */
+  qty?: string
+  /** Đá: TL xin (g) — bắt buộc với mọi mã đá. */
+  weight?: string
   note?: string
 }
 

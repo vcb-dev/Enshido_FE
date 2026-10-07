@@ -370,8 +370,11 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       )
     }
   } else if (model.state === 'CONFIRMING' && last) {
-    headline = `QC đã cân khâu ${STAGE_LABEL[last.stage]} — có hàng lỗi`
-    hint = 'Chờ thủ kho kiểm tra và xác nhận lỗi. Trong lúc chờ QC còn sửa lại được.'
+    const hasDefect = (last.defectQty ?? 0) > 0
+    headline = `QC đã cân khâu ${STAGE_LABEL[last.stage]}${hasDefect ? ' — có hàng lỗi' : ''}`
+    hint = hasDefect
+      ? 'Chờ thủ kho kiểm tra và xác nhận lỗi. Trong lúc chờ QC còn sửa lại được.'
+      : 'Chờ thủ kho nhận hàng + đá thừa rồi xác nhận. Trong lúc chờ QC còn sửa lại được.'
     facts = [
       { label: 'QC cân lúc', value: formatDateShort(last.returnedAt) },
       { label: 'Đạt', value: `${last.returnedQty ?? '—'} sp` },

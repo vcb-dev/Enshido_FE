@@ -1,3 +1,4 @@
+import { stoneAmountText } from './stoneInput'
 import { useMemo, useState } from 'react'
 import {
   Box,
@@ -183,7 +184,7 @@ export function WorkHistoryTable({
         action: 'Thợ xin xuất NVL',
         actor: request.requestedByName,
         details: [
-          `${material} · ${formatQty(request.requestedQty)} ${request.material.unit}`,
+          `${material} · ${stoneAmountText({ qty: request.requestedQty, weight: request.requestedWeight, unit: request.material.unit })}`,
           request.note ? `Ghi chú: ${request.note}` : '',
         ].filter(Boolean),
       })

@@ -32,6 +32,7 @@ import {
 import { formatCt, formatQty } from '../api/inventory'
 import { PageHeader, STICKY_END_CELL_SX, STICKY_END_HEAD_SX, TableSkeleton } from '../components/ui'
 import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
+import { stoneAmountText } from '../orders/stoneInput'
 import {
   IssueMaterialDialog,
   KIND_LABEL,
@@ -178,7 +179,7 @@ export function MaterialRequestsPage() {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        {formatQty(row.requestedQty)} {row.material.unit}
+                        {stoneAmountText({ qty: row.requestedQty, weight: row.requestedWeight, unit: row.material.unit })}
                       </TableCell>
                       <TableCell align="right">
                         {status === 'PENDING' ? (
