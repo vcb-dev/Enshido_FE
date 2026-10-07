@@ -48,6 +48,7 @@ import {
   getProductionOrderApi,
   getProductionOrderLookupsApi,
   handoverOrderApi,
+  assignOrderApi,
   assignSubTicketApi,
   confirmStageApi,
   handoverSubTicketApi,
@@ -70,12 +71,12 @@ import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { DialogForm, FormSelect, FormTextField, OrderDetailSkeleton, PageHeader, TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
-import { WorkHistory } from '../orders/WorkHistory'
 import { OrderCostingCard } from '../orders/OrderCostingCard'
 import {
   formatDateShort,
   formatDateTime,
   isInStage,
+  skipsStone,
   MANUAL_STATUSES,
   parentWorkTicketUrl,
   subTicketUrl,
@@ -90,7 +91,7 @@ import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../orders/orderCache'
 import { RequestTypeChip, SourceChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
-import { CastingDialog, HandoverDialog, type HandoverDialogState } from '../orders/StageDialogs'
+import { AssignReceiptDialog, CastingDialog, HandoverDialog, type HandoverDialogState } from '../orders/StageDialogs'
 import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
@@ -126,6 +127,8 @@ export function ProductionOrderDetailPage() {
   const [statusDialog, setStatusDialog] = useState(false)
   const [statusPreset, setStatusPreset] = useState<ProductionStatus | null>(null)
   const [parentStageDialog, setParentStageDialog] = useState(false)
+  const [parentReceiptDialog, setParentReceiptDialog] = useState(false)
+  const [parentReceiptStageOverride, setParentReceiptStageOverride] = useState<StageCode | null>(null)
   const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [selectedSubTicketId, setSelectedSubTicketId] = useState<string | null>(null)
@@ -181,7 +184,6 @@ export function ProductionOrderDetailPage() {
       if (handover?.mode === 'confirm') {
         // Thợ là người đã tự nhận phiếu, khâu là khâu đang mở — server tự lấy.
         return handoverSubTicketApi(code, handover.ticket.no, {
-          handedAt: payload.handedAt,
           handedQty: payload.handedQty,
           handedSilverWeight: payload.handedSilverWeight,
           note: payload.note,
@@ -190,7 +192,6 @@ export function ProductionOrderDetailPage() {
       }
       if (handover?.mode === 'confirm-order') {
         return handoverOrderApi(code, {
-          handedAt: payload.handedAt,
           handedQty: payload.handedQty,
           handedSilverWeight: payload.handedSilverWeight,
           note: payload.note,
@@ -234,8 +235,13 @@ export function ProductionOrderDetailPage() {
   const undoFinish = useOrderMutation(code, () => undoFinishOrderApi(code), 'Đã gỡ hoàn thiện đơn')
   const openParentStage = useOrderMutation(
     code,
-    (stage: StageCode) => openOrderStageApi(code, stage),
-    'Đã mở khâu trên phiếu mẹ cho thợ nhận',
+    (payload: { stage: StageCode }) => openOrderStageApi(code, payload.stage),
+    'Đã mở khâu trên phiếu mẹ',
+  )
+  const assignParentReceipt = useOrderMutation(
+    code,
+    (payload: HandoverPayload & { stage: StageCode }) => assignOrderApi(code, payload),
+    'Đã lưu giao khâu — chờ thợ nhận hàng',
   )
   const cancelParentStage = useOrderMutation(
     code,
@@ -284,6 +290,16 @@ export function ProductionOrderDetailPage() {
     !parentLastEntry || parentReworking
       ? STAGES
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
+  // Đang đi đúng quy trình: khâu mở được chỉ có khâu kế tiếp (bỏ Vào đá nếu đơn không có đá);
+  // chỉ làm lại (Sản xuất lỗi) mới cho chọn khâu.
+  const parentNextStage = parentOpenableStages.find((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
+  const parentDialogStages: StageCode[] = (parentReworking || !parentNextStage
+    ? parentOpenableStages
+    : [parentNextStage]
+  ).filter((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
+  const parentReceiptStages = parentDialogStages.filter((stage) => stage === 'FILING' || stage === 'STONE_SETTING')
+  const parentReceiptPending = Boolean(parentWork?.receiptPrepared) &&
+    (parentWork?.pendingStage === 'FILING' || parentWork?.pendingStage === 'STONE_SETTING')
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
   // Đơn NVL vào Nguội khi đã cắt cây thông (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
@@ -516,7 +532,11 @@ export function ProductionOrderDetailPage() {
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      {parentWork?.state === 'CLAIMED' && !canManageTickets ? (
+                      {parentWork?.state === 'CLAIMED' && parentReceiptPending ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Đã ghi giao cho {parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận hàng
+                        </Typography>
+                      ) : parentWork?.state === 'CLAIMED' && !canManageTickets ? (
                         <Typography variant="caption" color="text.secondary">
                           chờ người lên đơn chọn NVL và giao
                         </Typography>
@@ -560,9 +580,20 @@ export function ProductionOrderDetailPage() {
                               size="small"
                               variant="contained"
                               disabled={!castingReady || locked}
-                              onClick={() => setParentStageDialog(true)}
+                              onClick={() => {
+                                if (!parentReworking && parentReceiptStages.length > 0) {
+                                  setParentReceiptStageOverride(null)
+                                  setParentReceiptDialog(true)
+                                } else {
+                                  setParentStageDialog(true)
+                                }
+                              }}
                             >
-                              Mở khâu cho thợ nhận
+                              {parentReworking
+                                ? 'Chọn khâu'
+                                : parentReceiptStages.length > 0
+                                  ? 'Giao khâu cho thợ'
+                                  : 'Mở khâu cho thợ nhận'}
                             </Button>
                           </span>
                         </Tooltip>
@@ -572,12 +603,14 @@ export function ProductionOrderDetailPage() {
                   {parentWork && parentWork.state !== 'IDLE' ? (
                     <Alert severity="info" sx={{ mt: 1 }}>
                       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                        <SubTicketStateChip state={parentWork.state} />
+                        <SubTicketStateChip state={parentWork.state} stage={parentReceiptPending ? parentWork.pendingStage : null} />
                         <Typography variant="body2">
                           {parentWork.state === 'WAITING'
                             ? `Khâu ${STAGE_LABEL[parentWork.pendingStage!]} đang chờ thợ nhận.`
                             : parentWork.state === 'CLAIMED'
-                              ? `Thợ ${parentWork.claimedByName ?? '—'} đã nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} — chờ cân bạc và xác nhận giao.`
+                              ? parentReceiptPending
+                                ? `Đã giao khâu ${STAGE_LABEL[parentWork.pendingStage!]} cho ${parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận hàng.`
+                                : `Thợ ${parentWork.claimedByName ?? '—'} đã nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} — chờ cân bạc và xác nhận giao.`
                               : parentWork.state === 'SUBMITTED'
                                 ? `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đã báo xong — chờ QC cân lại.`
                                 : `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đang làm khâu ${parentWork.activeStage ? STAGE_LABEL[parentWork.activeStage] : '—'}.`}
@@ -585,16 +618,8 @@ export function ProductionOrderDetailPage() {
                       </Stack>
                     </Alert>
                   ) : null}
-                  <Box sx={{ mt: 0.5 }}>
-                    <WorkHistory order={order} ticket={null} />
-                  </Box>
                 </Box>
-              ) : (
-                // Đơn đã chia phiếu con không còn khung phiếu mẹ — thao tác cấp đơn xem ở đây.
-                <Box sx={{ mb: 1 }}>
-                  <WorkHistory order={order} ticket={null} />
-                </Box>
-              )}
+              ) : null}
               {directOnParent ? (
                 <Box sx={{ mt: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
@@ -668,7 +693,11 @@ export function ProductionOrderDetailPage() {
                           value="all-tickets"
                           id="sub-ticket-tab-all"
                           aria-controls="sub-ticket-panel-all"
-                          label={<Typography variant="body2" sx={{ fontWeight: 700 }}>Tổng hợp cả đơn</Typography>}
+                          label={
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              Tổng hợp cả đơn
+                            </Typography>
+                          }
                         />
                       ) : null}
                       {order.subTickets.map((ticket) => (
@@ -679,9 +708,12 @@ export function ProductionOrderDetailPage() {
                           aria-controls={`sub-ticket-panel-${ticket.id}`}
                           label={
                             <Stack spacing={0.5} sx={{ alignItems: 'flex-start', minWidth: 0 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 700 }}>{ticket.code}</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                {ticket.code}
+                              </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {ticket.qty} sp · {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'}
+                                {ticket.qty} sp ·{' '}
+                                {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'}
                               </Typography>
                             </Stack>
                           }
@@ -700,19 +732,36 @@ export function ProductionOrderDetailPage() {
                             <TicketMatrix order={order} />
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
                               Hao hụt bạc mỗi khâu: ≤ {SILVER_LOSS_LIMITS.ok}% đạt (xanh) · {SILVER_LOSS_LIMITS.ok}–
-                              {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao (đỏ).
+                              {SILVER_LOSS_LIMITS.warn}% cần xem lại (vàng) · trên {SILVER_LOSS_LIMITS.warn}% quá cao
+                              (đỏ).
                             </Typography>
                           </CollapsibleMatrix>
                           <ReworkHistory stages={stages} />
                         </>
                       ) : selectedTicket ? (
                         <>
-                          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-                            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                              <Link component={RouterLink} to={`/tickets/${selectedTicket.code}`} sx={{ fontWeight: 700 }}>
+                          <Stack
+                            direction="row"
+                            spacing={1.5}
+                            sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              useFlexGap
+                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                            >
+                              <Link
+                                component={RouterLink}
+                                to={`/tickets/${selectedTicket.code}`}
+                                sx={{ fontWeight: 700 }}
+                              >
                                 {selectedTicket.code}
                               </Link>
-                              <SubTicketStateChip state={selectedTicket.state} />
+                              <SubTicketStateChip
+                                state={selectedTicket.state}
+                                stage={selectedTicket.pendingStage ?? selectedTicket.activeStage}
+                              />
                               <Typography variant="caption" color="text.secondary">
                                 {Number(selectedTicket.materials.issuedMetalWeight)
                                   ? `Xuất thêm ${formatQty(selectedTicket.materials.issuedMetalWeight)} g bạc · `
@@ -722,13 +771,35 @@ export function ProductionOrderDetailPage() {
                                   : ''}
                               </Typography>
                             </Stack>
-                            {/* Mã QR của chính phiếu con: thợ quét để vào phiếu, nhận việc, báo xong từng khâu. */}
-                            <Stack spacing={0.25} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                            <Stack spacing={0.75} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                              <Tooltip title={canPrint ? '' : 'Đơn chưa báo Đúc'}>
+                                <span>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="inherit"
+                                    startIcon={<PrintIcon fontSize="small" />}
+                                    component={RouterLink}
+                                    to={`/orders/${order.code}/tickets/${selectedTicket.no}/print`}
+                                    target="_blank"
+                                    disabled={!canPrint}
+                                  >
+                                    In phiếu con
+                                  </Button>
+                                </span>
+                              </Tooltip>
+                              {/* Mã QR của chính phiếu con: thợ quét để vào phiếu, nhận việc, báo xong từng khâu. */}
                               <Box
                                 component={RouterLink}
                                 to={`/tickets/${selectedTicket.code}`}
                                 aria-label={`Mở phiếu ${selectedTicket.code}`}
-                                sx={{ p: 0.75, bgcolor: '#fff', border: '1px solid #ded3c3', borderRadius: 1, lineHeight: 0 }}
+                                sx={{
+                                  p: 0.75,
+                                  bgcolor: '#fff',
+                                  border: '1px solid #ded3c3',
+                                  borderRadius: 1,
+                                  lineHeight: 0,
+                                }}
                               >
                                 <QRCodeSVG value={subTicketUrl(selectedTicket.code)} size={88} marginSize={0} />
                               </Box>
@@ -744,7 +815,6 @@ export function ProductionOrderDetailPage() {
                               canManage={canManageTickets}
                               isAdmin={isAdmin}
                               locked={locked}
-                              canPrint={canPrint}
                               busy={undoReturn.isPending}
                               undoingEntryId={undoReturn.isPending ? undoReturn.variables?.id : null}
                               onConfirm={openConfirmHandover}
@@ -963,12 +1033,35 @@ export function ProductionOrderDetailPage() {
 
       <OpenOrderStageDialog
         open={parentStageDialog}
-        stages={parentOpenableStages}
+        stages={parentDialogStages}
         saving={openParentStage.isPending}
         onClose={() => setParentStageDialog(false)}
-        onSave={(stage) =>
-          openParentStage.mutate(stage, {
-            onSuccess: () => setParentStageDialog(false),
+        onSave={(payload) =>
+          payload.stage === 'FILING' || payload.stage === 'STONE_SETTING'
+            ? (setParentStageDialog(false), setParentReceiptStageOverride(payload.stage), setParentReceiptDialog(true))
+            : openParentStage.mutate(payload, {
+                onSuccess: () => setParentStageDialog(false),
+              })
+        }
+      />
+
+      <AssignReceiptDialog
+        open={parentReceiptDialog}
+        order={order}
+        ticket={parentWork}
+        stages={parentReceiptStageOverride ? [parentReceiptStageOverride] : parentReceiptStages}
+        workers={(lookups.data?.users ?? []).filter((worker) => lookups.data?.workerIds.includes(worker.id))}
+        saving={assignParentReceipt.isPending}
+        onClose={() => {
+          setParentReceiptDialog(false)
+          setParentReceiptStageOverride(null)
+        }}
+        onSave={(payload) =>
+          assignParentReceipt.mutate(payload, {
+            onSuccess: () => {
+              setParentReceiptDialog(false)
+              setParentReceiptStageOverride(null)
+            },
           })
         }
       />
@@ -1755,9 +1848,10 @@ function OpenOrderStageDialog({
   stages: StageCode[]
   saving: boolean
   onClose: () => void
-  onSave: (stage: StageCode) => void
+  onSave: (payload: { stage: StageCode }) => void
 }) {
-  const form = useForm<{ stage: StageCode | '' }>({
+  type OpenStageValues = { stage: StageCode | '' }
+  const form = useForm<OpenStageValues>({
     defaultValues: { stage: '' },
   })
   const stage = useWatch({ control: form.control, name: 'stage' })
@@ -1772,8 +1866,13 @@ function OpenOrderStageDialog({
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Mở khâu trên phiếu mẹ</DialogTitle>
-      <DialogForm form={form} onSubmit={(values) => values.stage && onSave(values.stage)}>
+      <DialogTitle>{stages.length === 1 ? `Mở khâu · ${STAGE_LABEL[stages[0]]}` : 'Mở khâu trên phiếu mẹ'}</DialogTitle>
+      <DialogForm
+        form={form}
+        onSubmit={(values) =>
+          values.stage && onSave({ stage: values.stage })
+        }
+      >
         <DialogContent
           sx={{
             display: 'flex',
@@ -1782,15 +1881,17 @@ function OpenOrderStageDialog({
             pt: '8px !important',
           }}
         >
-          <FormSelect<{ stage: StageCode | '' }, StageCode>
-            name="stage"
-            label="Khâu"
-            options={stages.map((item) => ({
-              value: item,
-              label: STAGE_LABEL[item],
-            }))}
-            required
-          />
+          {stages.length > 1 ? (
+            <FormSelect<OpenStageValues, StageCode>
+              name="stage"
+              label="Khâu"
+              options={stages.map((item) => ({
+                value: item,
+                label: STAGE_LABEL[item],
+              }))}
+              required
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>

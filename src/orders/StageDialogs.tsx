@@ -1,6 +1,6 @@
 import { confirmWeights, ratioWarning } from './weightSanity'
 import { STONE_SET_SOURCE_LABEL, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useForm, useWatch } from 'react-hook-form'
 import type {
@@ -19,6 +19,7 @@ import {
   CrudDialogShell,
   FormQtyField,
   FormRow,
+  FormSelect,
   FormTextField,
   TextInput,
 } from '../components/ui'
@@ -93,7 +94,6 @@ export function carriesStone(
 type HandoverValues = {
   stage: StageCode | ''
   craftsmanUserId: string
-  handedAt: string
   handedQty: string
   handedSilverWeight: string
   note: string
@@ -134,7 +134,6 @@ export function HandoverDialog({
     defaultValues: {
       stage: '',
       craftsmanUserId: '',
-      handedAt: '',
       handedQty: '',
       handedSilverWeight: '',
       note: '',
@@ -142,13 +141,19 @@ export function HandoverDialog({
     },
   })
 
+  const initializedTarget = useRef<string | null>(null)
   useEffect(() => {
-    if (!open || !state) return
+    if (!open || !state) {
+      initializedTarget.current = null
+      return
+    }
+    const target = `${state.mode}:${state.ticket.code}`
+    if (initializedTarget.current === target) return
+    initializedTarget.current = target
     const { ticket } = state
     form.reset({
       stage: ticket.pendingStage ?? '',
       craftsmanUserId: ticket.claimedByUserId ?? '',
-      handedAt: nowInput(),
       handedQty: String(ticket.availableQty),
       handedSilverWeight: ticket.availableSilver ?? '',
       note: '',
@@ -176,7 +181,10 @@ export function HandoverDialog({
   // Khâu không xuất kho thì bỏ qua các dòng còn sót trong form.
   const issuesStock = stageIssuesStock(stageCode)
   const issuedMetal = issuesStock ? handoverMetalWeight(materialLines ?? []) : 0
-  const silverIn = (Number(carried) || 0) + issuedMetal
+  // Khâu đầu chưa có hàng từ khâu trước: bạc vào khâu chỉ là NVL xuất bên dưới.
+  const firstStockStage = firstStage && issuesStock
+  const carriedWeight = firstStockStage ? 0 : Number(carried) || 0
+  const silverIn = carriedWeight + issuedMetal
   /** Mốc TL giao tối đa do BE tính (cùng công thức với chỗ chặn ở BE). */
   const limitText = ticket?.handoverSilverLimit ?? null
   const silverLimit = limitText != null ? Number(limitText) : null
@@ -195,9 +203,8 @@ export function HandoverDialog({
   function submit(values: HandoverValues) {
     onSave({
       craftsmanUserId: values.craftsmanUserId,
-      handedAt: fromDateTimeInput(values.handedAt) ?? new Date().toISOString(),
       handedQty: values.handedQty ? Number(values.handedQty) : null,
-      handedSilverWeight: values.handedSilverWeight || null,
+      handedSilverWeight: firstStockStage ? null : values.handedSilverWeight || null,
       note: values.note.trim(),
       materials: issuesStock
         ? values.materials.map((line) => ({
@@ -244,16 +251,6 @@ export function HandoverDialog({
         />
       </FormRow>
 
-      <FormRow columns={1}>
-        <FormTextField<HandoverValues>
-          name="handedAt"
-          label="Thời gian giao"
-          type="datetime-local"
-          required
-          slotProps={DATE_LABEL}
-        />
-      </FormRow>
-
       <FormRow columns={2}>
         <FormTextField<HandoverValues>
           name="handedQty"
@@ -270,33 +267,28 @@ export function HandoverDialog({
             },
           }}
         />
-        <FormQtyField<HandoverValues>
-          name="handedSilverWeight"
-          label={btpWeight ? 'TL hàng từ khâu trước — BTP (bạc + đá) (g)' : 'TL hàng từ khâu trước (g)'}
-          required={!firstStage}
-          helperText={[
-            firstStage
-              ? 'Khâu đầu: để trống nếu hàng lấy từ NVL xuất bên dưới'
-              : 'Tự điền theo số QC nhận lại khâu trước',
-            silverLimit != null ? `tối đa ${formatQty(String(silverLimit))} g` : '',
-          ]
-            .filter(Boolean)
-            .join(' · ') || undefined}
-          rules={{
-            validate: (value) => {
-              // Không giao vượt hàng đang có (QC nhận lại khâu trước / phôi sau đúc) — khớp BE.
-              if (silverLimit != null && value !== '' && Number(value) > silverLimit) {
-                return `Không vượt số hàng đang có (${formatQty(String(silverLimit))} g)`
-              }
-              return (
-                !firstStage ||
-                Boolean(value) ||
-                issuedMetal > 0 ||
-                'Khâu đầu: chọn NVL bạc xuất cho thợ hoặc nhập TL giao'
-              )
-            },
-          }}
-        />
+        {firstStockStage ? null : (
+          <FormQtyField<HandoverValues>
+            name="handedSilverWeight"
+            label={firstStage ? 'TL bạc giao (g)' : btpWeight ? 'TL hàng từ khâu trước — BTP (bạc + đá) (g)' : 'TL hàng từ khâu trước (g)'}
+            required
+            helperText={[
+              firstStage ? 'Trọng lượng hàng giao cho thợ' : 'Tự điền theo số QC nhận lại khâu trước',
+              silverLimit != null ? `tối đa ${formatQty(String(silverLimit))} g` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined}
+            rules={{
+              validate: (value) => {
+                // Không giao vượt hàng đang có (QC nhận lại khâu trước / phôi sau đúc) — khớp BE.
+                if (silverLimit != null && value !== '' && Number(value) > silverLimit) {
+                  return `Không vượt số hàng đang có (${formatQty(String(silverLimit))} g)`
+                }
+                return true
+              },
+            }}
+          />
+        )}
       </FormRow>
 
       <HandoverMaterialsField
@@ -314,10 +306,206 @@ export function HandoverDialog({
       />
       <Typography variant="body2" sx={{ mt: 1 }}>
         Bạc vào khâu: <b>{formatQty(String(round4(silverIn)))}</b> g
-        {issuedMetal ? ` (hàng ${formatQty(String(Number(carried) || 0))} g + xuất ${formatQty(String(round4(issuedMetal)))} g)` : ''}
+        {issuedMetal ? ` (hàng ${formatQty(String(carriedWeight))} g + xuất ${formatQty(String(round4(issuedMetal)))} g)` : ''}
       </Typography>
 
       <FormTextField<HandoverValues> name="note" label="Ghi chú" multiline minRows={2} maxRows={6} />
+    </CrudDialogShell>
+  )
+}
+
+/** Chỉ định thợ và ghi sẵn nội dung giao Nguội / Vào đá; thợ xác nhận nhận hàng ở bước sau. */
+export function AssignReceiptDialog({
+  open,
+  order,
+  ticket,
+  stages,
+  workers,
+  saving,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  order: ProductionOrderDetail
+  ticket: OrderWorkTicket | null
+  stages: StageCode[]
+  workers: Array<{ id: string; username: string; fullName: string }>
+  saving: boolean
+  onClose: () => void
+  onSave: (payload: HandoverPayload & { stage: StageCode }) => void
+}) {
+  type Values = {
+    stage: StageCode | ''
+    craftsmanUserId: string
+    handedQty: string
+    handedSilverWeight: string
+    note: string
+    materials: HandoverMaterialLine[]
+  }
+  const form = useForm<Values>({
+    defaultValues: {
+      stage: '',
+      craftsmanUserId: '',
+      handedQty: '',
+      handedSilverWeight: '',
+      note: '',
+      materials: [],
+    },
+  })
+  const stage = useWatch({ control: form.control, name: 'stage' })
+  const craftsmanUserId = useWatch({ control: form.control, name: 'craftsmanUserId' })
+  const handedQty = useWatch({ control: form.control, name: 'handedQty' })
+  const cutBtp =
+    order.cut?.btpMaterialId && order.cut.leftQty != null && order.cut.leftWeight != null
+      ? {
+          materialId: order.cut.btpMaterialId,
+          leftQty: Number(order.cut.leftQty),
+          leftWeight: Number(order.cut.leftWeight),
+        }
+      : null
+  const autoCutBtp = stage === 'FILING' && cutBtp != null
+  const missingCutBtpLink = stage === 'FILING' && Boolean(order.cutAt) && cutBtp == null
+  const autoCutQty = Number(handedQty)
+  const autoCutWeight =
+    cutBtp && Number.isInteger(autoCutQty) && autoCutQty > 0 && autoCutQty <= cutBtp.leftQty
+      ? autoCutQty === cutBtp.leftQty
+        ? cutBtp.leftWeight
+        : Math.round((cutBtp.leftWeight * autoCutQty / cutBtp.leftQty) * 10_000) / 10_000
+      : null
+  const cutBtpLabel = cutBtp
+    ? order.btp?.id === cutBtp.materialId
+      ? [order.btp.sku, order.btp.name].filter(Boolean).join(' — ')
+      : 'BTP đã cắt gắn với đơn'
+    : ''
+  const firstStage = order.stages.length === 0
+  const resetForOpen = useRef(false)
+  useEffect(() => {
+    if (!open) {
+      resetForOpen.current = false
+      return
+    }
+    // Props cập nhật khi trang làm mới dữ liệu nền; không được reset lựa chọn người dùng đang nhập.
+    if (resetForOpen.current) return
+    resetForOpen.current = true
+    form.reset({
+      stage: stages[0] ?? '',
+      craftsmanUserId: '',
+      handedQty: String(ticket?.availableQty ?? order.qty),
+      handedSilverWeight: ticket?.availableSilver ?? '',
+      note: '',
+      materials: [],
+    })
+  }, [open, stages, ticket, order.qty, order.stages.length, form])
+
+  return (
+    <CrudDialogShell<Values>
+      open={open}
+      kind="create"
+      titles={{ create: 'Giao khâu cho thợ', edit: 'Giao khâu cho thợ', view: 'Giao khâu cho thợ' }}
+      form={form}
+      onSubmit={(values) => {
+        if (!values.stage) return
+        const materialLines = autoCutBtp ? [] : values.materials
+        const stoneLines = values.stage === 'STONE_SETTING'
+          ? materialLines.filter((line) => line.kind === 'STONE')
+          : []
+        const stoneCounts = stoneLines
+          .filter((line) => line.stoneCount !== '')
+          .map((line) => Number(line.stoneCount))
+          .filter((count) => Number.isFinite(count) && count >= 0)
+        const stoneWeights = stoneLines
+          .map((line) => Number(handoverLineGram(line)))
+          .filter((weight) => Number.isFinite(weight) && weight > 0)
+        onSave({
+          stage: values.stage,
+          craftsmanUserId: values.craftsmanUserId,
+          handedQty: values.handedQty ? Number(values.handedQty) : null,
+          handedSilverWeight: firstStage ? null : values.handedSilverWeight || null,
+          handedStoneCount: stoneCounts.length ? stoneCounts.reduce((sum, count) => sum + count, 0) : null,
+          handedStoneWeight: stoneWeights.length ? String(stoneWeights.reduce((sum, weight) => sum + weight, 0)) : null,
+          note: values.note.trim(),
+          materials: materialLines.map((line) => ({
+            materialId: line.materialId,
+            kind: line.kind,
+            qty: line.qty,
+            weight: handoverLineGram(line),
+            stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
+          })),
+        })
+      }}
+      saving={saving}
+      submitDisabled={!stage || !craftsmanUserId}
+      submitLabel="Giao cho thợ"
+      pendingLabel="Đang giao…"
+      maxWidth="sm"
+      onClose={onClose}
+      onExited={() => undefined}
+    >
+      <Alert severity="info" sx={{ mt: 1 }}>
+        Lưu thông tin giao trước. Kho chỉ xuất hàng khi thợ bấm “Nhận hàng”.
+      </Alert>
+      <FormRow columns={2} sx={{ mt: 1 }}>
+        <FormSelect<Values>
+          name="stage"
+          label="Khâu"
+          required
+          options={stages.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
+        />
+        <FormSelect<Values>
+          name="craftsmanUserId"
+          label="Thợ"
+          required
+          options={workers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
+        />
+      </FormRow>
+      <FormRow columns={2}>
+        <FormTextField<Values>
+          name="handedQty"
+          label="Số lượng giao"
+          type="number"
+          required
+          rules={{
+            validate: (value) => {
+              const qty = Number(value)
+              if (!Number.isInteger(qty) || qty < 1) return 'Số lượng giao phải từ 1'
+              if (ticket && qty > ticket.availableQty) return `Không quá số phiếu đang có (${ticket.availableQty})`
+              if (autoCutBtp && cutBtp && qty > cutBtp.leftQty) {
+                return `Phôi BTP đã cắt chỉ còn ${formatQty(String(cutBtp.leftQty))} chiếc`
+              }
+              return true
+            },
+          }}
+        />
+        {!firstStage ? (
+          <FormQtyField<Values>
+            name="handedSilverWeight"
+            label="TL bạc giao (g)"
+            required
+            rules={{ validate: (value) => Number(value) > 0 || 'Nhập trọng lượng bạc giao' }}
+          />
+        ) : null}
+      </FormRow>
+      {autoCutBtp && cutBtp ? (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          Tự gắn {cutBtpLabel}. Còn {formatQty(String(cutBtp.leftQty))} chiếc ·{' '}
+          {formatQty(String(cutBtp.leftWeight))} g.
+          {autoCutWeight != null
+            ? ` Dự kiến xuất ${autoCutQty} chiếc · ${formatQty(String(autoCutWeight))} g.`
+            : ''}{' '}
+          Kho xuất khi thợ bấm “Nhận hàng”.
+        </Alert>
+      ) : (
+        <>
+          {missingCutBtpLink ? (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              Đơn đã có thời điểm cắt cây nhưng chưa lưu mã phôi BTP và số lượng cân trên phiếu mẹ,
+              nên chưa thể tự gắn phôi. Hãy kiểm tra dữ liệu cắt cây; nếu cần giao ngay, chọn BTP thủ công.
+            </Alert>
+          ) : null}
+          <HandoverMaterialsField form={form} stage={stage || null} blank={cutBtp} />
+        </>
+      )}
+      <FormTextField<Values> name="note" label="Ghi chú" multiline minRows={2} maxRows={5} />
     </CrudDialogShell>
   )
 }

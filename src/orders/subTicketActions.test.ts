@@ -134,6 +134,15 @@ describe('có mạng', () => {
     expect(toast.info).not.toHaveBeenCalled()
   })
 
+  it('thợ nhận hàng phiếu mẹ Nguội / Vào đá qua endpoint phiếu mẹ', async () => {
+    fetchMock.mockResolvedValue(jsonRes(ORDER))
+
+    await fire(client, 'accept', { orderCode: 'A012', no: null, ticketCode: 'A012' }).promise
+
+    expect(calledUrls()).toEqual(['/api/production-orders/A012/work/accept'])
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('bắt đầu làm'))
+  })
+
   it('lỗi nghiệp vụ thì báo nguyên văn máy chủ và không thử lại', async () => {
     fetchMock.mockResolvedValue(jsonRes({ message: 'Phiếu A012-1 đã có thợ Nam nhận' }, 400))
 

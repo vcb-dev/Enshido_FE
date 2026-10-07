@@ -96,6 +96,7 @@ export type ProductionOrderRow = {
   workState: SubTicketState | null
   /** Khâu đang chạy hoặc vừa được QC nhận lại của phiếu mẹ. */
   workStage: StageCode | null
+  workReceiptPrepared?: boolean
   images: Array<{ id: string; kind: ProductionImageKind; url: string }>
   /** Phiếu con của đơn — thành dòng con xổ ra dưới đơn ở danh sách. Đơn chưa chia thì rỗng. */
   subTickets: SubTicketSummary[]
@@ -398,6 +399,8 @@ export type OrderWorkTicket = {
   state: SubTicketState
   activeStage: StageCode | null
   pendingStage: StageCode | null
+  /** Phiếu mẹ đã lưu đủ thông tin giao theo luồng thợ nhận hàng. */
+  receiptPrepared?: boolean
   pendingAt: string | null
   pendingByName: string | null
   claimedByUserId: string | null
@@ -568,7 +571,8 @@ export type UpsertProductionOrderPayload = {
 
 export type HandoverPayload = {
   craftsmanUserId: string
-  handedAt: string
+  /** Máy chủ tự ghi thời điểm hiện tại khi xác nhận giao. */
+  handedAt?: string
   handedQty?: number | null
   /** TL hàng từ khâu trước; khâu đầu được bỏ trống nếu hàng lấy từ NVL xuất. */
   handedSilverWeight?: string | null
@@ -642,6 +646,7 @@ export type MyTicketItem = {
   /** null = đã được QC nhận lại. */
   state: SubTicketState | null
   stage: StageCode | null
+  receiptPrepared?: boolean
   qty: number
   /** Chờ nhận: bạc hàng từ khâu trước. Đang làm / đã nộp: bạc vào khâu (giao + NVL xuất). */
   silverWeight: string | null
@@ -1251,6 +1256,17 @@ export function openOrderStageApi(code: string, stage: StageCode) {
   })
 }
 
+/** Thủ kho chỉ định thợ và ghi thông tin giao Nguội / Vào đá; thợ nhận hàng sau đó mới xuất kho. */
+export function assignOrderApi(
+  code: string,
+  payload: HandoverPayload & { stage: StageCode },
+) {
+  return orderFetch(orderPath(code, '/work/assign'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function cancelOrderPendingApi(code: string) {
   return orderFetch(orderPath(code, '/work/pending'), { method: 'DELETE' })
 }
@@ -1279,6 +1295,11 @@ export function assignSubTicketApi(
 /** Thợ được chỉ định quét QR nhận hàng — khâu Nguội tự ghi giao và xuất phôi khỏi kho BTP. */
 export function acceptSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/accept'), { method: 'POST', body: '{}' })
+}
+
+/** Thợ được chỉ định nhận hàng trên phiếu mẹ Nguội / Vào đá. */
+export function acceptOrderApi(code: string) {
+  return orderFetch(orderPath(code, '/work/accept'), { method: 'POST', body: '{}' })
 }
 
 export function claimOrderApi(code: string) {

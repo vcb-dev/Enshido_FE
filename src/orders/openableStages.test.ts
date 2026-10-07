@@ -25,6 +25,11 @@ function order(subTickets: SubTicket[], stages: StageEntry[], status = 'FILING')
 }
 
 describe('openableStages — phiếu con xong trước được đi tiếp', () => {
+  it.each([{ stoneCount: 0 }, { stoneSkipped: true }])('đơn không có đá đi từ Nguội sang Khắc (%j)', (skip) => {
+    const o = { ...order([ticket(1)], [done('t1', 'FILING')]), ...skip }
+    expect(openableStages(o).byTicket.get(1)?.[0]).toBe('ENGRAVING')
+    expect(openableStages(o).byTicket.get(1)).not.toContain('STONE_SETTING')
+  })
   it('đúng cảnh A002: phiếu 1 xong Nguội, hai phiếu kia còn chờ Nguội → mở được Vào đá cho phiếu 1', () => {
     const o = order(
       [

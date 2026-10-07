@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { formatDateShort, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -59,6 +59,7 @@ type TicketModel = {
   qty: number
   state: SubTicketState
   pendingStage: StageCode | null
+  receiptPrepared?: boolean
   claimedByUserId: string | null
   claimedByName: string | null
   claimedAt: string | null
@@ -121,6 +122,7 @@ function toModel(order: ProductionOrderDetail, no: number | null): TicketModel |
       qty: order.qty,
       state: ticket.state,
       pendingStage: ticket.pendingStage,
+      receiptPrepared: ticket.receiptPrepared,
       claimedByUserId: ticket.claimedByUserId,
       claimedByName: ticket.claimedByName,
       claimedAt: ticket.claimedAt,
@@ -262,16 +264,19 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       hint = 'Chỉ tài khoản có quyền Thợ sản xuất mới nhận phiếu được.'
     }
   } else if (model.state === 'CLAIMED' && model.pendingStage) {
-    headline = `${mine ? 'Bạn' : `Thợ ${model.claimedByName ?? ''}`} đã nhận khâu ${STAGE_LABEL[model.pendingStage]}`
-    // Nguội: thợ quét QR bấm nhận là xong (hệ thống tự xuất phôi). Khâu khác chờ người giao.
-    const selfAccept = model.pendingStage === 'FILING' || model.pendingStage === 'STONE_SETTING'
+    // Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm nhận hàng mới bắt đầu (hệ thống tự xuất kho).
+    // Khâu khác: thợ tự nhận rồi chờ người giao.
+    const selfAccept = usesReceiptFlow(model.pendingStage, model.no, model.receiptPrepared)
+    headline = selfAccept
+      ? `${mine ? 'Bạn được' : `Thợ ${model.claimedByName ?? ''} được`} giao khâu ${STAGE_LABEL[model.pendingStage]} — chờ nhận hàng`
+      : `${mine ? 'Bạn' : `Thợ ${model.claimedByName ?? ''}`} đã nhận khâu ${STAGE_LABEL[model.pendingStage]}`
     hint = selfAccept
       ? mine
-        ? 'Nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất phôi khỏi kho.'
+        ? 'Nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất vật tư khỏi kho.'
         : 'Chờ thợ được chỉ định quét QR nhận hàng.'
       : `Chờ người giao ${stageIssuesStock(model.pendingStage) ? 'xuất NVL, ' : ''}cân bạc và xác nhận giao.`
     facts = [
-      { label: 'Nhận lúc', value: formatDateShort(model.claimedAt) },
+      { label: selfAccept ? 'Giao lúc' : 'Nhận lúc', value: formatDateShort(model.claimedAt) },
       { label: 'Số lượng', value: `${model.availableQty} sp` },
       {
         label: 'Bạc hiện có',
@@ -419,7 +424,10 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
               >
                 {model.heading}
               </Typography>
-              <SubTicketStateChip state={model.state} />
+              <SubTicketStateChip
+                state={model.state}
+                stage={usesReceiptFlow(model.pendingStage, model.no, model.receiptPrepared) ? model.pendingStage : null}
+              />
               {workerOnly ? null : <StatusChip status={order.status} />}
               {/* Trạng thái bên cạnh vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
                   của thợ chưa lên tới nơi, không phải là đã nhận / đã xong. */}

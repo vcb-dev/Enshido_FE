@@ -969,6 +969,9 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   const values = useWatch({ control, name: 'materials' }) ?? []
   // Nguội / Vào đá bắt buộc xuất kho lúc giao: luôn giữ ít nhất một dòng.
   const required = sources.length > 0
+  // Nguội chỉ xuất BTP (phôi), luôn tính theo gram — không cần chọn loại, gọi là BTP thay vì NVL.
+  const btpOnly = stage === 'FILING'
+  const noun = btpOnly ? 'BTP' : 'NVL'
   // Cộng mọi dòng cùng mã phôi: tách hai dòng cũng không lách được mốc.
   const blankTotals = values.reduce(
     (sum, item) =>
@@ -1045,7 +1048,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
         <Box>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            NVL xuất kho cho thợ *
+            {noun} xuất kho cho thợ *
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Xác nhận giao là trừ tồn và tạo phiếu xuất gắn mã đơn.
@@ -1053,7 +1056,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
           </Typography>
         </Box>
         <Button size="small" onClick={() => lines.append({ ...EMPTY_HANDOVER_LINE })}>
-          Thêm NVL
+          Thêm {noun}
         </Button>
       </Stack>
       <Stack spacing={1}>
@@ -1074,13 +1077,13 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
               <Controller
                 control={control}
                 name={name('materialId')}
-                rules={{ required: 'Chọn mã NVL' }}
+                rules={{ required: `Chọn mã ${noun}` }}
                 render={({ field: picker, fieldState }) => (
                   <CatalogPicker
                     value={picker.value}
                     options={pickerItems}
-                    label={`Mã NVL ${index + 1}`}
-                    placeholder="Tìm theo mã hoặc tên"
+                    label={`Mã ${noun} ${index + 1}`}
+                    placeholder={btpOnly ? 'Mã BTP' : 'Tìm theo mã hoặc tên'}
                     loadingText="Đang tải kho…"
                     noOptionsText="Không có mã còn tồn"
                     loading={nvlOptions.isLoading || btpOptions.isLoading}
@@ -1107,22 +1110,26 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                 sx={{
                   display: 'grid',
                   gap: 1,
-                  gridTemplateColumns: { xs: '1fr 1fr', sm: '1.2fr 1fr 1fr 1fr auto' },
+                  gridTemplateColumns: btpOnly
+                    ? { xs: '1fr 1fr', sm: '1fr 1fr auto' }
+                    : { xs: '1fr 1fr', sm: '1.2fr 1fr 1fr 1fr auto' },
                   alignItems: 'start',
                 }}
               >
-                <Controller
-                  control={control}
-                  name={name('kind')}
-                  render={({ field: select }) => (
-                    <SelectInput<MaterialRequestKind>
-                      label="Tính theo"
-                      options={kindOptions}
-                      value={select.value as MaterialRequestKind}
-                      onChange={(value) => select.onChange(value || 'OTHER')}
-                    />
-                  )}
-                />
+                {btpOnly ? null : (
+                  <Controller
+                    control={control}
+                    name={name('kind')}
+                    render={({ field: select }) => (
+                      <SelectInput<MaterialRequestKind>
+                        label="Tính theo"
+                        options={kindOptions}
+                        value={select.value as MaterialRequestKind}
+                        onChange={(value) => select.onChange(value || 'OTHER')}
+                      />
+                    )}
+                  />
+                )}
                 {weightOnly ? (
                   <Box />
                 ) : (
@@ -1238,15 +1245,11 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                 ) : (
                   <Box />
                 )}
-                <Button
-                  size="small"
-                  color="error"
-                  disabled={lines.fields.length <= 1}
-                  onClick={() => lines.remove(index)}
-                  sx={{ mt: 0.5 }}
-                >
-                  Bỏ
-                </Button>
+                {lines.fields.length > 1 ? (
+                  <Button size="small" color="error" onClick={() => lines.remove(index)} sx={{ mt: 0.5 }}>
+                    Bỏ
+                  </Button>
+                ) : null}
               </Box>
             </Box>
           )

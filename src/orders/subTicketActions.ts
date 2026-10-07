@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { isNetworkError } from '../api/auth'
 import {
   acceptSubTicketApi,
+  acceptOrderApi,
   claimOrderApi,
   submitOrderApi,
   submitSubTicketApi,
@@ -53,10 +54,7 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
     done: (code) => `Đã huỷ nhận phiếu ${code}`,
   },
   accept: {
-    run: (code, no) => {
-      if (no == null) throw new Error('Phiếu mẹ không có bước nhận hàng theo chỉ định')
-      return acceptSubTicketApi(code, no)
-    },
+    run: (code, no) => (no == null ? acceptOrderApi(code) : acceptSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng nhận hàng phiếu ${code} — gửi lên khi có mạng`,
     done: (code) => `Đã nhận hàng phiếu ${code} — bắt đầu làm`,
   },
