@@ -14,13 +14,13 @@ export function CastingCutSelectionDialog({ initialSelection, onClose, onSelect 
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const list = useQuery({
-    queryKey: ['casting-slips', 'cut-selection', search, page],
-    queryFn: () => listCastingSlipsApi({ status: 'DONE', search, page, pageSize: 25 }),
+    queryKey: ['casting-slips', 'cut-selection', 'awaiting-cut', search, page],
+    queryFn: () => listCastingSlipsApi({ status: 'DONE', awaitingCut: true, search, page, pageSize: 25 }),
     placeholderData: keepPreviousData,
     staleTime: 0,
   })
   const rows = (list.data?.items ?? []).flatMap((slip) => [slip, ...(slip.redos ?? [])])
-    .filter((slip) => slip.status === 'DONE')
+    .filter((slip) => canCutCastingSlip(slip))
   const currentSelection = selected.map((slip) => rows.find((row) => row.id === slip.id) ?? slip)
   const toggle = (slip: CastingSlip) => setSelected((current) =>
     current.some((item) => item.id === slip.id)
@@ -39,7 +39,7 @@ export function CastingCutSelectionDialog({ initialSelection, onClose, onSelect 
           onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
         {list.error ? <Alert severity="error">{list.error.message}</Alert> : null}
         {list.isFetching ? <Typography variant="body2">Đang tải phiếu đúc…</Typography> : null}
-        {!list.isFetching && !list.error && !rows.length ? <Typography variant="body2">Chưa có phiếu đúc xong.</Typography> : null}
+        {!list.isFetching && !list.error && !rows.length ? <Typography variant="body2">Chưa có phiếu Đúc xong chờ cắt.</Typography> : null}
         {rows.map((slip) => {
           const checked = selected.some((item) => item.id === slip.id)
           const blocked = getCastingSlipCutBlockedReason(slip)

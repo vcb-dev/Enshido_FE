@@ -33,5 +33,6 @@ describe('điều kiện cắt cây của phiếu cũ', () => {
     const moved = slip({ orders: [{ ...slip().orders[0], status: 'WAIT_COOLING' }] })
     expect(hasCastingSlipCutData(moved)).toBe(false)
     expect(canCutCastingSlip(moved)).toBe(false)
+    expect(getCastingSlipCutBlockedReason(moved)).toMatch(/đã chuyển bước/)
   })
 })

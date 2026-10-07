@@ -29,7 +29,7 @@ import { invalidateNvlWarehouse } from '../orders/nvlStock'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { CastingSlipViewDialog, SlipStatusChip } from './CastingOrdersPage'
 
-import { getCastingSlipCutBlockedReason, hasCastingSlipCutData } from '../casting/castingCuts'
+import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData } from '../casting/castingCuts'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -81,10 +81,11 @@ export function CastingCutsPage() {
   const canConfirm = canConfirmIntakeWarehouse(user)
 
   const list = useQuery({
-    queryKey: ['casting-slips', 'cuts', status, params.page, params.pageSize, params.slipDate, params.batchOrderCodes],
+    queryKey: ['casting-slips', 'cuts', 'awaiting-cut', status, params.page, params.pageSize, params.slipDate, params.batchOrderCodes],
     queryFn: () =>
       listCastingSlipsApi({
         status,
+        awaitingCut: true,
         slipDate: params.slipDate,
         batchOrderCodes: params.batchOrderCodes,
         page: params.page,
@@ -343,7 +344,11 @@ export function CastingCutsPage() {
       />
       <DataTable
         columns={columns}
-        rows={list.data?.items ?? []}
+        rows={(list.data?.items ?? []).flatMap((row) => {
+          const redos = (row.redos ?? []).filter(canCutCastingSlip)
+          if (canCutCastingSlip(row)) return [{ ...row, redos }]
+          return redos.map((redo) => ({ ...redo, redos: [] }))
+        })}
         rowKey={(row) => row.id}
         subRows={{
           get: (row) => row.redos ?? [],
@@ -352,7 +357,7 @@ export function CastingCutsPage() {
         }}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText="Chưa có phiếu đúc xong."
+        emptyText="Chưa có phiếu Đúc xong chờ cắt."
         variant="grid"
         fixedLayout
         minWidth={900}

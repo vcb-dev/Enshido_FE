@@ -143,6 +143,7 @@ export type ListCastingSlipsParams = {
   batchOrderCodes?: string
   waxWeight?: string
   issueTotal?: string
+  awaitingCut?: boolean
   page: number
   pageSize: number
 }
@@ -156,6 +157,7 @@ export function listCastingSlipsApi(params: ListCastingSlipsParams) {
   if (params.batchOrderCodes?.trim()) query.set('batchOrderCodes', params.batchOrderCodes.trim())
   if (params.waxWeight?.trim()) query.set('waxWeight', params.waxWeight.trim())
   if (params.issueTotal?.trim()) query.set('issueTotal', params.issueTotal.trim())
+  if (params.awaitingCut) query.set('awaitingCut', 'true')
   query.set('page', String(params.page))
   query.set('pageSize', String(params.pageSize))
   return apiFetch<CastingSlipList>(`/casting-slips?${query.toString()}`)

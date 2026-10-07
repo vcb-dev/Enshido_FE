@@ -324,7 +324,7 @@ export function CastingSlipsCutDialog({
               slips.some((slip) => !canCutCastingSlip(slip))
             }
           >
-            {saving ? 'Đang lưu…' : 'Lưu và chuyển Chờ nguội'}
+            {saving ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </DialogActions>
       </DialogForm>
