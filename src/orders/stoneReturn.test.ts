@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stoneReturnPreview } from './stoneReturn'
+import { stoneReturnPreview, stoneSetWeight } from './stoneReturn'
 
 describe('stoneReturnPreview — đá thừa theo cân gói', () => {
   it('quy viên thừa và SL xuất theo tỷ lệ TL', () => {
@@ -23,5 +23,37 @@ describe('stoneReturnPreview — đá thừa theo cân gói', () => {
       returnedCount: null,
       usedQty: 7.5,
     })
+  })
+})
+
+describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
+  const base = {
+    stone3dGram: null,
+    orderQty: 10,
+    handedQty: 5,
+    handedGram: 2,
+    allWeighed: true,
+    returnedPackGram: 0.5,
+    stonesHanded: null,
+    returnedCount: 0,
+  }
+
+  it('ưu tiên TL đá 3D chia theo số hàng giao', () => {
+    expect(stoneSetWeight({ ...base, stone3dGram: 3 })).toEqual({ gram: 1.5, source: '3d' })
+  })
+
+  it('không có 3D: TL đá cấp − gói thừa', () => {
+    expect(stoneSetWeight(base)).toEqual({ gram: 1.5, source: 'pack' })
+    expect(stoneSetWeight({ ...base, returnedPackGram: 5 })).toEqual({ gram: 0, source: 'pack' })
+  })
+
+  it('dòng cấp cũ đếm viên: chia theo số viên gắn', () => {
+    expect(
+      stoneSetWeight({ ...base, allWeighed: false, stonesHanded: 100, returnedCount: 25 }),
+    ).toEqual({ gram: 1.5, source: 'count' })
+  })
+
+  it('chưa cấp đá cân gói và không có 3D thì không có số', () => {
+    expect(stoneSetWeight({ ...base, handedGram: null })).toBeNull()
   })
 })

@@ -419,6 +419,10 @@ export type ProductionOrderDetail = Omit<
   askedUserId: string | null
   sizeLabel: string | null
   stoneCount: number | null
+  /** Thủ kho đánh dấu đơn không có đá — nguội xong sang thẳng Chờ khắc. */
+  stoneSkipped: boolean
+  stoneSkippedAt: string | null
+  stoneSkippedByName: string | null
   stoneWeight: string | null
   weight: string | null
   hasMold?: boolean | null
@@ -592,7 +596,7 @@ export type ReturnPayload = {
   /** Khâu Vào đá: số viên đá thợ trả lại — chỉ cho dòng cấp cũ không cân gói. */
   returnedStoneCount?: number | null
   /** Khâu Vào đá của phiếu con: TL gói đá thừa theo mã (g); mã không gửi = không thừa. */
-  returnedStones?: Array<{ materialId: string; weight: string }>
+  returnedStones?: Array<{ materialId: string; weight: string; count?: number }>
   /** Nguội / Vào đá của phiếu con: SL hàng lỗi QC tách ra. */
   defectQty?: number | null
   /** Lý do hàng lỗi (tuỳ chọn; bắt buộc khi lỗi hết ở khâu không qua thủ kho). */
@@ -1013,6 +1017,11 @@ export function clearStageDefectApi(code: string, no: number) {
 /** Thủ kho tạo phiếu bù cho hàng lỗi đã xác nhận — đi lại từ bước sáp. */
 export function createReworkApi(code: string, stageId: string) {
   return orderFetch(orderPath(code, `/stages/${stageId}/rework`), { method: 'POST', body: '{}' })
+}
+
+/** Thủ kho đánh dấu / bỏ đánh dấu đơn không có đá (bỏ khâu Vào đá — mô tả luồng bước 17). */
+export function skipStoneApi(code: string, skip: boolean) {
+  return orderFetch(orderPath(code, '/skip-stone'), { method: 'POST', body: JSON.stringify({ skip }) })
 }
 
 /** Thủ kho xác nhận sau QC (Nguội / Vào đá): nhập kho BTP hàng đạt, NVL hàng lỗi + thừa. */

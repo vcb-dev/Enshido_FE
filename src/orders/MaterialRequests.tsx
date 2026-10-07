@@ -318,6 +318,8 @@ export function IssueMaterialDialog({
   const blankWeight = request?.blankLeft?.weight != null ? Number(request.blankLeft.weight) : null
   /** Đá ở Vào đá của phiếu con: chỉ giữ chỗ, QC cân gói thừa, thủ kho xác nhận mới xuất kho (khớp BE). */
   const holdMode = kind === 'STONE' && request?.stage === 'STONE_SETTING' && request.subTicketNo != null
+  /** Cấp đá tính theo ct / g: chỉ nhập TL gói, số lượng cấp tự suy từ TL (không có ô Số lượng). */
+  const weightOnly = holdMode && !countUnit
 
   useEffect(() => {
     if (!request) return
@@ -389,21 +391,26 @@ export function IssueMaterialDialog({
           options={(['METAL', 'STONE', 'OTHER'] as const).map((value) => ({ value, label: KIND_LABEL[value] }))}
           helperText="Bạc tính gram, đá tính viên, loại khác chỉ ghi nhận"
         />
-        <FormQtyField<IssueValues>
-          name="qty"
-          label={`Số lượng ${holdMode ? 'cấp' : 'xuất'} (${unit})`}
-          required
-          helperText={blankQty != null ? `Phôi của đơn còn ${formatQty(String(blankQty))} ${unit}` : undefined}
-          rules={{
-            validate: (value) => {
-              if (!(Number(value) > 0)) return 'Số lượng phải lớn hơn 0'
-              if (blankQty != null && Number(value) > blankQty) {
-                return `Phôi của đơn chỉ còn ${formatQty(String(blankQty))} ${unit}`
-              }
-              return true
-            },
-          }}
-        />
+        {weightOnly ? (
+          <Box />
+        ) : (
+          <FormQtyField<IssueValues>
+            name="qty"
+            label={holdMode ? 'Số viên cấp (theo nhãn gói)' : `Số lượng xuất (${unit})`}
+            required
+            helperText={blankQty != null ? `Phôi của đơn còn ${formatQty(String(blankQty))} ${unit}` : undefined}
+            rules={{
+              validate: (value) => {
+                if (!(Number(value) > 0)) return 'Số lượng phải lớn hơn 0'
+                if (holdMode && !Number.isInteger(Number(value))) return 'Số viên phải là số nguyên'
+                if (blankQty != null && Number(value) > blankQty) {
+                  return `Phôi của đơn chỉ còn ${formatQty(String(blankQty))} ${unit}`
+                }
+                return true
+              },
+            }}
+          />
+        )}
       </FormRow>
       <FormRow columns={2}>
         <FormQtyField<IssueValues>
@@ -415,11 +422,15 @@ export function IssueMaterialDialog({
               ? `Phôi của đơn còn ${formatQty(String(blankWeight))} g`
               : kind === 'METAL'
                 ? 'Cộng vào bạc vào khâu'
-                : holdMode
-                  ? 'Mốc để tính đá đã dùng khi QC cân gói thừa'
-                  : 'Không bắt buộc'
+                : weightOnly
+                  ? `Đá tính theo ${unit} — SL cấp ${formatQty(qty || '0')} ${unit} suy từ TL gói`
+                  : holdMode
+                    ? 'Mốc để tính đá đã dùng khi QC cân gói thừa'
+                    : 'Không bắt buộc'
           }
           rules={{
+            // `required` đổi theo loại NVL — ghi đè luật cũ react-hook-form còn giữ; luật thật nằm trong validate.
+            required: false,
             validate: (value) => {
               if (kind === 'METAL' && !(Number(value) > 0)) return 'Bạc phải cân TL xuất'
               if (holdMode && !(Number(value) > 0)) return 'Cân cả gói đá trước khi cấp'
@@ -430,7 +441,7 @@ export function IssueMaterialDialog({
             },
           }}
         />
-        {kind === 'STONE' ? (
+        {kind === 'STONE' && !(holdMode && countUnit) ? (
           <FormTextField<IssueValues>
             name="stoneCount"
             label="Số viên đá (theo nhãn gói)"

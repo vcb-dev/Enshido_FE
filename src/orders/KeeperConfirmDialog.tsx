@@ -25,8 +25,9 @@ const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tab
 type Line = { label: string; qty: string; weight: string; warehouse: string; show: boolean }
 
 /**
- * Thủ kho kiểm tra và xác nhận lỗi khi QC báo hàng lỗi ở Nguội / Vào đá (QC cân không lỗi thì hệ
- * thống tự xác nhận, không qua đây — mô tả luồng bước 13–15, 18). Bấm xác
+ * Thủ kho kiểm tra và xác nhận sau QC ở Nguội / Vào đá. Nguội chỉ qua đây khi QC báo hàng lỗi
+ * (không lỗi thì hệ thống tự xác nhận); Vào đá luôn qua đây để thủ kho nhận hàng + túi đá thừa
+ * (mô tả luồng bước 13–15, 18). Bấm xác
  * nhận là hệ thống nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
  * đá còn xuất kho đá đã dùng theo từng mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
  */
@@ -84,7 +85,8 @@ export function KeeperConfirmDialog({
   return (
     <Dialog open={entry != null} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        Thủ kho xác nhận lỗi — {stage ? STAGE_LABEL[stage] : ''} · phiếu {ticketCode}
+        Thủ kho xác nhận{(entry?.defectQty ?? 0) > 0 ? ' lỗi' : ''} — {stage ? STAGE_LABEL[stage] : ''} · phiếu{' '}
+        {ticketCode}
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         {entry ? (
