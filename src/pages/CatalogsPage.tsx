@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
-  Paper,
-  Skeleton,
   Stack,
   Tab,
   Tabs,
@@ -32,18 +27,16 @@ import {
   FormEditReasonBlock,
   Form,
   FormTextField,
-  PencilIcon,
   RowActions,
   SearchInput,
-  TrashIcon,
   type Column,
 } from '../components/ui'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
+import { paginate, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 
 const BRAND = '#6b4513'
-const BRAND_SOFT = '#f1e6d5'
 const BORDER = '#ded3c3'
 
 type FormValues = { name: string; editReason?: string }
@@ -139,7 +132,8 @@ export function CatalogsPage() {
 
 function CatalogTreePage({ copy }: { copy: Copy }) {
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
+  const table = useTableParams({ pageSize: 25, sort: 'name' })
+  const { params } = table
   const [editId, setEditId] = useState<string | null>(null)
   const createParent = useCrudDialog<CatalogItem>()
   const parentForm = useForm<FormValues>({ defaultValues: EMPTY })
@@ -154,14 +148,25 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
   const editing = parents.find((row) => row.id === editId) ?? null
 
   const visibleParents = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return parents
-    return parents.filter(
-      (row) =>
-        row.name.toLowerCase().includes(q) ||
-        (row.children ?? []).some((child) => child.name.toLowerCase().includes(q)),
-    )
-  }, [parents, search])
+    const q = params.search.trim().toLowerCase()
+    const matched = q
+      ? parents.filter(
+          (row) =>
+            row.name.toLowerCase().includes(q) ||
+            (row.children ?? []).some((child) => child.name.toLowerCase().includes(q)),
+        )
+      : parents
+    const direction = params.dir === 'desc' ? -1 : 1
+    return [...matched].sort((a, b) => {
+      if (params.sort === 'childCount') {
+        return ((a.children?.length ?? 0) - (b.children?.length ?? 0)) * direction
+      }
+      return a.name.localeCompare(b.name, 'vi') * direction
+    })
+  }, [parents, params.search, params.sort, params.dir])
+
+  const pageCount = Math.max(1, Math.ceil(visibleParents.length / params.pageSize))
+  const page = Math.min(params.page, pageCount)
 
   useEffect(() => {
     if (!createParent.open) return
@@ -200,51 +205,85 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
     },
   })
 
+  const columns = useMemo<Column<CatalogItem>[]>(
+    () => [
+      { key: 'name', header: copy.parentName, sortable: true },
+      {
+        key: 'childCount',
+        header: 'Số danh mục con',
+        width: 160,
+        sortable: true,
+        render: (row) => row.children?.length ?? 0,
+      },
+      {
+        key: 'children',
+        header: copy.childSection,
+        render: (row) => {
+          const kids = row.children ?? []
+          if (!kids.length) return '—'
+          const preview = kids
+            .slice(0, 4)
+            .map((item) => item.name)
+            .join(', ')
+          return kids.length > 4 ? `${preview}…` : preview
+        },
+      },
+      {
+        key: 'actions',
+        header: 'Hành động',
+        width: 120,
+        align: 'center',
+        card: 'actions',
+        render: (row) => (
+          <RowActions onEdit={() => setEditId(row.id)} onDelete={() => delParent.request(row)} />
+        ),
+      },
+    ],
+    [copy.childSection, copy.parentName, delParent.request],
+  )
+
   return (
-    <Stack spacing={2} sx={{ minHeight: 0, flex: 1 }}>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        sx={{ alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 1.5 }}
-      >
-        <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
-          {copy.hint}
-        </Typography>
-        <Button variant="contained" onClick={createParent.openCreate} sx={{ alignSelf: { sm: 'center' } }}>
-          {copy.addParent}
-        </Button>
-      </Stack>
-
-      <Paper sx={{ px: 1.5, py: 1.25 }}>
-        <SearchInput value={search} onChange={setSearch} placeholder={copy.search} />
-      </Paper>
-
-      {list.error instanceof Error ? (
-        <Typography color="error">{list.error.message}</Typography>
-      ) : null}
-
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
-          gap: 1.5,
-        }}
-      >
-        {list.isLoading ? [0, 1, 2, 3, 4, 5].map((key) => <ParentCardSkeleton key={key} />) : null}
-        {visibleParents.map((row) => (
-          <ParentCard
-            key={row.id}
-            row={row}
-            copy={copy}
-            onOpen={() => setEditId(row.id)}
-            onDelete={() => delParent.request(row)}
-          />
-        ))}
-        {!list.isLoading && visibleParents.length === 0 ? (
-          <Paper sx={{ p: 3, gridColumn: '1 / -1', border: `1px solid ${BORDER}` }}>
-            <Typography color="text.secondary">{search ? copy.notFound : copy.empty}</Typography>
-          </Paper>
-        ) : null}
-      </Box>
+    <Stack spacing={1.25} sx={{ minHeight: 0, flex: 1 }}>
+      <Typography variant="body2" color="text.secondary">
+        {copy.hint}
+      </Typography>
+      <DataTable
+        columns={columns}
+        rows={paginate(visibleParents, page, params.pageSize)}
+        rowKey={(row) => row.id}
+        loading={list.isLoading}
+        errorText={list.error instanceof Error ? list.error.message : undefined}
+        emptyText={params.search.trim() ? copy.notFound : copy.empty}
+        variant="grid"
+        fixedLayout
+        cardBreakpoint={false}
+        showIndex
+        indexOffset={(page - 1) * params.pageSize}
+        minWidth={720}
+        page={page}
+        pageSize={params.pageSize}
+        total={visibleParents.length}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+        onRowClick={(row) => setEditId(row.id)}
+        sort={table.sortState}
+        onSortChange={table.toggleSort}
+        rowsLabel="danh mục"
+        sx={{ flex: 1 }}
+        toolbar={
+          <>
+            <SearchInput
+              value={params.search}
+              onChange={table.setSearch}
+              placeholder={copy.search}
+              sx={{ width: { xs: '100%', sm: 320 } }}
+            />
+            <Button variant="contained" sx={{ ml: { sm: 'auto' } }} onClick={createParent.openCreate}>
+              {copy.addParent}
+            </Button>
+          </>
+        }
+      />
 
       <CrudDialogShell<FormValues>
         open={createParent.open}
@@ -484,79 +523,5 @@ function ParentEditorDialog({
         onConfirm={delChild.confirm}
       />
     </>
-  )
-}
-
-/** Cùng khung với ParentCard: tên nhóm + 2 nút, chip số danh mục con, dòng xem trước. */
-function ParentCardSkeleton() {
-  return (
-    <Paper sx={{ p: 2, border: `1px solid ${BORDER}` }}>
-      <Stack spacing={1.25}>
-        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-          <Skeleton variant="text" width="55%" sx={{ fontSize: 18 }} />
-          <Stack direction="row" spacing={0.5}>
-            <Skeleton variant="circular" width={28} height={28} />
-            <Skeleton variant="circular" width={28} height={28} />
-          </Stack>
-        </Stack>
-        <Skeleton variant="rounded" width={112} height={24} />
-        <Skeleton variant="text" width="80%" />
-      </Stack>
-    </Paper>
-  )
-}
-
-function ParentCard({
-  row,
-  copy,
-  onOpen,
-  onDelete,
-}: {
-  row: CatalogItem
-  copy: Copy
-  onOpen: () => void
-  onDelete: () => void
-}) {
-  const kids = row.children ?? []
-  const preview = kids
-    .slice(0, 3)
-    .map((item) => item.name)
-    .join(', ')
-
-  return (
-    <Paper
-      onClick={onOpen}
-      sx={{
-        p: 2,
-        border: `1px solid ${BORDER}`,
-        cursor: 'pointer',
-        transition: 'border-color 120ms, box-shadow 120ms',
-        '&:hover': { borderColor: BRAND, boxShadow: '0 8px 20px rgba(107,69,19,0.12)' },
-      }}
-    >
-      <Stack spacing={1.25}>
-        <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-          <Typography variant="h6" sx={{ fontSize: 18, fontWeight: 700, color: BRAND }}>
-            {row.name}
-          </Typography>
-          <Stack direction="row" onClick={(event) => event.stopPropagation()}>
-            <IconButton size="small" aria-label="Sửa" onClick={onOpen}>
-              <PencilIcon />
-            </IconButton>
-            <IconButton size="small" aria-label="Xóa" color="error" onClick={onDelete}>
-              <TrashIcon />
-            </IconButton>
-          </Stack>
-        </Stack>
-        <Chip
-          size="small"
-          label={`${kids.length} danh mục con`}
-          sx={{ alignSelf: 'flex-start', bgcolor: BRAND_SOFT, color: BRAND, fontWeight: 600 }}
-        />
-        <Typography variant="body2" color="text.secondary">
-          {preview ? `${preview}${kids.length > 3 ? '…' : ''}` : copy.emptyChild.split('.')[0]}
-        </Typography>
-      </Stack>
-    </Paper>
   )
 }

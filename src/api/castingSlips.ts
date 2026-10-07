@@ -11,6 +11,8 @@ export type CastingSlipOrderLine = {
   trackingCode: string | null
   qty: number
   status: string
+  /** Trạng thái lệnh SX thật (sau cắt: WAIT_FILING → …). */
+  orderStatus?: string | null
   productionOrderCode: string | null
   /** Số liệu phôi đã cắt; có thể có trên phiếu cũ thiếu trọng lượng cây còn lại. */
   blankQty?: number | null

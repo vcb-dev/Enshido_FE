@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CastingSlip } from '../api/castingSlips'
-import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData } from './castingCuts'
+import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData, slipJourneyStatuses } from './castingCuts'
 
 function slip(overrides: Partial<CastingSlip> = {}): CastingSlip {
   return {
@@ -34,5 +34,16 @@ describe('điều kiện cắt cây của phiếu cũ', () => {
     expect(hasCastingSlipCutData(moved)).toBe(false)
     expect(canCutCastingSlip(moved)).toBe(false)
     expect(getCastingSlipCutBlockedReason(moved)).toMatch(/đã chuyển bước/)
+  })
+
+  it('sau cắt hiện lộ trình từ Chờ nguội, không giữ Đúc xong', () => {
+    const cut = slip({
+      restWeightGram: '100',
+      orders: [
+        { ...slip().orders[0], status: 'WAIT_COOLING', orderStatus: 'WAIT_FILING', productionOrderCode: 'A001' },
+        { ...slip().orders[0], code: 'DH002', status: 'WAIT_COOLING', orderStatus: 'FILING', productionOrderCode: 'A002' },
+      ],
+    })
+    expect(slipJourneyStatuses(cut)).toEqual(['WAIT_FILING', 'FILING'])
   })
 })

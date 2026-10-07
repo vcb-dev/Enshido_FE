@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Chip, Stack, Typography } from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -27,9 +27,10 @@ import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlWarehouse } from '../orders/nvlStock'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
+import { StatusChip } from '../orders/OrderChips'
 import { CastingSlipViewDialog, SlipStatusChip } from './CastingOrdersPage'
 
-import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData } from '../casting/castingCuts'
+import { canCutCastingSlip, getCastingSlipCutBlockedReason, slipJourneyStatuses } from '../casting/castingCuts'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -44,13 +45,18 @@ function formatGram(value: string | null) {
 }
 
 function renderCutStatus(slip: CastingSlip) {
-  if (slip.status === 'DONE' && hasCastingSlipCutData(slip)) {
-    return <>
-      <Chip size="small" label="Chờ nguội" color="info" />
-      {slip.restWeightGram == null ? <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-        Thiếu số liệu cây còn lại.
-      </Typography> : null}
-    </>
+  if (canCutCastingSlip(slip)) {
+    return <SlipStatusChip status={slip.status} />
+  }
+  const journey = slipJourneyStatuses(slip)
+  if (journey.length) {
+    return (
+      <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+        {journey.map((status) => (
+          <StatusChip key={status} status={status} />
+        ))}
+      </Stack>
+    )
   }
   return <>
     <SlipStatusChip status={slip.status} />
@@ -81,11 +87,10 @@ export function CastingCutsPage() {
   const canConfirm = canConfirmIntakeWarehouse(user)
 
   const list = useQuery({
-    queryKey: ['casting-slips', 'cuts', 'awaiting-cut', status, params.page, params.pageSize, params.slipDate, params.batchOrderCodes],
+    queryKey: ['casting-slips', 'cuts', status, params.page, params.pageSize, params.slipDate, params.batchOrderCodes],
     queryFn: () =>
       listCastingSlipsApi({
         status,
-        awaitingCut: true,
         slipDate: params.slipDate,
         batchOrderCodes: params.batchOrderCodes,
         page: params.page,
@@ -335,7 +340,7 @@ export function CastingCutsPage() {
     >
       <PageHeader
         title="Cắt cây thông"
-        subtitle="Chọn các phiếu Đúc xong để cắt nhiều đơn cùng lần. Nhập số liệu từng đơn; tất cả đơn đã cắt chuyển sang Chờ nguội."
+        subtitle="Chọn phiếu Đúc xong để cắt. Phiếu đã cắt vẫn hiện ở đây, trạng thái theo lộ trình đơn từ Chờ nguội trở đi."
         compactSubtitle
         actions={canConfirm ? <Button variant="contained" disabled={cut.isPending || cutMany.isPending}
           onClick={() => setSelecting(true)}>
@@ -344,11 +349,7 @@ export function CastingCutsPage() {
       />
       <DataTable
         columns={columns}
-        rows={(list.data?.items ?? []).flatMap((row) => {
-          const redos = (row.redos ?? []).filter(canCutCastingSlip)
-          if (canCutCastingSlip(row)) return [{ ...row, redos }]
-          return redos.map((redo) => ({ ...redo, redos: [] }))
-        })}
+        rows={list.data?.items ?? []}
         rowKey={(row) => row.id}
         subRows={{
           get: (row) => row.redos ?? [],
@@ -357,7 +358,7 @@ export function CastingCutsPage() {
         }}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText="Chưa có phiếu Đúc xong chờ cắt."
+        emptyText="Chưa có phiếu Đúc xong."
         variant="grid"
         fixedLayout
         minWidth={900}
