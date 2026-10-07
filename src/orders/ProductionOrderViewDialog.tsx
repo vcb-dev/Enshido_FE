@@ -73,7 +73,7 @@ export function ProductionOrderViewDialog({ row, onClose }: ProductionOrderViewD
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Stack spacing={0.75}>
               <Typography variant="body2">
-                <strong>Tên SP:</strong> {order.btpName?.trim() || '—'}
+                <strong>Tên SP:</strong> {order.productName?.trim() || '—'}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                 <StatusChip status={order.status} />

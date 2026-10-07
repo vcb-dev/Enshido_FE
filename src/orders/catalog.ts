@@ -25,7 +25,8 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
   NEW: { label: 'Mới', bg: '#eee8df', fg: '#4a3d2f' },
   REDO_3D: { label: 'Sửa 3D', bg: '#f39c12', fg: '#ffffff' },
   CASTING: { label: 'Đúc', bg: '#8e44ad', fg: '#ffffff' },
-  WAIT_FILING: { label: 'Chờ nguội', bg: '#a29bfe', fg: '#1f1b4d' },
+  // Cùng màu với chip "Chờ nguội" ở màn lên đơn — cùng một trạng thái nhìn từ hai màn.
+  WAIT_FILING: INTAKE_STATUS_META.WAIT_COOLING,
   FILING: { label: 'Đang nguội', bg: '#6c5ce7', fg: '#ffffff' },
   FILING_DEFECT: { label: 'Lỗi nguội', bg: '#d63031', fg: '#ffffff' },
   WAIT_STONE: { label: 'Chờ vào đá', bg: '#55c1b5', fg: '#06302c' },

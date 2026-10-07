@@ -83,8 +83,8 @@ export type ProductionOrderRow = {
   mainMaterial: string | null
   platingColor: string | null
   btpCategory: string | null
-  /** Tên bán thành phẩm — điền sẵn khi chọn mã. */
-  btpName: string | null
+  /** Tên sản phẩm — điền sẵn khi chọn mã BTP. */
+  productName: string | null
   productKind: string | null
   askedUserName: string | null
   receivedDate: string
@@ -540,7 +540,7 @@ export type UpsertProductionOrderPayload = {
   mainMaterial?: string
   platingColor?: string
   btpCategory?: string
-  btpName?: string
+  productName?: string
   productKind?: string
   askedUserId?: string | null
   debtStatus?: string
@@ -830,7 +830,7 @@ function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
     workState: row.workState ?? null,
     workStage: row.workStage ?? null,
     subTickets: row.subTickets ?? [],
-    btpName: row.btpName ?? null,
+    productName: row.productName ?? null,
     customerName: row.customerName ?? null,
   }
 }
@@ -838,7 +838,7 @@ function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
 function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
   return {
     ...order,
-    btpName: order.btpName ?? order.btp?.name ?? null,
+    productName: order.productName ?? order.btp?.name ?? null,
     customerName: order.customerName ?? null,
     subTickets: order.subTickets ?? [],
     // Máy chủ chưa biết phiếu con thì cũng chưa chia được gì.
@@ -1068,7 +1068,7 @@ export function listBtpOptionsApi(search = '') {
 export type FinishedProductOption = {
   code: string
   description: string
-  btpName?: string | null
+  productName?: string | null
   requestType: ProductionRequestType
   qty: number
   size: string | null

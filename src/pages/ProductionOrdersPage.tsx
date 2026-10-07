@@ -1057,10 +1057,7 @@ function orderColumns(
       header: 'Tên sản phẩm',
       width: 180,
       ellipsis: true,
-      render: (row) =>
-        row.kind === 'intake'
-          ? row.row.productName?.trim() || '—'
-          : row.row.btpName?.trim() || '—',
+      render: (row) => row.row.productName?.trim() || '—',
     },
     {
       key: 'requestType',
