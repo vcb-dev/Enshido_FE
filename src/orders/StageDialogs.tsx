@@ -156,6 +156,11 @@ export function HandoverDialog({
   }, [open, state, form])
 
   const ticket = state?.ticket ?? null
+  useEffect(() => {
+    if (open && state?.mode === 'confirm-order' && ticket) {
+      form.setValue('handedQty', String(ticket.availableQty))
+    }
+  }, [open, state?.mode, ticket?.availableQty, form])
   const stageCode = ticket?.pendingStage ?? null
   const stageLabel = stageCode ? STAGE_LABEL[stageCode] : ''
   /** Khâu Vào đá phát thêm đá cho thợ; khâu khác chỉ giao bạc. */
@@ -197,7 +202,9 @@ export function HandoverDialog({
   function submit(values: HandoverValues) {
     onSave({
       craftsmanUserId: values.craftsmanUserId,
-      handedQty: values.handedQty ? Number(values.handedQty) : null,
+      handedQty: state?.mode === 'confirm-order' && ticket
+        ? ticket.availableQty
+        : values.handedQty ? Number(values.handedQty) : null,
       handedSilverWeight: firstStockStage ? null : values.handedSilverWeight || null,
       note: values.note.trim(),
       materials: issuesStock
@@ -236,8 +243,8 @@ export function HandoverDialog({
           Bạn đang tự xác nhận giao cho chính mình (admin).
         </Alert>
       ) : null}
-      <FormRow columns={2} sx={{ mt: 1 }}>
-        <TextInput label="Khâu" value={stageLabel} readOnly />
+      <Typography variant="body2" sx={{ mt: 1 }}>Khâu: <b>{stageLabel}</b></Typography>
+      <FormRow columns={1}>
         <TextInput
           label="Người giao"
           value={operatorName}
@@ -250,6 +257,7 @@ export function HandoverDialog({
           name="handedQty"
           label="Số lượng giao"
           type="number"
+          readOnly={state?.mode === 'confirm-order'}
           required
           rules={{
             validate: (value) => {
@@ -349,6 +357,10 @@ export function AssignReceiptDialog({
   const stage = useWatch({ control: form.control, name: 'stage' })
   const craftsmanUserId = useWatch({ control: form.control, name: 'craftsmanUserId' })
   const handedQty = useWatch({ control: form.control, name: 'handedQty' })
+  const availableQty = ticket?.availableQty ?? order.qty
+  useEffect(() => {
+    if (open) form.setValue('handedQty', String(availableQty))
+  }, [open, availableQty, form])
   const cutBtp =
     order.cut?.btpMaterialId && order.cut.leftQty != null && order.cut.leftWeight != null
       ? {
@@ -413,7 +425,7 @@ export function AssignReceiptDialog({
         onSave({
           stage: values.stage,
           craftsmanUserId: values.craftsmanUserId,
-          handedQty: values.handedQty ? Number(values.handedQty) : null,
+          handedQty: availableQty,
           handedSilverWeight: firstStage ? null : values.handedSilverWeight || null,
           handedStoneCount: stoneCounts.length ? stoneCounts.reduce((sum, count) => sum + count, 0) : null,
           handedStoneWeight: stoneWeights.length ? String(stoneWeights.reduce((sum, weight) => sum + weight, 0)) : null,
@@ -438,13 +450,8 @@ export function AssignReceiptDialog({
       <Alert severity="info" sx={{ mt: 1 }}>
         Lưu thông tin giao trước. Kho chỉ xuất hàng khi thợ bấm “Xác nhận”.
       </Alert>
-      <FormRow columns={2} sx={{ mt: 1 }}>
-        <FormSelect<Values>
-          name="stage"
-          label="Khâu"
-          required
-          options={stages.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
-        />
+      <Typography variant="body2" sx={{ mt: 1 }}>Khâu: <b>{stage ? STAGE_LABEL[stage] : '—'}</b></Typography>
+      <FormRow columns={1}>
         <FormSelect<Values>
           name="craftsmanUserId"
           label="Thợ"
@@ -457,6 +464,7 @@ export function AssignReceiptDialog({
           name="handedQty"
           label="Số lượng giao"
           type="number"
+          readOnly
           required
           rules={{
             validate: (value) => {
@@ -870,8 +878,8 @@ export function KcsReturnDialog({
       submitLabel={
         keeperStage
           ? revising
-            ? 'Lưu bản sửa — chờ thủ kho xác nhận'
-            : 'Lưu QC — chờ thủ kho xác nhận'
+            ? 'Lưu bản sửa'
+            : 'Lưu QC'
           : revising
             ? 'Lưu bản sửa & chuyển khâu'
             : 'Lưu cân & chuyển khâu'

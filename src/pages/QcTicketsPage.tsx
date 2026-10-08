@@ -11,6 +11,8 @@ import ScaleIcon from '@mui/icons-material/Scale'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useAuth } from '../auth/AuthContext'
+import { canReportProductionDefect } from '../auth/permissions'
 import {
   finishOrderApi,
   finishSubTicketApi,
@@ -68,6 +70,8 @@ const MAX_REVISIONS = 3
  * Chi tiết lệnh sản xuất không còn nút thao tác của QC.
  */
 export function QcTicketsPage() {
+  const { user } = useAuth()
+  const canReportDefect = canReportProductionDefect(user)
   const queryClient = useQueryClient()
   const tickets = useQuery({
     queryKey: ['qc-tickets'],
@@ -178,11 +182,11 @@ export function QcTicketsPage() {
     const entry = item as QcTicketItem
     const loading = loadingEntry === entry.entryId
     if (tab === 'working') {
-      return (
+      return canReportDefect ? (
         <Button variant="outlined" color="error" onClick={() => setReporting(entry)}>
           Báo lỗi
         </Button>
-      )
+      ) : null
     }
     if (tab === 'pending') {
       return (
@@ -335,7 +339,7 @@ export function QcTicketsPage() {
         />
       ) : null}
       <DefectDialog
-        open={reporting != null}
+        open={reporting != null && canReportDefect}
         ticketCode={reporting ? `${reporting.ticketCode} · ${STAGE_LABEL[reporting.stage as StageCode]}` : ''}
         saving={reportDefect.isPending}
         onClose={() => setReporting(null)}

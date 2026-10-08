@@ -420,7 +420,7 @@ function partialDefectLines(order: ProductionOrderDetail, ticketId: string | nul
         `${STAGE_LABEL[entry.stage]}: ${entry.defectQty} sp lỗi`,
         entry.btpRecoveredWeight ? `${formatQty(entry.btpRecoveredWeight)} g` : '',
         entry.confirmedAt ? '' : 'chờ thủ kho',
-        rework ? `phiếu bù ${rework.code}` : '',
+        rework ? `phiếu bù ${rework.orderCode ?? rework.code}` : '',
       ]
         .filter(Boolean)
         .join(' · ')

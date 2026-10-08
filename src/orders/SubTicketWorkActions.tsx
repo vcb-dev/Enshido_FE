@@ -22,8 +22,8 @@ import {
   type StageEntry,
   type SubTicket,
 } from '../api/productionOrders'
-import { INTAKE_STATUS_META } from '../intake/catalog'
-import { isInStage, STAGE_LABEL } from './catalog'
+import { ReworkChildren } from './ReworkChildren'
+import { STAGE_LABEL } from './catalog'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -66,9 +66,9 @@ export function SubTicketWorkActions({
   const last = entries.at(-1)
   const openEntry = entries.find((entry) => !entry.returnedAt)
   const active = !locked && !order.finishedGoods
-  // Đi đúng quy trình: chỉ giao được khâu kế tiếp; chọn khâu khác chỉ khi đơn đang làm lại.
+  // Tự giao khâu kế tiếp của phiếu; làm lại thì bắt đầu từ khâu mặc định.
   const openable = openableStages(order).byTicket.get(ticket.no) ?? []
-  const assignableStages = !isInStage(order.status) ? openable : openable.slice(0, 1)
+  const assignableStages = openable.slice(0, 1)
 
   const cancel = useOrderMutation(
     order.code,
@@ -118,11 +118,7 @@ export function SubTicketWorkActions({
         </Alert>
       ) : null}
 
-      {reworks.map((item) => (
-        <Alert key={item.code} severity="info" sx={{ py: 0.25 }}>
-          Phiếu bù <b>{item.code}</b> · {item.qty} sp · {INTAKE_STATUS_META[item.status].label}
-        </Alert>
-      ))}
+      <ReworkChildren reworks={reworks} ticketCode={ticket.code} />
 
       <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         {ticket.state === 'IDLE' && active ? (

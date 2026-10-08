@@ -22,6 +22,7 @@ export type IntakeOrderStatus =
   | 'CANCELLED'
 
 export type IntakeOrder = {
+  reworkOfOrderId?: string | null
   id: string
   code: string
   /** Mã lệnh SX (random) — cột Mã SX trên Lệnh sản xuất. */
@@ -82,6 +83,7 @@ export type UpsertIntakeOrderPayload = {
 export function listIntakeOrdersApi(params: {
   status?: IntakeOrderStatus | ''
   unlinkedOnly?: boolean
+  rootsOnly?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
   page: number
@@ -89,6 +91,7 @@ export function listIntakeOrdersApi(params: {
 }) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
+  if (params.rootsOnly) query.set('rootsOnly', 'true')
   if (params.unlinkedOnly) query.set('unlinkedOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
@@ -106,11 +109,13 @@ export function getIntakePipelineCountsApi() {
 export type IntakePipelineLists = Partial<Record<IntakeOrderStatus, IntakeOrderList>>
 
 export function getIntakePipelineListsApi(params: {
+  rootsOnly?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
   pageSize?: number
 }) {
   const query = new URLSearchParams()
+  if (params.rootsOnly) query.set('rootsOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
   if (params.pageSize != null) query.set('pageSize', String(params.pageSize))

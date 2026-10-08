@@ -62,6 +62,14 @@ export function canAny(user: PermissionUser | undefined | null, ...permissions: 
   return permissions.some((permission) => can(user, permission))
 }
 
+/** Báo / bỏ báo lỗi khâu dành cho QC và admin, không dành cho tài khoản thợ. */
+export function canReportProductionDefect(user: PermissionUser | undefined | null): boolean {
+  if (!user) return false
+  const admin = user.roleCode === 'ADMIN' || Boolean(user.extraRoles?.includes('ADMIN'))
+  const worker = user.roleCode === 'WORKER' || Boolean(user.extraRoles?.includes('WORKER'))
+  return admin || (!worker && can(user, Permission.PRODUCTION_QC))
+}
+
 export type PermissionUser = {
   roleCode?: string
   extraRoles?: RoleCode[]

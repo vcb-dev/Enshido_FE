@@ -50,7 +50,7 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
 
   return (
     <Dialog open={Boolean(order)} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Chi tiết đơn — {order?.code ?? ''}</DialogTitle>
+      <DialogTitle>Chi tiết đơn — {order?.code ?? ''}{order?.reworkOfOrderId ? ` · Lệnh bù ${order.sxCode}` : ''}</DialogTitle>
       <DialogContent>
         {order ? (
           <Stack spacing={2} sx={{ pt: 0.5 }}>
