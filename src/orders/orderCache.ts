@@ -16,12 +16,43 @@ import {
 } from './productionStatusCountsRefresh'
 import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
+/** Mutation không trả ảnh QC — giữ ảnh đã có trong cache để màn chi tiết không chớp trắng. */
+function keepLoadedImages(
+  previous: ProductionOrderDetail | undefined,
+  next: ProductionOrderDetail,
+): ProductionOrderDetail {
+  if (!previous) return next
+  const byId = new Map(previous.stages.map((entry) => [entry.id, entry.images]))
+  return {
+    ...next,
+    images: next.images.length > 0 ? next.images : previous.images,
+    stages: next.stages.map((entry) => ({
+      ...entry,
+      images:
+        (entry.images?.length ?? 0) > 0
+          ? entry.images
+          : (byId.get(entry.id) ?? entry.images ?? []),
+    })),
+    cut: next.cut
+      ? {
+          ...next.cut,
+          restImages:
+            (next.cut.restImages?.length ?? 0) > 0
+              ? next.cut.restImages
+              : (previous.cut?.restImages ?? next.cut.restImages),
+        }
+      : next.cut,
+  }
+}
+
 /** Ghi cache chi tiết + vá danh sách để vào trang đơn ngay, không chờ refetch. */
 export function seedProductionOrder(queryClient: QueryClient, order: ProductionOrderDetail) {
-  queryClient.setQueryData(['production-order', order.code], order)
+  const previous = queryClient.getQueryData<ProductionOrderDetail>(['production-order', order.code])
+  const merged = keepLoadedImages(previous, order)
+  queryClient.setQueryData(['production-order', order.code], merged)
   queryClient.setQueriesData(
     { queryKey: ['production-orders'] },
-    (current: ProductionOrderListResponse | undefined) => patchOrderList(queryClient, current, order),
+    (current: ProductionOrderListResponse | undefined) => patchOrderList(queryClient, current, merged),
   )
 }
 

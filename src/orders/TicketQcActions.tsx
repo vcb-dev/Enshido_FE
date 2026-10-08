@@ -9,6 +9,7 @@ import { isReceiptStage, STAGE_LABEL } from './catalog'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock } from './nvlStock'
 import { KeeperConfirmDialog } from './KeeperConfirmDialog'
+import { scheduleMyTicketsRefresh } from './myTicketsRefresh'
 import { useOrderMutation } from './useOrderMutation'
 
 /** Xác nhận kho và tạo phiếu bù cho đúng phiếu mẹ / con đang xem. */
@@ -44,7 +45,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
   const refreshStock = () => {
     invalidateBtpStock(queryClient)
     invalidateNvlStock(queryClient)
-    void queryClient.invalidateQueries({ queryKey: ['qc-tickets'] })
+    scheduleMyTicketsRefresh(queryClient)
   }
   const ticketCode = ticketNo == null ? order.code : order.subTickets.find((ticket) => ticket.no === ticketNo)?.code ?? order.code
 

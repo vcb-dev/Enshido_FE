@@ -7,9 +7,9 @@
  */
 export const LIVE_REFRESH_MS = {
   /** Đang điều hành cùng lúc với người khác: tab Sản xuất của đơn (phiếu con đổi trạng thái). */
-  active: 15_000,
+  active: 25_000,
   /** Phiếu thợ đang cầm / mở từ QR. */
-  ticket: 20_000,
+  ticket: 30_000,
   /** Danh sách theo trạng thái: lệnh SX, lệnh đúc, đơn tạo, hàng chờ kho, phiếu xuất nháp. */
   list: 30_000,
   /** Bộ đếm trên tab. */

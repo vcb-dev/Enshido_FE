@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getWorkflowIntakeLiveApi, getWorkflowRevisionApi, type WorkflowRevision } from '../api/workflow'
 import { applyIntakeLiveSnapshot } from '../intake/intakeOrderCache'
+import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
 import { subscribeWorkflowBroadcast } from './workflowBroadcast'
 
 const EMPTY: WorkflowRevision = { intake: '', production: '', casting: '' }
@@ -26,15 +27,20 @@ function applyRevisionDelta(
     }
   }
   if (prev.production !== next.production) {
+    // Chi tiết đơn đã vá cache lúc bấm nút; poll không GET lại (ảnh QC nặng).
+    // Tab khác đang mở đơn thì liveRefresh trên tab Sản xuất / phiếu thợ tự làm mới.
     void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['qc-tickets'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['production-order'], refetchType: 'active' })
+    scheduleMyTicketsRefresh(queryClient)
+    const watchingRequests = queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ['material-requests'], type: 'active' }).length
+    if (watchingRequests) {
+      void queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'active' })
+    }
   }
   if (prev.casting !== next.casting) {
     void queryClient.invalidateQueries({ queryKey: ['casting-slips'], refetchType: 'active' })
-    void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
+    scheduleMyTicketsRefresh(queryClient)
   }
 }
 
@@ -47,8 +53,8 @@ export function useWorkflowLiveSync(enabled: boolean) {
     queryKey: ['workflow-revision'],
     queryFn: getWorkflowRevisionApi,
     enabled,
-    staleTime: 10_000,
-    refetchInterval: enabled ? 12_000 : false,
+    staleTime: 15_000,
+    refetchInterval: enabled ? 20_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })

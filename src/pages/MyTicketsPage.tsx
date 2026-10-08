@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -26,7 +26,6 @@ import { toast } from 'sonner'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   getMyTicketsApi,
-  getSubTicketOrderApi,
   type MyCastingSlipItem,
   type MyTicketItem,
   type MyTickets,
@@ -80,22 +79,6 @@ export function MyTicketsPage() {
     staleTime: 90_000,
     refetchOnWindowFocus: true,
   })
-
-  // Prefetch tối đa vài phiếu — prefetch hàng loạt sau my-tickets làm nghẽn API.
-  useEffect(() => {
-    if (!tickets.data) return
-    const queue = [...tickets.data.available, ...tickets.data.mine].slice(0, 4)
-    if (queue.length === 0) return
-    for (const item of queue) {
-      const key = ['production-order', item.orderCode] as const
-      if (queryClient.getQueryData(key)) continue
-      void queryClient.prefetchQuery({
-        queryKey: key,
-        queryFn: () => getSubTicketOrderApi(item.ticketCode),
-        staleTime: 60_000,
-      })
-    }
-  }, [tickets.data, queryClient])
 
   // Cache, thông báo và hàng chờ khi mất mạng nằm hết trong orders/subTicketActions.ts.
   const claim = useSubTicketAction('claim')

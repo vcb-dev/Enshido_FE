@@ -92,7 +92,6 @@ export function QcTicketsPage() {
     invalidateNvlStock(queryClient)
     scheduleMyTicketsRefresh(queryClient)
     scheduleProductionStatusCountsRefresh(queryClient)
-    void queryClient.invalidateQueries({ queryKey: ['qc-tickets'] })
     toast.success(message)
   }
 
