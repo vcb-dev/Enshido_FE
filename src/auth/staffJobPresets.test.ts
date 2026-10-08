@@ -5,6 +5,7 @@ import {
   inferStaffJobPreset,
   staffJobPresetForEditForm,
   staffJobSelectOptions,
+  workerStagesForPreset,
 } from './staffJobPresets'
 
 describe('vai trò ở màn Nhân sự', () => {
@@ -12,6 +13,20 @@ describe('vai trò ở màn Nhân sự', () => {
     expect(staffJobSelectOptions().map((o) => o.value)).toContain('worker_sx')
     const worker = { roleCode: 'WORKER' as const, allowedScreens: [Permission.SCREEN_MY_TICKETS] }
     expect(staffJobPresetForEditForm(inferStaffJobPreset(worker))).toBe('worker_sx')
+  })
+
+  it('chọn được Thợ nguội và lưu khâu Nguội', () => {
+    expect(staffJobSelectOptions().map((o) => o.value)).toContain('worker_filing')
+    expect(workerStagesForPreset('worker_filing')).toEqual(['FILING'])
+    const filing = {
+      roleCode: 'WORKER' as const,
+      allowedScreens: [Permission.SCREEN_MY_TICKETS],
+      workerStages: ['FILING' as const],
+    }
+    expect(inferStaffJobPreset(filing)).toBe('worker_filing')
+    expect(
+      allowedScreensForSave('worker_filing', []).includes(Permission.SCREEN_MY_TICKETS),
+    ).toBe(true)
   })
 
   it('thủ kho lưu kèm quyền tạo đơn và duyệt đơn', () => {

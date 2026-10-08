@@ -35,6 +35,7 @@ import {
   staffJobPresetHint,
   staffJobPresetForEditForm,
   staffJobSelectOptions,
+  workerStagesForPreset,
   type StaffJobPreset,
 } from '../auth/staffJobPresets'
 import { STAGE_LABEL } from '../orders/catalog'
@@ -337,6 +338,7 @@ function CreateUserDialog({
         roleCode: mapped.roleCode,
         department: values.department.trim() || undefined,
         allowedScreens: allowedScreensForSave(values.staffJob, values.screens),
+        workerStages: workerStagesForPreset(values.staffJob),
       })
     },
     onSuccess: () => {
@@ -472,6 +474,9 @@ function EditUserDialog({
         allowedScreens: isAdmin
           ? undefined
           : allowedScreensForSave(values.staffJob, values.screens),
+        workerStages: isAdmin
+          ? undefined
+          : workerStagesForPreset(values.staffJob),
         editReason: values.editReason.trim(),
       })
     },

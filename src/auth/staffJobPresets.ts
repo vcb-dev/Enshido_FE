@@ -1,4 +1,5 @@
 import type { RoleCode, UserRow } from '../api/auth'
+import type { StageCode } from '../api/productionOrders'
 import { Permission, type PermissionCode } from './permissions'
 import { SCREEN_GROUPS, type ScreenGroup } from './screens'
 
@@ -10,8 +11,17 @@ export type StaffJobPreset =
   | 'worker_3d'
   | 'worker_wax'
   | 'worker_casting'
+  | 'worker_filing'
   | 'warehouse'
   | 'kcs'
+
+const ALL_WORKER_STAGES: StageCode[] = [
+  'FILING',
+  'STONE_SETTING',
+  'ENGRAVING',
+  'POLISHING',
+  'PLATING',
+]
 
 export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'admin', label: 'Admin' },
@@ -20,6 +30,7 @@ export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'worker_3d', label: 'Thợ 3D' },
   { value: 'worker_wax', label: 'Thợ sáp' },
   { value: 'worker_casting', label: 'Thợ đúc' },
+  { value: 'worker_filing', label: 'Thợ nguội' },
   { value: 'warehouse', label: 'Thủ kho' },
   { value: 'kcs', label: 'QC' },
 ]
@@ -55,6 +66,8 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
       return 'Lệnh sản xuất: bơm sáp, cây thông.'
     case 'worker_casting':
       return 'Màn Lệnh đúc.'
+    case 'worker_filing':
+      return 'Màn Phiếu của tôi — khâu Nguội.'
     case 'warehouse':
       return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
@@ -123,6 +136,11 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
           Permission.SCREEN_MY_TICKETS,
         ],
       }
+    case 'worker_filing':
+      return {
+        roleCode: 'WORKER',
+        allowedScreens: [Permission.SCREEN_MY_TICKETS, Permission.PRODUCTION_WORKER],
+      }
     case 'warehouse':
       return {
         roleCode: 'USER',
@@ -158,7 +176,8 @@ export function allowedScreensForSave(
     preset === 'worker_sx' ||
     preset === 'worker_3d' ||
     preset === 'worker_wax' ||
-    preset === 'worker_casting'
+    preset === 'worker_casting' ||
+    preset === 'worker_filing'
   ) {
     return Array.from(new Set([...fromForm, ...fromPreset]))
   }
@@ -166,7 +185,15 @@ export function allowedScreensForSave(
   return Array.from(new Set([...fromForm, ...stage]))
 }
 
-export function inferStaffJobPreset(user: Pick<UserRow, 'roleCode' | 'allowedScreens'>): StaffJobPreset {
+export function workerStagesForPreset(preset: StaffJobPreset): StageCode[] {
+  if (preset === 'worker_filing') return ['FILING']
+  if (preset === 'worker_sx') return ALL_WORKER_STAGES
+  return []
+}
+
+export function inferStaffJobPreset(
+  user: Pick<UserRow, 'roleCode' | 'allowedScreens' | 'workerStages'>,
+): StaffJobPreset {
   if (user.roleCode === 'ADMIN') return 'admin'
   const screens = new Set(user.allowedScreens ?? [])
   if (user.roleCode === 'WORKER') {
@@ -178,6 +205,8 @@ export function inferStaffJobPreset(user: Pick<UserRow, 'roleCode' | 'allowedScr
     ) {
       return 'worker_casting'
     }
+    const stages = user.workerStages ?? []
+    if (stages.length === 1 && stages[0] === 'FILING') return 'worker_filing'
     return 'worker_sx'
   }
   if (screens.has(Permission.PRODUCTION_QC) && screens.has(Permission.SCREEN_DASHBOARD)) {
@@ -233,7 +262,9 @@ export function defaultEditScreensForPreset(preset: StaffJobPreset): PermissionC
   return Array.from(new Set(fromRole))
 }
 
-export function staffJobLabel(user: Pick<UserRow, 'roleCode' | 'allowedScreens'>): string {
+export function staffJobLabel(
+  user: Pick<UserRow, 'roleCode' | 'allowedScreens' | 'workerStages'>,
+): string {
   const preset = inferStaffJobPreset(user)
   const match = STAFF_JOB_OPTIONS.find((option) => option.value === preset)
   return match?.label ?? user.roleCode
