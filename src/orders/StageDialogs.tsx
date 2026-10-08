@@ -35,21 +35,15 @@ import {
 import { FormImageField } from './FormImageField'
 import {
   formatDateShort,
-  fromDateTimeInput,
   SILVER_LOSS_LIMITS,
   silverLossLevel,
   STAGE_LABEL,
-  toDateTimeInput,
 } from './catalog'
 
 const DATE_LABEL = { inputLabel: { shrink: true } }
 
 /** Hao hụt bạc: đạt / cần xem lại / quá cao — cùng ngưỡng với màu trên phiếu thợ. */
 const LOSS_SEVERITY = { ok: 'success', warn: 'warning', high: 'error' } as const
-
-function nowInput() {
-  return toDateTimeInput(new Date().toISOString())
-}
 
 /**
  * Hao tổn một khâu: thiếu bao nhiêu so với số đã giao, kèm %. Mặc định % tính trên chính số
@@ -442,7 +436,7 @@ export function AssignReceiptDialog({
       onExited={() => undefined}
     >
       <Alert severity="info" sx={{ mt: 1 }}>
-        Lưu thông tin giao trước. Kho chỉ xuất hàng khi thợ bấm “Nhận hàng”.
+        Lưu thông tin giao trước. Kho chỉ xuất hàng khi thợ bấm “Xác nhận”.
       </Alert>
       <FormRow columns={2} sx={{ mt: 1 }}>
         <FormSelect<Values>
@@ -492,7 +486,7 @@ export function AssignReceiptDialog({
           {autoCutWeight != null
             ? ` Dự kiến xuất ${autoCutQty} chiếc · ${formatQty(String(autoCutWeight))} g.`
             : ''}{' '}
-          Kho xuất khi thợ bấm “Nhận hàng”.
+          Kho xuất khi thợ bấm “Xác nhận”.
         </Alert>
       ) : (
         <>
@@ -525,7 +519,6 @@ const QC_OUTCOMES: { value: QcOutcome; label: string; color: 'success' | 'warnin
 ]
 
 type ReturnValues = {
-  returnedAt: string
   returnedQty: string
   returnedSilverWeight: string
   /** Nguội / Vào đá: SL hàng lỗi QC tách ra. */
@@ -582,7 +575,6 @@ export function KcsReturnDialog({
   const form = useForm<ReturnValues>({
     defaultValues: {
       images: [],
-      returnedAt: '',
       returnedQty: '',
       returnedSilverWeight: '',
       defectQty: '',
@@ -609,13 +601,11 @@ export function KcsReturnDialog({
     // Đã báo lỗi ở khâu Nguội / Vào đá: điền sẵn cả lô là hàng lỗi, QC sửa lại theo hàng thật.
     const flagged =
       entry.defectReportedAt != null &&
-      entry.subTicketId != null &&
       (entry.stage === 'FILING' || entry.stage === 'STONE_SETTING')
     // Sửa lại kết quả đã nhận: điền sẵn số liệu QC đã nhập lần trước.
     if (entry.returnedAt) {
       setOutcome((entry.defectQty ?? 0) > 0 ? (entry.returnedQty === 0 ? 'all' : 'partial') : 'ok')
       form.reset({
-        returnedAt: toDateTimeInput(entry.returnedAt),
         returnedQty: entry.returnedQty != null ? String(entry.returnedQty) : '',
         returnedSilverWeight: entry.returnedSilverWeight ?? '',
         defectQty: entry.defectQty != null ? String(entry.defectQty) : '',
@@ -633,7 +623,6 @@ export function KcsReturnDialog({
     // Đã báo lỗi giữa khâu: mở sẵn "Lỗi hết", QC đổi sang "Lỗi một phần" nếu còn hàng đạt.
     setOutcome(flagged ? 'all' : 'ok')
     form.reset({
-      returnedAt: nowInput(),
       returnedQty: flagged ? '0' : entry.handedQty != null ? String(entry.handedQty) : '',
       returnedSilverWeight: flagged ? '0' : '',
       defectQty: flagged && entry.handedQty != null ? String(entry.handedQty) : '',
@@ -654,9 +643,9 @@ export function KcsReturnDialog({
     control: form.control,
     name: ['returnedQty', 'returnedSilverWeight', 'btpRecoveredWeight', 'silverRecoveredWeight', 'scrapS999Weight'],
   })
-  /** Nguội / Vào đá của phiếu con: QC tách hàng đạt / hàng lỗi / nguyên liệu thừa; có hàng lỗi thì thủ kho kiểm tra, xác nhận lỗi. */
+  /** Nguội / Vào đá: QC tách hàng đạt / hàng lỗi / nguyên liệu thừa trên cả phiếu mẹ và phiếu con. */
   const keeperStage =
-    entry != null && entry.subTicketId != null && (entry.stage === 'FILING' || entry.stage === 'STONE_SETTING')
+    entry != null && (entry.stage === 'FILING' || entry.stage === 'STONE_SETTING')
   /** QC nhận lại 0 sp: phiếu đóng ở nhánh Lỗi (khâu qua thủ kho thì sau khi thủ kho xác nhận). */
   const allDefect = keeperStage ? outcome === 'all' : returnedQty === '0' && entry?.returnedAt == null
   /** Lỗi hết ở khâu không qua thủ kho thì bắt buộc lý do (phiếu chốt Lỗi ngay). */
@@ -841,7 +830,6 @@ export function KcsReturnDialog({
       return
     }
     onSave({
-      returnedAt: fromDateTimeInput(values.returnedAt) ?? new Date().toISOString(),
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
       returnedSilverWeight: values.returnedSilverWeight,
       defectQty: keeperStage ? (defectSection ? Number(values.defectQty || 0) : 0) : null,
@@ -877,17 +865,10 @@ export function KcsReturnDialog({
       onSubmit={submit}
       saving={saving}
       submitDisabled={uploading}
-      // Nguội: chỉ khi báo hàng lỗi mới chờ thủ kho kiểm tra, không lỗi thì hệ thống tự nhập kho.
-      // Vào đá: luôn chờ thủ kho nhận hàng + túi đá thừa rồi mới nhập kho.
+      // Nguội / Vào đá: mọi kết quả QC đều chờ thủ kho xác nhận rồi mới nhập kho, chuyển khâu.
       submitColor={keeperStage && outcome === 'all' ? 'error' : undefined}
       submitLabel={
-        keeperStage && outcome === 'all'
-          ? 'Chốt lỗi hết — dừng phiếu'
-          : defectSection
-          ? revising
-            ? 'Lưu bản sửa — chờ thủ kho xác nhận lỗi'
-            : 'Lưu QC — chờ thủ kho xác nhận lỗi'
-          : keeperStage && stoneStage
+        keeperStage
           ? revising
             ? 'Lưu bản sửa — chờ thủ kho xác nhận'
             : 'Lưu QC — chờ thủ kho xác nhận'
@@ -948,22 +929,8 @@ export function KcsReturnDialog({
         </Box>
       ) : null}
 
-      <FormRow columns={2}>
+      <FormRow columns={1}>
         <TextInput label="Người QC" value={operatorName} readOnly />
-        <FormTextField<ReturnValues>
-          name="returnedAt"
-          label="Thời gian nhận lại"
-          type="datetime-local"
-          required
-          slotProps={DATE_LABEL}
-          rules={{
-            validate: (value) =>
-              !entry ||
-              !value ||
-              new Date(String(value)) >= new Date(toDateTimeInput(entry.handedAt)) ||
-              'Không được trước thời gian giao',
-          }}
-        />
       </FormRow>
 
 

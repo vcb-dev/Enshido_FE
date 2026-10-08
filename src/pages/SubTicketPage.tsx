@@ -49,6 +49,9 @@ import {
 } from '../worker/WorkerUi'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { KcsImages } from '../orders/KcsImages'
+import { TicketQcActions } from '../orders/TicketQcActions'
+import { invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlStock } from '../orders/nvlStock'
 
 /** Phiếu mẹ (đơn chưa chia) và phiếu con quy về cùng một dạng để dùng chung một màn. */
 type TicketModel = {
@@ -115,6 +118,8 @@ function toModel(order: ProductionOrderDetail, no: number | null): TicketModel |
   if (no == null) {
     const ticket = order.workTicket
     if (!ticket) return null
+    const entries = order.stages.filter((entry) => !entry.subTicketId)
+    const last = entries.at(-1)
     return {
       code: ticket.code,
       no: null,
@@ -129,9 +134,11 @@ function toModel(order: ProductionOrderDetail, no: number | null): TicketModel |
       availableQty: ticket.availableQty,
       availableSilver: ticket.availableSilver,
       materials: ticket.materials,
-      entries: order.stages.filter((entry) => !entry.subTicketId),
+      entries,
       note: null,
-      outcome: null,
+      outcome: ticket.state === 'DEFECT'
+        ? { label: 'Lỗi', at: last?.confirmedAt ?? last?.returnedAt ?? null, by: last?.confirmedByName ?? last?.returnedByName ?? null }
+        : null,
     }
   }
   const ticket = order.subTickets.find((item) => item.no === no)
@@ -203,12 +210,12 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   )
   const reportDefect = useOrderMutation(
     order.code,
-    (note: string) => reportStageDefectApi(order.code, model.no as number, note),
+    (note: string) => reportStageDefectApi(order.code, model.no, note),
     'Đã báo lỗi khâu — mang hàng tới QC cân lại',
   )
   const clearDefect = useOrderMutation(
     order.code,
-    () => clearStageDefectApi(order.code, model.no as number),
+    () => clearStageDefectApi(order.code, model.no),
     'Đã bỏ báo lỗi',
   )
   const queued = useQueuedSubTickets().get(model.code)
@@ -225,7 +232,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const due = dueInfo(order.dueDate)
 
   const doneStages = Array.from(new Set(model.entries.filter((entry) => entry.returnedAt).map((entry) => entry.stage)))
-  const currentStage = model.outcome || closed ? null : (openEntry?.stage ?? model.pendingStage)
+  const currentStage = model.outcome || closed ? null : (openEntry?.stage ?? model.pendingStage ?? (model.state === 'CONFIRMING' ? last?.stage ?? null : null))
 
   // Một câu trạng thái + các số liệu + nút chính, tuỳ khâu đang ở bước nào.
   let headline: string
@@ -252,7 +259,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       },
     ]
     if (model.no != null) {
-      // Phiếu con không còn tự nhận: thủ kho chỉ định thợ rồi thợ bấm "Nhận hàng".
+      // Phiếu con không còn tự nhận: thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
       hint = 'Phiếu con do thủ kho chỉ định thợ — nhờ thủ kho chỉ định lại khâu này.'
     } else if (isWorker) {
       actions.push(
@@ -264,16 +271,16 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       hint = 'Chỉ tài khoản có quyền Thợ sản xuất mới nhận phiếu được.'
     }
   } else if (model.state === 'CLAIMED' && model.pendingStage) {
-    // Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm nhận hàng mới bắt đầu (hệ thống tự xuất kho).
+    // Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm xác nhận mới bắt đầu (hệ thống tự xuất kho).
     // Khâu khác: thợ tự nhận rồi chờ người giao.
     const selfAccept = usesReceiptFlow(model.pendingStage, model.no, model.receiptPrepared)
     headline = selfAccept
-      ? `${mine ? 'Bạn được' : `Thợ ${model.claimedByName ?? ''} được`} giao khâu ${STAGE_LABEL[model.pendingStage]} — chờ nhận hàng`
+      ? `${mine ? 'Bạn được' : `Thợ ${model.claimedByName ?? ''} được`} giao khâu ${STAGE_LABEL[model.pendingStage]} — chờ thợ nhận`
       : `${mine ? 'Bạn' : `Thợ ${model.claimedByName ?? ''}`} đã nhận khâu ${STAGE_LABEL[model.pendingStage]}`
     hint = selfAccept
       ? mine
-        ? 'Nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất vật tư khỏi kho.'
-        : 'Chờ thợ được chỉ định quét QR nhận hàng.'
+        ? 'Bấm Xác nhận khi đã nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất vật tư khỏi kho.'
+        : 'Chờ thợ được chỉ định quét QR xác nhận.'
       : `Chờ người giao ${stageIssuesStock(model.pendingStage) ? 'xuất NVL, ' : ''}cân bạc và xác nhận giao.`
     facts = [
       { label: selfAccept ? 'Giao lúc' : 'Nhận lúc', value: formatDateShort(model.claimedAt) },
@@ -286,7 +293,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     if (mine && selfAccept) {
       actions.push(
         <Button key="accept" variant="contained" size="large" disabled={busy} loading={sending('accept')} onClick={() => accept.mutate(vars)}>
-          Nhận hàng · {STAGE_LABEL[model.pendingStage]}
+          Xác nhận · {STAGE_LABEL[model.pendingStage]}
         </Button>,
       )
     }
@@ -326,7 +333,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           </Button>,
         )
       }
-    } else if ((workingIsMine || canQc) && model.no != null && model.state !== 'SUBMITTED') {
+    } else if ((workingIsMine || canQc) && model.state !== 'SUBMITTED') {
       // Thợ đã báo xong thì QC ghi hàng lỗi ngay trong hộp "QC cân lại" — không cần nút báo lỗi riêng.
       actions.push(
         <Button key="defect" variant="outlined" color="error" size="large" disabled={busy} onClick={() => setDefectOpen(true)}>
@@ -379,7 +386,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     headline = `QC đã cân khâu ${STAGE_LABEL[last.stage]}${hasDefect ? ' — có hàng lỗi' : ''}`
     hint = hasDefect
       ? 'Chờ thủ kho kiểm tra và xác nhận lỗi. Trong lúc chờ QC còn sửa lại được.'
-      : 'Chờ thủ kho nhận hàng + đá thừa rồi xác nhận. Trong lúc chờ QC còn sửa lại được.'
+      : last.stage === 'STONE_SETTING'
+        ? 'Chờ thủ kho nhận hàng + đá thừa rồi xác nhận. Trong lúc chờ QC còn sửa lại được.'
+        : 'Chờ thủ kho nhận hàng và xác nhận trước khi chuyển khâu. Trong lúc chờ QC còn sửa lại được.'
     facts = [
       { label: 'QC cân lúc', value: formatDateShort(last.returnedAt) },
       { label: 'Đạt', value: `${last.returnedQty ?? '—'} sp` },
@@ -506,6 +515,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
                 {actions}
               </Stack>
             ) : null}
+            <Box sx={{ mt: 2 }}>
+              <TicketQcActions order={order} ticketNo={model.no} busy={busy} />
+            </Box>
           </SectionCard>
 
           <MaterialRequestsCard
@@ -566,6 +578,8 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
               {
                 onSuccess: () => {
                   setQcEntry(null)
+                  invalidateBtpStock(queryClient)
+                  invalidateNvlStock(queryClient)
                   void queryClient.invalidateQueries({
                     queryKey: ['qc-tickets'],
                   })
@@ -704,6 +718,12 @@ function EntryRow({ entry, lastRow }: { entry: StageEntry; lastRow: boolean }) {
                 </Box>
               ) : null}
             </Typography>
+            {(entry.defectQty ?? 0) > 0 ? (
+              <Typography variant="body2" color="error">
+                Hàng lỗi: {entry.defectQty} sp · {entry.defectReason ?? entry.defectNote ?? '—'}
+                {entry.confirmedAt ? ' · thủ kho đã xác nhận' : ' · chờ thủ kho xác nhận'}
+              </Typography>
+            ) : null}
             <KcsImages images={entry.images} />
           </>
         ) : (

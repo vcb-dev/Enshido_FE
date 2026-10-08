@@ -90,7 +90,7 @@ export function SubTicketWorkActions({
     () => deleteSubTicketApi(order.code, ticket.no),
     'Đã xoá phiếu con',
   )
-  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Nhận hàng" — không xác nhận giao tay.
+  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Xác nhận" — không xác nhận giao tay.
   const selfAccept = ticket.pendingStage === 'FILING' || ticket.pendingStage === 'STONE_SETTING'
   // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần QC nhận,
   // đơn bù đi lại từ bước sáp rồi thành phiếu con mới của đơn này.
@@ -147,11 +147,11 @@ export function SubTicketWorkActions({
         ) : null}
         {ticket.state === 'CLAIMED' && active && !canManage ? (
           <Typography variant="caption" color="text.secondary">
-            {selfAccept ? 'chờ thợ được chỉ định quét QR nhận hàng' : 'chờ người lên đơn chọn NVL và giao'}
+            {selfAccept ? 'chờ thợ được chỉ định quét QR xác nhận' : 'chờ người lên đơn chọn NVL và giao'}
           </Typography>
         ) : ticket.state === 'CLAIMED' && active && selfAccept ? (
           <Typography variant="caption" color="text.secondary">
-            chờ {ticket.claimedByName ?? 'thợ'} quét QR nhận hàng
+            chờ {ticket.claimedByName ?? 'thợ'} quét QR xác nhận
           </Typography>
         ) : ticket.state === 'CLAIMED' && active ? (
           <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
@@ -190,14 +190,14 @@ export function SubTicketWorkActions({
           </>
         ) : null}
         {ticket.state === 'CONFIRMING' && last ? (
-          // Vào đá không lỗi vẫn chờ thủ kho nhận hàng + túi đá thừa; Nguội chỉ dừng ở đây khi có lỗi.
+          // Nguội / Vào đá luôn chờ thủ kho, kể cả không có hàng lỗi.
           canKeeper ? (
             <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
               {(last.defectQty ?? 0) > 0 ? 'Thủ kho xác nhận lỗi' : 'Thủ kho xác nhận'}
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho nhận hàng + đá thừa'}
+              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho xác nhận kết quả QC'}
             </Typography>
           )
         ) : null}

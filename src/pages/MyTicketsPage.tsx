@@ -233,7 +233,7 @@ export function MyTicketsPage() {
   const mineFilters: { value: MineFilter; label: string; count: number }[] = [
     { value: 'all', label: 'Tất cả', count: mineCount },
     { value: 'WORKING', label: 'Đang làm', count: count('WORKING') },
-    { value: 'CLAIMED', label: 'Chờ giao bạc / nhận hàng', count: count('CLAIMED') },
+    { value: 'CLAIMED', label: 'Chờ thợ nhận', count: count('CLAIMED') },
     { value: 'SUBMITTED', label: 'Chờ QC cân', count: count('SUBMITTED') },
   ]
 
@@ -281,7 +281,7 @@ export function MyTicketsPage() {
             onClick={() => accept.mutate(vars(item))}
             sx={{ minWidth: 132 }}
           >
-            Nhận hàng
+            Xác nhận
           </Button>
           <Button
             variant="outlined"
@@ -636,7 +636,7 @@ function statusLine(item: MyTicketItem, tab: TabKey) {
   if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
   if (item.state === 'CLAIMED') {
     return usesReceiptFlow(item.stage, item.no, item.receiptPrepared)
-      ? `Thủ kho giao ${formatDateShort(item.claimedAt)} · quét QR hoặc bấm Nhận hàng khi cầm hàng`
+      ? `Thủ kho giao ${formatDateShort(item.claimedAt)} · quét QR hoặc bấm Xác nhận khi đã nhận hàng`
       : `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
   }
   if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới QC cân lại`

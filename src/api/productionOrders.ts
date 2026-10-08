@@ -591,7 +591,6 @@ export type HandoverPayload = {
 }
 
 export type ReturnPayload = {
-  returnedAt: string
   returnedQty?: number | null
   laborCost?: string | null
   returnedSilverWeight: string
@@ -1010,15 +1009,15 @@ export function returnStageApi(code: string, stageId: string, payload: ReturnPay
 }
 
 /** Báo lỗi ở khâu đang làm (thợ giữ khâu, QC hoặc admin) — lý do bắt buộc. */
-export function reportStageDefectApi(code: string, no: number, note: string) {
-  return orderFetch(ticketPath(code, no, '/stage-defect'), {
+export function reportStageDefectApi(code: string, no: number | null, note: string) {
+  return orderFetch(no == null ? orderPath(code, '/work/stage-defect') : ticketPath(code, no, '/stage-defect'), {
     method: 'POST',
     body: JSON.stringify({ note }),
   })
 }
 
-export function clearStageDefectApi(code: string, no: number) {
-  return orderFetch(ticketPath(code, no, '/stage-defect'), { method: 'DELETE' })
+export function clearStageDefectApi(code: string, no: number | null) {
+  return orderFetch(no == null ? orderPath(code, '/work/stage-defect') : ticketPath(code, no, '/stage-defect'), { method: 'DELETE' })
 }
 
 /** Thủ kho tạo phiếu bù cho hàng lỗi đã xác nhận — đi lại từ bước sáp. */

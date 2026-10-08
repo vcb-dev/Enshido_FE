@@ -634,10 +634,9 @@ export function MaterialRequestsCard({
 
   const holder = openEntry && !openEntry.submittedAt && (openEntry.craftsmanUserId === userId || isAdmin)
   const canRequest = Boolean(holder) && !order.finishedGoods && stageIssuesStock(openEntry?.stage)
-  /** Thủ kho nhận lại túi đá thợ trả giữa khâu Vào đá (đổi size) — chỉ phiếu con còn túi đang giữ. */
+  /** Thủ kho nhận lại túi đá thợ trả giữa khâu Vào đá (đổi size), cả phiếu mẹ / con. */
   const canReturnStone =
     canHandle &&
-    ticketNo != null &&
     openEntry?.stage === 'STONE_SETTING' &&
     openEntry.stoneLines.some((line) => Number(line.weight) > 0)
 

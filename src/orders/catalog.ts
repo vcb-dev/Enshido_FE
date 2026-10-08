@@ -274,7 +274,7 @@ export function subTicketUrl(ticketCode: string) {
   return `${window.location.origin}/tickets/${ticketCode}`
 }
 
-/** Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm "Nhận hàng" — phiếu CLAIMED chưa phải thợ đã cầm hàng. */
+/** Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm "Xác nhận" — phiếu CLAIMED chưa phải thợ đã cầm hàng. */
 export function isReceiptStage(stage: string | null | undefined) {
   return stage === 'FILING' || stage === 'STONE_SETTING'
 }
@@ -288,9 +288,9 @@ export function usesReceiptFlow(stage: string | null | undefined, no: number | n
   return isReceiptStage(stage) && (no != null || receiptPrepared === true)
 }
 
-/** Nhãn trạng thái phiếu con; khâu nhận hàng theo chỉ định thì CLAIMED là "Chờ nhận hàng". */
+/** Nhãn trạng thái phiếu con; khâu nhận hàng theo chỉ định thì CLAIMED là "Chờ thợ nhận". */
 export function subTicketStateLabel(state: SubTicketState, stage?: string | null) {
-  return state === 'CLAIMED' && isReceiptStage(stage) ? 'Chờ nhận hàng' : SUB_TICKET_STATE_META[state].label
+  return state === 'CLAIMED' && isReceiptStage(stage) ? 'Chờ thợ nhận' : SUB_TICKET_STATE_META[state].label
 }
 
 /** Trạng thái phiếu con trong khâu hiện tại. */

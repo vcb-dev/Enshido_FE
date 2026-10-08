@@ -96,6 +96,7 @@ import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
 import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
+import { TicketQcActions } from '../orders/TicketQcActions'
 import { StoneSkipBar } from '../orders/StoneSkipBar'
 import { ticketTimeline, TICKET_PHASE_STATUSES, type TicketTimelineRow } from '../orders/ticketTimeline'
 import { useOrderMutation } from '../orders/useOrderMutation'
@@ -219,7 +220,7 @@ export function ProductionOrderDetailPage() {
         weight: string
       }>
     }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, stones }),
-    'Đã chỉ định thợ — thợ quét QR nhận hàng',
+    'Đã chỉ định thợ — thợ quét QR xác nhận',
   )
   const confirmStage = useOrderMutation(
     code,
@@ -241,7 +242,7 @@ export function ProductionOrderDetailPage() {
   const assignParentReceipt = useOrderMutation(
     code,
     (payload: HandoverPayload & { stage: StageCode }) => assignOrderApi(code, payload),
-    'Đã lưu giao khâu — chờ thợ nhận hàng',
+    'Đã lưu giao khâu — chờ thợ nhận',
   )
   const cancelParentStage = useOrderMutation(
     code,
@@ -479,10 +480,7 @@ export function ProductionOrderDetailPage() {
           {/* Mô tả, thông số và ảnh là một khối nhận diện đơn — gộp chung một thẻ cho trang ngắn lại. */}
           {tab === 'overview' ? (
             <Section title="Tổng quan đơn">
-              <OverviewSummary
-                order={order}
-                onOpenProduction={() => setTab('production')}
-              />
+              <OverviewSummary order={order} />
               {splitIntoTickets ? <ProductionTicketSummary tickets={order.subTickets} /> : null}
               <Divider sx={{ my: 2 }} />
               <InfoGrid order={order} />
@@ -534,7 +532,7 @@ export function ProductionOrderDetailPage() {
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
                       {parentWork?.state === 'CLAIMED' && parentReceiptPending ? (
                         <Typography variant="caption" color="text.secondary">
-                          Đã ghi giao cho {parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận hàng
+                          Đã ghi giao cho {parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận
                         </Typography>
                       ) : parentWork?.state === 'CLAIMED' && !canManageTickets ? (
                         <Typography variant="caption" color="text.secondary">
@@ -557,6 +555,14 @@ export function ProductionOrderDetailPage() {
                       ) : parentWork?.state === 'SUBMITTED' && parentOpenEntry ? (
                         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
                           Chờ QC nhận lại (màn Phiếu QC)
+                        </Typography>
+                      ) : parentWork?.state === 'CONFIRMING' ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                          Chờ thủ kho xác nhận kết quả QC
+                        </Typography>
+                      ) : parentWork?.state === 'DEFECT' ? (
+                        <Typography variant="caption" color="error" sx={{ alignSelf: 'center' }}>
+                          Phiếu đã chốt lỗi — tạo phiếu bù để làm lại phần lỗi
                         </Typography>
                       ) : parentWork?.state === 'WORKING' ? (
                         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
@@ -601,7 +607,7 @@ export function ProductionOrderDetailPage() {
                     </Stack>
                   </Stack>
                   {parentWork && parentWork.state !== 'IDLE' ? (
-                    <Alert severity="info" sx={{ mt: 1 }}>
+                    <Alert severity={parentWork.state === 'DEFECT' ? 'error' : 'info'} sx={{ mt: 1 }}>
                       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                         <SubTicketStateChip state={parentWork.state} stage={parentReceiptPending ? parentWork.pendingStage : null} />
                         <Typography variant="body2">
@@ -609,15 +615,22 @@ export function ProductionOrderDetailPage() {
                             ? `Khâu ${STAGE_LABEL[parentWork.pendingStage!]} đang chờ thợ nhận.`
                             : parentWork.state === 'CLAIMED'
                               ? parentReceiptPending
-                                ? `Đã giao khâu ${STAGE_LABEL[parentWork.pendingStage!]} cho ${parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận hàng.`
+                                ? `Đã giao khâu ${STAGE_LABEL[parentWork.pendingStage!]} cho ${parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận.`
                                 : `Thợ ${parentWork.claimedByName ?? '—'} đã nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} — chờ cân bạc và xác nhận giao.`
                               : parentWork.state === 'SUBMITTED'
                                 ? `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đã báo xong — chờ QC cân lại.`
+                                : parentWork.state === 'CONFIRMING'
+                                  ? `QC đã cân khâu ${STAGE_LABEL[parentLastEntry!.stage]} — chờ thủ kho xác nhận.`
+                                  : parentWork.state === 'DEFECT'
+                                    ? 'Phiếu lỗi toàn bộ — dừng ở khâu lỗi.'
                                 : `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đang làm khâu ${parentWork.activeStage ? STAGE_LABEL[parentWork.activeStage] : '—'}.`}
                         </Typography>
                       </Stack>
                     </Alert>
                   ) : null}
+                  <Box sx={{ mt: 1 }}>
+                    <TicketQcActions order={order} />
+                  </Box>
                 </Box>
               ) : null}
               {directOnParent ? (
@@ -1420,13 +1433,7 @@ function materialsSummary(materials: ProductionOrderDetail['materials']) {
 }
 
 /** Ảnh chụp vận hành của đơn: người điều hành nhìn từ trên xuống là biết việc tiếp theo. */
-function OverviewSummary({
-  order,
-  onOpenProduction,
-}: {
-  order: ProductionOrderDetail
-  onOpenProduction: () => void
-}) {
+function OverviewSummary({ order }: { order: ProductionOrderDetail }) {
   const tickets = order.subTickets.length
     ? order.subTickets.map((ticket) => ({
         state: ticket.state,
@@ -1529,11 +1536,7 @@ function OverviewSummary({
           >
             Mở phiếu nhập thành phẩm
           </Button>
-        ) : (
-          <Button size="small" variant="contained" onClick={onOpenProduction} sx={{ mt: 1.25 }}>
-            Mở điều hành sản xuất
-          </Button>
-        )}
+        ) : null}
       </Box>
 
       <Box
