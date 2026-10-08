@@ -27,6 +27,7 @@ import {
   type IssueMaterialPayload,
   type MaterialRequest,
   type MaterialRequestKind,
+  type OrderImage,
   type MaterialRequestPayload,
   type MaterialRequestStatus,
   type ProductionOrderDetail,
@@ -57,6 +58,8 @@ import {
   TextInput,
 } from '../components/ui'
 import { CatalogPicker, type CatalogPickerItem } from './CatalogPicker'
+import { FormImageField } from './FormImageField'
+import { STONE_PHOTO_LABEL, STONE_PHOTO_REQUIRED, stonePhotosPayload, useUploadingByKey } from './stonePhotos'
 import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from './catalog'
 import { stoneAmountText, stoneQtyFromCt, stoneUnitKind } from './stoneInput'
 import { EarlyStoneReturnDialog } from './EarlyStoneReturnDialog'
@@ -353,7 +356,7 @@ export function MaterialRequestDialog({
 
 // ---------------------------------------------------------------- Kho duyệt xuất
 
-type IssueValues = { kind: MaterialRequestKind; qty: string; weight: string; stoneCount: string }
+type IssueValues = { kind: MaterialRequestKind; qty: string; weight: string; stoneCount: string; images: OrderImage[] }
 
 /** Kho / người giao cân rồi xuất theo yêu cầu. Số thực xuất có thể khác số thợ xin. */
 export function IssueMaterialDialog({
@@ -369,7 +372,10 @@ export function IssueMaterialDialog({
   onClose: () => void
   onSave: (payload: IssueMaterialPayload) => void
 }) {
-  const form = useForm<IssueValues>({ defaultValues: { kind: 'METAL', qty: '', weight: '', stoneCount: '' } })
+  const form = useForm<IssueValues>({
+    defaultValues: { kind: 'METAL', qty: '', weight: '', stoneCount: '', images: [] },
+  })
+  const [uploading, setUploading] = useState(false)
   const kind = useWatch({ control: form.control, name: 'kind' })
   const qty = useWatch({ control: form.control, name: 'qty' })
   const unit = request?.material.unit ?? ''
@@ -378,6 +384,8 @@ export function IssueMaterialDialog({
   /** Đá ở Vào đá của phiếu con: chỉ giữ chỗ, QC cân gói thừa, thủ kho xác nhận mới xuất kho (khớp BE). */
   const holdMode = kind === 'STONE' && request?.stage === 'STONE_SETTING' && request.subTicketNo != null
   const stoneKind = kind === 'STONE'
+  /** Cấp đá cho khâu Vào đá (phiếu mẹ lẫn phiếu con): thủ kho chụp ảnh gói đá trên cân (khớp BE). */
+  const stonePhoto = stoneKind && request?.stage === 'STONE_SETTING'
   /** Đá tính theo ct / g: chỉ nhập TL (ct), số lượng tự suy từ TL (không có ô Số lượng). */
   const weightOnly = stoneKind && stoneUnitKind(unit) === 'weight'
   /** Đá tính theo viên: nhập cả số viên (số lượng) lẫn TL; số viên theo nhãn gói chính là số lượng. */
@@ -391,6 +399,7 @@ export function IssueMaterialDialog({
       // Thợ đã xin kèm TL (đá) thì điền sẵn, kho cân lại sửa được; TL lưu theo g, ô nhập theo ct.
       weight: request.requestedWeight ? gramToCt(request.requestedWeight) : '',
       stoneCount: '',
+      images: [],
     })
   }, [request, suggestedKind, form])
 
@@ -421,9 +430,11 @@ export function IssueMaterialDialog({
           qty: values.qty,
           weight: (values.kind === 'STONE' ? ctToGram(values.weight) : values.weight) || null,
           stoneCount: values.stoneCount ? Number(values.stoneCount) : null,
+          ...(stonePhoto ? { images: stonePhotosPayload(values.images) } : {}),
         })
       }
       saving={saving}
+      submitDisabled={stonePhoto && uploading}
       submitLabel={holdMode ? 'Cấp đá (giữ chỗ)' : 'Xuất kho'}
       maxWidth="sm"
       onClose={onClose}
@@ -525,6 +536,17 @@ export function IssueMaterialDialog({
           <Box />
         )}
       </FormRow>
+      {stonePhoto ? (
+        <FormImageField<IssueValues>
+          name="images"
+          label={STONE_PHOTO_LABEL}
+          kind="DETAIL"
+          required
+          requiredMessage={STONE_PHOTO_REQUIRED}
+          onUploadingChange={setUploading}
+          readOnly={saving}
+        />
+      ) : null}
     </CrudDialogShell>
   )
 }
@@ -910,6 +932,8 @@ export type HandoverMaterialLine = {
   qty: string
   weight: string
   stoneCount: string
+  /** Dòng đá: ảnh gói đá trên cân thủ kho chụp lúc cấp. */
+  images: OrderImage[]
 }
 
 export const EMPTY_HANDOVER_LINE: HandoverMaterialLine = {
@@ -918,6 +942,19 @@ export const EMPTY_HANDOVER_LINE: HandoverMaterialLine = {
   qty: '',
   weight: '',
   stoneCount: '',
+  images: [],
+}
+
+/** Một dòng giao gửi API — dòng đá kèm ảnh gói đá, dòng khác không gửi ảnh. */
+export function handoverLinePayload(line: HandoverMaterialLine) {
+  return {
+    materialId: line.materialId,
+    kind: line.kind,
+    qty: line.qty,
+    weight: handoverLineGram(line),
+    stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
+    ...(line.kind === 'STONE' ? { images: stonePhotosPayload(line.images) } : {}),
+  }
 }
 
 const GRAM_UNITS = new Set(['g', 'gr', 'gram', 'gam'])
@@ -952,11 +989,17 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   form,
   stage,
   blank,
+  readOnly,
+  onUploadingChange,
 }: {
   form: UseFormReturn<T>
   stage: StageCode | null
   /** Phôi sau đúc của đơn còn chưa xuất — tổng xuất mã phôi không được vượt (khớp BE). */
   blank?: { materialId: string; leftQty: number; leftWeight: number } | null
+  /** Đang lưu — khoá ô ảnh gói đá. */
+  readOnly?: boolean
+  /** Còn ảnh gói đá đang tải lên — hộp thoại khoá nút lưu. */
+  onUploadingChange?: (uploading: boolean) => void
 }) {
   const stoneStage = stage === 'STONE_SETTING'
   const sources = stageSources(stage)
@@ -979,6 +1022,12 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
     { qty: 0, weight: 0 },
   )
   const { fields, append } = lines
+  const uploading = useUploadingByKey()
+  const stoneKeys = fields.filter((_, index) => values[index]?.kind === 'STONE').map((field) => field.id)
+  const anyUploading = uploading.any(stoneKeys)
+  useEffect(() => {
+    onUploadingChange?.(anyUploading)
+  }, [anyUploading, onUploadingChange])
   // Mở hộp thoại chỉ có sẵn một dòng; muốn thêm thì bấm "Thêm NVL". Đọc số dòng từ form (cập nhật
   // ngay khi append) thay vì `fields` — StrictMode chạy effect hai lần sẽ không thêm trùng dòng.
   useEffect(() => {
@@ -1062,7 +1111,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
           const stoneUnit = line.kind === 'STONE' ? stoneUnitKind(unit) : null
           const weightOnly = stoneUnit === 'weight'
           const countStone = stoneUnit === 'count'
-          const name = (key: keyof HandoverMaterialLine) => `materials.${index}.${key}` as const
+          const name = <K extends keyof HandoverMaterialLine>(key: K) => `materials.${index}.${key}` as const
           return (
             <Box
               key={field.id}
@@ -1231,6 +1280,18 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   </Button>
                 ) : null}
               </Box>
+              {line.kind === 'STONE' ? (
+                <FormImageField<{ materials: HandoverMaterialLine[] }>
+                  control={control}
+                  name={name('images')}
+                  label={STONE_PHOTO_LABEL}
+                  kind="DETAIL"
+                  required
+                  requiredMessage={STONE_PHOTO_REQUIRED}
+                  onUploadingChange={(busy) => uploading.set(field.id, busy)}
+                  readOnly={readOnly}
+                />
+              ) : null}
             </Box>
           )
         })}

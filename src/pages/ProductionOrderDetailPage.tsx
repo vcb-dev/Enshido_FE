@@ -63,6 +63,7 @@ import {
   type ProductionStatus,
   type StageCode,
   type StageEntry,
+  type StageImage,
   type SubTicket,
   type SubTicketState,
   type UpsertProductionOrderPayload,
@@ -218,6 +219,7 @@ export function ProductionOrderDetailPage() {
         materialId: string
         stoneCount: number | null
         weight: string
+        images: StageImage[]
       }>
     }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, stones }),
     'Đã chỉ định thợ — thợ quét QR xác nhận',

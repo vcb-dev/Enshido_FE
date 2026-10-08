@@ -28,11 +28,13 @@ import { useOperatorName } from '../hooks/useOperatorName'
 import {
   HandoverMaterialsField,
   handoverLineGram,
+  handoverLinePayload,
   handoverMetalWeight,
   stageIssuesStock,
   type HandoverMaterialLine,
 } from './MaterialRequests'
 import { FormImageField } from './FormImageField'
+import { KcsImages } from './KcsImages'
 import {
   formatDateShort,
   SILVER_LOSS_LIMITS,
@@ -198,6 +200,7 @@ export function HandoverDialog({
   // tự giao cho mình, người khác bấm cũng chỉ nhận lỗi nên chặn luôn ở đây.
   const selfConfirm = Boolean(ticket && user && ticket.claimedByUserId === user.id)
   const selfConfirmBlocked = selfConfirm && !isAdmin
+  const [uploading, setUploading] = useState(false)
 
   function submit(values: HandoverValues) {
     onSave({
@@ -207,15 +210,7 @@ export function HandoverDialog({
         : values.handedQty ? Number(values.handedQty) : null,
       handedSilverWeight: firstStockStage ? null : values.handedSilverWeight || null,
       note: values.note.trim(),
-      materials: issuesStock
-        ? values.materials.map((line) => ({
-            materialId: line.materialId,
-            kind: line.kind,
-            qty: line.qty,
-            weight: handoverLineGram(line),
-            stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
-          }))
-        : undefined,
+      materials: issuesStock ? values.materials.map(handoverLinePayload) : undefined,
     })
   }
 
@@ -227,7 +222,7 @@ export function HandoverDialog({
       form={form}
       onSubmit={submit}
       saving={saving}
-      submitDisabled={selfConfirmBlocked}
+      submitDisabled={selfConfirmBlocked || uploading}
       submitLabel="Xác nhận giao"
       pendingLabel="Đang xác nhận…"
       maxWidth="sm"
@@ -296,6 +291,8 @@ export function HandoverDialog({
       <HandoverMaterialsField
         form={form}
         stage={stageCode}
+        readOnly={saving}
+        onUploadingChange={setUploading}
         blank={
           order.cut?.btpMaterialId && order.cut.leftQty != null && order.cut.leftWeight != null
             ? {
@@ -357,6 +354,7 @@ export function AssignReceiptDialog({
   const stage = useWatch({ control: form.control, name: 'stage' })
   const craftsmanUserId = useWatch({ control: form.control, name: 'craftsmanUserId' })
   const handedQty = useWatch({ control: form.control, name: 'handedQty' })
+  const [uploading, setUploading] = useState(false)
   const availableQty = ticket?.availableQty ?? order.qty
   useEffect(() => {
     if (open) form.setValue('handedQty', String(availableQty))
@@ -430,17 +428,11 @@ export function AssignReceiptDialog({
           handedStoneCount: stoneCounts.length ? stoneCounts.reduce((sum, count) => sum + count, 0) : null,
           handedStoneWeight: stoneWeights.length ? String(stoneWeights.reduce((sum, weight) => sum + weight, 0)) : null,
           note: values.note.trim(),
-          materials: materialLines.map((line) => ({
-            materialId: line.materialId,
-            kind: line.kind,
-            qty: line.qty,
-            weight: handoverLineGram(line),
-            stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
-          })),
+          materials: materialLines.map(handoverLinePayload),
         })
       }}
       saving={saving}
-      submitDisabled={!stage || !craftsmanUserId}
+      submitDisabled={!stage || !craftsmanUserId || uploading}
       submitLabel="Giao cho thợ"
       pendingLabel="Đang giao…"
       maxWidth="sm"
@@ -504,7 +496,13 @@ export function AssignReceiptDialog({
               nên chưa thể tự gắn phôi. Hãy kiểm tra dữ liệu cắt cây; nếu cần giao ngay, chọn BTP thủ công.
             </Alert>
           ) : null}
-          <HandoverMaterialsField form={form} stage={stage || null} blank={cutBtp} />
+          <HandoverMaterialsField
+            form={form}
+            stage={stage || null}
+            blank={cutBtp}
+            readOnly={saving}
+            onUploadingChange={setUploading}
+          />
         </>
       )}
       <FormTextField<Values> name="note" label="Ghi chú" multiline minRows={2} maxRows={5} />
@@ -995,6 +993,7 @@ export function KcsReturnDialog({
                     {line.extraCount ? ` (gồm ${line.extraCount} lần xin thêm)` : ''}
                     {line.earlyReturnedWeight ? ` · đã trả giữa khâu ${formatCt(line.earlyReturnedWeight)}` : ''}
                   </Typography>
+                  <KcsImages images={line.images} title="Ảnh gói đá lúc cấp" />
                 </Box>
                 <Stack spacing={1}>
                   <FormQtyField<ReturnValues>
