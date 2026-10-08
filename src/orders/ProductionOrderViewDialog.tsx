@@ -67,7 +67,7 @@ function toImages(raw: Array<OrderImage | ProductionOrderRow['images'][number]>)
     kind: image.kind,
     url: image.url,
     publicId:
-      'publicId' in image && typeof image.publicId === 'string' ? image.publicId : image.id,
+      'publicId' in image && typeof image.publicId === 'string' ? image.publicId : image.id ?? image.url,
     width: 'width' in image ? optionalDimension(image.width) : null,
     height: 'height' in image ? optionalDimension(image.height) : null,
   }))

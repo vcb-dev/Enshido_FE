@@ -130,7 +130,7 @@ function ReferenceView({ order }: { order: OrderReference }) {
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                       <Typography sx={{ fontWeight: 800 }}>{ticket.code}</Typography>
                       <Chip size="small" label={`${ticket.qty} sp`} sx={{ height: 22, borderRadius: 1 }} />
-                      <SubTicketStateChip state={ticket.state} />
+                      <SubTicketStateChip state={ticket.state} stage={ticket.activeStage} />
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
                       {ticket.activeStage ? `Khâu ${STAGE_LABEL[ticket.activeStage]}` : 'Chưa mở khâu'}

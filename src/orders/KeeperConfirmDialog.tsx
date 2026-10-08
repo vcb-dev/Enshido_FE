@@ -25,10 +25,9 @@ const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tab
 type Line = { label: string; qty: string; weight: string; warehouse: string; show: boolean }
 
 /**
- * Thủ kho kiểm tra và xác nhận sau QC ở Nguội / Vào đá. Nguội chỉ qua đây khi QC báo hàng lỗi
- * (không lỗi thì hệ thống tự xác nhận); Vào đá luôn qua đây để thủ kho nhận hàng + túi đá thừa
- * (mô tả luồng bước 13–15, 18). Bấm xác
- * nhận là hệ thống nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
+ * Thủ kho kiểm tra và xác nhận mọi kết quả QC ở Nguội / Vào đá, cả phiếu mẹ / con.
+ * Vào đá còn nhận lại túi đá thừa (mô tả luồng bước 13–15, 18). Bấm xác nhận là hệ thống
+ * nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
  * đá còn xuất kho đá đã dùng theo từng mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
  */
 export function KeeperConfirmDialog({

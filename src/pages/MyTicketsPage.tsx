@@ -42,7 +42,7 @@ import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { formatCt, formatQty } from '../api/inventory'
 import { applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { CardGroupSkeleton } from '../components/ui'
-import { formatDateShort, STAGE_LABEL } from '../orders/catalog'
+import { formatDateShort, usesReceiptFlow, STAGE_LABEL } from '../orders/catalog'
 import { SubTicketStateChip } from '../orders/OrderChips'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '../orders/subTicketQueue'
@@ -233,7 +233,7 @@ export function MyTicketsPage() {
   const mineFilters: { value: MineFilter; label: string; count: number }[] = [
     { value: 'all', label: 'Tất cả', count: mineCount },
     { value: 'WORKING', label: 'Đang làm', count: count('WORKING') },
-    { value: 'CLAIMED', label: 'Chờ giao bạc', count: count('CLAIMED') },
+    { value: 'CLAIMED', label: 'Chờ thợ nhận', count: count('CLAIMED') },
     { value: 'SUBMITTED', label: 'Chờ QC cân', count: count('SUBMITTED') },
   ]
 
@@ -271,7 +271,7 @@ export function MyTicketsPage() {
         </Button>
       )
     }
-    if (item.state === 'CLAIMED' && (item.stage === 'FILING' || item.stage === 'STONE_SETTING')) {
+    if (item.state === 'CLAIMED' && usesReceiptFlow(item.stage, item.no, item.receiptPrepared)) {
       return (
         <Stack direction="row" spacing={1}>
           <Button
@@ -281,7 +281,7 @@ export function MyTicketsPage() {
             onClick={() => accept.mutate(vars(item))}
             sx={{ minWidth: 132 }}
           >
-            Nhận hàng
+            Xác nhận
           </Button>
           <Button
             variant="outlined"
@@ -634,7 +634,11 @@ function statusLine(item: MyTicketItem, tab: TabKey) {
     return `QC ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${loss}`
   }
   if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
-  if (item.state === 'CLAIMED') return `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
+  if (item.state === 'CLAIMED') {
+    return usesReceiptFlow(item.stage, item.no, item.receiptPrepared)
+      ? `Thủ kho giao ${formatDateShort(item.claimedAt)} · quét QR hoặc bấm Xác nhận khi đã nhận hàng`
+      : `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
+  }
   if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới QC cân lại`
   return `Bắt đầu ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
 }
@@ -692,7 +696,9 @@ function TicketCard({
               />
             ) : null}
             <Box sx={{ flex: 1 }} />
-            {item.state ? <SubTicketStateChip state={item.state} /> : null}
+            {item.state ? (
+              <SubTicketStateChip state={item.state} stage={usesReceiptFlow(item.stage, item.no, item.receiptPrepared) ? item.stage : null} />
+            ) : null}
           </Stack>
           <Typography
             variant="body2"

@@ -28,7 +28,7 @@ import type {
 } from '../api/productionOrders'
 import { ctToGram, formatQty } from '../api/inventory'
 import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
-import { isInStage, STAGE_LABEL, STAGES } from './catalog'
+import { isInStage, skipsStone, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
@@ -190,6 +190,29 @@ export function SubTicketFormDialog({
 }) {
   const form = useForm<TicketValues>({ defaultValues: { qty: '', note: '' } })
   const remaining = useMemo(() => remainingSplit(order, ticket?.id), [order, ticket])
+  const locked = Boolean(ticket && ticket.entryCount > 0)
+  const qtyValue = useWatch({ control: form.control, name: 'qty' })
+  const siblingTickets = ticket
+    ? order.subTickets.filter((row) => row.id !== ticket.id).sort((left, right) => left.no - right.no)
+    : []
+  const proposedQty = Number(qtyValue || ticket?.qty || 0)
+  const siblingQty = Math.max(0, order.qty - proposedQty)
+  const siblingSplit = evenSplit(siblingQty, siblingTickets.length)
+  const siblingSplitSummary = siblingSplit.length
+    ? siblingSplit.every((qty) => qty === siblingSplit[0])
+      ? `${siblingSplit[0]} sp/phiếu`
+      : `${Math.min(...siblingSplit)}–${Math.max(...siblingSplit)} sp/phiếu (phần dư vào các phiếu đầu)`
+    : ''
+  const maxEditableQty = ticket ? order.qty - siblingTickets.length : remaining.qty
+  const hasStartedSibling = Boolean(
+    ticket && order.subTickets.some(
+      (row) => row.id !== ticket.id && (row.entryCount > 0 || row.outcome != null),
+    ),
+  )
+  const hasPendingStoneSetting = Boolean(
+    ticket && order.subTickets.some((row) => row.pendingStage === 'STONE_SETTING'),
+  )
+  const quantityReadOnly = locked || hasStartedSibling || hasPendingStoneSetting
 
   // Nạp form một lần mỗi lần mở. Trang đơn tự làm mới định kỳ; `remaining` đổi theo mỗi lần
   // có ai đó đổi đơn, nạp lại theo nó là xoá mất số người dùng đang gõ.
@@ -212,7 +235,6 @@ export function SubTicketFormDialog({
     )
   }, [open, ticket, remaining, form])
 
-  const locked = Boolean(ticket && ticket.entryCount > 0)
   const title = ticket
     ? `Sửa phiếu${order.subTickets.length > 1 ? ' con' : ''} ${ticket.code}`
     : `Tạo phiếu con cho đơn ${order.code}`
@@ -233,12 +255,35 @@ export function SubTicketFormDialog({
       onExited={onExited}
     >
       <Alert severity="info" sx={{ mt: 1, py: 0 }}>
-        Đơn {order.qty} sp · còn chưa chia: <b>{remaining.qty} sp</b>
+        {ticket ? (
+          quantityReadOnly ? (
+            <>Đơn {order.qty} sp · Số lượng đang được giữ nguyên.</>
+          ) : siblingTickets.length > 0 ? (
+            <>
+              Đơn {order.qty} sp · Sau khi lưu, {siblingTickets.length} phiếu còn lại sẽ chia đều {siblingQty} sp (
+              {siblingSplitSummary}).
+            </>
+          ) : (
+            <>Đơn {order.qty} sp · Phiếu này sẽ nhận toàn bộ số lượng còn lại.</>
+          )
+        ) : (
+          <>Đơn {order.qty} sp · còn chưa chia: <b>{remaining.qty} sp</b></>
+        )}
       </Alert>
       {locked ? (
         <Typography variant="body2" color="text.secondary">
           Phiếu đã giao khâu nên chỉ sửa được ghi chú.
         </Typography>
+      ) : null}
+      {!locked && hasStartedSibling ? (
+        <Alert severity="warning" sx={{ py: 0 }}>
+          Phiếu con khác đã bắt đầu làm nên không thể chia lại số lượng; bạn vẫn có thể sửa ghi chú.
+        </Alert>
+      ) : null}
+      {!locked && !hasStartedSibling && hasPendingStoneSetting ? (
+        <Alert severity="warning" sx={{ py: 0 }}>
+          Có phiếu đang được chỉ định Vào đá và giữ đá nên không thể chia lại số lượng; bạn vẫn có thể sửa ghi chú.
+        </Alert>
       ) : null}
       <FormRow columns={1}>
         <FormTextField<TicketValues>
@@ -246,12 +291,17 @@ export function SubTicketFormDialog({
           label="Số lượng (sp)"
           type="number"
           required
-          readOnly={locked}
+          readOnly={quantityReadOnly}
+          slotProps={{ htmlInput: { min: 1, max: maxEditableQty } }}
           rules={{
             validate: (value) => {
               const qty = Number(value)
               if (!Number.isInteger(qty) || qty < 1) return 'Số lượng phải từ 1'
-              if (qty > remaining.qty) return `Còn ${remaining.qty} sp chưa chia`
+              if (qty > maxEditableQty) {
+                return ticket
+                  ? `Phải để lại ít nhất 1 sp cho mỗi phiếu còn lại (tối đa ${maxEditableQty})`
+                  : `Còn ${remaining.qty} sp chưa chia`
+              }
               return true
             },
           }}
@@ -285,7 +335,7 @@ export function openableStages(order: ProductionOrderDetail) {
     lastBy.set(ticket.no, last)
     const next = !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last))
     // Thủ kho đã đánh dấu đơn không có đá: không gợi ý khâu Vào đá.
-    byTicket.set(ticket.no, order.stoneSkipped ? next.filter((stage) => stage !== 'STONE_SETTING') : next)
+    byTicket.set(ticket.no, skipsStone(order) ? next.filter((stage) => stage !== 'STONE_SETTING') : next)
   }
   const stages = STAGES.filter((stage) => idle.some((ticket) => byTicket.get(ticket.no)?.includes(stage)))
   /** Các khâu phiếu này sẽ bị bỏ qua nếu mở `stage` — rỗng nghĩa là đúng khâu kế tiếp. */
@@ -347,9 +397,16 @@ export function AssignWorkerDialog({
     enabled: open && stoneStage,
     staleTime: 60_000,
   })
+  const initializedTicket = useRef<string | null>(null)
   useEffect(() => {
-    if (open) form.reset({ stage: stageOptions[0] ?? '', craftsmanUserId: '', stones: [] })
-  }, [open, stageOptions, form])
+    if (!open || !ticket) {
+      initializedTicket.current = null
+      return
+    }
+    if (initializedTicket.current === ticket.id) return
+    initializedTicket.current = ticket.id
+    form.reset({ stage: stageOptions[0] ?? '', craftsmanUserId: '', stones: [] })
+  }, [open, ticket, stageOptions, form])
   // Vào đá luôn có ít nhất một dòng đá để thủ kho điền.
   useEffect(() => {
     if (stoneStage && stones.fields.length === 0) stones.append({ ...EMPTY_STONE_LINE })
@@ -370,7 +427,9 @@ export function AssignWorkerDialog({
   useEffect(() => {
     form.clearErrors('stones')
   }, [materialKey, form])
-  const title = ticket ? `Chỉ định thợ · phiếu ${ticket.code}` : 'Chỉ định thợ'
+  const title = ticket
+    ? `Chỉ định thợ · ${stageOptions.length === 1 ? `${STAGE_LABEL[stageOptions[0]]} · ` : ''}phiếu ${ticket.code}`
+    : 'Chỉ định thợ'
 
   return (
     <CrudDialogShell<AssignValues>
@@ -402,14 +461,16 @@ export function AssignWorkerDialog({
       onClose={onClose}
       onExited={() => undefined}
     >
-      <FormRow columns={1}>
-        <FormSelect<AssignValues>
-          name="stage"
-          label="Khâu"
-          required
-          options={stageOptions.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
-        />
-      </FormRow>
+      {stageOptions.length > 1 ? (
+        <FormRow columns={1}>
+          <FormSelect<AssignValues>
+            name="stage"
+            label="Khâu"
+            required
+            options={stageOptions.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
+          />
+        </FormRow>
+      ) : null}
       <FormRow columns={1}>
         <FormSelect<AssignValues>
           name="craftsmanUserId"

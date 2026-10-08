@@ -1,17 +1,13 @@
 import { useState } from 'react'
 import {
   Alert,
-  Box,
   Button,
-  Collapse,
   Stack,
   Tooltip,
   Typography,
 } from '@mui/material'
-import PrintIcon from '@mui/icons-material/Print'
 import { TrashIcon } from '../components/ui'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
-import { Link as RouterLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
@@ -27,9 +23,8 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { INTAKE_STATUS_META } from '../intake/catalog'
-import { STAGE_LABEL } from './catalog'
+import { isInStage, STAGE_LABEL } from './catalog'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
-import { WorkHistoryTable } from './WorkHistory'
 import { useOrderMutation } from './useOrderMutation'
 
 /**
@@ -42,7 +37,6 @@ export function SubTicketWorkActions({
   canManage,
   isAdmin,
   locked,
-  canPrint,
   busy = false,
   undoingEntryId,
   onConfirm,
@@ -56,7 +50,6 @@ export function SubTicketWorkActions({
   canManage: boolean
   isAdmin: boolean
   locked: boolean
-  canPrint: boolean
   busy?: boolean
   undoingEntryId?: string | null
   onConfirm: (ticket: SubTicket) => void
@@ -68,13 +61,14 @@ export function SubTicketWorkActions({
   const canKeeper = can(user, Permission.WAREHOUSE_KEEPER) || isAdmin
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
 
   const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
   const last = entries.at(-1)
   const openEntry = entries.find((entry) => !entry.returnedAt)
   const active = !locked && !order.finishedGoods
-  const assignableStages = openableStages(order).byTicket.get(ticket.no) ?? []
+  // Đi đúng quy trình: chỉ giao được khâu kế tiếp; chọn khâu khác chỉ khi đơn đang làm lại.
+  const openable = openableStages(order).byTicket.get(ticket.no) ?? []
+  const assignableStages = !isInStage(order.status) ? openable : openable.slice(0, 1)
 
   const cancel = useOrderMutation(
     order.code,
@@ -96,7 +90,7 @@ export function SubTicketWorkActions({
     () => deleteSubTicketApi(order.code, ticket.no),
     'Đã xoá phiếu con',
   )
-  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Nhận hàng" — không xác nhận giao tay.
+  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Xác nhận" — không xác nhận giao tay.
   const selfAccept = ticket.pendingStage === 'FILING' || ticket.pendingStage === 'STONE_SETTING'
   // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần QC nhận,
   // đơn bù đi lại từ bước sáp rồi thành phiếu con mới của đơn này.
@@ -153,11 +147,11 @@ export function SubTicketWorkActions({
         ) : null}
         {ticket.state === 'CLAIMED' && active && !canManage ? (
           <Typography variant="caption" color="text.secondary">
-            chờ người lên đơn chọn NVL và giao
+            {selfAccept ? 'chờ thợ được chỉ định quét QR xác nhận' : 'chờ người lên đơn chọn NVL và giao'}
           </Typography>
         ) : ticket.state === 'CLAIMED' && active && selfAccept ? (
           <Typography variant="caption" color="text.secondary">
-            chờ {ticket.claimedByName ?? 'thợ'} quét QR nhận hàng
+            chờ {ticket.claimedByName ?? 'thợ'} quét QR xác nhận
           </Typography>
         ) : ticket.state === 'CLAIMED' && active ? (
           <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
@@ -196,14 +190,14 @@ export function SubTicketWorkActions({
           </>
         ) : null}
         {ticket.state === 'CONFIRMING' && last ? (
-          // Vào đá không lỗi vẫn chờ thủ kho nhận hàng + túi đá thừa; Nguội chỉ dừng ở đây khi có lỗi.
+          // Nguội / Vào đá luôn chờ thủ kho, kể cả không có hàng lỗi.
           canKeeper ? (
             <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
               {(last.defectQty ?? 0) > 0 ? 'Thủ kho xác nhận lỗi' : 'Thủ kho xác nhận'}
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho nhận hàng + đá thừa'}
+              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho xác nhận kết quả QC'}
             </Typography>
           )
         ) : null}
@@ -235,35 +229,7 @@ export function SubTicketWorkActions({
             Xoá phiếu con
           </Button>
         ) : null}
-        <Button size="small" variant="outlined" color="inherit" onClick={() => setHistoryOpen((value) => !value)}>
-          {historyOpen ? 'Ẩn lịch sử thao tác' : 'Lịch sử thao tác'}
-        </Button>
-        <Tooltip title={canPrint ? '' : 'Đơn chưa báo Đúc'}>
-          <span>
-            <Button
-              size="small"
-              variant="outlined"
-              color="inherit"
-              startIcon={<PrintIcon fontSize="small" />}
-              component={RouterLink}
-              to={`/orders/${order.code}/tickets/${ticket.no}/print`}
-              target="_blank"
-              disabled={!canPrint}
-            >
-              In phiếu con
-            </Button>
-          </span>
-        </Tooltip>
       </Stack>
-
-      <Collapse in={historyOpen} timeout="auto" unmountOnExit>
-        <Box sx={{ py: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-            Lịch sử thao tác phiếu {ticket.code}
-          </Typography>
-          <WorkHistoryTable order={order} ticket={ticket} />
-        </Box>
-      </Collapse>
 
       <SubTicketFormDialog
         open={editOpen}

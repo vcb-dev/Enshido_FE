@@ -50,11 +50,11 @@ const TABS: { value: TabKey; label: string }[] = [
 ]
 
 const EMPTY: Record<TabKey, { title: string; description: string }> = {
-  working: { title: 'Không có phiếu nào đang làm', description: 'Phiếu con thợ đang làm hiện ở đây — thấy hàng hỏng thì bấm Báo lỗi.' },
+  working: { title: 'Không có phiếu nào đang làm', description: 'Phiếu thợ đang làm hiện ở đây — thấy hàng hỏng thì bấm Báo lỗi.' },
   pending: { title: 'Chưa có phiếu nào chờ QC', description: 'Thợ bấm "Đã làm xong" hoặc báo lỗi thì phiếu hiện ở đây.' },
   confirming: {
     title: 'Không có phiếu nào chờ thủ kho',
-    description: 'Vào đá luôn chờ thủ kho nhận hàng + đá thừa; Nguội chỉ chờ khi QC báo hàng lỗi. Phiếu nằm đây tới khi thủ kho xác nhận — trong lúc chờ QC còn sửa lại được.',
+    description: 'Nguội / Vào đá luôn chờ thủ kho xác nhận sau QC, kể cả không có hàng lỗi. Trong lúc chờ QC còn sửa lại được.',
   },
   finishable: { title: 'Chưa có phiếu nào chờ hoàn thiện', description: 'Phiếu xong khâu Xi thì hiện ở đây để QC chốt hoàn thiện.' },
   recent: { title: 'Chưa có lần QC nào', description: 'Các lần bạn cân lại gần nhất hiện ở đây.' },
@@ -121,7 +121,7 @@ export function QcTicketsPage() {
   // Báo lỗi khâu thợ đang làm: phiếu sang "Chờ QC" để QC cân hàng lỗi.
   const reportDefect = useMutation({
     mutationFn: ({ item, note }: { item: QcTicketItem; note: string }) =>
-      reportStageDefectApi(item.orderCode, item.no as number, note),
+      reportStageDefectApi(item.orderCode, item.no, note),
     onSuccess: (order) => {
       onOrderSaved(order, 'Đã báo lỗi khâu — phiếu chuyển sang Chờ QC')
       setReporting(null)
@@ -180,7 +180,7 @@ export function QcTicketsPage() {
     const loading = loadingEntry === entry.entryId
     if (tab === 'working') {
       return (
-        <Button variant="outlined" color="error" disabled={entry.no == null} onClick={() => setReporting(entry)}>
+        <Button variant="outlined" color="error" onClick={() => setReporting(entry)}>
           Báo lỗi
         </Button>
       )

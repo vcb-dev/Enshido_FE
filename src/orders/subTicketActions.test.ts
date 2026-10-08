@@ -130,8 +130,17 @@ describe('có mạng', () => {
 
     expect(calledUrls()).toEqual(['/api/production-orders/A012/sub-tickets/1/accept'])
     expect(client.getQueryData(['production-order', 'A012'])).toEqual(CACHED_ORDER)
-    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã nhận hàng phiếu A012-1'))
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã xác nhận phiếu A012-1'))
     expect(toast.info).not.toHaveBeenCalled()
+  })
+
+  it('thợ xác nhận phiếu mẹ Nguội / Vào đá qua endpoint phiếu mẹ', async () => {
+    fetchMock.mockResolvedValue(jsonRes(ORDER))
+
+    await fire(client, 'accept', { orderCode: 'A012', no: null, ticketCode: 'A012' }).promise
+
+    expect(calledUrls()).toEqual(['/api/production-orders/A012/work/accept'])
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('bắt đầu làm'))
   })
 
   it('lỗi nghiệp vụ thì báo nguyên văn máy chủ và không thử lại', async () => {
@@ -155,7 +164,7 @@ describe('mất mạng', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(observer.getCurrentResult().isPaused).toBe(true)
-    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('Đã xếp hàng nhận hàng phiếu A012-1'))
+    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('Đã xếp hàng xác nhận phiếu A012-1'))
     expect(toast.success).not.toHaveBeenCalled()
 
     // Đúng thứ mà thẻ phiếu đọc để hiện chip vàng.

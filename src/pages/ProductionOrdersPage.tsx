@@ -70,7 +70,7 @@ import {
   STAGE_LABEL,
   STATUS_META,
   STATUS_TABS,
-  SUB_TICKET_STATE_META,
+  subTicketStateLabel,
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
@@ -1245,7 +1245,7 @@ function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
       <StatusChip status={sub.status} label={orderStatusLabel(sub.status, sub.state, sub.stage)} />
-      {sub.state === 'IDLE' ? null : <SubTicketStateChip state={sub.state} />}
+      {sub.state === 'IDLE' ? null : <SubTicketStateChip state={sub.state} stage={sub.stage} />}
     </Stack>
   )
 }
@@ -1284,7 +1284,7 @@ function OrderStatus({ row }: { row: ProductionOrderRow }) {
       {row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT' ? (
         <SubTicketStateChip
           state={row.workState}
-          label={row.workState === 'IDLE' ? 'QC đã nhận lại' : SUB_TICKET_STATE_META[row.workState].label}
+          label={row.workState === 'IDLE' ? 'QC đã nhận lại' : subTicketStateLabel(row.workState, row.workReceiptPrepared ? row.workStage : null)}
         />
       ) : null}
     </Stack>
