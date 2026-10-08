@@ -27,7 +27,6 @@ import { useAuth } from '../auth/AuthContext'
 import { useOperatorName } from '../hooks/useOperatorName'
 import {
   HandoverMaterialsField,
-  handoverLineGram,
   handoverLinePayload,
   handoverMetalWeight,
   stageIssuesStock,
@@ -382,6 +381,13 @@ export function AssignReceiptDialog({
       : 'BTP đã cắt gắn với đơn'
     : ''
   const firstStage = order.stages.length === 0
+  /**
+   * Vào đá: hàng đạt khâu trước đã nhập kho BTP (BTP đã nguội của đơn) thì hệ thống tự xuất khi
+   * thợ nhận hàng — thủ kho chỉ chọn đá, không nhập TL bạc hay chọn lại BTP (khớp BE).
+   */
+  const previousEntry = order.stages.filter((item) => item.subTicketId == null).at(-1) ?? null
+  const autoFiledBtp =
+    stage === 'STONE_SETTING' && previousEntry?.outputMaterialId != null ? previousEntry : null
   const resetForOpen = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -410,23 +416,13 @@ export function AssignReceiptDialog({
       onSubmit={(values) => {
         if (!values.stage) return
         const materialLines = autoCutBtp ? [] : values.materials
-        const stoneLines = values.stage === 'STONE_SETTING'
-          ? materialLines.filter((line) => line.kind === 'STONE')
-          : []
-        const stoneCounts = stoneLines
-          .filter((line) => line.stoneCount !== '')
-          .map((line) => Number(line.stoneCount))
-          .filter((count) => Number.isFinite(count) && count >= 0)
-        const stoneWeights = stoneLines
-          .map((line) => Number(handoverLineGram(line)))
-          .filter((weight) => Number.isFinite(weight) && weight > 0)
         onSave({
           stage: values.stage,
           craftsmanUserId: values.craftsmanUserId,
           handedQty: availableQty,
-          handedSilverWeight: firstStage ? null : values.handedSilverWeight || null,
-          handedStoneCount: stoneCounts.length ? stoneCounts.reduce((sum, count) => sum + count, 0) : null,
-          handedStoneWeight: stoneWeights.length ? String(stoneWeights.reduce((sum, weight) => sum + weight, 0)) : null,
+          // Bạc vào khâu lấy từ dòng BTP xuất kho; đá giao máy chủ tính từ các dòng đá — không gửi
+          // kèm tổng, gửi cả hai là cộng đôi.
+          handedSilverWeight: firstStage || autoFiledBtp ? null : values.handedSilverWeight || null,
           note: values.note.trim(),
           materials: materialLines.map(handoverLinePayload),
         })
@@ -470,7 +466,7 @@ export function AssignReceiptDialog({
             },
           }}
         />
-        {!firstStage ? (
+        {!firstStage && !autoFiledBtp ? (
           <FormQtyField<Values>
             name="handedSilverWeight"
             label="TL bạc giao (g)"
@@ -496,10 +492,17 @@ export function AssignReceiptDialog({
               nên chưa thể tự gắn phôi. Hãy kiểm tra dữ liệu cắt cây; nếu cần giao ngay, chọn BTP thủ công.
             </Alert>
           ) : null}
+          {autoFiledBtp ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Tự xuất BTP đã nguội của đơn: {autoFiledBtp.returnedQty ?? availableQty} chiếc ·{' '}
+              {formatQty(autoFiledBtp.returnedSilverWeight ?? '0')} g. Kho xuất khi thợ bấm “Xác nhận”.
+            </Alert>
+          ) : null}
           <HandoverMaterialsField
             form={form}
             stage={stage || null}
             blank={cutBtp}
+            stoneOnly={autoFiledBtp != null}
             readOnly={saving}
             onUploadingChange={setUploading}
           />

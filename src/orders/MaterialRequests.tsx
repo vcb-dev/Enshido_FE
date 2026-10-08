@@ -989,11 +989,17 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   form,
   stage,
   blank,
+  stoneOnly = false,
   readOnly,
   onUploadingChange,
 }: {
   form: UseFormReturn<T>
   stage: StageCode | null
+  /**
+   * Vào đá khi BTP đã nguội của đơn tự xuất lúc thợ nhận hàng: chỉ chọn đá ở kho NVL chính,
+   * không chọn lại BTP (khớp BE).
+   */
+  stoneOnly?: boolean
   /** Phôi sau đúc của đơn còn chưa xuất — tổng xuất mã phôi không được vượt (khớp BE). */
   blank?: { materialId: string; leftQty: number; leftWeight: number } | null
   /** Đang lưu — khoá ô ảnh gói đá. */
@@ -1002,7 +1008,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   onUploadingChange?: (uploading: boolean) => void
 }) {
   const stoneStage = stage === 'STONE_SETTING'
-  const sources = stageSources(stage)
+  const sources: StockSource[] = stoneOnly ? ['NVL'] : stageSources(stage)
   // Form của hộp thoại giao có thêm các ô khác; ở đây chỉ động tới mảng `materials`.
   const control = form.control as unknown as UseFormReturn<{ materials: HandoverMaterialLine[] }>['control']
   const setValue = form.setValue as unknown as UseFormReturn<{ materials: HandoverMaterialLine[] }>['setValue']
@@ -1012,7 +1018,8 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   const required = sources.length > 0
   // Nguội chỉ xuất BTP (phôi), luôn tính theo gram — không cần chọn loại, gọi là BTP thay vì NVL.
   const btpOnly = stage === 'FILING'
-  const noun = btpOnly ? 'BTP' : 'NVL'
+  const noun = btpOnly ? 'BTP' : stoneOnly ? 'đá' : 'NVL'
+  const emptyLine: HandoverMaterialLine = stoneOnly ? { ...EMPTY_HANDOVER_LINE, kind: 'STONE' } : EMPTY_HANDOVER_LINE
   // Cộng mọi dòng cùng mã phôi: tách hai dòng cũng không lách được mốc.
   const blankTotals = values.reduce(
     (sum, item) =>
@@ -1033,9 +1040,9 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
   useEffect(() => {
     const current = (form.getValues as unknown as () => { materials?: HandoverMaterialLine[] })().materials
     if (required && (current?.length ?? 0) === 0) {
-      append({ ...EMPTY_HANDOVER_LINE })
+      append({ ...emptyLine })
     }
-  }, [required, fields.length, append, form])
+  }, [required, fields.length, append, form, stoneOnly])
 
   const nvlOptions = useQuery({
     queryKey: ['nvl-options'],
@@ -1067,16 +1074,16 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
       } satisfies CatalogPickerItem,
     })
     return [
-      ...(sources.includes('NVL') ? (nvlOptions.data ?? []) : []).map((item) =>
-        pick('Kho NVL chính', item, item.images),
-      ),
+      ...(sources.includes('NVL') ? (nvlOptions.data ?? []) : [])
+        .map((item) => pick('Kho NVL chính', item, item.images))
+        .filter((item) => !stoneOnly || item.kind === 'STONE'),
       // Phôi BTP là bạc — tính gram để vào bạc vào khâu.
       ...(sources.includes('BTP') ? (btpOptions.data ?? []) : []).map((item) => ({
         ...pick('Kho BTP', { ...item, metalKind: null }, item.images),
         kind: 'METAL' as const,
       })),
     ]
-  }, [nvlOptions.data, btpOptions.data, sources.join()])
+  }, [nvlOptions.data, btpOptions.data, sources.join(), stoneOnly])
   const pickerItems = useMemo(() => picks.map((pick) => pick.item), [picks])
   if (!required) {
     return (
@@ -1091,14 +1098,15 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
         <Box>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {noun} xuất kho cho thợ *
+            {stoneOnly ? 'Đá cấp cho thợ *' : `${noun} xuất kho cho thợ *`}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Xác nhận giao là trừ tồn và tạo phiếu xuất gắn mã đơn.
-            {sourcesNote(stage)}
+            {stoneOnly
+              ? 'Giữ chỗ ở kho NVL chính, chưa xuất kho. Cân cả gói và chụp ảnh gói đá trên cân.'
+              : `Xác nhận giao là trừ tồn và tạo phiếu xuất gắn mã đơn.${sourcesNote(stage)}`}
           </Typography>
         </Box>
-        <Button size="small" onClick={() => lines.append({ ...EMPTY_HANDOVER_LINE })}>
+        <Button size="small" onClick={() => lines.append({ ...emptyLine })}>
           Thêm {noun}
         </Button>
       </Stack>
