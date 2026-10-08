@@ -5,7 +5,7 @@ import type {
   ProductionStatus,
   SubTicketState,
 } from '../api/productionOrders'
-import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META } from './catalog'
+import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META, subTicketStateLabel } from './catalog'
 
 export function StatusChip({
   status,
@@ -54,12 +54,20 @@ export function SourceChip({ source, size = 'small' }: { source: ProductionSourc
   )
 }
 
-export function SubTicketStateChip({ state, label }: { state: SubTicketState; label?: string }) {
+export function SubTicketStateChip({
+  state,
+  label,
+  stage,
+}: {
+  state: SubTicketState
+  label?: string
+  stage?: string | null
+}) {
   const meta = SUB_TICKET_STATE_META[state]
   return (
     <Chip
       size="small"
-      label={label ?? meta.label}
+      label={label ?? subTicketStateLabel(state, stage)}
       sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600, maxWidth: '100%' }}
     />
   )

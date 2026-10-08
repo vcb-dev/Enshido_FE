@@ -67,7 +67,7 @@ export function SubTicketMatrixCard({
                     `Phiếu ${ticket.code}`
                   )}
                 </Typography>
-                <SubTicketStateChip state={ticket.state} />
+                <SubTicketStateChip state={ticket.state} stage={ticket.pendingStage ?? ticket.activeStage} />
                 <Typography variant="body2" color="text.secondary">
                   {ticket.qty} sp
                   {ticket.note ? ` · ${ticket.note}` : ''}

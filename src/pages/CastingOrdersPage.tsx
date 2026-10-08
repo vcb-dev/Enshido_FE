@@ -757,18 +757,18 @@ export function CastingSlipViewDialog({
         ) : view ? (
           <Stack spacing={2}>
             <Box>
-              <SlipStatusChip status={slip.status} />
+              <SlipStatusChip status={view.status} />
             </Box>
             <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1.5, columnGap: 2.5 }}>
               <Typography variant="body2">
-                <strong>Ngày:</strong> {slip.slipDate}
+                <strong>Ngày:</strong> {view.slipDate}
               </Typography>
               <Typography variant="body2">
-                <strong>Giao cho thợ:</strong> {slip.startedByName ?? '—'}
+                <strong>Giao cho thợ:</strong> {view.startedByName ?? '—'}
               </Typography>
-              {slip.createdByName ? (
+              {view.createdByName ? (
                 <Typography variant="body2">
-                  <strong>Thủ kho lập:</strong> {slip.createdByName}
+                  <strong>Thủ kho lập:</strong> {view.createdByName}
                 </Typography>
               ) : null}
             </Stack>
@@ -787,7 +787,7 @@ export function CastingSlipViewDialog({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {slip.orders.map((line) => (
+                {view.orders.map((line) => (
                   <TableRow key={line.intakeOrderId}>
                     <TableCell sx={{ fontWeight: 700 }}>{line.code}</TableCell>
                     <TableCell>{line.trackingCode ?? '—'}</TableCell>
@@ -801,39 +801,39 @@ export function CastingSlipViewDialog({
                     Trọng lượng sáp (cây thông) giao
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>
-                    {formatGram(slip.waxWeightGram)}
+                    {formatGram(view.waxWeightGram)}
                   </TableCell>
                 </TableRow>
               </TableBody>
             </Table>
             <CastingSlipMetalTable
-              estimateS999Gram={slip.estimateS999Gram}
-              estimateMasterAlloyGram={slip.estimateMasterAlloyGram}
-              estimateS925Gram={slip.estimateS925Gram}
-              estimateTotalGram={slip.estimateTotalGram}
-              issueS999Gram={slip.issueS999Gram}
-              issueMasterAlloyGram={slip.issueMasterAlloyGram}
-              issueS925Gram={slip.issueS925Gram}
-              issueTotalGram={slip.issueTotalGram}
-              returnTotalGram={slip.returnTotalGram}
+              estimateS999Gram={view.estimateS999Gram}
+              estimateMasterAlloyGram={view.estimateMasterAlloyGram}
+              estimateS925Gram={view.estimateS925Gram}
+              estimateTotalGram={view.estimateTotalGram}
+              issueS999Gram={view.issueS999Gram}
+              issueMasterAlloyGram={view.issueMasterAlloyGram}
+              issueS925Gram={view.issueS925Gram}
+              issueTotalGram={view.issueTotalGram}
+              returnTotalGram={view.returnTotalGram}
               extraRows={
-                slip.castLossGram != null ? (
+                view.castLossGram != null ? (
                   <>
                     <TableRow>
                       <TableCell>Trong đó: cây thông sau đúc</TableCell>
-                      <TableCell colSpan={3}>{formatGram(slip.castTreeWeightGram)}</TableCell>
+                      <TableCell colSpan={3}>{formatGram(view.castTreeWeightGram)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>Trong đó: bạc giao chưa dùng (trả kho)</TableCell>
-                      <TableCell colSpan={3}>{formatGram(slip.leftoverGram)}</TableCell>
+                      <TableCell colSpan={3}>{formatGram(view.leftoverGram)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 700 }}>
-                        Hao hụt đúc{slip.startedByName ? ` — ${slip.startedByName}` : ''}
+                        Hao hụt đúc{view.startedByName ? ` — ${view.startedByName}` : ''}
                       </TableCell>
-                      <TableCell colSpan={3} sx={{ fontWeight: 700, color: Number(slip.castLossGram) < 0 ? 'error.main' : undefined }}>
-                        {formatGram(slip.castLossGram)} g
-                        {slip.castLossPercent != null ? ` (${slip.castLossPercent}% bạc đã dùng)` : ''}
+                      <TableCell colSpan={3} sx={{ fontWeight: 700, color: Number(view.castLossGram) < 0 ? 'error.main' : undefined }}>
+                        {formatGram(view.castLossGram)} g
+                        {view.castLossPercent != null ? ` (${view.castLossPercent}% bạc đã dùng)` : ''}
                       </TableCell>
                     </TableRow>
                   </>
@@ -848,30 +848,30 @@ export function CastingSlipViewDialog({
                 <IntakeImageThumbs label="Ảnh phiếu đúc" images={thumbs} />
               </Box>
             ) : null}
-            {slip.startedAt ? (
+            {view.startedAt ? (
               <Typography variant="body2">
-                <strong>Bắt đầu đúc:</strong> {formatDateTime(slip.startedAt)}
-                {slip.startedByName ? ` · ${slip.startedByName}` : ''}
+                <strong>Bắt đầu đúc:</strong> {formatDateTime(view.startedAt)}
+                {view.startedByName ? ` · ${view.startedByName}` : ''}
               </Typography>
             ) : null}
-            {slip.castTreeWeightGram != null ? (
+            {view.castTreeWeightGram != null ? (
               <Stack spacing={0.75}>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>
                   Kết quả sau đúc
-                  {slip.submittedByName ? ` (${slip.submittedByName})` : ''}
+                  {view.submittedByName ? ` (${view.submittedByName})` : ''}
                 </Typography>
                 <Typography variant="body2">
-                  TL cây thông (trả): <strong>{formatGram(slip.castTreeWeightGram)} g</strong> · Bạc đã dùng:{' '}
-                  <strong>{formatGram(slip.silverUsedGram)} g</strong> · Thạch cao đã dùng:{' '}
-                  <strong>{formatGram(slip.plasterUsedGram)} g</strong>
+                  TL cây thông (trả): <strong>{formatGram(view.castTreeWeightGram)} g</strong> · Bạc đã dùng:{' '}
+                  <strong>{formatGram(view.silverUsedGram)} g</strong> · Thạch cao đã dùng:{' '}
+                  <strong>{formatGram(view.plasterUsedGram)} g</strong>
                 </Typography>
                 {resultThumbs.length ? <IntakeImageThumbs label="Ảnh sau đúc" images={resultThumbs} /> : null}
               </Stack>
             ) : null}
-            {slip.confirmedAt ? (
+            {view.confirmedAt ? (
               <Typography variant="body2">
-                <strong>Thủ kho xác nhận:</strong> {formatDateTime(slip.confirmedAt)}
-                {slip.confirmedByName ? ` · ${slip.confirmedByName}` : ''}
+                <strong>Thủ kho xác nhận:</strong> {formatDateTime(view.confirmedAt)}
+                {view.confirmedByName ? ` · ${view.confirmedByName}` : ''}
               </Typography>
             ) : null}
           </Stack>
@@ -879,32 +879,32 @@ export function CastingSlipViewDialog({
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Đóng</Button>
-        {slip && canConfirm && variant !== 'cut' ? (
-          <Button variant="outlined" href={`/casting/${slip.code}/print`} target="_blank">
-            {slip.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
+        {view && canConfirm && variant !== 'cut' ? (
+          <Button variant="outlined" href={`/casting/${view.code}/print`} target="_blank">
+            {view.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
           </Button>
         ) : null}
-        {slip?.status === 'CASTING' && canCast ? (
-          <Button variant="contained" onClick={() => onEnterResult(slip)}>
+        {view?.status === 'CASTING' && canCast ? (
+          <Button variant="contained" onClick={() => onEnterResult(view)}>
             Nhập kết quả đúc
           </Button>
         ) : null}
-        {slip && canConfirm && onCut && canCutCastingSlip(slip) ? (
-          <Button variant="contained" onClick={() => onCut(slip)}>
+        {view && canConfirm && onCut && canCutCastingSlip(view) ? (
+          <Button variant="contained" onClick={() => onCut(view)}>
             Cắt cây thông
           </Button>
         ) : null}
-        {slip?.status === 'PENDING_CONFIRMATION' && canConfirm ? (
+        {view?.status === 'PENDING_CONFIRMATION' && canConfirm ? (
           <>
             <Button
               variant="contained"
               color="error"
               disabled={busy || busyReject}
-              onClick={() => onReject(slip)}
+              onClick={() => onReject(view)}
             >
               Lỗi đúc
             </Button>
-            <Button variant="contained" disabled={busy || busyReject} onClick={() => onConfirm(slip)}>
+            <Button variant="contained" disabled={busy || busyReject} onClick={() => onConfirm(view)}>
               Xác nhận
             </Button>
           </>

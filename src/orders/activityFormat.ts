@@ -97,7 +97,7 @@ const FIELD_LABEL: Record<string, string> = {
   scrapS999Weight: 'S999 thừa (g)',
   stockInboundCount: 'Số phiếu nhập kho',
   stockInboundIds: 'Phiếu nhập kho',
-  acceptedBy: 'Thợ nhận hàng',
+  acceptedBy: 'Thợ xác nhận',
   heldStoneCount: 'Đá giữ chỗ (viên)',
 }
 

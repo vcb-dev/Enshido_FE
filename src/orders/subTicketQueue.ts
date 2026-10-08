@@ -29,7 +29,7 @@ export function subTicketMutationKey(action: SubTicketAction) {
 const WAITING_LABEL: Record<SubTicketAction, string> = {
   claim: 'Chờ gửi: nhận phiếu',
   unclaim: 'Chờ gửi: huỷ nhận',
-  accept: 'Chờ gửi: nhận hàng',
+  accept: 'Chờ gửi: xác nhận',
   submit: 'Chờ gửi: báo xong',
   unsubmit: 'Chờ gửi: bỏ báo xong',
 }

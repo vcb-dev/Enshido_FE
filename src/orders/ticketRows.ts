@@ -387,12 +387,15 @@ export function outcomeLines(
     ]
   }
 
-  // Tổng hợp cả đơn: hàng lỗi một phần của mọi phiếu con, ghi kèm mã phiếu.
-  const partial = order.subTickets.flatMap((item) =>
-    partialDefectLines(order, item.id).map((line) => (line.startsWith('Lý do:') ? line : `${item.code} · ${line}`)),
-  )
+  // Tổng hợp hàng lỗi QC đã tách trên phiếu mẹ và mọi phiếu con.
+  const partial = [
+    ...partialDefectLines(order, null),
+    ...order.subTickets.flatMap((item) =>
+      partialDefectLines(order, item.id).map((line) => (line.startsWith('Lý do:') ? line : `${item.code} · ${line}`)),
+    ),
+  ]
   // Lần ghi lỗi gần nhất — giữ lại cả khi đơn đã được làm lại, để phiếu còn dấu vết lỗi.
-  const log = order.statusLogs.find((item) => item.toStatus === 'DEFECT')
+  const log = order.statusLogs.find((item) => ['DEFECT', 'FILING_DEFECT', 'STONE_DEFECT'].includes(item.toStatus))
   if (!log) return partial
   return [
     ...partial,
@@ -408,7 +411,7 @@ export function outcomeLines(
  * Hàng lỗi một phần QC tách ra ở Nguội / Vào đá: phiếu vẫn đi tiếp với hàng đạt, phần lỗi
  * về kho NVL (sau khi thủ kho xác nhận) và có thể làm phiếu bù — ghi lại ở cột Lỗi.
  */
-function partialDefectLines(order: ProductionOrderDetail, ticketId: string): string[] {
+function partialDefectLines(order: ProductionOrderDetail, ticketId: string | null): string[] {
   return order.stages
     .filter((entry) => entry.subTicketId === ticketId && entry.returnedAt && (entry.defectQty ?? 0) > 0)
     .flatMap((entry) => {
