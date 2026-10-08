@@ -47,6 +47,7 @@ import { can, Permission } from '../auth/permissions'
 import {
   listProductionOrdersApi,
   type ProductionOrderRow,
+  type ReworkChild,
   type ProductionRequestType,
   type ProductionStatus,
   type SubTicketSummary,
@@ -67,14 +68,14 @@ import {
   formatDateTime,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
-  STAGE_LABEL,
   STATUS_META,
   STATUS_TABS,
-  subTicketStateLabel,
 } from '../orders/catalog'
-import { RequestTypeChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
+import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
 import { deadlineWarning } from '../orders/deadline'
+
+type ProductionListChild = SubTicketSummary | ReworkChild
 
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
@@ -169,6 +170,7 @@ export function ProductionOrdersPage() {
   const search = useDebouncedValue(params.search, 300)
 
   const listBaseParams = {
+    groupReworks: isAllView,
     status: statusTab,
     requestType: params.requestType as ProductionRequestType | '',
     search,
@@ -179,9 +181,10 @@ export function ProductionOrdersPage() {
   }
 
   const intakePipelineLists = useQuery({
-    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType],
+    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType, { rootsOnly: true }],
     queryFn: () =>
       getIntakePipelineListsApi({
+        rootsOnly: true,
         requestType: params.requestType as ProductionRequestType | '',
         search,
         pageSize: 120,
@@ -584,25 +587,24 @@ export function ProductionOrdersPage() {
               : setIntakeViewTarget(row.row)
             : navigate(`/orders/${row.row.code}`)
         }
-        onSubRowClick={(sub) => navigate(`/tickets/${sub.code}`)}
+        onSubRowClick={(sub) => {
+          if ('intake' in sub) {
+            if (sub.intake.productionOrderCode) navigate(`/orders/${sub.orderCode}`)
+            else setIntakeViewTarget(sub.intake)
+          } else navigate(`/tickets/${sub.code}`)
+        }}
         subRows={{
-          get: (row) =>
-            row.kind === 'intake'
-              ? []
-              : row.row.subTickets.length < 2
-                ? []
-                : statusTab
-                ? row.row.subTickets.filter((sub) => {
-                    const subStatus = subTicketListStatus(sub)
-                    return (
-                      subStatus === statusTab ||
-                      (subStatus == null && row.row.status === statusTab)
-                    )
-                  })
-                : row.row.subTickets,
-          key: (sub) => sub.code,
+          get: (row): ProductionListChild[] => {
+            if (row.kind === 'intake') return []
+            const tickets = row.row.subTickets.length < 2 ? [] : row.row.subTickets
+            return [
+              ...(statusTab ? tickets.filter((sub) => subTicketListStatus(sub) === statusTab) : tickets),
+              ...(isAllView ? row.row.reworks ?? [] : []),
+            ]
+          },
+          key: (sub) => 'intake' in sub ? sub.intake.id : sub.code,
           label: (count) => `${count} phiếu con`,
-          autoExpandKey: statusTab || undefined,
+          autoExpandKey: statusTab || 'all',
         }}
         loading={
           (list.isLoading && !list.data) ||
@@ -950,8 +952,8 @@ function orderColumns(
     receivedDate: ReactNode
     dueDate: ReactNode
   },
-): Column<ProductionListRow, SubTicketSummary>[] {
-  return [
+): Column<ProductionListRow, ProductionListChild>[] {
+  const columns: Column<ProductionListRow, SubTicketSummary>[] = [
     {
       key: 'code',
       header: 'Mã SX',
@@ -981,11 +983,12 @@ function orderColumns(
         }
         const order = row.row
         const displayCode = order.intakeSxCode || order.code
-        const body = order.subTickets.length > 1 ? (
+        const childCount = (order.subTickets.length > 1 ? order.subTickets.length : 0) + (order.reworks?.length ?? 0)
+        const body = childCount > 0 ? (
           <>
             {displayCode}
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
-              {order.subTickets.length} phiếu con
+              {childCount} phiếu con
             </Typography>
           </>
         ) : (
@@ -1216,6 +1219,39 @@ function orderColumns(
       ),
     },
   ]
+  return columns.map((column) => ({
+    ...column,
+    renderSub: (sub: ProductionListChild, parent: ProductionListRow) => {
+      if (!('intake' in sub)) return column.renderSub?.(sub, parent)
+      const intake = sub.intake
+      const production = Boolean(intake.productionOrderCode)
+      const open = () => actions.onIntakeView(intake)
+      switch (column.key) {
+        case 'code':
+          return <Stack>
+            {production ? (
+              <Link component={RouterLink} to={`/orders/${sub.orderCode}`} sx={{ fontWeight: 600 }}>{sub.orderCode}</Link>
+            ) : <Button size="small" onClick={open}>{sub.orderCode}</Button>}
+            <Typography variant="caption">Bù cho {sub.sourceTicketCode}</Typography>
+          </Stack>
+        case 'createdAt': return formatDateTime(intake.createdAt)
+        case 'status': return production
+          ? <StatusChip status={sub.productionStatus} />
+          : <IntakeStatusChip status={intake.status} />
+        case 'qty': return intake.qty
+        case 'intakeOrderCode': return intake.code
+        case 'description': return intake.description
+        case 'actions':
+          return <Stack spacing={0.5} onClick={(event) => event.stopPropagation()}>
+            {!production ? renderIntakeWorkflowAction(intake, actions) : null}
+            {production ? (
+              <Button size="small" component={RouterLink} to={`/orders/${sub.orderCode}`}>Xem phiếu bù</Button>
+            ) : <Button size="small" onClick={open}>Xem phiếu bù</Button>}
+          </Stack>
+        default: return null
+      }
+    },
+  }))
 }
 
 function sliceMergedPage(
@@ -1234,80 +1270,37 @@ function sliceMergedPage(
   return { pendingOnPage, prodStart, prodTake }
 }
 
-/**
- * Trạng thái của một phiếu con: khâu đang ở (cùng màu chip với trạng thái đơn ở dòng cha, để
- * dò cột là thấy tiến độ), bên dưới là bước trong khâu — chờ thợ nhận, đang làm, chờ QC…
- */
+/** Danh sách chỉ hiện trạng thái sản xuất; các bước thao tác nằm trong chi tiết lệnh. */
 function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
-  if (sub.state === 'FINISH') return <StatusChip status="FINISHING" />
-  if (sub.state === 'DEFECT') return <StatusChip status="DEFECT" />
-  if (!sub.stage) return <StatusChip status={sub.status} />
-  return (
-    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      <StatusChip status={sub.status} label={orderStatusLabel(sub.status, sub.state, sub.stage)} />
-      {sub.state === 'IDLE' ? null : <SubTicketStateChip state={sub.state} stage={sub.stage} />}
-    </Stack>
-  )
+  return <StatusChip status={subTicketListStatus(sub)} />
 }
 
 function OrderStatus({ row }: { row: ProductionOrderRow }) {
   if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} />
   if (row.subTickets.length > 1) {
-    const counts = new Map<string, { status: ProductionStatus; label: string; count: number }>()
+    const counts = new Map<ProductionStatus, number>()
     for (const ticket of row.subTickets) {
       const status = subTicketListStatus(ticket)
-      if (status) {
-        const label = orderStatusLabel(status, ticket.state, ticket.stage)
-        const key = `${status}:${label}`
-        const current = counts.get(key)
-        counts.set(key, { status, label, count: (current?.count ?? 0) + 1 })
-      }
+      counts.set(status, (counts.get(status) ?? 0) + 1)
     }
     if (counts.size) {
       return (
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-          {[...counts.values()].map(({ status, label, count }) => (
+          {[...counts.entries()].map(([status, count]) => (
             <StatusChip
-              key={`${status}:${label}`}
+              key={status}
               status={status}
-              label={`${label} · ${count}`}
+              label={`${STATUS_META[status].label} · ${count}`}
             />
           ))}
         </Stack>
       )
     }
   }
-  const label = orderStatusLabel(row.status, row.workState, row.workStage)
-  return (
-    <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      <StatusChip status={row.status} label={label} />
-      {row.workState && row.workStage && row.workState !== 'FINISH' && row.workState !== 'DEFECT' ? (
-        <SubTicketStateChip
-          state={row.workState}
-          label={row.workState === 'IDLE' ? 'QC đã nhận lại' : subTicketStateLabel(row.workState, row.workReceiptPrepared ? row.workStage : null)}
-        />
-      ) : null}
-    </Stack>
-  )
+  return <StatusChip status={row.status} />
 }
 
-function orderStatusLabel(
-  status: ProductionStatus,
-  state: SubTicketSummary['state'] | ProductionOrderRow['workState'],
-  stage: SubTicketSummary['stage'] | ProductionOrderRow['workStage'],
-) {
-  const stageName = stage ? STAGE_LABEL[stage] : STATUS_META[status].label
-  const stageStatus = status === 'FILING' || status === 'STONE_SETTING' ||
-    status === 'ENGRAVING' || status === 'POLISHING' || status === 'PLATING'
-  if (!stageStatus) return STATUS_META[status].label
-  const lowerStage = stageName.toLocaleLowerCase('vi')
-  if (state === 'WORKING') return `Đang ${lowerStage}`
-  if (state === 'CLAIMED') return `Đã nhận ${lowerStage}`
-  if (state === 'SUBMITTED') return `Chờ QC ${lowerStage}`
-  return `Chờ ${lowerStage}`
-}
-
-function subTicketListStatus(sub: SubTicketSummary): ProductionStatus | null {
+function subTicketListStatus(sub: SubTicketSummary): ProductionStatus {
   if (sub.state === 'FINISH') return 'FINISHING'
   if (sub.state === 'DEFECT') return 'DEFECT'
   return sub.status

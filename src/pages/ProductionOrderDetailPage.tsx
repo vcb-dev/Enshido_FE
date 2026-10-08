@@ -291,13 +291,9 @@ export function ProductionOrderDetailPage() {
     !parentLastEntry || parentReworking
       ? STAGES
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
-  // Đang đi đúng quy trình: khâu mở được chỉ có khâu kế tiếp (bỏ Vào đá nếu đơn không có đá);
-  // chỉ làm lại (Sản xuất lỗi) mới cho chọn khâu.
+  // Tự lấy khâu kế tiếp; đơn làm lại bắt đầu từ khâu mặc định, bỏ Vào đá nếu không có đá.
   const parentNextStage = parentOpenableStages.find((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
-  const parentDialogStages: StageCode[] = (parentReworking || !parentNextStage
-    ? parentOpenableStages
-    : [parentNextStage]
-  ).filter((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
+  const parentDialogStages: StageCode[] = parentNextStage ? [parentNextStage] : []
   const parentReceiptStages = parentDialogStages.filter((stage) => stage === 'FILING' || stage === 'STONE_SETTING')
   const parentReceiptPending = Boolean(parentWork?.receiptPrepared) &&
     (parentWork?.pendingStage === 'FILING' || parentWork?.pendingStage === 'STONE_SETTING')
@@ -1033,7 +1029,10 @@ export function ProductionOrderDetailPage() {
         open={assignTarget != null}
         ticket={assignTarget?.ticket ?? null}
         stageOptions={assignTarget?.stageOptions ?? []}
-        workers={(lookups.data?.users ?? []).filter((worker) => lookups.data?.workerIds.includes(worker.id))}
+        workers={(lookups.data?.users ?? []).filter((worker) =>
+          lookups.data?.workerIds.includes(worker.id) &&
+          (isAdmin || !lookups.data?.adminIds?.includes(worker.id)),
+        )}
         saving={assignWorker.isPending}
         onClose={() => setAssignTarget(null)}
         onSave={(payload) =>
@@ -1063,7 +1062,10 @@ export function ProductionOrderDetailPage() {
         order={order}
         ticket={parentWork}
         stages={parentReceiptStageOverride ? [parentReceiptStageOverride] : parentReceiptStages}
-        workers={(lookups.data?.users ?? []).filter((worker) => lookups.data?.workerIds.includes(worker.id))}
+        workers={(lookups.data?.users ?? []).filter((worker) =>
+          lookups.data?.workerIds.includes(worker.id) &&
+          (isAdmin || !lookups.data?.adminIds?.includes(worker.id)),
+        )}
         saving={assignParentReceipt.isPending}
         onClose={() => {
           setParentReceiptDialog(false)
@@ -1861,15 +1863,14 @@ function OpenOrderStageDialog({
 
   useEffect(() => {
     if (!open) return
-    const current = form.getValues('stage')
     form.reset({
-      stage: current && stages.includes(current) ? current : (stages[0] ?? ''),
+      stage: stages[0] ?? '',
     })
   }, [open, stages, form])
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{stages.length === 1 ? `Mở khâu · ${STAGE_LABEL[stages[0]]}` : 'Mở khâu trên phiếu mẹ'}</DialogTitle>
+      <DialogTitle>{stage ? `Mở khâu · ${STAGE_LABEL[stage]}` : 'Mở khâu trên phiếu mẹ'}</DialogTitle>
       <DialogForm
         form={form}
         onSubmit={(values) =>
@@ -1884,17 +1885,7 @@ function OpenOrderStageDialog({
             pt: '8px !important',
           }}
         >
-          {stages.length > 1 ? (
-            <FormSelect<OpenStageValues, StageCode>
-              name="stage"
-              label="Khâu"
-              options={stages.map((item) => ({
-                value: item,
-                label: STAGE_LABEL[item],
-              }))}
-              required
-            />
-          ) : null}
+          <Typography variant="body2">Khâu: <b>{stage ? STAGE_LABEL[stage] : '—'}</b></Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>

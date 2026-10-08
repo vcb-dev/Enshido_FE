@@ -5,6 +5,7 @@ import type {
   IntakeOrderStatus,
   IntakePipelineLists,
 } from '../api/intakeOrders'
+import type { ProductionOrderListResponse } from '../api/productionOrders'
 import {
   patchIntakePipelineCounts,
   scheduleIntakePipelineCountsRefresh,
@@ -35,7 +36,10 @@ function patchPipelineLists(queryClient: QueryClient, order: IntakeOrder) {
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders', 'pipeline-lists'] })) {
     const old = query.state.data as IntakePipelineLists | undefined
     if (!old) continue
-    queryClient.setQueryData(query.queryKey, moveOrderInPipelineLists(old, order))
+    const rootsOnly = query.queryKey.some((part) => typeof part === 'object' && part !== null && 'rootsOnly' in part && part.rootsOnly === true)
+    queryClient.setQueryData(query.queryKey, rootsOnly && order.reworkOfOrderId
+      ? removeOrderFromPipelineLists(old, order.id)
+      : moveOrderInPipelineLists(old, order))
   }
 }
 
@@ -181,11 +185,25 @@ function patchIntakeQueries(
   }
 }
 
+function findNestedRework(queryClient: QueryClient, matches: (order: IntakeOrder) => boolean): IntakeOrder | undefined {
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['production-orders'] })) {
+    const data = query.state.data as ProductionOrderListResponse | undefined
+    if (!Array.isArray(data?.items)) continue
+    for (const row of data.items) {
+      const hit = row.reworks?.find((child) => matches(child.intake))
+      if (hit) return hit.intake
+    }
+  }
+  return undefined
+}
+
 /** Tìm đơn intake đang có trong cache (pipeline hoặc list). */
 export function findIntakeOrderByCodeInCaches(
   queryClient: QueryClient,
   code: string,
 ): IntakeOrder | undefined {
+  const nested = findNestedRework(queryClient, (order) => order.code === code)
+  if (nested) return nested
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders'] })) {
     if (query.queryKey[1] === 'pipeline-lists') {
       const lists = query.state.data as IntakePipelineLists | undefined
@@ -208,6 +226,8 @@ export function findIntakeOrderInCaches(
   queryClient: QueryClient,
   orderId: string,
 ): IntakeOrder | undefined {
+  const nested = findNestedRework(queryClient, (order) => order.id === orderId)
+  if (nested) return nested
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders'] })) {
     if (query.queryKey[1] === 'pipeline-lists') {
       const lists = query.state.data as IntakePipelineLists | undefined
@@ -234,6 +254,10 @@ export function moveIntakeOrderInCaches(
 ) {
   const prev = findIntakeOrderInCaches(queryClient, order.id)
   patchPipelineLists(queryClient, order)
+  if (order.reworkOfOrderId) {
+    void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+    void queryClient.invalidateQueries({ queryKey: ['production-order'] })
+  }
   patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
   patchIntakePipelineCounts(
     queryClient,

@@ -50,10 +50,10 @@ export function seedProductionOrder(queryClient: QueryClient, order: ProductionO
   const previous = queryClient.getQueryData<ProductionOrderDetail>(['production-order', order.code])
   const merged = keepLoadedImages(previous, order)
   queryClient.setQueryData(['production-order', order.code], merged)
-  queryClient.setQueriesData(
-    { queryKey: ['production-orders'] },
-    (current: ProductionOrderListResponse | undefined) => patchOrderList(queryClient, current, merged),
-  )
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ['production-orders'] })) {
+    const grouped = query.queryKey.some((part) => typeof part === 'object' && part !== null && 'groupReworks' in part && part.groupReworks === true)
+    queryClient.setQueryData(query.queryKey, (current: ProductionOrderListResponse | undefined) => patchOrderList(queryClient, current, merged, grouped))
+  }
 }
 
 export function refreshProductionOrderLists(queryClient: QueryClient) {
@@ -224,6 +224,16 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
       url: image.url,
     })),
     subTickets: summarizeSubTickets(order),
+    reworks: (order.reworks ?? []).flatMap((child) => {
+      if (!child.intake || !child.orderCode || !child.productionStatus) return []
+      return [{
+        intake: child.intake,
+        orderCode: child.orderCode,
+        productionStatus: child.productionStatus,
+        sourceTicketCode: child.ticketNo == null ? order.code
+          : order.subTickets.find((ticket) => ticket.no === child.ticketNo)?.code ?? order.code,
+      }]
+    }),
   }
 }
 
@@ -258,8 +268,19 @@ function patchOrderList(
   queryClient: QueryClient,
   current: ProductionOrderListResponse | undefined,
   order: ProductionOrderDetail,
+  groupReworks = false,
 ): ProductionOrderListResponse | undefined {
   if (!current?.items) return current
+  if (groupReworks && order.reworkOfOrderId) {
+    return { ...current, items: current.items.map((parent) => ({
+      ...parent,
+      reworks: parent.reworks?.map((child) => child.orderCode === order.code ? {
+        ...child,
+        productionStatus: order.status,
+        intake: { ...child.intake, qty: order.qty, productionOrderCode: child.intake.productionOrderCode ?? (order.workTicket ? order.code : null) },
+      } : child),
+    })) }
+  }
   const row = toListRow(order)
   const index = current.items.findIndex((item) => item.id === order.id)
   if (index >= 0) {

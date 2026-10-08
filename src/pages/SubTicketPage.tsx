@@ -7,7 +7,7 @@ import ScaleIcon from '@mui/icons-material/Scale'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, canReportProductionDefect, isWorkerOnly, Permission } from '../auth/permissions'
 import {
   getSubTicketOrderApi,
   parseSubTicketCode,
@@ -200,6 +200,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const [defectOpen, setDefectOpen] = useState(false)
   // QC cân lại / sửa lại ngay trên chi tiết phiếu (cùng hộp thoại với màn Phiếu QC).
   const canQc = isAdmin || can(user, Permission.PRODUCTION_QC)
+  const canReportDefect = canReportProductionDefect(user)
   const queryClient = useQueryClient()
   const [qcEntry, setQcEntry] = useState<StageEntry | null>(null)
   const saveReturn = useOrderMutation(
@@ -326,14 +327,14 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     ]
     if (openEntry.defectReportedAt) {
       hint = `Đã báo lỗi khâu ${STAGE_LABEL[openEntry.stage]}: ${openEntry.defectNote ?? ''} — mang hàng tới QC cân lại.`
-      if (workingIsMine) {
+      if (canReportDefect) {
         actions.push(
           <Button key="clear-defect" variant="outlined" color="inherit" size="large" disabled={busy || clearDefect.isPending} onClick={() => clearDefect.mutate(undefined)}>
             Bỏ báo lỗi
           </Button>,
         )
       }
-    } else if ((workingIsMine || canQc) && model.state !== 'SUBMITTED') {
+    } else if (canReportDefect && model.state !== 'SUBMITTED') {
       // Thợ đã báo xong thì QC ghi hàng lỗi ngay trong hộp "QC cân lại" — không cần nút báo lỗi riêng.
       actions.push(
         <Button key="defect" variant="outlined" color="error" size="large" disabled={busy} onClick={() => setDefectOpen(true)}>
@@ -590,7 +591,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
         />
       ) : null}
       <DefectDialog
-        open={defectOpen}
+        open={defectOpen && canReportDefect}
         ticketCode={model.code}
         saving={reportDefect.isPending}
         onClose={() => setDefectOpen(false)}

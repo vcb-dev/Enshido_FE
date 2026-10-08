@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Alert, Button, Stack } from '@mui/material'
+import { Button, Stack } from '@mui/material'
+import { ReworkChildren } from './ReworkChildren'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { confirmStageApi, createReworkApi, type ProductionOrderDetail, type StageEntry } from '../api/productionOrders'
-import { INTAKE_STATUS_META } from '../intake/catalog'
 import { isReceiptStage, STAGE_LABEL } from './catalog'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock } from './nvlStock'
@@ -51,11 +51,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
 
   return (
     <Stack spacing={1}>
-      {reworks.map((item) => (
-        <Alert key={item.code} severity="info" sx={{ py: 0.25 }}>
-          Phiếu bù <b>{item.code}</b> · {item.qty} sp · {INTAKE_STATUS_META[item.status].label}
-        </Alert>
-      ))}
+      <ReworkChildren reworks={reworks} ticketCode={ticketCode} />
       {canKeeper && active ? (
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           {pending ? (

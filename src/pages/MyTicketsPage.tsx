@@ -42,6 +42,7 @@ import { formatCt, formatQty } from '../api/inventory'
 import { applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { CardGroupSkeleton } from '../components/ui'
 import { formatDateShort, usesReceiptFlow, STAGE_LABEL } from '../orders/catalog'
+import { isWaitingForWorkerReceipt } from '../orders/myTicketsCache'
 import { SubTicketStateChip } from '../orders/OrderChips'
 import { useQueuedSubTickets, useSubTicketAction } from '../orders/subTicketActions'
 import { queuedLabel, type QueuedSubTicketAction, type SubTicketAction } from '../orders/subTicketQueue'
@@ -93,7 +94,7 @@ export function MyTicketsPage() {
   const data = tickets.data
   const mine = useMemo(
     () =>
-      [...(data?.mine ?? [])].sort(
+      [...(data?.mine ?? [])].filter((item) => !isWaitingForWorkerReceipt(item)).sort(
         (a, b) => (MINE_ORDER[a.state ?? 'IDLE'] ?? 9) - (MINE_ORDER[b.state ?? 'IDLE'] ?? 9),
       ),
     [data?.mine],
@@ -101,10 +102,13 @@ export function MyTicketsPage() {
   // Phiếu sắp tới hạn lên trước để thợ nhận đúng việc gấp.
   const available = useMemo(
     () =>
-      [...(data?.available ?? [])].sort(
+      [...new Map([
+        ...(data?.available ?? []),
+        ...(data?.mine ?? []).filter(isWaitingForWorkerReceipt),
+      ].map((item) => [item.ticketCode, item])).values()].sort(
         (a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || (a.pendingAt ?? '').localeCompare(b.pendingAt ?? ''),
       ),
-    [data?.available],
+    [data?.available, data?.mine],
   )
   const recent = data?.recent ?? []
   const castingMine = useMemo(
@@ -196,16 +200,7 @@ export function MyTicketsPage() {
     setResultSlip(item)
   }
 
-  const [tab, setTab] = useState<TabKey | null>(null)
-  // Lần đầu vào: đang giữ việc thì mở tab việc của tôi, chưa có thì mở tab chờ nhận.
-  const activeTab: TabKey =
-    tab ??
-    (data &&
-    mine.length === 0 &&
-    castingMine.length === 0 &&
-    available.length + castingAvailable.length > 0
-      ? 'available'
-      : 'mine')
+  const [activeTab, setTab] = useState<TabKey>('available')
 
   const availableCount = available.length + castingAvailable.length
   const mineCount = mine.length + castingMine.length
@@ -216,7 +211,7 @@ export function MyTicketsPage() {
   const mineFilters: { value: MineFilter; label: string; count: number }[] = [
     { value: 'all', label: 'Tất cả', count: mineCount },
     { value: 'WORKING', label: 'Đang làm', count: count('WORKING') },
-    { value: 'CLAIMED', label: 'Chờ thợ nhận', count: count('CLAIMED') },
+    { value: 'CLAIMED', label: 'Chờ giao', count: count('CLAIMED') },
     { value: 'SUBMITTED', label: 'Chờ QC cân', count: count('SUBMITTED') },
   ]
 
@@ -228,7 +223,7 @@ export function MyTicketsPage() {
 
   const actionFor = (item: MyTicketItem): ReactNode => {
     const busy = queued.has(item.ticketCode)
-    if (activeTab === 'available') {
+    if (activeTab === 'available' && item.state === 'WAITING') {
       return (
         <Button
           variant="contained"
@@ -382,11 +377,11 @@ export function MyTicketsPage() {
                 },
               }}
             >
-              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mineCount} active={activeTab === 'mine'} />} />
               <Tab
                 value="available"
                 label={<TabLabel text="Chờ nhận" count={availableCount} active={activeTab === 'available'} />}
               />
+              <Tab value="mine" label={<TabLabel text="Đang giữ" count={mineCount} active={activeTab === 'mine'} />} />
               <Tab value="recent" label={<TabLabel text="Đã nộp" count={recentCount} active={activeTab === 'recent'} />} />
             </Tabs>
             <Stack
@@ -616,12 +611,12 @@ function statusLine(item: MyTicketItem, tab: TabKey) {
         : ''
     return `QC ${item.returnedByName ?? '—'} nhận lại ${formatDateShort(item.returnedAt)}${loss}`
   }
-  if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
   if (item.state === 'CLAIMED') {
     return usesReceiptFlow(item.stage, item.no, item.receiptPrepared)
       ? `Thủ kho giao ${formatDateShort(item.claimedAt)} · quét QR hoặc bấm Xác nhận khi đã nhận hàng`
       : `Đã nhận ${formatDateShort(item.claimedAt)} · chờ người giao cân bạc và xác nhận`
   }
+  if (tab === 'available') return `Mở khâu lúc ${formatDateShort(item.pendingAt)}`
   if (item.state === 'SUBMITTED') return `Báo xong ${formatDateShort(item.submittedAt)} · mang hàng tới QC cân lại`
   return `Bắt đầu ${formatDateShort(item.handedAt)} · người giao ${item.handedByName ?? '—'}`
 }

@@ -428,7 +428,7 @@ export function AssignWorkerDialog({
     form.clearErrors('stones')
   }, [materialKey, form])
   const title = ticket
-    ? `Chỉ định thợ · ${stageOptions.length === 1 ? `${STAGE_LABEL[stageOptions[0]]} · ` : ''}phiếu ${ticket.code}`
+    ? `Chỉ định thợ · ${stage ? `${STAGE_LABEL[stage]} · ` : ''}phiếu ${ticket.code}`
     : 'Chỉ định thợ'
 
   return (
@@ -456,21 +456,13 @@ export function AssignWorkerDialog({
         })
       }
       saving={saving}
+      submitDisabled={!stage}
       submitLabel="Chỉ định"
       maxWidth="sm"
       onClose={onClose}
       onExited={() => undefined}
     >
-      {stageOptions.length > 1 ? (
-        <FormRow columns={1}>
-          <FormSelect<AssignValues>
-            name="stage"
-            label="Khâu"
-            required
-            options={stageOptions.map((item) => ({ value: item, label: STAGE_LABEL[item] }))}
-          />
-        </FormRow>
-      ) : null}
+      <Typography variant="body2">Khâu: <b>{stage ? STAGE_LABEL[stage] : '—'}</b></Typography>
       <FormRow columns={1}>
         <FormSelect<AssignValues>
           name="craftsmanUserId"

@@ -5,7 +5,7 @@ import type {
   ProductionStatus,
   SubTicketState,
 } from '../api/productionOrders'
-import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META, subTicketStateLabel } from './catalog'
+import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META, isReceiptStage, subTicketStateLabel } from './catalog'
 
 export function StatusChip({
   status,
@@ -63,7 +63,8 @@ export function SubTicketStateChip({
   label?: string
   stage?: string | null
 }) {
-  const meta = SUB_TICKET_STATE_META[state]
+  const displayState = state === 'CLAIMED' && isReceiptStage(stage) ? 'WAITING' : state
+  const meta = SUB_TICKET_STATE_META[displayState]
   return (
     <Chip
       size="small"

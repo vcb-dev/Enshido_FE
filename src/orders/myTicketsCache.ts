@@ -5,6 +5,7 @@ import type {
   ProductionOrderDetail,
   SubTicketState,
 } from '../api/productionOrders'
+import { usesReceiptFlow } from './catalog'
 import type { SubTicketAction, SubTicketVars } from './subTicketQueue'
 
 function pickTicketState(
@@ -27,6 +28,10 @@ function pickTicketState(
   return { state: null, stage: null }
 }
 
+export function isWaitingForWorkerReceipt(item: MyTicketItem) {
+  return item.state === 'CLAIMED' && usesReceiptFlow(item.stage, item.no, item.receiptPrepared)
+}
+
 function shouldBeAvailable(state: SubTicketState | null, pendingStage: MyTicketItem['stage']) {
   return state === 'WAITING' && pendingStage != null
 }
@@ -43,6 +48,7 @@ function patchItem(item: MyTicketItem, order: ProductionOrderDetail, no: number 
     orderStatus: order.status,
     state: state ?? item.state,
     stage: stage ?? item.stage,
+    receiptPrepared: no == null ? order.workTicket?.receiptPrepared : item.receiptPrepared,
     claimedAt: ticket?.claimedAt ?? item.claimedAt,
     pendingAt: ticket?.pendingAt ?? item.pendingAt,
   }
@@ -72,7 +78,7 @@ export function patchMyTicketsAfterSubTicketAction(
     let mine = without(prev.mine)
     let recent = without(prev.recent)
 
-    if (shouldBeAvailable(state, stage)) {
+    if (shouldBeAvailable(state, stage) || isWaitingForWorkerReceipt(nextItem)) {
       available = [...available, nextItem]
     } else if (shouldBeMine(state)) {
       mine = [...mine, nextItem]

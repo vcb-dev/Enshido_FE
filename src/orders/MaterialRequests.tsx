@@ -52,7 +52,6 @@ import {
   FormRow,
   FormSelect,
   FormTextField,
-  SelectInput,
   STICKY_END_CELL_SX,
   STICKY_END_HEAD_SX,
   TextInput,
@@ -1030,10 +1029,6 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
     ]
   }, [nvlOptions.data, btpOptions.data, sources.join()])
   const pickerItems = useMemo(() => picks.map((pick) => pick.item), [picks])
-  const kindOptions = (['METAL', 'STONE', 'OTHER'] as const)
-    .filter((value) => value !== 'STONE' || stoneStage)
-    .map((value) => ({ value, label: KIND_LABEL[value] }))
-
   if (!required) {
     return (
       <Typography variant="body2" color="text.secondary">
@@ -1111,24 +1106,10 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   gap: 1,
                   gridTemplateColumns: btpOnly
                     ? { xs: '1fr 1fr', sm: '1fr 1fr auto' }
-                    : { xs: '1fr 1fr', sm: '1.2fr 1fr 1fr 1fr auto' },
+                    : { xs: '1fr 1fr', sm: '1fr 1fr 1fr auto' },
                   alignItems: 'start',
                 }}
               >
-                {btpOnly ? null : (
-                  <Controller
-                    control={control}
-                    name={name('kind')}
-                    render={({ field: select }) => (
-                      <SelectInput<MaterialRequestKind>
-                        label="Tính theo"
-                        options={kindOptions}
-                        value={select.value as MaterialRequestKind}
-                        onChange={(value) => select.onChange(value || 'OTHER')}
-                      />
-                    )}
-                  />
-                )}
                 {weightOnly ? (
                   <Box />
                 ) : (

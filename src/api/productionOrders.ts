@@ -1,6 +1,6 @@
 import { apiFetch } from './auth'
 import type { StockSnapshot } from './inventory'
-import type { IntakeOrderStatus } from './intakeOrders'
+import type { IntakeOrder, IntakeOrderStatus } from './intakeOrders'
 
 export type PreProductionStatus =
   | 'PENDING_APPROVAL'
@@ -52,6 +52,13 @@ export type OrderImage = {
   height?: number | null
 }
 
+export type ReworkChild = {
+  intake: IntakeOrder
+  orderCode: string
+  productionStatus: ProductionStatus
+  sourceTicketCode: string
+}
+
 export type ProductionOrderRow = {
   id: string
   code: string
@@ -100,6 +107,7 @@ export type ProductionOrderRow = {
   images: Array<{ id: string; kind: ProductionImageKind; url: string }>
   /** Phiếu con của đơn — thành dòng con xổ ra dưới đơn ở danh sách. Đơn chưa chia thì rỗng. */
   subTickets: SubTicketSummary[]
+  reworks?: ReworkChild[]
 }
 
 /** Một phiếu con ở danh sách đơn: đang ở khâu nào, trạng thái gì, ai đang giữ hàng. */
@@ -416,8 +424,9 @@ export type OrderWorkTicket = {
 // Bản chi tiết có `subTickets` đầy đủ của riêng nó — bỏ bản tóm tắt của dòng danh sách đi.
 export type ProductionOrderDetail = Omit<
   ProductionOrderRow,
-  'images' | 'subTickets' | 'workState' | 'workStage'
+  'images' | 'subTickets' | 'workState' | 'workStage' | 'reworks'
 > & {
+  reworkOfOrderId?: string | null
   btp: { id: string; sku: string | null; name: string } | null
   nvl: { id: string; sku: string | null; name: string } | null
   sourceOrderCode: string | null
@@ -492,13 +501,15 @@ export type ProductionOrderDetail = Omit<
   materials: TicketMaterials
   statusLogs: StatusLog[]
   /** Phiếu bù cho hàng lỗi Nguội / Vào đá: đơn tạo bù đang đi lại từ bước sáp. */
-  reworks: Array<{ code: string; status: IntakeOrderStatus; qty: number; entryId: string | null; ticketNo: number | null }>
+  reworks: Array<{ intake?: IntakeOrder; orderCode?: string; productionStatus?: ProductionStatus; code: string; status: IntakeOrderStatus; qty: number; entryId: string | null; ticketNo: number | null }>
 }
 
 export type ProductionOrderLookups = {
   users: Array<{ id: string; username: string; fullName: string }>
   /** Tài khoản có quyền Thợ sản xuất. */
   workerIds: string[]
+  /** Admin chỉ được chọn làm thợ khi người giao là admin. */
+  adminIds: string[]
   closers: string[]
   stoneTypes: string[]
   leadTimes: string[]
@@ -507,6 +518,7 @@ export type ProductionOrderLookups = {
 }
 
 export type ProductionOrderListParams = {
+  groupReworks?: boolean
   status?: ProductionStatus | ''
   requestType?: ProductionRequestType | ''
   source?: ProductionSource | ''
