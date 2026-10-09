@@ -41,6 +41,11 @@ type ActionDef = {
   done: (ticketCode: string) => string
 }
 
+type TicketActionCtx = {
+  previousTickets?: MyTickets
+  previousOrder?: ProductionOrderDetail
+}
+
 const ACTIONS: Record<SubTicketAction, ActionDef> = {
   claim: {
     // Chỉ phiếu mẹ còn tự nhận; phiếu con do thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
@@ -84,7 +89,12 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
 export function registerSubTicketActions(queryClient: QueryClient) {
   for (const action of Object.keys(ACTIONS) as SubTicketAction[]) {
     const def = ACTIONS[action]
-    queryClient.setMutationDefaults<ProductionOrderDetail, Error, SubTicketVars>(
+    queryClient.setMutationDefaults<
+      ProductionOrderDetail,
+      Error,
+      SubTicketVars,
+      TicketActionCtx
+    >(
       subTicketMutationKey(action),
       {
         mutationFn: (vars) => def.run(vars.orderCode, vars.no),
@@ -116,11 +126,12 @@ export function registerSubTicketActions(queryClient: QueryClient) {
           toast.success(def.done(vars.ticketCode))
         },
         onError: (error, vars, ctx) => {
-          if (ctx?.previousTickets) {
-            queryClient.setQueryData(['my-tickets'], ctx.previousTickets)
+          const snap = ctx as TicketActionCtx | undefined
+          if (snap?.previousTickets) {
+            queryClient.setQueryData(['my-tickets'], snap.previousTickets)
           }
-          if (ctx?.previousOrder) {
-            queryClient.setQueryData(['production-order', vars.orderCode], ctx.previousOrder)
+          if (snap?.previousOrder) {
+            queryClient.setQueryData(['production-order', vars.orderCode], snap.previousOrder)
           }
           toast.error(`Phiếu ${vars.ticketCode}: ${error.message}`)
           scheduleMyTicketsRefresh(queryClient)
