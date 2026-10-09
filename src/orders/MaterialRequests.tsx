@@ -1120,6 +1120,32 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
           const weightOnly = stoneUnit === 'weight'
           const countStone = stoneUnit === 'count'
           const name = <K extends keyof HandoverMaterialLine>(key: K) => `materials.${index}.${key}` as const
+          // Mã ct / g (và dòng đá chưa chọn mã): ô đầu là số viên không bắt buộc, không có ô SL riêng.
+          const optionalCount = line.kind === 'STONE' && (weightOnly || !selected)
+          // Đá đơn vị khác (gói, túi…): SL theo đơn vị của mã, thêm ô số viên ở cuối.
+          const extraCount = line.kind === 'STONE' && !optionalCount && !countStone
+          const countField = (
+            <Controller
+              control={control}
+              name={name('stoneCount')}
+              rules={{
+                // Số viên không bắt buộc — đá tấm / nhỏ chỉ cân TL.
+                validate: (value) =>
+                  !value || (Number.isInteger(Number(value)) && Number(value) > 0) || 'Số viên phải từ 1',
+              }}
+              render={({ field: input, fieldState }) => (
+                <TextInput
+                  label="Số viên"
+                  value={input.value}
+                  inputRef={input.ref}
+                  slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                  errorText={fieldState.error?.message}
+                  helperText={weightOnly ? `Không bắt buộc — đá tính theo ${unit}` : 'Không bắt buộc'}
+                  onChange={(event) => input.onChange(event.target.value.replace(/[^\d]/g, ''))}
+                />
+              )}
+            />
+          )
           return (
             <Box
               key={field.id}
@@ -1149,7 +1175,18 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                         const kind = chosen.kind === 'STONE' && !stoneStage ? 'OTHER' : chosen.kind
                         setValue(name('kind'), kind)
                         const typed = values[index]?.weight
-                        if (kind === 'STONE' && stoneUnitKind(chosen.unit) === 'weight' && Number(typed) > 0) {
+                        const nextUnit = kind === 'STONE' ? stoneUnitKind(chosen.unit) : null
+                        // Ô "Số viên" đổi giữa bắt buộc (mã viên) và không bắt buộc (mã ct / g): giữ số đã gõ.
+                        if (nextUnit === 'count' && optionalCount) {
+                          setValue(name('qty'), values[index]?.stoneCount ?? '')
+                          setValue(name('stoneCount'), '')
+                        }
+                        if (nextUnit === 'weight' && countStone) {
+                          const count = values[index]?.qty ?? ''
+                          setValue(name('stoneCount'), /^\d+$/.test(count) ? count : '')
+                          setValue(name('qty'), '')
+                        }
+                        if (nextUnit === 'weight' && Number(typed) > 0) {
                           setValue(name('qty'), stoneQtyFromCt(chosen.unit, typed))
                         }
                       }
@@ -1161,14 +1198,14 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                 sx={{
                   display: 'grid',
                   gap: 1,
-                  gridTemplateColumns: btpOnly
-                    ? { xs: '1fr 1fr', sm: '1fr 1fr auto' }
-                    : { xs: '1fr 1fr', sm: '1fr 1fr 1fr auto' },
+                  gridTemplateColumns: extraCount
+                    ? { xs: '1fr 1fr', sm: '1fr 1fr 1fr auto' }
+                    : { xs: '1fr 1fr', sm: '1fr 1fr auto' },
                   alignItems: 'start',
                 }}
               >
-                {weightOnly ? (
-                  <Box />
+                {optionalCount ? (
+                  countField
                 ) : (
                   <Controller
                     control={control}
@@ -1236,11 +1273,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
                       helperText={
-                        weightOnly
-                          ? `Đá tính theo ${unit} — chỉ nhập TL`
-                          : line.kind === 'STONE'
-                            ? undefined
-                            : gramReadout(String(input.value ?? '')) || undefined
+                        line.kind === 'STONE' ? undefined : gramReadout(String(input.value ?? '')) || undefined
                       }
                       onChange={(event) => {
                         const next = parseQtyInput(
@@ -1258,30 +1291,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                     />
                   )}
                 />
-                {line.kind === 'STONE' && !countStone ? (
-                  <Controller
-                    control={control}
-                    name={name('stoneCount')}
-                    rules={{
-                      // Số viên không bắt buộc — đá tấm / nhỏ chỉ cân TL.
-                      validate: (value) =>
-                        !value || (Number.isInteger(Number(value)) && Number(value) > 0) || 'Số viên phải từ 1',
-                    }}
-                    render={({ field: input, fieldState }) => (
-                      <TextInput
-                        label="Số viên"
-                        placeholder="Không bắt buộc"
-                        value={input.value}
-                        inputRef={input.ref}
-                        slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                        errorText={fieldState.error?.message}
-                        onChange={(event) => input.onChange(event.target.value.replace(/[^\d]/g, ''))}
-                      />
-                    )}
-                  />
-                ) : (
-                  <Box />
-                )}
+                {extraCount ? countField : null}
                 {lines.fields.length > 1 ? (
                   <Button size="small" color="error" onClick={() => lines.remove(index)} sx={{ mt: 0.5 }}>
                     Bỏ

@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import type { StageEntry } from '../api/productionOrders'
 import { formatCt, formatQty } from '../api/inventory'
-import { formatDateShort, STAGE_LABEL } from './catalog'
+import { defectScopeText, formatDateShort, STAGE_LABEL } from './catalog'
 import { stoneReturnPreview } from './stoneReturn'
 import { KcsImages } from './KcsImages'
 
@@ -79,13 +79,13 @@ export function KeeperConfirmDialog({
       ]
     : []
   const visible = lines.filter((line) => line.show)
+  const defectLabel = defectScopeText(entry)
   const stoneUsed = entry && entry.stonesIn != null ? entry.stonesIn - (entry.returnedStoneCount ?? 0) : null
 
   return (
     <Dialog open={entry != null} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        Thủ kho xác nhận{(entry?.defectQty ?? 0) > 0 ? ' lỗi' : ''} — {stage ? STAGE_LABEL[stage] : ''} · phiếu{' '}
-        {ticketCode}
+        Thủ kho xác nhận{defectLabel} — {stage ? STAGE_LABEL[stage] : ''} · phiếu {ticketCode}
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
         {entry ? (

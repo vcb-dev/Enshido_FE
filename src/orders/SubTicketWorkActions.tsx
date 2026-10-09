@@ -23,7 +23,7 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { ReworkChildren } from './ReworkChildren'
-import { STAGE_LABEL } from './catalog'
+import { defectScopeText, STAGE_LABEL } from './catalog'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -189,11 +189,11 @@ export function SubTicketWorkActions({
           // Nguội / Vào đá luôn chờ thủ kho, kể cả không có hàng lỗi.
           canKeeper ? (
             <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
-              {(last.defectQty ?? 0) > 0 ? 'Thủ kho xác nhận lỗi' : 'Thủ kho xác nhận'}
+              Thủ kho xác nhận{defectScopeText(last)}
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {(last.defectQty ?? 0) > 0 ? 'chờ thủ kho xác nhận lỗi' : 'chờ thủ kho xác nhận kết quả QC'}
+              {(last.defectQty ?? 0) > 0 ? `chờ thủ kho xác nhận${defectScopeText(last)}` : 'chờ thủ kho xác nhận kết quả QC'}
             </Typography>
           )
         ) : null}

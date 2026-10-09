@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { confirmStageApi, createReworkApi, type ProductionOrderDetail, type StageEntry } from '../api/productionOrders'
-import { isReceiptStage, STAGE_LABEL } from './catalog'
+import { defectScopeText, isReceiptStage, STAGE_LABEL } from './catalog'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock } from './nvlStock'
 import { KeeperConfirmDialog } from './KeeperConfirmDialog'
@@ -56,7 +56,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           {pending ? (
             <Button variant="contained" disabled={busy || confirm.isPending} onClick={() => setTarget(pending)}>
-              {(pending.defectQty ?? 0) > 0 ? 'Thủ kho xác nhận lỗi' : 'Thủ kho xác nhận'}
+              Thủ kho xác nhận{defectScopeText(pending)}
             </Button>
           ) : null}
           {reworkable.map((entry) => (

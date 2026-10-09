@@ -519,12 +519,12 @@ export function AssignReceiptDialog({
 const SILVER_FIELDS = ['returnedSilverWeight', 'btpRecoveredWeight', 'silverRecoveredWeight', 'scrapS999Weight'] as const
 type SilverField = (typeof SILVER_FIELDS)[number]
 
-/** Kết quả QC ở Nguội / Vào đá: không lỗi, lỗi một phần, lỗi hết (phiếu dừng ở khâu này). */
+/** Kết quả QC ở Nguội / Vào đá: không lỗi, lỗi một phần, lỗi toàn bộ (phiếu dừng ở khâu này). */
 type QcOutcome = 'ok' | 'partial' | 'all'
 const QC_OUTCOMES: { value: QcOutcome; label: string; color: 'success' | 'warning' | 'error' }[] = [
   { value: 'ok', label: 'Không lỗi', color: 'success' },
   { value: 'partial', label: 'Lỗi một phần', color: 'warning' },
-  { value: 'all', label: 'Lỗi hết', color: 'error' },
+  { value: 'all', label: 'Lỗi toàn bộ', color: 'error' },
 ]
 
 type ReturnValues = {
@@ -629,7 +629,7 @@ export function KcsReturnDialog({
       })
       return
     }
-    // Đã báo lỗi giữa khâu: mở sẵn "Lỗi hết", QC đổi sang "Lỗi một phần" nếu còn hàng đạt.
+    // Đã báo lỗi giữa khâu: mở sẵn "Lỗi toàn bộ", QC đổi sang "Lỗi một phần" nếu còn hàng đạt.
     setOutcome(flagged ? 'all' : 'ok')
     form.reset({
       returnedQty: flagged ? '0' : entry.handedQty != null ? String(entry.handedQty) : '',
@@ -657,9 +657,9 @@ export function KcsReturnDialog({
     entry != null && (entry.stage === 'FILING' || entry.stage === 'STONE_SETTING')
   /** QC nhận lại 0 sp: phiếu đóng ở nhánh Lỗi (khâu qua thủ kho thì sau khi thủ kho xác nhận). */
   const allDefect = keeperStage ? outcome === 'all' : returnedQty === '0' && entry?.returnedAt == null
-  /** Lỗi hết ở khâu không qua thủ kho thì bắt buộc lý do (phiếu chốt Lỗi ngay). */
+  /** Lỗi toàn bộ ở khâu không qua thủ kho thì bắt buộc lý do (phiếu chốt Lỗi ngay). */
   const reasonRequired = allDefect && !keeperStage
-  /** Nguội / Vào đá ghi lý do trong phần "Hàng lỗi"; khâu khác chỉ hỏi khi lỗi hết. */
+  /** Nguội / Vào đá ghi lý do trong phần "Hàng lỗi"; khâu khác chỉ hỏi khi lỗi toàn bộ. */
   const showDefectReason = reasonRequired
   const defectSection = keeperStage && outcome !== 'ok'
   const handedQty = entry?.handedQty ?? null
@@ -674,7 +674,7 @@ export function KcsReturnDialog({
       form.setValue('returnedSilverWeight', '0')
       form.setValue('defectQty', handed)
     } else {
-      // Từ "Lỗi hết" quay lại: số đạt / TL đạt 0 là số tự điền, trả về trống cho QC nhập.
+      // Từ "Lỗi toàn bộ" quay lại: số đạt / TL đạt 0 là số tự điền, trả về trống cho QC nhập.
       if (outcome === 'all') {
         form.setValue('returnedQty', next === 'ok' ? handed : '')
         form.setValue('returnedSilverWeight', '')
@@ -842,7 +842,7 @@ export function KcsReturnDialog({
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
       returnedSilverWeight: values.returnedSilverWeight,
       defectQty: keeperStage ? (defectSection ? Number(values.defectQty || 0) : 0) : null,
-      // Lỗi hết: không có hàng đạt — bỏ qua số đạt còn sót trong form.
+      // Lỗi toàn bộ: không có hàng đạt — bỏ qua số đạt còn sót trong form.
       ...(keeperStage && outcome === 'all' ? { returnedQty: 0, returnedSilverWeight: '0' } : {}),
       defectReason: keeperStage && !defectSection ? null : values.defectReason.trim() || null,
       scrapS999Weight: keeperStage ? values.scrapS999Weight || null : null,
@@ -1083,7 +1083,7 @@ export function KcsReturnDialog({
               if (!(qty >= 0)) return 'Số lượng sản phẩm đạt không hợp lệ'
               const handed = entry?.handedQty
               if (handed != null && qty > handed) return `Không quá số đã giao (${handed})`
-              if (keeperStage && outcome === 'ok' && qty === 0) return 'Đạt 0 sp — chọn "Lỗi hết"'
+              if (keeperStage && outcome === 'ok' && qty === 0) return 'Đạt 0 sp — chọn "Lỗi toàn bộ"'
               return true
             },
           }}
@@ -1149,7 +1149,7 @@ export function KcsReturnDialog({
                         return `Đạt + lỗi không quá ${entry.handedQty} sp đã giao`
                       }
                       if (outcome === 'partial' && Number(returnedQty || 0) === 0) {
-                        return 'Không còn hàng đạt — chọn "Lỗi hết"'
+                        return 'Không còn hàng đạt — chọn "Lỗi toàn bộ"'
                       }
                       return true
                     },
@@ -1246,7 +1246,7 @@ export function KcsReturnDialog({
 
       {keeperStage && outcome === 'all' && entry ? (
         <Alert severity="error" sx={{ py: 0.25 }}>
-          Lỗi hết {entry.handedQty ?? ''} sp — phiếu dừng ở khâu {STAGE_LABEL[entry.stage]} sau khi thủ kho xác nhận,
+          Lỗi toàn bộ {entry.handedQty ?? ''} sp — phiếu dừng ở khâu {STAGE_LABEL[entry.stage]} sau khi thủ kho xác nhận,
           không chuyển khâu tiếp. Hàng lỗi về kho NVL.
         </Alert>
       ) : null}
