@@ -17,7 +17,7 @@ import {
 } from '@mui/material'
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
-import { listNvlOptionsApi, type NvlOption } from '../api/productionOrders'
+import { listNvlOptionsApi, type NvlOption, type OrderImage, type StageImage } from '../api/productionOrders'
 import AddIcon from '@mui/icons-material/Add'
 import { createFilterOptions } from '@mui/material/Autocomplete'
 import type {
@@ -30,6 +30,8 @@ import { ctToGram, formatQty } from '../api/inventory'
 import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
 import { isInStage, skipsStone, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
+import { FormImageField } from './FormImageField'
+import { STONE_PHOTO_LABEL, STONE_PHOTO_REQUIRED, stonePhotosPayload, useUploadingByKey } from './stonePhotos'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
 
@@ -349,7 +351,7 @@ export function openableStages(order: ProductionOrderDetail) {
   return { stages, idle, byTicket, skipped }
 }
 
-type StoneLineValues = { materialId: string; stoneCount: string; weight: string }
+type StoneLineValues = { materialId: string; stoneCount: string; weight: string; images: OrderImage[] }
 type AssignValues = { stage: StageCode | ''; craftsmanUserId: string; stones: StoneLineValues[] }
 
 /** Tìm theo mã hoặc tên đá — gõ "moiss 4.0" hay "MROW" đều ra. */
@@ -357,7 +359,7 @@ const STONE_FILTER = createFilterOptions<NvlOption>({
   stringify: (option) => `${option.sku ?? ''} ${option.name}`,
 })
 
-const EMPTY_STONE_LINE: StoneLineValues = { materialId: '', stoneCount: '', weight: '' }
+const EMPTY_STONE_LINE: StoneLineValues = { materialId: '', stoneCount: '', weight: '', images: [] }
 
 /**
  * Thủ kho chỉ định thợ cho một khâu của phiếu con. Chưa giao hàng: thợ quét QR bấm nhận —
@@ -384,11 +386,12 @@ export function AssignWorkerDialog({
     ticket: SubTicket
     stage: StageCode
     craftsmanUserId: string
-    stones: Array<{ materialId: string; stoneCount: number | null; weight: string }>
+    stones: Array<{ materialId: string; stoneCount: number | null; weight: string; images: StageImage[] }>
   }) => void
 }) {
   const form = useForm<AssignValues>({ defaultValues: { stage: '', craftsmanUserId: '', stones: [] } })
   const stones = useFieldArray({ control: form.control, name: 'stones' })
+  const uploading = useUploadingByKey()
   const stage = useWatch({ control: form.control, name: 'stage' })
   const stoneStage = stage === 'STONE_SETTING'
   const nvl = useQuery({
@@ -451,12 +454,13 @@ export function AssignWorkerDialog({
                   stoneCount: line.stoneCount ? Number(line.stoneCount) : null,
                   // Ô TL gói nhập theo ct, API nhận g.
                   weight: ctToGram(line.weight),
+                  images: stonePhotosPayload(line.images),
                 }))
               : [],
         })
       }
       saving={saving}
-      submitDisabled={!stage}
+      submitDisabled={!stage || (stoneStage && uploading.any(stones.fields.map((field) => field.id)))}
       submitLabel="Chỉ định"
       maxWidth="sm"
       onClose={onClose}
@@ -478,7 +482,7 @@ export function AssignWorkerDialog({
               Đá cấp cho thợ
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Giữ chỗ, chưa xuất kho. Cân cả gói.
+              Giữ chỗ, chưa xuất kho. Cân cả gói và chụp ảnh gói đá trên cân.
             </Typography>
           </Box>
           {stones.fields.map((field, index) => (
@@ -588,6 +592,15 @@ export function AssignWorkerDialog({
                     }
                   />
                 </FormRow>
+                <FormImageField<AssignValues>
+                  name={`stones.${index}.images` as 'stones'}
+                  label={STONE_PHOTO_LABEL}
+                  kind="DETAIL"
+                  required
+                  requiredMessage={STONE_PHOTO_REQUIRED}
+                  onUploadingChange={(busy) => uploading.set(field.id, busy)}
+                  readOnly={saving}
+                />
               </Stack>
             </Paper>
           ))}

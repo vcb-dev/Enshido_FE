@@ -176,6 +176,7 @@ export function KeeperConfirmDialog({
                                 gồm {line.extraCount} lần thợ xin thêm
                               </Typography>
                             ) : null}
+                            <KcsImages images={line.images} title="Ảnh gói đá lúc cấp" />
                           </TableCell>
                           <TableCell sx={NUM}>
                             {formatQty(line.qty)} {line.unit}

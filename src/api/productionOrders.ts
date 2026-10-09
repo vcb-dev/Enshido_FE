@@ -56,7 +56,6 @@ export type ReworkChild = {
   intake: IntakeOrder
   orderCode: string
   productionStatus: ProductionStatus
-  sourceTicketCode: string
 }
 
 export type ProductionOrderRow = {
@@ -247,6 +246,8 @@ export type StoneLine = {
   usedCount: number | null
   /** Số lần thợ xin thêm mã này. */
   extraCount: number
+  /** Ảnh gói đá thủ kho chụp lúc cấp (mọi lần cấp của mã này trong khâu). */
+  images?: StageImage[]
 }
 
 export type MaterialRequestStatus = 'PENDING' | 'ISSUED' | 'REJECTED' | 'CANCELLED'
@@ -599,6 +600,8 @@ export type HandoverPayload = {
     qty: string
     weight?: string | null
     stoneCount?: number | null
+    /** Dòng đá: ảnh gói đá trên cân — bắt buộc. */
+    images?: StageImage[]
   }>
 }
 
@@ -1294,7 +1297,7 @@ export function assignSubTicketApi(
     stage?: StageCode
     craftsmanUserId: string
     /** Khâu Vào đá: đá thủ kho cấp (giữ chỗ, xuất kho khi xác nhận sau QC). */
-    stones?: Array<{ materialId: string; stoneCount?: number | null; weight: string }>
+    stones?: Array<{ materialId: string; stoneCount?: number | null; weight: string; images: StageImage[] }>
   },
 ) {
   return orderFetch(ticketPath(code, no, '/assign'), {
@@ -1405,6 +1408,8 @@ export type IssueMaterialPayload = {
   weight?: string | null
   /** Đá: số viên — đơn vị không phải viên thì bắt buộc. */
   stoneCount?: number | null
+  /** Đá khâu Vào đá: ảnh gói đá trên cân — bắt buộc. */
+  images?: StageImage[]
 }
 
 /** Kho / người giao cân rồi xuất theo yêu cầu — tạo phiếu xuất gắn mã đơn. */

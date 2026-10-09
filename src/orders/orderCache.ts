@@ -230,8 +230,6 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
         intake: child.intake,
         orderCode: child.orderCode,
         productionStatus: child.productionStatus,
-        sourceTicketCode: child.ticketNo == null ? order.code
-          : order.subTickets.find((ticket) => ticket.no === child.ticketNo)?.code ?? order.code,
       }]
     }),
   }

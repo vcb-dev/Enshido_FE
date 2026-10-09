@@ -4,7 +4,16 @@ import type { StageImage } from '../api/productionOrders'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 
 /** Ảnh làm chứng QC chụp lúc nhận lại khâu — thu nhỏ, bấm để xem lớn. */
-export function KcsImages({ images, size = 48 }: { images?: StageImage[]; size?: number }) {
+export function KcsImages({
+  images,
+  size = 48,
+  title = 'Ảnh QC',
+}: {
+  images?: StageImage[]
+  size?: number
+  /** Tên bộ ảnh — ảnh QC làm chứng, hoặc ảnh gói đá thủ kho chụp lúc cấp. */
+  title?: string
+}) {
   const [viewing, setViewing] = useState<number | null>(null)
   if (!images?.length) return null
   return (
@@ -15,7 +24,7 @@ export function KcsImages({ images, size = 48 }: { images?: StageImage[]; size?:
             key={image.publicId}
             url={image.url}
             size={size}
-            label={`Ảnh QC ${index + 1}/${images.length}`}
+            label={`${title} ${index + 1}/${images.length}`}
             onClick={() => setViewing(index)}
           />
         ))}
@@ -23,7 +32,7 @@ export function KcsImages({ images, size = 48 }: { images?: StageImage[]; size?:
       <ImageLightbox
         images={images.map((image) => ({ id: image.publicId, url: image.url }))}
         index={viewing}
-        title="Ảnh QC"
+        title={title}
         onIndexChange={setViewing}
         onClose={() => setViewing(null)}
       />
