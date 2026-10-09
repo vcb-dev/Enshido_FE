@@ -1,5 +1,5 @@
 import { apiFetch } from './auth'
-import type { OrderImage, ProductionRequestType } from './productionOrders'
+import type { OrderImage, ProductionRequestType, ProductionStatus } from './productionOrders'
 
 export type { ProductionRequestType }
 
@@ -28,6 +28,8 @@ export type IntakeOrder = {
   /** Mã lệnh SX (random) — cột Mã SX trên Lệnh sản xuất. */
   sxCode: string
   status: IntakeOrderStatus
+  /** Đã cắt cây: trạng thái thật trên lệnh sản xuất, đơn chia phiếu thì đếm theo phiếu con. */
+  productionStatuses?: Array<{ status: ProductionStatus; count: number }> | null
   requestType: ProductionRequestType
   productName: string
   qty: number

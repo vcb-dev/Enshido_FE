@@ -44,7 +44,7 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { useTableParams } from '../hooks/useTableParams'
 import { INTAKE_STATUSES, INTAKE_STATUS_META } from '../intake/catalog'
-import { IntakeStatusChip } from '../intake/IntakeStatusChip'
+import { IntakeOrderStatusChips } from '../intake/IntakeStatusChip'
 import { ImageUploadField } from '../orders/ImageUploadField'
 import { formatDateShort, REQUEST_TYPES, REQUEST_TYPE_META } from '../orders/catalog'
 import { RequestTypeChip } from '../orders/OrderChips'
@@ -121,6 +121,8 @@ export function IntakeOrdersPage() {
         search: params.search,
         page: params.page,
         pageSize: params.pageSize,
+        // Lệnh bù chỉ hiện ở Lệnh sản xuất (dưới đơn gốc), không phải một đơn đặt hàng mới.
+        rootsOnly: true,
       }),
     placeholderData: keepPreviousData,
     staleTime: 15_000,
@@ -191,18 +193,19 @@ export function IntakeOrdersPage() {
       {
         key: 'status',
         header: 'Trạng thái',
-        width: 130,
+        width: 170,
         filter: (
           <ColumnHeaderFilter
             valueId={params.status}
             onChange={(status) => table.setFilter({ status: status as IntakeOrderStatus | '' })}
             options={INTAKE_STATUSES.map((status) => ({
               id: status,
-              name: INTAKE_STATUS_META[status].label,
+              // Đơn đã cắt cây hiện trạng thái thật của lệnh SX — lọc chung một nhóm.
+              name: status === 'WAIT_COOLING' ? 'Đã vào sản xuất' : INTAKE_STATUS_META[status].label,
             }))}
           />
         ),
-        render: (row) => <IntakeStatusChip status={row.status} />,
+        render: (row) => <IntakeOrderStatusChips order={row} />,
       },
       {
         key: 'productName',
@@ -305,7 +308,7 @@ export function IntakeOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={1460}
+        minWidth={1500}
         cardBreakpoint={false}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
@@ -449,7 +452,7 @@ function IntakeOrderFormDialog({
             <Typography variant="body2" color="text.secondary">
               Trạng thái:
             </Typography>
-            <IntakeStatusChip status={row.status} />
+            <IntakeOrderStatusChips order={row} />
           </Stack>
         ) : null}
         <FormSelect<FormValues>
