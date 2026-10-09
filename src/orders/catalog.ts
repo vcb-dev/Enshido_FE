@@ -304,3 +304,9 @@ export const SUB_TICKET_STATE_META: Record<SubTicketState, ChipTone> = {
   DEFECT: { label: 'Lỗi', bg: '#fdecea', fg: '#b3261e' },
   FINISH: { label: 'Hoàn thiện', bg: '#e6f4ea', fg: '#1e7a3c' },
 }
+
+/** Chữ nối sau "xác nhận" theo kết quả QC: không lỗi để trống, còn hàng đạt là lỗi một phần, đạt 0 là lỗi toàn bộ. */
+export function defectScopeText(entry: { defectQty?: number | null; returnedQty?: number | null } | null | undefined) {
+  if (!((entry?.defectQty ?? 0) > 0)) return ''
+  return (entry?.returnedQty ?? 0) === 0 ? ' lỗi toàn bộ' : ' lỗi một phần'
+}

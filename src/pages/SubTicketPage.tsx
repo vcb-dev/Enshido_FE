@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { formatDateShort, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { defectScopeText, formatDateShort, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -386,7 +386,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
     const hasDefect = (last.defectQty ?? 0) > 0
     headline = `QC đã cân khâu ${STAGE_LABEL[last.stage]}${hasDefect ? ' — có hàng lỗi' : ''}`
     hint = hasDefect
-      ? 'Chờ thủ kho kiểm tra và xác nhận lỗi. Trong lúc chờ QC còn sửa lại được.'
+      ? `Chờ thủ kho kiểm tra và xác nhận${defectScopeText(last)}. Trong lúc chờ QC còn sửa lại được.`
       : last.stage === 'STONE_SETTING'
         ? 'Chờ thủ kho nhận hàng + đá thừa rồi xác nhận. Trong lúc chờ QC còn sửa lại được.'
         : 'Chờ thủ kho nhận hàng và xác nhận trước khi chuyển khâu. Trong lúc chờ QC còn sửa lại được.'

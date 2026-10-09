@@ -103,7 +103,7 @@ export function ticketTimeline(
       step(`${entry.id}-keeper`, `QC nhận lại ${stage} — chờ thủ kho xác nhận`, entry.returnedAt, entry.returnedByName, qcNote)
       return
     }
-    // Lỗi hết: phiếu chốt Lỗi ở dòng kết cục, không có "Chờ" khâu sau.
+    // Lỗi toàn bộ: phiếu chốt Lỗi ở dòng kết cục, không có "Chờ" khâu sau.
     const after = next ? WAITING[next.stage] : ticket.outcome ? null : ticket.status
     if (after && after !== WORKING[entry.stage]) {
       const keeperStep = needsKeeper && entry.confirmedAt && entry.confirmedByName !== entry.returnedByName
