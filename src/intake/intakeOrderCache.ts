@@ -131,6 +131,8 @@ function statusListAllows(queryKey: QueryKey, order: IntakeOrder) {
 }
 
 function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
+  // Màn Tạo đơn không hiện lệnh bù — chỉ có ở Lệnh sản xuất, dưới đơn gốc.
+  if (order.reworkOfOrderId) return false
   const statusFilter = String(queryKey[3] ?? '')
   if (statusFilter && statusFilter !== order.status) return false
   const search = String(queryKey[4] ?? '').trim().toLowerCase()

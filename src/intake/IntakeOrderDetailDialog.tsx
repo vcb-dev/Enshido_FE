@@ -15,7 +15,7 @@ import { formatCt } from '../api/inventory'
 import { formatIntakeGram } from './intakeDisplay'
 import { intakeCastingTreeImages, intakeDetailImages, intakeProductOnlyImages } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
-import { IntakeStatusChip } from './IntakeStatusChip'
+import { IntakeOrderStatusChips } from './IntakeStatusChip'
 import { RequestTypeChip } from '../orders/OrderChips'
 import { formatDateShort, formatDateTime } from '../orders/catalog'
 
@@ -59,7 +59,7 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
                 <strong>Tên SP:</strong> {order.productName?.trim() || '—'}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                <IntakeStatusChip status={order.status} />
+                <IntakeOrderStatusChips order={order} />
                 <RequestTypeChip type={order.requestType} />
                 <Typography variant="body2" color="text.secondary">
                   SL {order.qty}
