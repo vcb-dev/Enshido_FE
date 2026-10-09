@@ -54,6 +54,56 @@ function patchItem(item: MyTicketItem, order: ProductionOrderDetail, no: number 
   }
 }
 
+const NEXT_STATE: Record<SubTicketAction, SubTicketState> = {
+  claim: 'CLAIMED',
+  unclaim: 'WAITING',
+  accept: 'WORKING',
+  submit: 'SUBMITTED',
+  unsubmit: 'WORKING',
+}
+
+/** Vá danh sách phiếu ngay lúc bấm nút — không đợi máy chủ. */
+export function optimisticMyTicketsAction(
+  queryClient: QueryClient,
+  vars: SubTicketVars,
+  action: SubTicketAction,
+) {
+  const state = NEXT_STATE[action]
+  queryClient.setQueryData<ProductionOrderDetail>(['production-order', vars.orderCode], (order) => {
+    if (!order) return order
+    if (vars.no == null) {
+      if (!order.workTicket) return order
+      return { ...order, workTicket: { ...order.workTicket, state } }
+    }
+    return {
+      ...order,
+      subTickets: order.subTickets.map((ticket) =>
+        ticket.no === vars.no ? { ...ticket, state } : ticket,
+      ),
+    }
+  })
+  queryClient.setQueryData<MyTickets>(['my-tickets'], (prev) => {
+    if (!prev) return prev
+    const code = vars.ticketCode
+    const hit =
+      prev.available.find((row) => row.ticketCode === code) ??
+      prev.mine.find((row) => row.ticketCode === code)
+    if (!hit) return prev
+    const nextItem: MyTicketItem = { ...hit, state }
+    const without = (rows: MyTicketItem[]) => rows.filter((row) => row.ticketCode !== code)
+    let available = without(prev.available)
+    let mine = without(prev.mine)
+    if (shouldBeAvailable(state, nextItem.stage) || isWaitingForWorkerReceipt(nextItem)) {
+      available = [...available, nextItem]
+    } else if (shouldBeMine(state)) {
+      mine = [...mine, nextItem]
+    } else {
+      mine = [...mine, nextItem]
+    }
+    return { ...prev, available, mine }
+  })
+}
+
 /** Cập nhật Phiếu của tôi ngay sau claim / giao / nộp — không chờ refetch. */
 export function patchMyTicketsAfterSubTicketAction(
   queryClient: QueryClient,

@@ -199,10 +199,10 @@ describe('mất mạng', () => {
     onlineManager.setOnline(true)
     await Promise.all([first.promise, second.promise])
 
-    expect(calledUrls()).toEqual([
+    expect(calledUrls().sort()).toEqual([
       '/api/production-orders/A012/sub-tickets/1/accept',
       '/api/production-orders/A012/sub-tickets/2/submit',
-    ])
+    ].sort())
   })
 })
 

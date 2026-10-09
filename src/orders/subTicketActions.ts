@@ -16,6 +16,7 @@ import {
   unclaimSubTicketApi,
   unsubmitOrderApi,
   unsubmitSubTicketApi,
+  type MyTickets,
   type ProductionOrderDetail,
 } from '../api/productionOrders'
 import {
@@ -27,7 +28,10 @@ import {
   type SubTicketAction,
   type SubTicketVars,
 } from './subTicketQueue'
-import { patchMyTicketsAfterSubTicketAction } from './myTicketsCache'
+import {
+  optimisticMyTicketsAction,
+  patchMyTicketsAfterSubTicketAction,
+} from './myTicketsCache'
 import { applyProductionOrderDetail } from './orderCache'
 import { scheduleMyTicketsRefresh } from './myTicketsRefresh'
 
@@ -84,16 +88,22 @@ export function registerSubTicketActions(queryClient: QueryClient) {
       subTicketMutationKey(action),
       {
         mutationFn: (vars) => def.run(vars.orderCode, vars.no),
-        // Một hàng đợi chung cho mọi phiếu: thao tác phải lên máy chủ đúng thứ tự thợ bấm,
-        // không để "huỷ nhận" vượt lên trước "nhận" của cùng một phiếu.
-        scope: { id: SUB_TICKET_ACTION_KEY },
         // Chỉ thử lại khi hỏng vì mạng. Lỗi nghiệp vụ (phiếu đã có thợ khác nhận) mà thử
         // lại thì chỉ tổ báo sai cho thợ chậm mất mấy giây. Giữa hai lần thử, mất mạng thì
         // react-query tự treo lại chứ không tính là hỏng.
         retry: (failureCount, error) => failureCount < 2 && isNetworkError(error),
         retryDelay: 3_000,
-        onMutate: (vars) => {
+        onMutate: async (vars) => {
           if (!onlineManager.isOnline()) toast.info(def.queued(vars.ticketCode))
+          await queryClient.cancelQueries({ queryKey: ['my-tickets'] })
+          await queryClient.cancelQueries({ queryKey: ['production-order', vars.orderCode] })
+          const previousTickets = queryClient.getQueryData<MyTickets>(['my-tickets'])
+          const previousOrder = queryClient.getQueryData<ProductionOrderDetail>([
+            'production-order',
+            vars.orderCode,
+          ])
+          optimisticMyTicketsAction(queryClient, vars, action)
+          return { previousTickets, previousOrder }
         },
         onSuccess: (order, vars) => {
           applyProductionOrderDetail(queryClient, order)
@@ -105,7 +115,13 @@ export function registerSubTicketActions(queryClient: QueryClient) {
           scheduleMyTicketsRefresh(queryClient)
           toast.success(def.done(vars.ticketCode))
         },
-        onError: (error, vars) => {
+        onError: (error, vars, ctx) => {
+          if (ctx?.previousTickets) {
+            queryClient.setQueryData(['my-tickets'], ctx.previousTickets)
+          }
+          if (ctx?.previousOrder) {
+            queryClient.setQueryData(['production-order', vars.orderCode], ctx.previousOrder)
+          }
           toast.error(`Phiếu ${vars.ticketCode}: ${error.message}`)
           scheduleMyTicketsRefresh(queryClient)
           void queryClient.invalidateQueries({ queryKey: ['production-order', vars.orderCode] })

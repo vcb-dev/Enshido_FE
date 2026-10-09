@@ -9,5 +9,5 @@ export function scheduleMyTicketsRefresh(queryClient: QueryClient) {
     timer = undefined
     void queryClient.invalidateQueries({ queryKey: ['my-tickets'], refetchType: 'active' })
     void queryClient.invalidateQueries({ queryKey: ['qc-tickets'], refetchType: 'active' })
-  }, 600)
+  }, 2_500)
 }

@@ -255,8 +255,7 @@ export function moveIntakeOrderInCaches(
   const prev = findIntakeOrderInCaches(queryClient, order.id)
   patchPipelineLists(queryClient, order)
   if (order.reworkOfOrderId) {
-    void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
-    void queryClient.invalidateQueries({ queryKey: ['production-order'] })
+    void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'active' })
   }
   patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
   patchIntakePipelineCounts(

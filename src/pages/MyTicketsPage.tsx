@@ -78,7 +78,7 @@ export function MyTicketsPage() {
     // API my-tickets nặng (nhiều truy vấn) — không poll; thao tác trên máy đã vá cache, còn
     // thay đổi từ máy khác hiện khi thợ quay lại tab.
     staleTime: 90_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 
   // Cache, thông báo và hàng chờ khi mất mạng nằm hết trong orders/subTicketActions.ts.
