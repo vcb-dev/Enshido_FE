@@ -58,7 +58,10 @@ const EMPTY: Record<TabKey, { title: string; description: string }> = {
     title: 'Không có phiếu nào chờ thủ kho',
     description: 'Nguội / Vào đá luôn chờ thủ kho xác nhận sau QC, kể cả không có hàng lỗi. Trong lúc chờ QC còn sửa lại được.',
   },
-  finishable: { title: 'Chưa có phiếu nào chờ hoàn thiện', description: 'Phiếu xong khâu Xi thì hiện ở đây để QC chốt hoàn thiện.' },
+  finishable: {
+    title: 'Chưa có phiếu nào chờ hoàn thiện',
+    description: 'QC xác nhận khâu Xi là phiếu tự chốt và sinh phiếu nhập kho thành phẩm. Ở đây chỉ còn phiếu cũ chưa chốt.',
+  },
   recent: { title: 'Chưa có lần QC nào', description: 'Các lần bạn cân lại gần nhất hiện ở đây.' },
 }
 
@@ -103,7 +106,19 @@ export function QcTicketsPage() {
     mutationFn: ({ order, entry, payload }: { order: ProductionOrderDetail; entry: StageEntry; payload: ReturnPayload }) =>
       entry.returnedAt ? reviseReturnApi(order.code, entry.id, payload) : returnStageApi(order.code, entry.id, payload),
     onSuccess: (order, vars) => {
-      onOrderSaved(order, vars.entry.returnedAt ? 'Đã lưu bản sửa QC' : 'Đã lưu kết quả QC')
+      // Xi đạt: phiếu tự chốt, sinh phiếu nhập kho thành phẩm; Khắc / Đánh bóng: tự mở khâu kế cho thợ nhận.
+      const next = vars.entry.stage === 'ENGRAVING' ? 'Chờ đánh bóng' : vars.entry.stage === 'POLISHING' ? 'Chờ xi' : null
+      const good = order.stages.find((entry) => entry.id === vars.entry.id)?.returnedQty ?? 0
+      onOrderSaved(
+        order,
+        vars.entry.returnedAt
+          ? 'Đã lưu bản sửa QC'
+          : good > 0 && vars.entry.stage === 'PLATING'
+            ? 'Đã xi xong — đã tạo phiếu nhập kho thành phẩm, chờ thủ kho xác nhận'
+            : good > 0 && next
+              ? `Đã lưu kết quả QC — phiếu sang ${next}, thợ tự nhận`
+              : 'Đã lưu kết quả QC',
+      )
       setQc(null)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -115,7 +130,7 @@ export function QcTicketsPage() {
         ? finishOrderApi(item.orderCode, { note })
         : finishSubTicketApi(item.orderCode, item.no, note),
     onSuccess: (order) => {
-      onOrderSaved(order, 'Đã hoàn thiện — chờ kho thành phẩm nhập')
+      onOrderSaved(order, 'Đã xi xong — chờ kho thành phẩm nhập')
       setFinishing(null)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -272,7 +287,9 @@ export function QcTicketsPage() {
                 '& .MuiTab-root': { minHeight: 44, minWidth: 0, px: 0, mr: 3, fontWeight: 600, textTransform: 'none' },
               }}
             >
-              {TABS.map((item) => (
+              {TABS.filter(
+                (item) => item.value !== 'finishable' || lists.finishable.length > 0 || tab === 'finishable',
+              ).map((item) => (
                 <Tab
                   key={item.value}
                   value={item.value}

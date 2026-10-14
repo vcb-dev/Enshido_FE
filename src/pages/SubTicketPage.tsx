@@ -20,9 +20,9 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { defectScopeText, formatDateShort, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { defectScopeText, formatDateShort, isSelfTakeStage, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
-import { MaterialRequestsCard, stageIssuesStock } from '../orders/MaterialRequests'
+import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
 import { CollapsibleMatrix } from '../orders/CollapsibleMatrix'
 import { TicketMatrix } from '../orders/TicketMatrix'
@@ -229,7 +229,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const mine = model.claimedByUserId != null && model.claimedByUserId === user?.id
   // Khâu đang mở là của chính mình — chỉ người đó mới báo xong được (khớp luật ở BE).
   const workingIsMine = openEntry?.craftsmanUserId != null && openEntry.craftsmanUserId === user?.id
-  const closed = order.status === 'DELIVERED' || order.finishedGoods != null
+  // Đơn chia phiếu: phiếu xi xong trước đã sinh phiếu nhập thành phẩm, các phiếu còn lại vẫn chạy tiếp.
+  const closed =
+    order.status === 'DELIVERED' || (order.finishedGoods != null && !order.subTickets.some((ticket) => !ticket.outcome))
   const due = dueInfo(order.dueDate)
 
   const doneStages = Array.from(new Set(model.entries.filter((entry) => entry.returnedAt).map((entry) => entry.stage)))
@@ -259,21 +261,22 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
         value: model.availableSilver != null ? `${formatQty(model.availableSilver)} g` : '—',
       },
     ]
-    if (model.no != null) {
-      // Phiếu con không còn tự nhận: thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
-      hint = 'Phiếu con do thủ kho chỉ định thợ — nhờ thủ kho chỉ định lại khâu này.'
+    if (!isSelfTakeStage(model.pendingStage)) {
+      // Chỉ Đánh bóng / Xi thợ tự nhận; khâu khác thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
+      hint = `Khâu ${STAGE_LABEL[model.pendingStage]} do thủ kho chỉ định thợ — nhờ thủ kho giao lại khâu này.`
     } else if (isWorker) {
+      hint = 'Bấm Nhận là bắt đầu làm ngay — hàng lấy nguyên số QC đã nhận lại ở khâu trước.'
       actions.push(
         <Button key="claim" variant="contained" size="large" disabled={busy} loading={sending('claim')} onClick={() => claim.mutate(vars)}>
-          Nhận phiếu · {STAGE_LABEL[model.pendingStage]}
+          Nhận · {STAGE_LABEL[model.pendingStage]}
         </Button>,
       )
     } else {
       hint = 'Chỉ tài khoản có quyền Thợ sản xuất mới nhận phiếu được.'
     }
   } else if (model.state === 'CLAIMED' && model.pendingStage) {
-    // Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm xác nhận mới bắt đầu (hệ thống tự xuất kho).
-    // Khâu khác: thợ tự nhận rồi chờ người giao.
+    // Thủ kho chỉ định thợ, thợ quét QR bấm xác nhận mới bắt đầu (hệ thống tự xuất kho nếu khâu có kho).
+    // Lượt nhận kiểu cũ trên phiếu mẹ (chưa có nội dung giao) thì huỷ rồi giao lại.
     const selfAccept = usesReceiptFlow(model.pendingStage, model.no, model.receiptPrepared)
     headline = selfAccept
       ? `${mine ? 'Bạn được' : `Thợ ${model.claimedByName ?? ''} được`} giao khâu ${STAGE_LABEL[model.pendingStage]} — chờ thợ nhận`
@@ -282,7 +285,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       ? mine
         ? 'Bấm Xác nhận khi đã nhận hàng để bắt đầu làm — hệ thống ghi giao khâu và xuất vật tư khỏi kho.'
         : 'Chờ thợ được chỉ định quét QR xác nhận.'
-      : `Chờ người giao ${stageIssuesStock(model.pendingStage) ? 'xuất NVL, ' : ''}cân bạc và xác nhận giao.`
+      : 'Lượt nhận theo cách cũ — huỷ nhận rồi nhờ thủ kho giao lại khâu này.'
     facts = [
       { label: selfAccept ? 'Giao lúc' : 'Nhận lúc', value: formatDateShort(model.claimedAt) },
       { label: 'Số lượng', value: `${model.availableQty} sp` },

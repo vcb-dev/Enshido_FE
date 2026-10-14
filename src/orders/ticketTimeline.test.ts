@@ -99,3 +99,42 @@ describe('ticketTimeline — trạng thái riêng từng phiếu con', () => {
     expect(rows.at(-1)).toMatchObject({ status: null, label: 'Chỉ định Thợ B làm Nguội' })
   })
 })
+
+describe('ticketTimeline — Khắc → Đánh bóng → Xi', () => {
+  const done = (id: string, stage: StageEntry['stage'], at: string) =>
+    entry({ id, stage, handedAt: at, submittedAt: at, returnedAt: at, returnedByName: 'QC Lan', returnedQty: 50, confirmedAt: at, confirmedByName: 'QC Lan' })
+
+  it('QC xác nhận Khắc xong phiếu sang Chờ đánh bóng, thợ nhận rồi mới Đang đánh bóng', () => {
+    const engraved = done('e1', 'ENGRAVING', '2026-10-05T01:00:00Z')
+    const waiting = ticketTimeline(ticket({ status: 'WAIT_POLISHING', pendingStage: 'POLISHING' }), [engraved], START)
+    expect(waiting.map((row) => row.status)).toEqual(['WAIT_FILING', 'ENGRAVING', 'WAIT_POLISHING'])
+
+    const working = ticketTimeline(
+      ticket({ status: 'POLISHING' }),
+      [engraved, entry({ id: 'e2', stage: 'POLISHING', handedAt: '2026-10-05T02:00:00Z' })],
+      START,
+    )
+    expect(working.map((row) => row.status)).toEqual(['WAIT_FILING', 'ENGRAVING', 'WAIT_POLISHING', 'POLISHING'])
+  })
+
+  it('đi hết Xi: Chờ xi → Đang xi → Đã xi xong, kho nhận đủ mới Sản xuất xong', () => {
+    const entries = [
+      done('e1', 'ENGRAVING', '2026-10-05T01:00:00Z'),
+      done('e2', 'POLISHING', '2026-10-05T02:00:00Z'),
+      done('e3', 'PLATING', '2026-10-05T03:00:00Z'),
+    ]
+    const closed = { outcome: 'FINISH', outcomeStage: 'PLATING', outcomeAt: '2026-10-05T03:00:00Z', outcomeByName: 'QC Lan' } as const
+    const plated = ticketTimeline(ticket({ status: 'PLATED', ...closed }), entries, START)
+    expect(plated.map((row) => row.status).filter(Boolean)).toEqual([
+      'WAIT_FILING',
+      'ENGRAVING',
+      'WAIT_POLISHING',
+      'POLISHING',
+      'WAIT_PLATING',
+      'PLATING',
+      'PLATED',
+    ])
+    const stocked = ticketTimeline(ticket({ status: 'FINISHING', ...closed }), entries, START)
+    expect(stocked.at(-1)?.status).toBe('FINISHING')
+  })
+})

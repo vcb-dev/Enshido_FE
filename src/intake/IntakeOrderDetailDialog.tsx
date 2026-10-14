@@ -28,14 +28,16 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
   const waxWeight = order ? formatIntakeGram(order.productWeightGram) : null
   const treeWeight = order ? formatIntakeGram(order.castingTreeWeightGram) : null
   const checkedWeight = order ? formatIntakeGram(order.waxCheckedWeightGram) : null
-  const stoneLine = order
-    ? [
-        order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
-        order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : ''
+  const stoneLine = !order
+    ? ''
+    : order.stoneCount3d === 0
+      ? 'Không có đá — bỏ khâu Vào đá'
+      : [
+          order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
+          order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
   const detailImages = order ? intakeDetailImages(order.images) : []
   const waxImages = order ? intakeProductOnlyImages(order.images) : []
   const treeImages = order ? intakeCastingTreeImages(order.images) : []

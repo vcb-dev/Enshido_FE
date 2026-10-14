@@ -47,11 +47,9 @@ import {
   deleteProductionOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
-  handoverOrderApi,
   assignOrderApi,
   assignSubTicketApi,
   confirmStageApi,
-  handoverSubTicketApi,
   openOrderStageApi,
   undoFinishOrderApi,
   undoReturnApi,
@@ -77,6 +75,7 @@ import {
   formatDateShort,
   formatDateTime,
   isInStage,
+  isSelfTakeStage,
   skipsStone,
   MANUAL_STATUSES,
   parentWorkTicketUrl,
@@ -92,13 +91,12 @@ import { invalidateNvlStock } from '../orders/nvlStock'
 import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../orders/orderCache'
 import { RequestTypeChip, SourceChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
-import { AssignReceiptDialog, CastingDialog, HandoverDialog, type HandoverDialogState } from '../orders/StageDialogs'
+import { AssignReceiptDialog, CastingDialog } from '../orders/StageDialogs'
 import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
 import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
 import { TicketQcActions } from '../orders/TicketQcActions'
-import { StoneSkipBar } from '../orders/StoneSkipBar'
 import { ticketTimeline, TICKET_PHASE_STATUSES, type TicketTimelineRow } from '../orders/ticketTimeline'
 import { useOrderMutation } from '../orders/useOrderMutation'
 import { stageColumns } from '../orders/ticketRows'
@@ -118,8 +116,6 @@ export function ProductionOrderDetailPage() {
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
 
   const [editing, setEditing] = useState(false)
-  const [handover, setHandover] = useState<HandoverDialogState | null>(null)
-  const [handoverOpen, setHandoverOpen] = useState(false)
   const [keeperTarget, setKeeperTarget] = useState<StageEntry | null>(null)
   const [assignTarget, setAssignTarget] = useState<{
     ticket: SubTicket
@@ -178,31 +174,6 @@ export function ProductionOrderDetailPage() {
     code,
     (payload: CastingPayload) => updateCastingApi(code, payload),
     'Đã lưu thông tin Đúc',
-  )
-  // Đơn không chia chạy trực tiếp trên phiếu mẹ; đơn chia phiếu được giao cho thợ theo từng phiếu.
-  const saveHandover = useOrderMutation(
-    code,
-    (payload: HandoverPayload) => {
-      if (handover?.mode === 'confirm') {
-        // Thợ là người đã tự nhận phiếu, khâu là khâu đang mở — server tự lấy.
-        return handoverSubTicketApi(code, handover.ticket.no, {
-          handedQty: payload.handedQty,
-          handedSilverWeight: payload.handedSilverWeight,
-          note: payload.note,
-          materials: payload.materials,
-        })
-      }
-      if (handover?.mode === 'confirm-order') {
-        return handoverOrderApi(code, {
-          handedQty: payload.handedQty,
-          handedSilverWeight: payload.handedSilverWeight,
-          note: payload.note,
-          materials: payload.materials,
-        })
-      }
-      throw new Error('Không có khâu nào để giao')
-    },
-    handover?.mode === 'confirm-order' ? 'Đã xác nhận giao trên phiếu mẹ' : 'Đã xác nhận giao cho thợ',
   )
   const assignWorker = useOrderMutation(
     code,
@@ -296,9 +267,9 @@ export function ProductionOrderDetailPage() {
   // Tự lấy khâu kế tiếp; đơn làm lại bắt đầu từ khâu mặc định, bỏ Vào đá nếu không có đá.
   const parentNextStage = parentOpenableStages.find((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
   const parentDialogStages: StageCode[] = parentNextStage ? [parentNextStage] : []
-  const parentReceiptStages = parentDialogStages.filter((stage) => stage === 'FILING' || stage === 'STONE_SETTING')
-  const parentReceiptPending = Boolean(parentWork?.receiptPrepared) &&
-    (parentWork?.pendingStage === 'FILING' || parentWork?.pendingStage === 'STONE_SETTING')
+  // Thủ kho chỉ định thợ (Nguội, Vào đá, Giao Khắc); Đánh bóng / Xi thợ tự nhận nên chỉ mở lại khâu.
+  const parentReceiptStages = parentDialogStages.filter((stage) => !isSelfTakeStage(stage))
+  const parentReceiptPending = Boolean(parentWork?.receiptPrepared)
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
   // Đơn NVL vào Nguội khi đã cắt cây thông (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
@@ -315,11 +286,6 @@ export function ProductionOrderDetailPage() {
     !order.lastPrintedAt &&
     (order.status === 'NEW' || (isBtp && order.status === 'WAIT_FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
-
-  function openConfirmHandover(ticket: SubTicket) {
-    setHandover({ mode: 'confirm', ticket })
-    setHandoverOpen(true)
-  }
 
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
@@ -524,7 +490,7 @@ export function ProductionOrderDetailPage() {
                         Quy trình trên phiếu mẹ
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Người điều hành mở khâu; thợ xem phiếu {order.code} ở “Phiếu của tôi” và tự nhận.
+                        Thủ kho giao Nguội / Vào đá / Khắc cho thợ; Đánh bóng / Xi thợ tự nhận phiếu {order.code} ở “Phiếu của tôi”.
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -532,24 +498,22 @@ export function ProductionOrderDetailPage() {
                         <Typography variant="caption" color="text.secondary">
                           Đã ghi giao cho {parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận
                         </Typography>
-                      ) : parentWork?.state === 'CLAIMED' && !canManageTickets ? (
-                        <Typography variant="caption" color="text.secondary">
-                          chờ người lên đơn chọn NVL và giao
-                        </Typography>
                       ) : parentWork?.state === 'CLAIMED' ? (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => {
-                            setHandover({
-                              mode: 'confirm-order',
-                              ticket: parentWork,
-                            })
-                            setHandoverOpen(true)
-                          }}
-                        >
-                          Xác nhận giao
-                        </Button>
+                        // Lượt nhận kiểu cũ (chưa có nội dung giao): huỷ rồi giao lại cho thợ.
+                        canManageTickets ? (
+                          <Button
+                            size="small"
+                            color="inherit"
+                            loading={cancelParentStage.isPending}
+                            onClick={() => cancelParentStage.mutate(undefined)}
+                          >
+                            Hủy mở khâu để giao lại
+                          </Button>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            chờ thủ kho giao lại khâu này
+                          </Typography>
+                        )
                       ) : parentWork?.state === 'SUBMITTED' && parentOpenEntry ? (
                         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
                           Chờ QC nhận lại (màn Phiếu QC)
@@ -595,9 +559,11 @@ export function ProductionOrderDetailPage() {
                             >
                               {parentReworking
                                 ? 'Chọn khâu'
-                                : parentReceiptStages.length > 0
-                                  ? 'Giao khâu cho thợ'
-                                  : 'Mở khâu cho thợ nhận'}
+                                : parentReceiptStages[0] === 'ENGRAVING'
+                                  ? 'Giao Khắc'
+                                  : parentReceiptStages.length > 0
+                                    ? 'Giao khâu cho thợ'
+                                    : 'Mở khâu cho thợ nhận'}
                             </Button>
                           </span>
                         </Tooltip>
@@ -614,7 +580,7 @@ export function ProductionOrderDetailPage() {
                             : parentWork.state === 'CLAIMED'
                               ? parentReceiptPending
                                 ? `Đã giao khâu ${STAGE_LABEL[parentWork.pendingStage!]} cho ${parentWork.claimedByName ?? 'thợ'} — chờ thợ nhận.`
-                                : `Thợ ${parentWork.claimedByName ?? '—'} đã nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} — chờ cân bạc và xác nhận giao.`
+                                : `Thợ ${parentWork.claimedByName ?? '—'} nhận khâu ${STAGE_LABEL[parentWork.pendingStage!]} theo cách cũ — hủy mở khâu rồi giao lại.`
                               : parentWork.state === 'SUBMITTED'
                                 ? `Thợ ${parentOpenEntry?.craftsmanName ?? '—'} đã báo xong — chờ QC cân lại.`
                                 : parentWork.state === 'CONFIRMING'
@@ -675,7 +641,6 @@ export function ProductionOrderDetailPage() {
                 </Box>
               ) : null}
               <SubTicketToolbar order={order} canManage={canManageTickets} locked={locked} />
-              <StoneSkipBar order={order} locked={locked} />
               {order.subTickets.length ? (() => {
                 const selectedTicket =
                   order.subTickets.find((ticket) => ticket.id === selectedSubTicketId) ??
@@ -828,7 +793,6 @@ export function ProductionOrderDetailPage() {
                               locked={locked}
                               busy={undoReturn.isPending}
                               undoingEntryId={undoReturn.isPending ? undoReturn.variables?.id : null}
-                              onConfirm={openConfirmHandover}
                               onAssign={(ticket, stageOptions) => setAssignTarget({ ticket, stageOptions })}
                               onKeeperConfirm={setKeeperTarget}
                               onUndoReturn={(entry) => undoReturn.mutate(entry)}
@@ -990,28 +954,6 @@ export function ProductionOrderDetailPage() {
         onSave={(payload) => casting.mutate(payload, { onSuccess: () => setCastingOpen(false) })}
       />
 
-      <HandoverDialog
-        open={handoverOpen}
-        order={order}
-        state={handover}
-        saving={saveHandover.isPending}
-        onClose={() => setHandoverOpen(false)}
-        onExited={() => setHandover(null)}
-        onSave={(payload) =>
-          saveHandover.mutate(payload, {
-            onSuccess: () => setHandoverOpen(false),
-            // Máy chủ từ chối thì form đang mở đã không còn đúng (phiếu đổi trạng thái, thiếu
-            // quyền…): đóng lại, toast đã nói lý do, tải lại đơn để thấy trạng thái thật.
-            onError: () => {
-              setHandoverOpen(false)
-              void queryClient.invalidateQueries({
-                queryKey: ['production-order', code],
-              })
-            },
-          })
-        }
-      />
-
       <KeeperConfirmDialog
         entry={keeperTarget}
         ticketCode={
@@ -1051,7 +993,7 @@ export function ProductionOrderDetailPage() {
         saving={openParentStage.isPending}
         onClose={() => setParentStageDialog(false)}
         onSave={(payload) =>
-          payload.stage === 'FILING' || payload.stage === 'STONE_SETTING'
+          !isSelfTakeStage(payload.stage)
             ? (setParentStageDialog(false), setParentReceiptStageOverride(payload.stage), setParentReceiptDialog(true))
             : openParentStage.mutate(payload, {
                 onSuccess: () => setParentStageDialog(false),

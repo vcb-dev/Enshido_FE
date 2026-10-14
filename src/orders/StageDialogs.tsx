@@ -12,7 +12,6 @@ import type {
   ReturnPayload,
   StageCode,
   StageEntry,
-  SubTicket,
 } from '../api/productionOrders'
 import { ctToGram, CT_PER_GRAM, formatCt, formatQty, gramToCt } from '../api/inventory'
 import {
@@ -23,13 +22,10 @@ import {
   FormTextField,
   TextInput,
 } from '../components/ui'
-import { useAuth } from '../auth/AuthContext'
 import { useOperatorName } from '../hooks/useOperatorName'
 import {
   HandoverMaterialsField,
   handoverLinePayload,
-  handoverMetalWeight,
-  stageIssuesStock,
   type HandoverMaterialLine,
 } from './MaterialRequests'
 import { FormImageField } from './FormImageField'
@@ -86,233 +82,10 @@ export function carriesStone(
   )
 }
 
-type HandoverValues = {
-  stage: StageCode | ''
-  craftsmanUserId: string
-  handedQty: string
-  handedSilverWeight: string
-  note: string
-  /** NVL xuất kho cho thợ lúc xác nhận giao. */
-  materials: HandoverMaterialLine[]
-}
-
-/** Đã giao cho thợ thì thông tin giao khoá luôn — hộp thoại chỉ còn bước xác nhận giao. */
-export type HandoverDialogState =
-  /** Phiếu con: thợ đã tự nhận khâu, người giao cân bạc rồi xác nhận. */
-  | { mode: 'confirm'; ticket: SubTicket }
-  /** Phiếu mẹ không chia: cùng luồng tự nhận như phiếu con. */
-  | { mode: 'confirm-order'; ticket: OrderWorkTicket }
-
-/** Giao khâu cho thợ. Người giao là tài khoản đang đăng nhập. */
-export function HandoverDialog({
-  open,
-  order,
-  state,
-  saving,
-  onClose,
-  onExited,
-  onSave,
-}: {
-  open: boolean
-  /** Đơn đang mở — lấy quỹ đá của đơn để chặn giao quá. */
-  order: ProductionOrderDetail
-  state: HandoverDialogState | null
-  saving: boolean
-  onClose: () => void
-  onExited: () => void
-  onSave: (payload: HandoverPayload) => void
-}) {
-  const operatorName = useOperatorName()
-  const { user } = useAuth()
-  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
-  const form = useForm<HandoverValues>({
-    defaultValues: {
-      stage: '',
-      craftsmanUserId: '',
-      handedQty: '',
-      handedSilverWeight: '',
-      note: '',
-      materials: [],
-    },
-  })
-
-  const initializedTarget = useRef<string | null>(null)
-  useEffect(() => {
-    if (!open || !state) {
-      initializedTarget.current = null
-      return
-    }
-    const target = `${state.mode}:${state.ticket.code}`
-    if (initializedTarget.current === target) return
-    initializedTarget.current = target
-    const { ticket } = state
-    form.reset({
-      stage: ticket.pendingStage ?? '',
-      craftsmanUserId: ticket.claimedByUserId ?? '',
-      handedQty: String(ticket.availableQty),
-      handedSilverWeight: ticket.availableSilver ?? '',
-      note: '',
-      materials: [],
-    })
-  }, [open, state, form])
-
-  const ticket = state?.ticket ?? null
-  useEffect(() => {
-    if (open && state?.mode === 'confirm-order' && ticket) {
-      form.setValue('handedQty', String(ticket.availableQty))
-    }
-  }, [open, state?.mode, ticket?.availableQty, form])
-  const stageCode = ticket?.pendingStage ?? null
-  const stageLabel = stageCode ? STAGE_LABEL[stageCode] : ''
-  /** Khâu Vào đá phát thêm đá cho thợ; khâu khác chỉ giao bạc. */
-  const stoneStage = stageCode === 'STONE_SETTING'
-  /** Khâu đầu của phiếu: chưa có hàng từ khâu trước, TL lấy từ NVL xuất. */
-  const firstStage = ticket
-    ? !order.stages.some((item) =>
-        state?.mode === 'confirm'
-          ? item.subTicketId === state.ticket.id
-          : item.subTicketId == null,
-      )
-    : false
-  const [carried, materialLines] = useWatch({
-    control: form.control,
-    name: ['handedSilverWeight', 'materials'],
-  })
-  // Khâu không xuất kho thì bỏ qua các dòng còn sót trong form.
-  const issuesStock = stageIssuesStock(stageCode)
-  const issuedMetal = issuesStock ? handoverMetalWeight(materialLines ?? []) : 0
-  // Khâu đầu chưa có hàng từ khâu trước: bạc vào khâu chỉ là NVL xuất bên dưới.
-  const firstStockStage = firstStage && issuesStock
-  const carriedWeight = firstStockStage ? 0 : Number(carried) || 0
-  const silverIn = carriedWeight + issuedMetal
-  /** Mốc TL giao tối đa do BE tính (cùng công thức với chỗ chặn ở BE). */
-  const limitText = ticket?.handoverSilverLimit ?? null
-  const silverLimit = limitText != null ? Number(limitText) : null
-  /** Đã qua khâu Vào đá: giao cả cụm BTP (bạc + đá), không còn là bạc trơn. */
-  const btpWeight =
-    !stoneStage &&
-    carriesStone(order.stages, state?.mode === 'confirm' ? state.ticket.id : null)
-  const title = ticket
-    ? `Xác nhận giao ${stageLabel} — ${state?.mode === 'confirm-order' ? 'phiếu mẹ' : 'phiếu'} ${ticket.code}`
-    : ''
-  // Người đang xác nhận cũng chính là thợ đã nhận phiếu. Khớp luật ở BE: chỉ admin được
-  // tự giao cho mình, người khác bấm cũng chỉ nhận lỗi nên chặn luôn ở đây.
-  const selfConfirm = Boolean(ticket && user && ticket.claimedByUserId === user.id)
-  const selfConfirmBlocked = selfConfirm && !isAdmin
-  const [uploading, setUploading] = useState(false)
-
-  function submit(values: HandoverValues) {
-    onSave({
-      craftsmanUserId: values.craftsmanUserId,
-      handedQty: state?.mode === 'confirm-order' && ticket
-        ? ticket.availableQty
-        : values.handedQty ? Number(values.handedQty) : null,
-      handedSilverWeight: firstStockStage ? null : values.handedSilverWeight || null,
-      note: values.note.trim(),
-      materials: issuesStock ? values.materials.map(handoverLinePayload) : undefined,
-    })
-  }
-
-  return (
-    <CrudDialogShell<HandoverValues>
-      open={open}
-      kind="create"
-      titles={{ create: title, edit: title, view: title }}
-      form={form}
-      onSubmit={submit}
-      saving={saving}
-      submitDisabled={selfConfirmBlocked || uploading}
-      submitLabel="Xác nhận giao"
-      pendingLabel="Đang xác nhận…"
-      maxWidth="sm"
-      onClose={onClose}
-      onExited={onExited}
-    >
-      {selfConfirmBlocked ? (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          Bạn là thợ nhận phiếu này — nhờ người khác xác nhận giao.
-        </Alert>
-      ) : selfConfirm ? (
-        <Alert severity="warning" sx={{ mt: 1 }}>
-          Bạn đang tự xác nhận giao cho chính mình (admin).
-        </Alert>
-      ) : null}
-      <Typography variant="body2" sx={{ mt: 1 }}>Khâu: <b>{stageLabel}</b></Typography>
-      <FormRow columns={1}>
-        <TextInput
-          label="Người giao"
-          value={operatorName}
-          readOnly
-        />
-      </FormRow>
-
-      <FormRow columns={2}>
-        <FormTextField<HandoverValues>
-          name="handedQty"
-          label="Số lượng giao"
-          type="number"
-          readOnly={state?.mode === 'confirm-order'}
-          required
-          rules={{
-            validate: (value) => {
-              if (!(Number(value) >= 1)) return 'Số lượng giao phải từ 1'
-              if (ticket && Number(value) > ticket.availableQty) {
-                return `Không quá số phiếu đang có (${ticket.availableQty})`
-              }
-              return true
-            },
-          }}
-        />
-        {firstStockStage ? null : (
-          <FormQtyField<HandoverValues>
-            name="handedSilverWeight"
-            label={firstStage ? 'TL bạc giao (g)' : btpWeight ? 'TL hàng từ khâu trước — BTP (bạc + đá) (g)' : 'TL hàng từ khâu trước (g)'}
-            required
-            helperText={[
-              firstStage ? 'Trọng lượng hàng giao cho thợ' : 'Tự điền theo số QC nhận lại khâu trước',
-              silverLimit != null ? `tối đa ${formatQty(String(silverLimit))} g` : '',
-            ]
-              .filter(Boolean)
-              .join(' · ') || undefined}
-            rules={{
-              validate: (value) => {
-                // Không giao vượt hàng đang có (QC nhận lại khâu trước / phôi sau đúc) — khớp BE.
-                if (silverLimit != null && value !== '' && Number(value) > silverLimit) {
-                  return `Không vượt số hàng đang có (${formatQty(String(silverLimit))} g)`
-                }
-                return true
-              },
-            }}
-          />
-        )}
-      </FormRow>
-
-      <HandoverMaterialsField
-        form={form}
-        stage={stageCode}
-        readOnly={saving}
-        onUploadingChange={setUploading}
-        blank={
-          order.cut?.btpMaterialId && order.cut.leftQty != null && order.cut.leftWeight != null
-            ? {
-                materialId: order.cut.btpMaterialId,
-                leftQty: Number(order.cut.leftQty),
-                leftWeight: Number(order.cut.leftWeight),
-              }
-            : null
-        }
-      />
-      <Typography variant="body2" sx={{ mt: 1 }}>
-        Bạc vào khâu: <b>{formatQty(String(round4(silverIn)))}</b> g
-        {issuedMetal ? ` (hàng ${formatQty(String(carriedWeight))} g + xuất ${formatQty(String(round4(issuedMetal)))} g)` : ''}
-      </Typography>
-
-      <FormTextField<HandoverValues> name="note" label="Ghi chú" multiline minRows={2} maxRows={6} />
-    </CrudDialogShell>
-  )
-}
-
-/** Chỉ định thợ và ghi sẵn nội dung giao Nguội / Vào đá; thợ xác nhận nhận hàng ở bước sau. */
+/**
+ * Chỉ định thợ và ghi sẵn nội dung giao trên phiếu mẹ; thợ xác nhận nhận hàng ở bước sau. Nguội tự
+ * gắn phôi, Vào đá chọn đá; Khắc ("Giao Khắc") trở đi chỉ chọn thợ — hàng chuyển nguyên từ khâu trước.
+ */
 export function AssignReceiptDialog({
   open,
   order,
@@ -386,8 +159,10 @@ export function AssignReceiptDialog({
    * thợ nhận hàng — thủ kho chỉ chọn đá, không nhập TL bạc hay chọn lại BTP (khớp BE).
    */
   const previousEntry = order.stages.filter((item) => item.subTicketId == null).at(-1) ?? null
+  /** Khắc / Đánh bóng / Xi: hàng chuyển nguyên từ khâu trước — thủ kho chỉ chọn thợ (khớp BE). */
+  const carryOver = stage !== '' && stage !== 'FILING' && stage !== 'STONE_SETTING' && previousEntry != null
   const autoFiledBtp =
-    stage === 'STONE_SETTING' && previousEntry?.outputMaterialId != null ? previousEntry : null
+    (stage === 'STONE_SETTING' || carryOver) && previousEntry?.outputMaterialId != null ? previousEntry : null
   const resetForOpen = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -411,18 +186,22 @@ export function AssignReceiptDialog({
     <CrudDialogShell<Values>
       open={open}
       kind="create"
-      titles={{ create: 'Giao khâu cho thợ', edit: 'Giao khâu cho thợ', view: 'Giao khâu cho thợ' }}
+      titles={{
+        create: stage === 'ENGRAVING' ? 'Giao Khắc' : 'Giao khâu cho thợ',
+        edit: 'Giao khâu cho thợ',
+        view: 'Giao khâu cho thợ',
+      }}
       form={form}
       onSubmit={(values) => {
         if (!values.stage) return
-        const materialLines = autoCutBtp ? [] : values.materials
+        const materialLines = autoCutBtp || carryOver ? [] : values.materials
         onSave({
           stage: values.stage,
           craftsmanUserId: values.craftsmanUserId,
           handedQty: availableQty,
           // Bạc vào khâu lấy từ dòng BTP xuất kho; đá giao máy chủ tính từ các dòng đá — không gửi
           // kèm tổng, gửi cả hai là cộng đôi.
-          handedSilverWeight: firstStage || autoFiledBtp ? null : values.handedSilverWeight || null,
+          handedSilverWeight: firstStage || autoFiledBtp || carryOver ? null : values.handedSilverWeight || null,
           note: values.note.trim(),
           materials: materialLines.map(handoverLinePayload),
         })
@@ -466,7 +245,7 @@ export function AssignReceiptDialog({
             },
           }}
         />
-        {!firstStage && !autoFiledBtp ? (
+        {!firstStage && !autoFiledBtp && !carryOver ? (
           <FormQtyField<Values>
             name="handedSilverWeight"
             label="TL bạc giao (g)"
@@ -494,18 +273,26 @@ export function AssignReceiptDialog({
           ) : null}
           {autoFiledBtp ? (
             <Alert severity="info" sx={{ mt: 1 }}>
-              Tự xuất BTP đã nguội của đơn: {autoFiledBtp.returnedQty ?? availableQty} chiếc ·{' '}
-              {formatQty(autoFiledBtp.returnedSilverWeight ?? '0')} g. Kho xuất khi thợ bấm “Xác nhận”.
+              Tự xuất BTP đã {STAGE_LABEL[autoFiledBtp.stage].toLowerCase()} của đơn:{' '}
+              {autoFiledBtp.returnedQty ?? availableQty} chiếc · {formatQty(autoFiledBtp.returnedSilverWeight ?? '0')} g.
+              Kho xuất khi thợ bấm “Xác nhận”.
+            </Alert>
+          ) : carryOver && previousEntry ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Hàng chuyển từ khâu {STAGE_LABEL[previousEntry.stage]}: {previousEntry.returnedQty ?? availableQty} chiếc ·{' '}
+              {formatQty(previousEntry.returnedSilverWeight ?? '0')} g. Không xuất kho.
             </Alert>
           ) : null}
-          <HandoverMaterialsField
-            form={form}
-            stage={stage || null}
-            blank={cutBtp}
-            stoneOnly={autoFiledBtp != null}
-            readOnly={saving}
-            onUploadingChange={setUploading}
-          />
+          {carryOver ? null : (
+            <HandoverMaterialsField
+              form={form}
+              stage={stage || null}
+              blank={cutBtp}
+              stoneOnly={autoFiledBtp != null}
+              readOnly={saving}
+              onUploadingChange={setUploading}
+            />
+          )}
         </>
       )}
       <FormTextField<Values> name="note" label="Ghi chú" multiline minRows={2} maxRows={5} />

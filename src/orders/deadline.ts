@@ -20,13 +20,13 @@ function utcDay(value: string) {
   return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
 }
 
-/** Cảnh báo theo ngày lịch; đơn đã hoàn thiện / đã giao không còn tính trễ hạn sản xuất. */
+/** Cảnh báo theo ngày lịch; đơn đã xi xong / sản xuất xong / đã giao không còn tính trễ hạn sản xuất. */
 export function deadlineWarning(
   dueDate: string | null | undefined,
   status: ProductionStatus,
   today = ymdToday(),
 ): DeadlineWarning | null {
-  if (!dueDate || status === 'FINISHING' || status === 'DELIVERED') return null
+  if (!dueDate || status === 'PLATED' || status === 'FINISHING' || status === 'DELIVERED') return null
   const due = utcDay(dueDate)
   const current = utcDay(today)
   if (due == null || current == null) return null

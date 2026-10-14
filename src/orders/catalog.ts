@@ -33,11 +33,15 @@ export const STATUS_META: Record<ProductionStatus, ChipTone> = {
   STONE_SETTING: { label: 'Đang vào đá', bg: '#00897b', fg: '#ffffff' },
   STONE_DEFECT: { label: 'Lỗi vào đá', bg: '#b71c1c', fg: '#ffffff' },
   WAIT_ENGRAVING: { label: 'Chờ khắc', bg: '#a89a8a', fg: '#2b241c' },
-  ENGRAVING: { label: 'Khắc', bg: '#6f6254', fg: '#ffffff' },
-  POLISHING: { label: 'Bóng', bg: '#0097a7', fg: '#ffffff' },
-  PLATING: { label: 'Xi', bg: '#c2185b', fg: '#ffffff' },
+  ENGRAVING: { label: 'Đang khắc', bg: '#6f6254', fg: '#ffffff' },
+  WAIT_POLISHING: { label: 'Chờ đánh bóng', bg: '#9fdbe2', fg: '#06363c' },
+  POLISHING: { label: 'Đang đánh bóng', bg: '#0097a7', fg: '#ffffff' },
+  WAIT_PLATING: { label: 'Chờ xi', bg: '#f3b6cf', fg: '#5b0c2c' },
+  PLATING: { label: 'Đang xi', bg: '#c2185b', fg: '#ffffff' },
+  // U: đã có phiếu nhập kho thành phẩm, chờ thủ kho xác nhận; V: kho đã nhận đủ.
+  PLATED: { label: 'Đã xi xong', bg: '#a9dfbf', fg: '#145a32' },
   DEFECT: { label: 'Sản xuất lỗi', bg: '#2d3436', fg: '#ffffff' },
-  FINISHING: { label: 'Hoàn thiện', bg: '#27ae60', fg: '#ffffff' },
+  FINISHING: { label: 'Sản xuất xong', bg: '#27ae60', fg: '#ffffff' },
   DELIVERED: { label: 'Đã giao', bg: '#2563eb', fg: '#ffffff' },
 }
 
@@ -52,8 +56,11 @@ export const STATUS_TABS: ProductionStatus[] = [
   'STONE_DEFECT',
   'WAIT_ENGRAVING',
   'ENGRAVING',
+  'WAIT_POLISHING',
   'POLISHING',
+  'WAIT_PLATING',
   'PLATING',
+  'PLATED',
   'DEFECT',
   'FINISHING',
   'DELIVERED',
@@ -91,7 +98,9 @@ const IN_STAGE_STATUSES: ProductionStatus[] = [
   'STONE_SETTING',
   'WAIT_ENGRAVING',
   'ENGRAVING',
+  'WAIT_POLISHING',
   'POLISHING',
+  'WAIT_PLATING',
   'PLATING',
 ]
 
@@ -274,23 +283,43 @@ export function subTicketUrl(ticketCode: string) {
   return `${window.location.origin}/tickets/${ticketCode}`
 }
 
-/** Nguội / Vào đá: thủ kho chỉ định thợ, thợ quét QR bấm "Xác nhận" — phiếu CLAIMED chưa phải thợ đã cầm hàng. */
+/** Nguội / Vào đá: sau QC còn bước thủ kho xác nhận nhập kho (hàng đạt, hàng lỗi, nguyên liệu thừa). */
 export function isReceiptStage(stage: string | null | undefined) {
   return stage === 'FILING' || stage === 'STONE_SETTING'
 }
 
-export function skipsStone(order: { stoneCount?: number | null; stoneSkipped?: boolean }) {
-  return order.stoneCount === 0 || order.stoneSkipped === true
+/**
+ * Đánh bóng / Xi (mô tả luồng bước 21–22): QC xác nhận khâu trước là phiếu tự mở, thợ tự chọn
+ * phiếu để nhận và vào làm ngay. Các khâu khác do thủ kho chỉ định thợ.
+ */
+export function isSelfTakeStage(stage: string | null | undefined) {
+  return stage === 'POLISHING' || stage === 'PLATING'
 }
 
-/** Phiếu mẹ cũ chưa có thông tin giao vẫn cần người giao xác nhận. */
+/**
+ * Đơn bỏ khâu Vào đá: không khai TL đá ở khâu 3D (trống hoặc 0). Đơn cũ chỉ khai số viên vẫn tính
+ * là có đá; `stoneSkipped` giữ cho đơn thủ kho đã đánh dấu trước đây. Khớp `skipsStone` phía BE.
+ */
+export function skipsStone(order: {
+  stoneCount: number | null
+  stoneWeight: string | null
+  stoneSkipped?: boolean
+}) {
+  if (order.stoneSkipped === true) return true
+  return !(Number(order.stoneWeight) > 0 || (order.stoneCount ?? 0) > 0)
+}
+
+/**
+ * Phiếu đã được thủ kho chỉ định, chờ chính thợ đó bấm nhận hàng — mọi khâu. Phiếu mẹ phải có sẵn
+ * nội dung giao (`receiptPrepared`); lượt nhận kiểu cũ chưa có thì thủ kho huỷ rồi giao lại.
+ */
 export function usesReceiptFlow(stage: string | null | undefined, no: number | null, receiptPrepared?: boolean) {
-  return isReceiptStage(stage) && (no != null || receiptPrepared === true)
+  return stage != null && (no != null || receiptPrepared === true)
 }
 
-/** Nhãn trạng thái phiếu con; khâu nhận hàng theo chỉ định thì CLAIMED là "Chờ thợ nhận". */
+/** Nhãn trạng thái phiếu con; phiếu được chỉ định thì CLAIMED là "Chờ thợ nhận". */
 export function subTicketStateLabel(state: SubTicketState, stage?: string | null) {
-  return state === 'CLAIMED' && isReceiptStage(stage) ? 'Chờ thợ nhận' : SUB_TICKET_STATE_META[state].label
+  return state === 'CLAIMED' && stage != null ? 'Chờ thợ nhận' : SUB_TICKET_STATE_META[state].label
 }
 
 /** Trạng thái phiếu con trong khâu hiện tại. */

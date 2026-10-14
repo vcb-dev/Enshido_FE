@@ -10,6 +10,7 @@ import {
   acceptSubTicketApi,
   acceptOrderApi,
   claimOrderApi,
+  claimSubTicketApi,
   submitOrderApi,
   submitSubTicketApi,
   unclaimOrderApi,
@@ -48,14 +49,11 @@ type TicketActionCtx = {
 
 const ACTIONS: Record<SubTicketAction, ActionDef> = {
   claim: {
-    // Chỉ phiếu mẹ còn tự nhận; phiếu con do thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
-    run: (code, no) => {
-      if (no != null) throw new Error('Phiếu con do thủ kho chỉ định thợ — không tự nhận được')
-      return claimOrderApi(code)
-    },
+    // Thợ tự chọn phiếu chờ Đánh bóng / Xi: nhận là vào làm ngay, không qua người giao.
+    run: (code, no) => (no == null ? claimOrderApi(code) : claimSubTicketApi(code, no)),
     queued: (code) =>
       `Đã xếp hàng nhận phiếu ${code} — gửi lên khi có mạng. Thợ khác nhận trước thì sẽ báo lại.`,
-    done: (code) => `Đã nhận phiếu ${code} — chờ người giao cân bạc và xác nhận`,
+    done: (code) => `Đã nhận phiếu ${code} — bắt đầu làm`,
   },
   unclaim: {
     run: (code, no) => (no == null ? unclaimOrderApi(code) : unclaimSubTicketApi(code, no)),
