@@ -60,7 +60,7 @@ import {
 import { CatalogPicker, type CatalogPickerItem } from './CatalogPicker'
 import { FormImageField } from './FormImageField'
 import { STONE_PHOTO_LABEL, STONE_PHOTO_REQUIRED, stonePhotosPayload, useUploadingByKey } from './stonePhotos'
-import { formatDateShort, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from './catalog'
+import { formatDateShort, productionClosed, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from './catalog'
 import { stoneAmountText, stoneQtyFromCt, stoneUnitKind } from './stoneInput'
 import { EarlyStoneReturnDialog } from './EarlyStoneReturnDialog'
 import { useOrderMutation } from './useOrderMutation'
@@ -654,7 +654,7 @@ export function MaterialRequestsCard({
   )
 
   const holder = openEntry && !openEntry.submittedAt && (openEntry.craftsmanUserId === userId || isAdmin)
-  const canRequest = Boolean(holder) && !order.finishedGoods && stageIssuesStock(openEntry?.stage)
+  const canRequest = Boolean(holder) && !productionClosed(order) && stageIssuesStock(openEntry?.stage)
   /** Thủ kho nhận lại túi đá thợ trả giữa khâu Vào đá (đổi size), cả phiếu mẹ / con. */
   const canReturnStone =
     canHandle &&

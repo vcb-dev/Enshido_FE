@@ -59,6 +59,8 @@ export type ReworkChild = {
   intake: IntakeOrder
   orderCode: string
   productionStatus: ProductionStatus
+  /** Lệnh được bù — khác đơn gốc khi bù tiếp cho một lệnh bù lại lỗi. */
+  reworkOfCode?: string | null
 }
 
 export type ProductionOrderRow = {
@@ -506,6 +508,22 @@ export type ProductionOrderDetail = Omit<
   statusLogs: StatusLog[]
   /** Phiếu bù cho hàng lỗi Nguội / Vào đá: đơn tạo bù đang đi lại từ bước sáp. */
   reworks: Array<{ intake?: IntakeOrder; orderCode?: string; productionStatus?: ProductionStatus; code: string; status: IntakeOrderStatus; qty: number; entryId: string | null; ticketNo: number | null }>
+  /** Cả chuỗi lệnh bù của đơn (bù trực tiếp + bù tiếp cho lệnh bù lại lỗi), theo thứ tự tạo. */
+  reworkChain?: ReworkChainItem[]
+}
+
+/** Một lệnh bù trong chuỗi bù của đơn. */
+export type ReworkChainItem = {
+  intake?: IntakeOrder
+  orderCode?: string
+  productionStatus?: ProductionStatus
+  code: string
+  status: IntakeOrderStatus
+  qty: number
+  /** Lệnh được bù: đơn này, hoặc một lệnh bù trước đó lại lỗi. */
+  reworkOfCode?: string
+  /** Phiếu con của đơn này mà chuỗi bù bắt nguồn; null = phiếu mẹ. */
+  rootTicketNo?: number | null
 }
 
 export type ProductionOrderLookups = {
@@ -611,7 +629,8 @@ export type HandoverPayload = {
 export type ReturnPayload = {
   returnedQty?: number | null
   laborCost?: string | null
-  returnedSilverWeight: string
+  /** Khắc / Đánh bóng QC chỉ chụp ảnh — gửi null. */
+  returnedSilverWeight: string | null
   /** Khâu Vào đá: số viên đá gắn lên. Khâu khác không gửi. */
   stoneCount?: number | null
   /** Khâu Vào đá: TL đá gắn lên (g). */

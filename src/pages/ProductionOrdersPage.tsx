@@ -1232,7 +1232,9 @@ function orderColumns(
             {production ? (
               <Link component={RouterLink} to={`/orders/${sub.orderCode}`} sx={{ fontWeight: 600 }}>{sub.orderCode}</Link>
             ) : <Button size="small" onClick={open}>{sub.orderCode}</Button>}
-            <Typography variant="caption">Bù cho {intake.code}</Typography>
+            <Typography variant="caption">
+              Bù cho {sub.reworkOfCode && sub.reworkOfCode !== parent.row.code ? sub.reworkOfCode : intake.code}
+            </Typography>
           </Stack>
         case 'createdAt': return formatDateTime(intake.createdAt)
         case 'status': return production

@@ -79,6 +79,7 @@ import {
   skipsStone,
   MANUAL_STATUSES,
   parentWorkTicketUrl,
+  productionClosed,
   subTicketUrl,
   SILVER_LOSS_LIMITS,
   STAGE_LABEL,
@@ -94,6 +95,7 @@ import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { AssignReceiptDialog, CastingDialog } from '../orders/StageDialogs'
 import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
+import { ReworkChildren } from '../orders/ReworkChildren'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
 import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
 import { TicketQcActions } from '../orders/TicketQcActions'
@@ -689,7 +691,12 @@ export function ProductionOrderDetailPage() {
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {ticket.qty} sp ·{' '}
-                                {ticket.activeStage ? STAGE_LABEL[ticket.activeStage] : 'Chưa có khâu'}
+                                {/* Phiếu đã chốt / đang chờ khâu kế thì không còn khâu chạy — hiện trạng thái thật. */}
+                                {ticket.activeStage
+                                  ? STAGE_LABEL[ticket.activeStage]
+                                  : ticket.outcome || ticket.entryCount > 0
+                                    ? STATUS_META[ticket.status].label
+                                    : 'Chưa có khâu'}
                               </Typography>
                             </Stack>
                           }
@@ -713,6 +720,26 @@ export function ProductionOrderDetailPage() {
                             </Typography>
                           </CollapsibleMatrix>
                           <ReworkHistory stages={stages} />
+                          {order.reworkChain?.length ? (
+                            <Box sx={{ mt: 1.5 }}>
+                              <ReworkChildren
+                                // Bù trực tiếp cho một phiếu con: ghi "bù cho A007-3" thay vì mã đơn.
+                                reworks={order.reworkChain.map((item) =>
+                                  item.reworkOfCode === order.code && item.rootTicketNo != null
+                                    ? {
+                                        ...item,
+                                        reworkOfCode:
+                                          order.subTickets.find((ticket) => ticket.no === item.rootTicketNo)?.code ??
+                                          item.reworkOfCode,
+                                      }
+                                    : item,
+                                )}
+                                ticketCode={order.code}
+                                orderCode={order.code}
+                                title={`Lệnh bù của đơn (${order.reworkChain.length})`}
+                              />
+                            </Box>
+                          ) : null}
                         </>
                       ) : selectedTicket ? (
                         <>
@@ -1423,7 +1450,7 @@ function OverviewSummary({ order }: { order: ProductionOrderDetail }) {
   } else if (count('CLAIMED') > 0) {
     actionTitle = `${count('CLAIMED')} phiếu đã có thợ nhận`
     actionDetail = 'Cân hàng và xác nhận giao để thợ bắt đầu làm.'
-  } else if (count('IDLE') > 0 && !order.finishedGoods) {
+  } else if (count('IDLE') > 0 && !productionClosed(order)) {
     actionTitle = `${count('IDLE')} phiếu chờ mở khâu tiếp theo`
     actionDetail = 'Kiểm tra khâu vừa xong rồi mở khâu tiếp theo hoặc chốt kết cục phiếu.'
   } else if (count('WAITING') > 0) {
