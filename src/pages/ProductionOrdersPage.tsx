@@ -388,8 +388,8 @@ export function ProductionOrdersPage() {
       productWeightGram: number
       castingTreeWeightGram?: number
       images: IntakeOrder['images']
-      stoneCount3d: number | null
-      stoneWeight3dGram: number | null
+      stoneCount3d?: number | null
+      stoneWeight3dGram?: number | null
     }) =>
       submitIntakeProductSpecsApi(id, {
         productWeightGram,
@@ -1301,7 +1301,8 @@ function OrderStatus({ row }: { row: ProductionOrderRow }) {
 }
 
 function subTicketListStatus(sub: SubTicketSummary): ProductionStatus {
-  if (sub.state === 'FINISH') return 'FINISHING'
+  // Phiếu đạt: U Đã xi xong / V Sản xuất xong do BE tính theo kho thành phẩm.
+  if (sub.state === 'FINISH') return sub.status === 'FINISHING' ? 'FINISHING' : 'PLATED'
   if (sub.state === 'DEFECT') return 'DEFECT'
   return sub.status
 }

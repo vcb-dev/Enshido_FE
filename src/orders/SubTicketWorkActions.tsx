@@ -28,8 +28,8 @@ import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
 import { useOrderMutation } from './useOrderMutation'
 
 /**
- * Thao tác của MỘT phiếu con, đặt ngay trên phiếu đó: chỉ định thợ, xác nhận giao, QC cân lại,
- * thủ kho xác nhận. Trước đây nằm gộp ở bảng tổng "Phiếu con cho thợ".
+ * Thao tác của MỘT phiếu con, đặt ngay trên phiếu đó: chỉ định thợ (Giao Khắc…), thủ kho xác nhận
+ * sau QC. Đánh bóng / Xi thợ tự nhận ở "Phiếu của tôi". Trước đây nằm gộp ở bảng tổng "Phiếu con cho thợ".
  */
 export function SubTicketWorkActions({
   order,
@@ -39,20 +39,18 @@ export function SubTicketWorkActions({
   locked,
   busy = false,
   undoingEntryId,
-  onConfirm,
   onAssign,
   onUndoReturn,
   onKeeperConfirm,
 }: {
   order: ProductionOrderDetail
   ticket: SubTicket
-  /** Người lên đơn, thủ kho hoặc admin — chỉ định thợ, xác nhận giao. */
+  /** Người lên đơn, thủ kho hoặc admin — chỉ định thợ. */
   canManage: boolean
   isAdmin: boolean
   locked: boolean
   busy?: boolean
   undoingEntryId?: string | null
-  onConfirm: (ticket: SubTicket) => void
   onAssign: (ticket: SubTicket, stages: StageCode[]) => void
   onUndoReturn: (entry: StageEntry) => void
   onKeeperConfirm: (entry: StageEntry) => void
@@ -90,8 +88,6 @@ export function SubTicketWorkActions({
     () => deleteSubTicketApi(order.code, ticket.no),
     'Đã xoá phiếu con',
   )
-  // Nguội / Vào đá: chỉ thợ được chỉ định tự quét QR bấm "Xác nhận" — không xác nhận giao tay.
-  const selfAccept = ticket.pendingStage === 'FILING' || ticket.pendingStage === 'STONE_SETTING'
   // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần QC nhận,
   // đơn bù đi lại từ bước sáp rồi thành phiếu con mới của đơn này.
   const reworks = (order.reworks ?? []).filter((item) => item.ticketNo === ticket.no)
@@ -131,7 +127,7 @@ export function SubTicketWorkActions({
                   disabled={assignableStages.length === 0}
                   onClick={() => onAssign(ticket, assignableStages)}
                 >
-                  Chỉ định thợ
+                  {assignableStages[0] === 'ENGRAVING' ? 'Giao Khắc' : 'Chỉ định thợ'}
                 </Button>
               </span>
             </Tooltip>
@@ -141,18 +137,15 @@ export function SubTicketWorkActions({
             </Typography>
           )
         ) : null}
-        {ticket.state === 'CLAIMED' && active && !canManage ? (
+        {ticket.state === 'CLAIMED' && active ? (
           <Typography variant="caption" color="text.secondary">
-            {selfAccept ? 'chờ thợ được chỉ định quét QR xác nhận' : 'chờ người lên đơn chọn NVL và giao'}
+            chờ {ticket.claimedByName ?? 'thợ'} quét QR xác nhận nhận hàng
           </Typography>
-        ) : ticket.state === 'CLAIMED' && active && selfAccept ? (
+        ) : null}
+        {ticket.state === 'WAITING' && active && ticket.pendingStage ? (
           <Typography variant="caption" color="text.secondary">
-            chờ {ticket.claimedByName ?? 'thợ'} quét QR xác nhận
+            chờ thợ {STAGE_LABEL[ticket.pendingStage].toLowerCase()} tự nhận ở “Phiếu của tôi”
           </Typography>
-        ) : ticket.state === 'CLAIMED' && active ? (
-          <Button size="small" variant="contained" onClick={() => onConfirm(ticket)}>
-            Xác nhận giao
-          </Button>
         ) : null}
         {reworkable && canKeeper && active ? (
           <Button
@@ -209,8 +202,9 @@ export function SubTicketWorkActions({
             {cancel.isPending ? 'Đang huỷ…' : 'Huỷ mở khâu'}
           </Button>
         ) : null}
-        {/* Gỡ nhận lại chỉ còn cho các khâu không qua thủ kho; Nguội / Vào đá khoá khi thủ kho đã xác nhận. */}
-        {ticket.state === 'IDLE' && last?.returnedAt && isAdmin && active && last.stage !== 'FILING' && last.stage !== 'STONE_SETTING' ? (
+        {/* Gỡ nhận lại chỉ còn cho các khâu không qua thủ kho; Nguội / Vào đá khoá khi thủ kho đã xác nhận.
+            Khâu kế tự mở sau QC (chờ thợ nhận) được gỡ cùng lúc. */}
+        {(ticket.state === 'IDLE' || ticket.state === 'WAITING') && last?.returnedAt && isAdmin && active && last.stage !== 'FILING' && last.stage !== 'STONE_SETTING' ? (
           <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => onUndoReturn(last)}>
             {undoingEntryId === last.id ? 'Đang gỡ…' : 'Gỡ nhận lại'}
           </Button>

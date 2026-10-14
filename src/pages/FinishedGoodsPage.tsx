@@ -40,6 +40,8 @@ import {
   type Column,
   type ColumnGroup,
 } from '../components/ui'
+import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { paginate, sortRows, useTableParams } from '../hooks/useTableParams'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
@@ -360,6 +362,9 @@ function FinishedGoodsInboundTable() {
 
   // Kho đếm hàng rồi mới nhập, nên nút mở hộp thoại nhập số lượng thay vì nhận thẳng.
   const [receiving, setReceiving] = useState<FinishedGoodsReceiptRow | null>(null)
+  // Chỉ thủ kho (và admin) xác nhận nhập kho thành phẩm — khớp quyền phía BE.
+  const { user } = useAuth()
+  const canReceive = can(user, Permission.WAREHOUSE_KEEPER)
   const receive = useMutation({
     mutationFn: ({ row, qty }: { row: FinishedGoodsReceiptRow; qty: number }) =>
       receiveFinishedGoodsReceiptApi(row.id, qty),
@@ -389,10 +394,11 @@ function FinishedGoodsInboundTable() {
       onEnteredBy: (id) => table.setFilter({ enteredBy: id }),
       onView: dialog.openView,
       onEdit: dialog.openEdit,
+      canReceive,
       onReceive: (row) => setReceiving(row),
       receivingId: receive.isPending ? (receive.variables?.row.id ?? null) : null,
     }),
-    [dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.variables, table, totals],
+    [canReceive, dialog.openEdit, dialog.openView, enteredByOptions, params.enteredBy, params.search, receive.isPending, receive.variables, table, totals],
   )
 
   const save = useMutation({
@@ -1139,6 +1145,7 @@ function inboundColumns(
     onEnteredBy: (id: string) => void
     onView: (row: FinishedGoodsReceiptRow) => void
     onEdit: (row: FinishedGoodsReceiptRow) => void
+    canReceive: boolean
     onReceive: (row: FinishedGoodsReceiptRow) => void
     receivingId: string | null
   },
@@ -1249,7 +1256,7 @@ function inboundColumns(
       align: 'center',
       render: (row) => (
         <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', alignItems: 'center' }}>
-          {row.status === 'PENDING' ? (
+          {row.status === 'PENDING' && opts.canReceive ? (
             <Button
               size="small"
               variant="contained"

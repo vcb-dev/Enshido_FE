@@ -45,7 +45,7 @@ export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeMo
               name="model3dUrl"
               label="Link file 3D"
               required
-              rules={{ validate: (value) => (value.trim() ? true : 'Nhập link file 3D') }}
+              rules={{ validate: (value) => (String(value).trim() ? true : 'Nhập link file 3D') }}
               helperText="VD: link Drive, Cloudinary hoặc kho file nội bộ"
               size="small"
               fullWidth

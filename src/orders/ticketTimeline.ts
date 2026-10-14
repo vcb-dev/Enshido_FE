@@ -1,5 +1,5 @@
 import type { ProductionStatus, StageCode, StageEntry, StatusLog, SubTicket } from '../api/productionOrders'
-import { STAGE_LABEL, STATUS_META } from './catalog'
+import { isSelfTakeStage, STAGE_LABEL, STATUS_META } from './catalog'
 
 /** Một dòng trên quy trình của phiếu con. */
 export type TicketTimelineRow = {
@@ -24,8 +24,11 @@ export const TICKET_PHASE_STATUSES: ProductionStatus[] = [
   'STONE_DEFECT',
   'WAIT_ENGRAVING',
   'ENGRAVING',
+  'WAIT_POLISHING',
   'POLISHING',
+  'WAIT_PLATING',
   'PLATING',
+  'PLATED',
 ]
 
 const WORKING: Record<StageCode, ProductionStatus> = {
@@ -36,19 +39,20 @@ const WORKING: Record<StageCode, ProductionStatus> = {
   PLATING: 'PLATING',
 }
 
-/** Trạng thái phiếu chờ vào khâu — khâu không có trạng thái "Chờ" riêng thì giữ trạng thái khâu. */
+/** Trạng thái phiếu chờ vào khâu. */
 const WAITING: Record<StageCode, ProductionStatus> = {
   FILING: 'WAIT_FILING',
   STONE_SETTING: 'WAIT_STONE',
   ENGRAVING: 'WAIT_ENGRAVING',
-  POLISHING: 'POLISHING',
-  PLATING: 'PLATING',
+  POLISHING: 'WAIT_POLISHING',
+  PLATING: 'WAIT_PLATING',
 }
 
 const KEEPER_STAGES: StageCode[] = ['FILING', 'STONE_SETTING']
 
-function outcomeStatusOf(ticket: Pick<SubTicket, 'outcome' | 'outcomeStage'>): ProductionStatus {
-  if (ticket.outcome === 'FINISH') return 'FINISHING'
+function outcomeStatusOf(ticket: Pick<SubTicket, 'outcome' | 'outcomeStage' | 'status'>): ProductionStatus {
+  // Đạt: U Đã xi xong cho tới khi kho thành phẩm nhận đủ cả đơn (V) — lấy trạng thái thật của phiếu.
+  if (ticket.outcome === 'FINISH') return ticket.status === 'FINISHING' ? 'FINISHING' : 'PLATED'
   if (ticket.outcomeStage === 'FILING') return 'FILING_DEFECT'
   if (ticket.outcomeStage === 'STONE_SETTING') return 'STONE_DEFECT'
   return 'DEFECT'
@@ -118,7 +122,9 @@ export function ticketTimeline(
     }
   })
 
-  if (ticket.pendingStage) {
+  // Đánh bóng / Xi tự mở sau QC: dòng "Chờ đánh bóng / Chờ xi" ở trên đã nói phiếu đang chờ thợ nhận.
+  const selfTakeWaiting = isSelfTakeStage(ticket.pendingStage) && !ticket.claimedByName && entries.length > 0
+  if (ticket.pendingStage && !selfTakeWaiting) {
     const worker = ticket.claimedByName
     step(
       'pending',

@@ -21,11 +21,11 @@ function ticket(no: number, over: Partial<SubTicket> = {}): SubTicket {
 }
 
 function order(subTickets: SubTicket[], stages: StageEntry[], status = 'FILING'): ProductionOrderDetail {
-  return { code: 'A002', status, subTickets, stages } as unknown as ProductionOrderDetail
+  return { code: 'A002', status, stoneCount: null, stoneWeight: '1', subTickets, stages } as unknown as ProductionOrderDetail
 }
 
 describe('openableStages — phiếu con xong trước được đi tiếp', () => {
-  it.each([{ stoneCount: 0 }, { stoneSkipped: true }])('đơn không có đá đi từ Nguội sang Khắc (%j)', (skip) => {
+  it.each([{ stoneWeight: null }, { stoneWeight: '0.0000' }, { stoneSkipped: true }])('đơn không có đá đi từ Nguội sang Khắc (%j)', (skip) => {
     const o = { ...order([ticket(1)], [done('t1', 'FILING')]), ...skip }
     expect(openableStages(o).byTicket.get(1)?.[0]).toBe('ENGRAVING')
     expect(openableStages(o).byTicket.get(1)).not.toContain('STONE_SETTING')

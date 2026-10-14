@@ -27,8 +27,11 @@ export type ProductionStatus =
   | 'STONE_DEFECT'
   | 'WAIT_ENGRAVING'
   | 'ENGRAVING'
+  | 'WAIT_POLISHING'
   | 'POLISHING'
+  | 'WAIT_PLATING'
   | 'PLATING'
+  | 'PLATED'
   | 'DEFECT'
   | 'FINISHING'
   | 'DELIVERED'
@@ -645,7 +648,6 @@ export type CastingPayload = {
 
 export type SubTicketPayload = { qty: number; note?: string }
 
-export type SubTicketHandoverPayload = Omit<HandoverPayload, 'craftsmanUserId'>
 
 /** Một dòng ở màn "Phiếu của tôi". */
 export type MyTicketItem = {
@@ -1040,11 +1042,6 @@ export function createReworkApi(code: string, stageId: string) {
   return orderFetch(orderPath(code, `/stages/${stageId}/rework`), { method: 'POST', body: '{}' })
 }
 
-/** Thủ kho đánh dấu / bỏ đánh dấu đơn không có đá (bỏ khâu Vào đá — mô tả luồng bước 17). */
-export function skipStoneApi(code: string, skip: boolean) {
-  return orderFetch(orderPath(code, '/skip-stone'), { method: 'POST', body: JSON.stringify({ skip }) })
-}
-
 /** Thủ kho xác nhận sau QC (Nguội / Vào đá): nhập kho BTP hàng đạt, NVL hàng lỗi + thừa. */
 export function confirmStageApi(code: string, stageId: string) {
   return orderFetch(orderPath(code, `/stages/${stageId}/confirm`), { method: 'POST', body: '{}' })
@@ -1270,7 +1267,7 @@ export function openOrderStageApi(code: string, stage: StageCode) {
   })
 }
 
-/** Thủ kho chỉ định thợ và ghi thông tin giao Nguội / Vào đá; thợ nhận hàng sau đó mới xuất kho. */
+/** Thủ kho chỉ định thợ và ghi thông tin giao (Nguội / Vào đá / Khắc); thợ nhận hàng sau đó mới xuất kho. */
 export function assignOrderApi(
   code: string,
   payload: HandoverPayload & { stage: StageCode },
@@ -1311,13 +1308,19 @@ export function acceptSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/accept'), { method: 'POST', body: '{}' })
 }
 
-/** Thợ được chỉ định nhận hàng trên phiếu mẹ Nguội / Vào đá. */
+/** Thợ được chỉ định nhận hàng trên phiếu mẹ. */
 export function acceptOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/accept'), { method: 'POST', body: '{}' })
 }
 
+/** Thợ tự nhận phiếu mẹ đang chờ Đánh bóng / Xi — nhận là vào làm ngay. */
 export function claimOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/claim'), { method: 'POST', body: '{}' })
+}
+
+/** Thợ tự nhận phiếu con đang chờ Đánh bóng / Xi — nhận là vào làm ngay. */
+export function claimSubTicketApi(code: string, no: number) {
+  return orderFetch(ticketPath(code, no, '/claim'), { method: 'POST', body: '{}' })
 }
 
 export function unclaimSubTicketApi(code: string, no: number) {
@@ -1326,21 +1329,6 @@ export function unclaimSubTicketApi(code: string, no: number) {
 
 export function unclaimOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/claim'), { method: 'DELETE' })
-}
-
-/** Người giao cân bạc và xác nhận giao khâu cho thợ đã nhận. */
-export function handoverSubTicketApi(code: string, no: number, payload: SubTicketHandoverPayload) {
-  return orderFetch(ticketPath(code, no, '/handover'), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function handoverOrderApi(code: string, payload: SubTicketHandoverPayload) {
-  return orderFetch(orderPath(code, '/work/handover'), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
 }
 
 /**

@@ -16,8 +16,8 @@ type IntakeProductSpecsDialogProps = {
     productWeightGram: number
     castingTreeWeightGram?: number
     images: OrderImage[]
-    stoneCount3d: number | null
-    stoneWeight3dGram: number | null
+    stoneCount3d?: number | null
+    stoneWeight3dGram?: number | null
   }) => void
 }
 
@@ -63,7 +63,8 @@ export function IntakeProductSpecsDialog({
             productWeightGram: Number(waxWeight),
             ...(order?.hasMold ? { castingTreeWeightGram: Number(treeWeight) } : {}),
             images,
-            ...stoneSpecsPayload(stone),
+            // Đơn cần 3D đã khai đá ở bước link 3D — không gửi lại để khỏi ghi đè.
+            ...(order?.hasMold ? stoneSpecsPayload(stone) : {}),
           })
         }
       >
