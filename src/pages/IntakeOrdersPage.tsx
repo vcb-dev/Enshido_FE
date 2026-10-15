@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -29,6 +29,7 @@ import {
   FormTextField,
   PageHeader,
   RowActions,
+  TextInput,
   type Column,
 } from '../components/ui'
 import {
@@ -54,6 +55,7 @@ type FormValues = {
   productName: string
   qty: string
   trackingCode: string
+  customerCode: string
   placedBy: string
   description: string
   createdDate: string
@@ -64,13 +66,44 @@ type FormValues = {
 
 const digitsOnly = (value: string) => value.replace(/\D/g, '')
 
+/** Mọi đơn tạo mới đều là hàng của VCB — ô khách hàng chỉ để xem. */
+const CUSTOMER_NAME = 'VCB'
+
+/** Khối field có viền trong hộp thoại tạo / sửa đơn, gom nhóm cho dễ đọc. */
+function FormSection({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        p: 1.75,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1.5,
+      }}
+    >
+      {title ? (
+        <Typography
+          variant="caption"
+          sx={{ fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}
+          color="text.secondary"
+        >
+          {title}
+        </Typography>
+      ) : null}
+      {children}
+    </Box>
+  )
+}
+
 function todayYmd() {
   return new Date().toISOString().slice(0, 10)
 }
 
 function validateDueDate(value: unknown, createdDate: string, allowPast: boolean) {
   const due = String(value ?? '').trim()
-  if (!due) return true
+  if (!due) return 'Chọn ngày trả hàng'
   if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
   if (createdDate && due < createdDate) return 'Ngày trả hàng không được trước ngày tạo'
   return true
@@ -82,6 +115,7 @@ const EMPTY: FormValues = {
   productName: '',
   qty: '',
   trackingCode: '',
+  customerCode: '',
   placedBy: '',
   description: '',
   createdDate: todayYmd(),
@@ -216,7 +250,7 @@ export function IntakeOrdersPage() {
       },
       {
         key: 'requestType',
-        header: 'Yêu cầu làm hàng',
+        header: 'Loại đơn hàng',
         width: 140,
         render: (row) => <RequestTypeChip type={row.requestType} />,
       },
@@ -235,6 +269,20 @@ export function IntakeOrdersPage() {
         render: (row) => row.trackingCode?.trim() || '—',
       },
       {
+        key: 'customerCode',
+        header: 'Mã của khách',
+        width: 120,
+        ellipsis: true,
+        render: (row) => row.customerCode?.trim() || '—',
+      },
+      {
+        key: 'customerName',
+        header: 'Khách hàng',
+        width: 110,
+        ellipsis: true,
+        render: (row) => row.customerName?.trim() || '—',
+      },
+      {
         key: 'placedBy',
         header: 'Người đặt đơn',
         width: 120,
@@ -243,7 +291,7 @@ export function IntakeOrdersPage() {
       },
       {
         key: 'description',
-        header: 'Mô tả / Yêu cầu',
+        header: 'Yêu cầu khác',
         width: 260,
         ellipsis: true,
         render: (row) => row.description || '—',
@@ -308,7 +356,7 @@ export function IntakeOrdersPage() {
         }
         variant="grid"
         fixedLayout
-        minWidth={1500}
+        minWidth={1730}
         cardBreakpoint={false}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
@@ -390,6 +438,7 @@ function IntakeOrderFormDialog({
         productName: row.productName ?? '',
         qty: String(row.qty),
         trackingCode: row.trackingCode ?? '',
+        customerCode: row.customerCode ?? '',
         placedBy: row.placedBy,
         description: row.description,
         createdDate: row.createdDate,
@@ -398,6 +447,7 @@ function IntakeOrderFormDialog({
         detailImages: intakeDetailImages(row.images),
       })
     } else {
+      // Ngày tạo không hiện trên form: đơn mới luôn tính là hôm nay.
       form.reset({ ...EMPTY, createdDate: todayYmd(), placedBy: operatorName })
     }
   }, [open, row, operatorName, form])
@@ -411,10 +461,11 @@ function IntakeOrderFormDialog({
       productName: values.productName.trim(),
       qty,
       trackingCode: values.trackingCode.trim() || null,
+      customerCode: values.customerCode.trim() || null,
       placedBy: values.placedBy.trim(),
       description: values.description.trim(),
       createdDate: values.createdDate,
-      dueDate: values.dueDate.trim() || null,
+      dueDate: values.dueDate.trim(),
       images: imagesForSave(row, values.detailImages),
       editReason: values.editReason?.trim() || undefined,
     })
@@ -437,91 +488,93 @@ function IntakeOrderFormDialog({
       onExited={onExited}
       editLog={row ? { entityType: 'intake_order_form', entityId: row.id } : undefined}
     >
-      <FormRow columns={row ? 3 : 2} sx={{ pt: 0.5 }}>
-        <FormTextField<FormValues>
-          name="createdDate"
-          label="Ngày tạo"
-          type="date"
-          required
-          readOnly={Boolean(row)}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        {row ? (
-          // Trạng thái chỉ đổi qua nút thao tác của từng bước, form sửa không nhảy bước được.
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              Trạng thái:
-            </Typography>
-            <IntakeOrderStatusChips order={row} />
-          </Stack>
-        ) : null}
-        <FormSelect<FormValues>
-          name="requestType"
-          label="Yêu cầu làm hàng"
-          required
-          clearable
-          options={REQUEST_TYPES.map((type) => ({
-            value: type,
-            label: REQUEST_TYPE_META[type].label,
-          }))}
-        />
-      </FormRow>
+      {row ? (
+        // Trạng thái chỉ đổi qua nút thao tác của từng bước, form sửa không nhảy bước được.
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', pt: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            Trạng thái:
+          </Typography>
+          <IntakeOrderStatusChips order={row} />
+        </Stack>
+      ) : null}
 
-      <FormTextField<FormValues>
-        name="productName"
-        label="Tên sản phẩm"
-        required
-        autoFocus={!row}
-      />
-
-      <FormRow columns={3}>
-        <FormTextField<FormValues>
-          name="qty"
-          label="Số lượng cần lên đơn"
-          required
-          transform={digitsOnly}
-          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-          rules={{ validate: (v) => (Number(v) >= 1 ? true : 'Số lượng phải từ 1') }}
-        />
-        <FormTextField<FormValues>
-          name="dueDate"
-          label="Thời gian cần trả hàng"
-          type="date"
-          clearable
-          slotProps={{ inputLabel: { shrink: true } }}
-          onBlur={() => void form.trigger('dueDate')}
-          rules={{
-            validate: (value, values) =>
-              validateDueDate(value, values.createdDate, Boolean(row)),
-          }}
-        />
-        <FormTextField<FormValues> name="trackingCode" label="Mã sản phẩm" clearable />
-      </FormRow>
-
-      <FormTextField<FormValues> name="placedBy" label="Người đặt đơn" required readOnly />
-
-      <FormTextField<FormValues>
-        name="description"
-        label="Mô tả / Yêu cầu sản phẩm"
-        required
-        multiline
-        minRows={3}
-        maxRows={10}
-      />
-
-      <Controller
-        control={form.control}
-        name="detailImages"
-        render={({ field }) => (
-          <ImageUploadField
-            label="Ảnh chi tiết"
-            kind="DETAIL"
-            value={field.value}
-            onChange={field.onChange}
-            onUploadingChange={onDetailUploading}
+      <FormSection title="Sản phẩm">
+        <FormRow columns={2}>
+          <FormSelect<FormValues>
+            name="requestType"
+            label="Loại đơn hàng"
+            required
+            clearable
+            options={REQUEST_TYPES.map((type) => ({
+              value: type,
+              label: REQUEST_TYPE_META[type].label,
+            }))}
           />
-        )}
-      />
+          <FormTextField<FormValues>
+            name="productName"
+            label="Tên sản phẩm"
+            required
+            autoFocus={!row}
+          />
+        </FormRow>
+
+        <FormRow columns={3}>
+          <FormTextField<FormValues>
+            name="qty"
+            label="Số lượng cần lên đơn"
+            required
+            transform={digitsOnly}
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            rules={{ validate: (v) => (Number(v) >= 1 ? true : 'Số lượng phải từ 1') }}
+          />
+          <FormTextField<FormValues>
+            name="dueDate"
+            label="Thời gian cần trả hàng"
+            type="date"
+            required
+            slotProps={{ inputLabel: { shrink: true } }}
+            onBlur={() => void form.trigger('dueDate')}
+            rules={{
+              validate: (value, values) =>
+                validateDueDate(value, values.createdDate, Boolean(row)),
+            }}
+          />
+          <FormTextField<FormValues> name="trackingCode" label="Mã sản phẩm" clearable />
+        </FormRow>
+
+        <FormTextField<FormValues>
+          name="description"
+          label="Yêu cầu khác"
+          multiline
+          minRows={3}
+          maxRows={10}
+        />
+      </FormSection>
+
+      <FormSection title="Khách hàng">
+        <FormRow columns={3}>
+          <FormTextField<FormValues> name="customerCode" label="Mã của khách" clearable />
+          {/* Khách cố định VCB, server tự gán — không để trong form để khỏi lưu theo giá trị cũ. */}
+          <TextInput label="Khách hàng" value={row?.customerName?.trim() || CUSTOMER_NAME} readOnly />
+          <FormTextField<FormValues> name="placedBy" label="Người đặt đơn" required readOnly />
+        </FormRow>
+      </FormSection>
+
+      <FormSection>
+        <Controller
+          control={form.control}
+          name="detailImages"
+          render={({ field }) => (
+            <ImageUploadField
+              label="Ảnh chi tiết"
+              kind="DETAIL"
+              value={field.value}
+              onChange={field.onChange}
+              onUploadingChange={onDetailUploading}
+            />
+          )}
+        />
+      </FormSection>
     </CrudDialogShell>
   )
 }

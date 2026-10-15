@@ -1,5 +1,5 @@
 import { Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
-import { WAX_TO_SILVER_RATIO } from './castingEstimate'
+import { WAX_TO_SILVER_RATIO, type SilverEstimate } from './castingEstimate'
 import type { ReactNode } from 'react'
 import { formatQty } from '../api/inventory'
 import { FormQtyField } from '../components/ui'
@@ -110,20 +110,20 @@ export function CastingSlipMetalTable({
 
 export function CastingSlipMetalFormTable<T extends FieldValues>({
   issueNames,
-  estimateGram,
+  estimate,
   issueTotal,
   disabled,
 }: {
   issueNames: { s999: Path<T>; hoi: Path<T>; s925: Path<T> }
-  estimateGram: number
+  estimate: SilverEstimate
   issueTotal: number
   disabled?: boolean
 }) {
-  const estimateText = estimateGram > 0 ? `${formatQty(String(estimateGram))} g` : '—'
-  const lines: Array<{ label: string; issue: Path<T> }> = [
-    { label: 'S999 (g)', issue: issueNames.s999 },
-    { label: 'Hội (g)', issue: issueNames.hoi },
-    { label: 'S925 (g)', issue: issueNames.s925 },
+  const gramText = (value: number) => (value > 0 ? `${formatQty(String(value))} g` : '—')
+  const lines: Array<{ label: string; issue: Path<T>; estimate: number }> = [
+    { label: 'S999 (g)', issue: issueNames.s999, estimate: estimate.s999 },
+    { label: 'Hội (g)', issue: issueNames.hoi, estimate: estimate.masterAlloy },
+    { label: 'S925 (g)', issue: issueNames.s925, estimate: estimate.s925 },
   ]
   return (
     <Table size="small" sx={tableSx}>
@@ -139,7 +139,7 @@ export function CastingSlipMetalFormTable<T extends FieldValues>({
         {lines.map((row) => (
           <TableRow key={row.label}>
             <TableCell>{row.label}</TableCell>
-            <TableCell align="right">{estimateText}</TableCell>
+            <TableCell align="right">{gramText(row.estimate)}</TableCell>
             <TableCell sx={{ minWidth: 140 }}>
               <FormQtyField<T>
                 name={row.issue}
@@ -158,7 +158,7 @@ export function CastingSlipMetalFormTable<T extends FieldValues>({
         <TableRow>
           <TableCell sx={{ fontWeight: 700 }}>Tổng</TableCell>
           <TableCell align="right" sx={{ fontWeight: 700 }}>
-            {estimateText}
+            {gramText(estimate.total)}
           </TableCell>
           <TableCell align="right" sx={{ fontWeight: 700 }}>
             {formatQty(String(issueTotal))} g

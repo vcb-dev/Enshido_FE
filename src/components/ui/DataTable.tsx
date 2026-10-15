@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -397,20 +397,38 @@ export function DataTable<T, S = never>({
       : defaultCell((row as Record<string, unknown>)[(column.field as string) ?? column.key])
   }
 
-  /** Một ô thân bảng — dùng chung cho dòng cha và dòng con để canh lề / cắt chữ giống nhau. */
-  function bodyCell(column: Column<T, S>, content: ReactNode) {
-    const sticky = isStickyEnd(column)
-    const cell = (
-      <TableCell
-        key={column.key}
-        align={column.align ?? (column.numeric ? 'right' : undefined)}
-        className={stickyClassName(column, sticky)}
-        sx={{
+  // Kiểu dáng ô chỉ phụ thuộc định nghĩa cột, không phụ thuộc dữ liệu dòng. Tính sẵn một lần
+  // cho mỗi cột thay vì dựng lại object `sx` ở từng ô (19 cột × 25 dòng là 475 object mỗi lần vẽ).
+  const bodyCellStyle = useMemo(() => {
+    const byKey = new Map<
+      string,
+      { align: Column<T, S>['align']; className?: string; sx: SxProps<Theme> }
+    >()
+    for (const column of columns) {
+      const sticky = isStickyEnd(column)
+      byKey.set(column.key, {
+        align: column.align ?? (column.numeric ? 'right' : undefined),
+        className: stickyClassName(column, sticky),
+        sx: {
           ...(column.numeric ? NUMERIC_SX : null),
           ...(column.ellipsis ? ELLIPSIS_SX : null),
           ...column.cellSx,
           ...(sticky ? STICKY_END_CELL_SX : null),
-        }}
+        },
+      })
+    }
+    return byKey
+  }, [columns])
+
+  /** Một ô thân bảng — dùng chung cho dòng cha và dòng con để canh lề / cắt chữ giống nhau. */
+  function bodyCell(column: Column<T, S>, content: ReactNode) {
+    const style = bodyCellStyle.get(column.key)
+    const cell = (
+      <TableCell
+        key={column.key}
+        align={style?.align}
+        className={style?.className}
+        sx={style?.sx}
       >
         {content}
       </TableCell>

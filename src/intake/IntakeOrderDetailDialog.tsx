@@ -60,6 +60,10 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
               <Typography variant="body2">
                 <strong>Tên SP:</strong> {order.productName?.trim() || '—'}
               </Typography>
+              <Typography variant="body2">
+                <strong>Khách hàng:</strong> {order.customerName?.trim() || '—'}
+                {order.customerCode?.trim() ? ` · Mã của khách ${order.customerCode.trim()}` : null}
+              </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                 <IntakeOrderStatusChips order={order} />
                 <RequestTypeChip type={order.requestType} />

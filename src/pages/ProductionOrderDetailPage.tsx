@@ -1606,7 +1606,7 @@ function InfoGrid({ order }: { order: ProductionOrderDetail }) {
           bgcolor: '#f8fafb',
         }}
       >
-        <VerticalInfoList items={[{ label: 'Mô tả / Yêu cầu sản phẩm', value: order.description }]} />
+        <VerticalInfoList items={[{ label: 'Yêu cầu khác', value: order.description }]} />
       </Box>
 
       <FieldGroup title="Đơn hàng" fields={orderFields} />

@@ -35,6 +35,7 @@ const CACHED_ORDER = {
   ...ORDER,
   productName: null,
   customerName: null,
+  customerCode: null,
   subTickets: [],
   subTicketTotals: { qty: 0 },
   materialRequests: [],

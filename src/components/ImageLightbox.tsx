@@ -63,11 +63,14 @@ export function ImageLightbox({
     thumb?.scrollIntoView({ block: 'nearest', inline: 'center' })
   }, [open, current])
 
-  const src = image ? cloudinaryFit(image.url, 1600) : ''
+  // Đóng thì dựng luôn cây Dialog cũng phí: hộp thoại này được gắn kèm từng ô ảnh trên bảng.
+  if (!open || !image) return null
+
+  const src = cloudinaryFit(image.url, 1600)
 
   return (
     <Dialog
-      open={open}
+      open
       onClose={onClose}
       fullScreen={fullScreen}
       maxWidth={false}
@@ -109,40 +112,36 @@ export function ImageLightbox({
           go(end < start ? 1 : -1)
         }}
       >
-        {image ? (
-          <>
-            {loadedUrl !== src ? (
-              <Skeleton
-                variant="rounded"
-                sx={{
-                  position: 'absolute',
-                  top: 16,
-                  bottom: 16,
-                  left: { xs: 16, sm: 56 },
-                  right: { xs: 16, sm: 56 },
-                  height: 'auto',
-                  bgcolor: 'rgba(255,255,255,0.08)',
-                }}
-              />
-            ) : null}
-            <Box
-              key={src}
-              component="img"
-              src={src}
-              alt=""
-              onLoad={() => setLoadedUrl(src)}
-              onError={() => setLoadedUrl(src)}
-              sx={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-                userSelect: 'none',
-                opacity: loadedUrl === src ? 1 : 0,
-                transition: 'opacity 150ms',
-              }}
-            />
-          </>
+        {loadedUrl !== src ? (
+          <Skeleton
+            variant="rounded"
+            sx={{
+              position: 'absolute',
+              top: 16,
+              bottom: 16,
+              left: { xs: 16, sm: 56 },
+              right: { xs: 16, sm: 56 },
+              height: 'auto',
+              bgcolor: 'rgba(255,255,255,0.08)',
+            }}
+          />
         ) : null}
+        <Box
+          key={src}
+          component="img"
+          src={src}
+          alt=""
+          onLoad={() => setLoadedUrl(src)}
+          onError={() => setLoadedUrl(src)}
+          sx={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            userSelect: 'none',
+            opacity: loadedUrl === src ? 1 : 0,
+            transition: 'opacity 150ms',
+          }}
+        />
         {many ? (
           <>
             <NavButton side="left" label="Ảnh trước" onClick={() => go(-1)}>
@@ -180,6 +179,7 @@ export function ImageLightbox({
                   component="img"
                   src={cloudinaryThumb(item.url, 112)}
                   alt=""
+                  loading="lazy"
                   sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </ButtonBase>

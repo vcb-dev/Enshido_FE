@@ -48,10 +48,10 @@ export function CastingSlipIssueDialog({
   }, [slip, form])
 
   const [s999, hoi, s925] = useWatch({ control: form.control, name: ['s999', 'hoi', 's925'] })
-  const estimateGram = silverEstimateFromWax(slip?.waxWeightGram)
+  const estimate = silverEstimateFromWax(slip?.waxWeightGram)
   const issueParts = [s999, hoi, s925].map(optionalGram)
   const enteredTotal = issueParts.reduce<number>((sum, n) => sum + (n != null && !Number.isNaN(n) ? n : 0), 0)
-  const issueTotal = enteredTotal > 0 ? enteredTotal : estimateGram
+  const issueTotal = enteredTotal > 0 ? enteredTotal : estimate.total
   const busy = saving || uploading
 
   return (
@@ -77,7 +77,7 @@ export function CastingSlipIssueDialog({
             </Typography>
             <CastingSlipMetalFormTable<Values>
               issueNames={{ s999: 's999', hoi: 'hoi', s925: 's925' }}
-              estimateGram={estimateGram}
+              estimate={estimate}
               issueTotal={issueTotal}
               disabled={busy}
             />

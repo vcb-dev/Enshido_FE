@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { ProductionOrderDetail, StageEntry, SubTicket } from '../api/productionOrders'
-import { summarizeSubTickets } from './orderCache'
+import { QueryClient } from '@tanstack/react-query'
+import type {
+  ProductionOrderDetail,
+  StageEntry,
+  StatusLog,
+  SubTicket,
+} from '../api/productionOrders'
+import { seedProductionOrder, summarizeSubTickets } from './orderCache'
 
 const RETURNED = '2026-09-21T02:58:00.000Z'
 
@@ -81,5 +87,43 @@ describe('summarizeSubTickets — dòng danh sách vá từ bản chi tiết', (
 
   it('đơn chưa chia phiếu con thì rỗng', () => {
     expect(summarizeSubTickets(order([], []))).toEqual([])
+  })
+})
+
+function log(id: string, changedAt: string): StatusLog {
+  return { id, fromStatus: null, toStatus: 'FILING', note: null, changedBy: null, changedAt }
+}
+
+function orderWithLogs(statusLogs: StatusLog[]): ProductionOrderDetail {
+  return { code: 'A001', subTickets: [], stages: [], images: [], statusLogs } as unknown as ProductionOrderDetail
+}
+
+describe('seedProductionOrder — lịch sử trạng thái', () => {
+  it('ghép log cũ khi bản trả về sau thao tác chỉ kèm vài dòng mới nhất', () => {
+    const client = new QueryClient()
+    const loaded = orderWithLogs([
+      log('c', '2026-10-03T00:00:00.000Z'),
+      log('b', '2026-10-02T00:00:00.000Z'),
+      log('a', '2026-10-01T00:00:00.000Z'),
+    ])
+    client.setQueryData(['production-order', 'A001'], loaded)
+
+    seedProductionOrder(client, orderWithLogs([log('d', '2026-10-04T00:00:00.000Z')]))
+
+    const merged = client.getQueryData<ProductionOrderDetail>(['production-order', 'A001'])
+    expect(merged?.statusLogs.map((item) => item.id)).toEqual(['d', 'c', 'b', 'a'])
+  })
+
+  it('bản đầy đủ từ GET chi tiết thì thay hẳn, không giữ log đã xoá', () => {
+    const client = new QueryClient()
+    client.setQueryData(['production-order', 'A001'], orderWithLogs([log('a', '2026-10-01T00:00:00.000Z')]))
+
+    seedProductionOrder(
+      client,
+      orderWithLogs([log('b', '2026-10-02T00:00:00.000Z'), log('c', '2026-10-03T00:00:00.000Z')]),
+    )
+
+    const next = client.getQueryData<ProductionOrderDetail>(['production-order', 'A001'])
+    expect(next?.statusLogs.map((item) => item.id)).toEqual(['b', 'c'])
   })
 })

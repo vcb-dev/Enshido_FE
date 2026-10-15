@@ -128,7 +128,6 @@ export type CastCastWorkerOption = {
 }
 
 export type CreateCastingSlipPayload = {
-  slipDate: string
   intakeOrderIds: string[]
   assignedUserId: string
   estimateS999Gram?: number

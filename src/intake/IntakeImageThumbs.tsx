@@ -29,13 +29,16 @@ export function IntakeImageThumbs({ label, images }: { label: string; images: Or
           />
         ))}
       </Stack>
-      <ImageLightbox
-        images={images.map((image) => ({ id: image.publicId, url: image.url }))}
-        index={viewing}
-        title={label}
-        onIndexChange={setViewing}
-        onClose={() => setViewing(null)}
-      />
+      {/* Chỉ dựng khi mở: ô này nằm trên từng dòng bảng, mỗi instance là một useMediaQuery. */}
+      {viewing != null ? (
+        <ImageLightbox
+          images={images.map((image) => ({ id: image.publicId, url: image.url }))}
+          index={viewing}
+          title={label}
+          onIndexChange={setViewing}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
     </>
   )
 }

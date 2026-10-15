@@ -6,6 +6,7 @@ import type {
   ProductionOrderDetail,
   ProductionOrderListResponse,
   ProductionOrderRow,
+  StatusLog,
   SubTicketSummary,
 } from '../api/productionOrders'
 import { invalidateBtpStock } from './btpStock'
@@ -16,6 +17,24 @@ import {
 } from './productionStatusCountsRefresh'
 import { notifyWorkflowChanged } from '../workflow/workflowBroadcast'
 
+/**
+ * Bản trả về sau thao tác chỉ kèm mấy dòng log mới nhất (payload nhẹ cho nhanh) — ghép
+ * với log đã tải để phần Lịch sử trên màn chi tiết không bị cụt.
+ */
+function mergeStatusLogs(
+  previous: ProductionOrderDetail,
+  next: ProductionOrderDetail,
+): StatusLog[] {
+  if (next.statusLogs.length >= previous.statusLogs.length) return next.statusLogs
+  const seen = new Set(next.statusLogs.map((log) => log.id))
+  const merged = [...next.statusLogs]
+  for (const log of previous.statusLogs) {
+    if (!seen.has(log.id)) merged.push(log)
+  }
+  // Máy chủ trả mới nhất trước; giữ đúng thứ tự đó sau khi ghép.
+  return merged.sort((a, b) => b.changedAt.localeCompare(a.changedAt))
+}
+
 /** Mutation không trả ảnh QC — giữ ảnh đã có trong cache để màn chi tiết không chớp trắng. */
 function keepLoadedImages(
   previous: ProductionOrderDetail | undefined,
@@ -25,6 +44,7 @@ function keepLoadedImages(
   const byId = new Map(previous.stages.map((entry) => [entry.id, entry.images]))
   return {
     ...next,
+    statusLogs: mergeStatusLogs(previous, next),
     images: next.images.length > 0 ? next.images : previous.images,
     stages: next.stages.map((entry) => ({
       ...entry,
@@ -198,6 +218,7 @@ function toListRow(order: ProductionOrderDetail): ProductionOrderRow {
     trackingCode: order.trackingCode,
     closedBy: order.closedBy,
     customerName: order.customerName ?? null,
+    customerCode: order.customerCode ?? null,
     description: order.description,
     stoneColor: order.stoneColor,
     stoneTypes: order.stoneTypes,

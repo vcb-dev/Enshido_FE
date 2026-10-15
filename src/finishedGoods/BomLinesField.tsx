@@ -161,6 +161,7 @@ export function NvlSpecGrid({ material }: { material: FinishedGoodsNvlOption }) 
           component="img"
           src={cloudinaryThumb(material.imageUrl, 160)}
           alt=""
+          loading="lazy"
           sx={{
             width: 72,
             height: 72,

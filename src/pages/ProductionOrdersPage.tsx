@@ -64,7 +64,6 @@ import {
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTableParams } from '../hooks/useTableParams'
 import {
-  formatDateShort,
   formatDateTime,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
@@ -149,7 +148,6 @@ export function ProductionOrdersPage() {
     filters: {
       status: '',
       requestType: '',
-      receivedDate: '',
       dueDate: '',
     },
   })
@@ -174,7 +172,6 @@ export function ProductionOrdersPage() {
     status: statusTab,
     requestType: params.requestType as ProductionRequestType | '',
     search,
-    receivedDate: params.receivedDate,
     dueDate: params.dueDate,
     sort: params.sort || undefined,
     dir: params.sort ? params.dir : undefined,
@@ -495,12 +492,6 @@ export function ProductionOrdersPage() {
             options: requestTypeOptions,
             onChange: (id) => table.setFilter({ requestType: id }),
           },
-          receivedDate: (
-            <ColumnHeaderDate
-              value={params.receivedDate}
-              onChange={(value) => table.setFilter({ receivedDate: value })}
-            />
-          ),
           dueDate: (
             <ColumnHeaderDate
               value={params.dueDate}
@@ -516,7 +507,6 @@ export function ProductionOrdersPage() {
       user,
       navigate,
       params.dueDate,
-      params.receivedDate,
       params.requestType,
       params.search,
       statusFilterValue,
@@ -561,7 +551,6 @@ export function ProductionOrdersPage() {
     params.status ||
       params.requestType ||
       params.search.trim() ||
-      params.receivedDate ||
       params.dueDate,
   )
 
@@ -640,7 +629,6 @@ export function ProductionOrdersPage() {
                 table.setFilter({
                   status: '',
                   requestType: '',
-                  receivedDate: '',
                   dueDate: '',
                 })
               }}
@@ -949,7 +937,6 @@ function orderColumns(
       options: Array<{ id: string; name: string }>
       onChange: (id: string) => void
     }
-    receivedDate: ReactNode
     dueDate: ReactNode
   },
 ): Column<ProductionListRow, ProductionListChild>[] {
@@ -1032,10 +1019,7 @@ function orderColumns(
       width: 136,
       sortable: true,
       card: 'meta',
-      render: (row) =>
-        row.kind === 'intake'
-          ? formatDateShort(row.row.createdAt)
-          : formatDateTime(row.row.createdAt),
+      render: (row) => formatDateTime(row.row.createdAt),
       renderSub: (sub) => formatDateTime(sub.createdAt),
     },
     {
@@ -1111,6 +1095,20 @@ function orderColumns(
       render: (row) => row.row.trackingCode?.trim() || '—',
     },
     {
+      key: 'customerCode',
+      header: 'Mã khách hàng',
+      width: 110,
+      ellipsis: true,
+      render: (row) => row.row.customerCode?.trim() || '—',
+    },
+    {
+      key: 'customerName',
+      header: 'Khách hàng',
+      width: 110,
+      ellipsis: true,
+      render: (row) => row.row.customerName?.trim() || '—',
+    },
+    {
       key: 'closedBy',
       header: 'Người chốt',
       width: 120,
@@ -1120,7 +1118,7 @@ function orderColumns(
     },
     {
       key: 'description',
-      header: 'Mô tả / Yêu cầu sản phẩm',
+      header: 'Yêu cầu khác',
       width: 260,
       ellipsis: true,
       render: (row) => row.row.description || '—',
@@ -1153,22 +1151,13 @@ function orderColumns(
       },
     },
     {
-      key: 'receivedDate',
-      header: 'Ngày đặt đơn',
-      width: 148,
-      sortable: true,
-      filter: filters.receivedDate,
-      render: (row) =>
-        row.kind === 'intake' ? formatDateShort(row.row.createdDate) : formatStockedDate(row.row.receivedDate),
-    },
-    {
       key: 'dueDate',
       header: 'Ngày cần trả',
       width: 156,
       filter: filters.dueDate,
       render: (row) =>
         row.kind === 'intake' ? (
-          row.row.dueDate ? formatDateShort(row.row.dueDate) : '—'
+          formatStockedDate(row.row.dueDate)
         ) : (
           <DeadlineCell row={row.row} />
         ),

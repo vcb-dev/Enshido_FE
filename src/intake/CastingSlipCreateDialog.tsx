@@ -24,29 +24,22 @@ import {
   type CastingSlipCandidate,
   type CreateCastingSlipPayload,
 } from '../api/castingSlips'
-import { DialogForm, FormAutocomplete, FormTextField, SearchInput } from '../components/ui'
+import { DialogForm, FormAutocomplete, SearchInput } from '../components/ui'
 import { CastingSlipMetalTable } from './CastingSlipMetalTable'
 import { silverEstimateFromWax } from './castingEstimate'
 import { formatQty } from '../api/inventory'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { formatDateShort } from '../orders/catalog'
 
-function todayIsoDate() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 type Values = {
   picked: CastingSlipCandidate[]
   assignedUserId: string | null
-  slipDate: string
 }
 
 function emptyValues(): Values {
   return {
     picked: [],
     assignedUserId: null,
-    slipDate: todayIsoDate(),
   }
 }
 
@@ -117,8 +110,8 @@ export function CastingSlipCreateDialog({
     () => picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
     [picked],
   )
-  const estimateGram = silverEstimateFromWax(waxTotal)
-  const estimateText = estimateGram > 0 ? String(estimateGram) : null
+  const estimate = silverEstimateFromWax(waxTotal)
+  const gramText = (value: number) => (value > 0 ? String(value) : null)
   const allVisibleChecked = rows.length > 0 && rows.every((row) => selected.has(row.id))
   const formError = pickedField.fieldState.error?.message ?? form.formState.errors.root?.message
 
@@ -138,16 +131,15 @@ export function CastingSlipCreateDialog({
   }
 
   function submit(values: Values) {
-    const estimate = silverEstimateFromWax(
+    const picked = silverEstimateFromWax(
       values.picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
     )
     onSave({
-      slipDate: values.slipDate,
       intakeOrderIds: values.picked.map((row) => row.id),
       assignedUserId: values.assignedUserId!,
-      estimateS999Gram: estimate || undefined,
-      estimateMasterAlloyGram: estimate || undefined,
-      estimateS925Gram: estimate || undefined,
+      estimateS999Gram: picked.s999 || undefined,
+      estimateMasterAlloyGram: picked.masterAlloy || undefined,
+      estimateS925Gram: picked.s925 || undefined,
     })
   }
 
@@ -236,19 +228,11 @@ export function CastingSlipCreateDialog({
               noOptionsText="Không có thợ đúc"
             />
 
-            <FormTextField<Values>
-              name="slipDate"
-              size="small"
-              type="date"
-              label="Ngày phiếu"
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 170, maxWidth: 220 }}
-            />
             <CastingSlipMetalTable
-              estimateS999Gram={estimateText}
-              estimateMasterAlloyGram={estimateText}
-              estimateS925Gram={estimateText}
-              estimateTotalGram={estimateText}
+              estimateS999Gram={gramText(estimate.s999)}
+              estimateMasterAlloyGram={gramText(estimate.masterAlloy)}
+              estimateS925Gram={gramText(estimate.s925)}
+              estimateTotalGram={gramText(estimate.total)}
             />
             <Typography variant="caption" color="text.secondary">
               Lưu và in phiếu trước. Thủ kho nhập trọng lượng thực xuất lúc cấp vật tư — để trống thì lấy số

@@ -170,6 +170,7 @@ function ImageThumbs({ images }: { images: MaterialImage[] }) {
               component="img"
               src={cloudinaryThumb(image.url, 144)}
               alt=""
+              loading="lazy"
               sx={{
                 width: '100%',
                 height: '100%',

@@ -34,6 +34,10 @@ export type IntakeOrder = {
   productName: string
   qty: number
   trackingCode: string | null
+  /** Mã khách tự đặt cho sản phẩm. */
+  customerCode: string | null
+  /** Luôn là VCB — form tạo đơn không cho chọn khách khác. */
+  customerName: string
   placedBy: string
   description: string
   createdDate: string
@@ -73,10 +77,12 @@ export type UpsertIntakeOrderPayload = {
   productName: string
   qty: number
   trackingCode?: string | null
+  customerCode?: string | null
   placedBy: string
   description: string
   createdDate: string
-  dueDate?: string | null
+  /** Bắt buộc từ form tạo đơn — server chặn nếu trống. */
+  dueDate: string
   status?: IntakeOrderStatus
   images: OrderImage[]
   editReason?: string

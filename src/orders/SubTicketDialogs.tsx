@@ -322,12 +322,33 @@ function lastStageOf(order: ProductionOrderDetail, ticket: SubTicket): StageCode
   return last?.stage ?? null
 }
 
+type OpenableStages = {
+  stages: StageCode[]
+  idle: SubTicket[]
+  byTicket: Map<number, StageCode[]>
+  skipped: (no: number, stage: StageCode) => StageCode[]
+}
+
+/** Đơn đổi là object mới trong cache query nên kết quả cũ tự hết hiệu lực. */
+const openableCache = new WeakMap<ProductionOrderDetail, OpenableStages>()
+
 /**
  * Các khâu mở được cho từng phiếu con đang rảnh — không lùi khâu trừ khi đơn đang làm lại.
  * Mỗi phiếu đi khâu của riêng nó: phiếu xong trước thì mở khâu sau luôn, không đợi các phiếu
  * còn đang làm khâu cũ (khớp luật ở BE).
+ *
+ * Mỗi dòng phiếu con gọi một lần mà hàm quét toàn bộ khâu của đơn, nên kết quả được giữ lại
+ * theo bản đơn để đơn chia nhiều phiếu không tính đi tính lại.
  */
-export function openableStages(order: ProductionOrderDetail) {
+export function openableStages(order: ProductionOrderDetail): OpenableStages {
+  const hit = openableCache.get(order)
+  if (hit) return hit
+  const value = computeOpenableStages(order)
+  openableCache.set(order, value)
+  return value
+}
+
+function computeOpenableStages(order: ProductionOrderDetail): OpenableStages {
   const reworking = !isInStage(order.status)
   const idle = order.subTickets.filter((ticket) => ticket.state === 'IDLE')
   const byTicket = new Map<number, StageCode[]>()

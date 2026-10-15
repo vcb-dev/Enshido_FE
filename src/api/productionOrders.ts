@@ -84,6 +84,8 @@ export type ProductionOrderRow = {
   intakeOrderCode?: string | null
   closedBy: string
   customerName: string | null
+  /** Mã khách tự đặt cho sản phẩm, nhập từ form tạo đơn. */
+  customerCode: string | null
   description: string
   stoneColor: string | null
   stoneTypes: string[]
@@ -869,6 +871,7 @@ function fillOrderRow(row: SparseOrderRow): ProductionOrderRow {
     subTickets: row.subTickets ?? [],
     productName: row.productName ?? null,
     customerName: row.customerName ?? null,
+    customerCode: row.customerCode ?? null,
   }
 }
 
@@ -877,6 +880,7 @@ function fillOrderDetail(order: SparseOrderDetail): ProductionOrderDetail {
     ...order,
     productName: order.productName ?? order.btp?.name ?? null,
     customerName: order.customerName ?? null,
+    customerCode: order.customerCode ?? null,
     subTickets: order.subTickets ?? [],
     // Máy chủ chưa biết phiếu con thì cũng chưa chia được gì.
     subTicketTotals: order.subTicketTotals ?? { qty: 0 },
