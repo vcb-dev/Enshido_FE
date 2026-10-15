@@ -53,6 +53,8 @@ export type FinishedGoodsStockRow = {
   receivedAt: string
   receivedByName: string
   unitCost: string
+  /** TL bạc một chiếc sau Xi đã trừ đá (g); null = chưa tính được, phiếu xuất nhập TL tay. */
+  netWeightPerUnit?: string | null
   stockValue: string
   costWarnings: number
   availability: AvailabilityCode
@@ -107,6 +109,10 @@ export type ShipmentListRow = {
   createdByName: string
   createdAt: string
   autoIssued?: boolean
+  /** Thủ kho đã lập, chờ kế toán xác nhận — đơn chưa tính Đã giao. */
+  pendingApproval: boolean
+  approvedAt: string | null
+  approvedByName: string | null
   lines: ShipmentListLine[]
 }
 
@@ -117,8 +123,20 @@ export type ShipmentLine = {
   sizeLabel: string | null
   size: string | null
   mainMaterial: string | null
+  requestType: ProductionRequestType
+  /** Mã khách tự đặt cho sản phẩm (cột "Mã của khách" trên lệnh). */
+  customerCode: string | null
+  orderCustomerName: string | null
   imageUrl: string | null
   qty: number
+  netWeightPerUnit: string | null
+  /** TL tính tiền (g) = (TL sau Xi − TL đá) × 0,95. */
+  weightGram: string | null
+  materialUnitPrice: string | null
+  laborAmount: string | null
+  stoneAmount: string | null
+  otherAmount: string | null
+  /** Thành tiền ÷ SL — giữ cho sổ xuất. */
   unitPrice: string
   amount: string
   /** Giá vốn chụp lúc lập / sửa phiếu. */
@@ -134,11 +152,17 @@ export type ShipmentDetail = {
   paymentMethod: string | null
   note: string | null
   autoIssued?: boolean
+  /** Thủ kho đã lập, chờ kế toán xác nhận — đơn chưa tính Đã giao. */
+  pendingApproval: boolean
+  approvedAt: string | null
+  approvedByName: string | null
   createdByName: string
   createdAt: string
   updatedAt: string
   lastPrintedAt: string | null
   dataChangedAt: string
+  /** Mọi dòng đã đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác. */
+  printable: boolean
   lines: ShipmentLine[]
   totals: { qty: number; amount: string; costAmount: string }
 }
@@ -148,7 +172,16 @@ export type ShipmentPayload = {
   customerName: string
   paymentMethod?: string
   note?: string
-  lines: Array<{ orderCode: string; qty: number; unitPrice: string; note?: string }>
+  lines: Array<{
+    orderCode: string
+    qty: number
+    weightGram?: string
+    materialUnitPrice?: string
+    laborAmount?: string
+    stoneAmount?: string
+    otherAmount?: string
+    note?: string
+  }>
   editReason?: string
 }
 
@@ -301,6 +334,11 @@ export function updateShipmentApi(code: string, payload: ShipmentPayload) {
 
 export function deleteShipmentApi(code: string) {
   return apiFetch<{ success: boolean }>(shipmentPath(code), { method: 'DELETE' })
+}
+
+/** Bước 23: kế toán xác nhận phiếu xuất — đơn mới tính Đã giao. */
+export function approveShipmentApi(code: string) {
+  return apiFetch<ShipmentDetail>(shipmentPath(code, '/approve'), { method: 'POST', body: '{}' })
 }
 
 export function markShipmentPrintedApi(code: string) {

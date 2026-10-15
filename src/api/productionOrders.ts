@@ -491,7 +491,14 @@ export type ProductionOrderDetail = Omit<
     receivedByName: string
     shippedQty: number
     remainingQty: number
-    shipments: Array<{ code: string; shippedAt: string; customerName: string; qty: number }>
+    shipments: Array<{
+      code: string
+      shippedAt: string
+      customerName: string
+      qty: number
+      /** Phiếu chờ kế toán xác nhận — chưa tính vào Đã giao. */
+      pendingApproval: boolean
+    }>
   } | null
   lastPrintedAt: string | null
   dataChangedAt: string

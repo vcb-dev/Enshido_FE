@@ -84,10 +84,17 @@ export function OutboundView({
           {row.destWarehouseName ? (
             <DetailFact label="Đến kho" value={row.destWarehouseName} />
           ) : null}
+          {row.castingSlipCode ? <DetailFact label="Phiếu đúc" value={row.castingSlipCode} /> : null}
           {row.autoIssued ? (
             <DetailFact
               label="Loại phiếu"
-              value={<Chip size="small" variant="outlined" label="Tự tạo từ đơn sản xuất" />}
+              value={
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={row.castingSlipCode ? 'Tự tạo khi cấp vật tư đúc' : 'Tự tạo từ đơn sản xuất'}
+                />
+              }
             />
           ) : null}
         </Box>

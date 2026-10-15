@@ -557,6 +557,8 @@ export type OutboundRow = {
   materialId: string | null
   /** Mã đơn sản xuất dùng NVL này. */
   productionOrderCode: string | null
+  /** Phiếu đúc cấp bạc / hội — phiếu xuất tự tạo lúc cấp vật tư đúc. */
+  castingSlipCode?: string | null
   /** Phiếu do lên Đơn BTP tự tạo — chỉ sửa / xoá qua đơn. */
   autoIssued?: boolean
   destWarehouseCode?: string | null

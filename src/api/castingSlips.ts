@@ -195,6 +195,10 @@ export function issueCastingSlipApi(
     issueS999Gram?: number
     issueMasterAlloyGram?: number
     issueS925Gram?: number
+    /** Mã NVL xuất cho từng dòng — bắt buộc khi dòng đó có số gram (kể cả lấy theo ước tính). */
+    issueS999MaterialId?: string
+    issueMasterAlloyMaterialId?: string
+    issueS925MaterialId?: string
   },
 ) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/issue`, {
@@ -273,7 +277,7 @@ export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload
   })
 }
 
-/** Mã NVL (gram, kho NVL chính) nhận phần cây còn lại lúc xác nhận đúc. */
+/** Mã NVL (gram, kho NVL chính): nhận phần cây còn lại khi cắt cây, xuất bạc / hội khi cấp vật tư đúc. */
 export type RestMaterialOptions = {
   defaultName: string
   items: { id: string; sku: string | null; name: string }[]

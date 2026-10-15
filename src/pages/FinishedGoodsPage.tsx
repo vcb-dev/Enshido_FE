@@ -67,6 +67,9 @@ type OutboundMoveRow = {
   issuedBy: string
   receivedBy: string
   autoIssued: boolean
+  /** Phiếu chờ kế toán xác nhận; đã xác nhận thì không sửa được. */
+  pendingApproval: boolean
+  approved: boolean
 }
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
@@ -141,6 +144,9 @@ function FinishedGoodsStockTable() {
   const dialog = useCrudDialog<FinishedGoodsStockRow>()
   const table = useTableParams({ pageSize: 8, filters: { unit: '', status: 'ALL', flowStatus: 'ALL' } })
   const { params } = table
+  // Thêm / sửa thành phẩm là việc của thủ kho — khớp quyền phía BE.
+  const { user } = useAuth()
+  const canEdit = can(user, Permission.WAREHOUSE_KEEPER)
 
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
@@ -236,10 +242,10 @@ function FinishedGoodsStockTable() {
         },
         {
           onView: dialog.openView,
-          onEdit: dialog.openEdit,
+          onEdit: canEdit ? dialog.openEdit : undefined,
         },
       ),
-    [dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, params.unit, statusFilterOptions, table, totals, unitOptions],
+    [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, params.unit, statusFilterOptions, table, totals, unitOptions],
   )
 
   const save = useMutation({
@@ -289,7 +295,7 @@ function FinishedGoodsStockTable() {
             row={row}
             index={indexOffset + index + 1}
             onView={() => dialog.openView(row)}
-            onEdit={() => dialog.openEdit(row)}
+            onEdit={canEdit ? () => dialog.openEdit(row) : undefined}
           />
         )}
         toolbar={
@@ -300,9 +306,11 @@ function FinishedGoodsStockTable() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button variant="contained" onClick={dialog.openCreate}>
-              {profile.createLabel}
-            </Button>
+            {canEdit ? (
+              <Button variant="contained" onClick={dialog.openCreate}>
+                {profile.createLabel}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -393,7 +401,7 @@ function FinishedGoodsInboundTable() {
       enteredByOptions,
       onEnteredBy: (id) => table.setFilter({ enteredBy: id }),
       onView: dialog.openView,
-      onEdit: dialog.openEdit,
+      onEdit: canReceive ? dialog.openEdit : undefined,
       canReceive,
       onReceive: (row) => setReceiving(row),
       receivingId: receive.isPending ? (receive.variables?.row.id ?? null) : null,
@@ -450,9 +458,11 @@ function FinishedGoodsInboundTable() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button variant="contained" onClick={dialog.openCreate}>
-              {profile.inboundLabel}
-            </Button>
+            {canReceive ? (
+              <Button variant="contained" onClick={dialog.openCreate}>
+                {profile.inboundLabel}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -483,6 +493,9 @@ function FinishedGoodsOutboundTable() {
   const { params } = table
   const dialog = useCrudDialog<OutboundMoveRow>()
   const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
+  // Lập / sửa phiếu xuất là việc của thủ kho; kế toán chỉ xem và xác nhận ở trang chi tiết.
+  const { user } = useAuth()
+  const canEdit = can(user, Permission.WAREHOUSE_KEEPER)
 
   const stock = useQuery({
     queryKey: ['finished-goods-stock'],
@@ -590,9 +603,10 @@ function FinishedGoodsOutboundTable() {
         receivedByOptions: receiverOptions,
         onReceivedBy: (id) => table.setFilter({ receivedBy: id }),
         onView: (row) => navigate(`/finished-goods/shipments/${row.shipmentCode}`),
-        onEdit: dialog.openEdit,
+        onEdit: canEdit ? dialog.openEdit : undefined,
       }),
     [
+      canEdit,
       dialog.openEdit,
       issuerOptions,
       navigate,
@@ -638,9 +652,11 @@ function FinishedGoodsOutboundTable() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button variant="contained" onClick={() => setCreating({ orderCode: null })}>
-              {profile.outboundLabel}
-            </Button>
+            {canEdit ? (
+              <Button variant="contained" onClick={() => setCreating({ orderCode: null })}>
+                {profile.outboundLabel}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -683,6 +699,8 @@ function flattenShipments(items: ShipmentListRow[]): OutboundMoveRow[] {
       issuedBy: shipment.createdByName,
       receivedBy: shipment.customerName,
       autoIssued: Boolean(shipment.autoIssued),
+      pendingApproval: shipment.pendingApproval,
+      approved: shipment.approvedAt != null,
     })),
   )
 }
@@ -922,7 +940,7 @@ function stockColumns(
   filters: { name: ReactNode; unit: HeaderFilter; status: HeaderFilter; flowStatus: HeaderFilter },
   actions: {
     onView: (row: FinishedGoodsStockRow) => void
-    onEdit: (row: FinishedGoodsStockRow) => void
+    onEdit?: (row: FinishedGoodsStockRow) => void
   },
 ): Column<FinishedGoodsStockRow>[] {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
@@ -1061,7 +1079,10 @@ function stockColumns(
       card: 'actions',
       header: 'Hành động',
       align: 'center',
-      render: (row) => <RowActions onView={() => actions.onView(row)} onEdit={() => actions.onEdit(row)} />,
+      render: (row) => {
+        const onEdit = actions.onEdit
+        return <RowActions onView={() => actions.onView(row)} onEdit={onEdit ? () => onEdit(row) : undefined} />
+      },
     },
   ]
 }
@@ -1075,7 +1096,7 @@ function StockCard({
   row: FinishedGoodsStockRow
   index: number
   onView: () => void
-  onEdit: () => void
+  onEdit?: () => void
 }) {
   return (
     <Paper variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
@@ -1144,7 +1165,7 @@ function inboundColumns(
     enteredByOptions: Array<{ id: string; name: string }>
     onEnteredBy: (id: string) => void
     onView: (row: FinishedGoodsReceiptRow) => void
-    onEdit: (row: FinishedGoodsReceiptRow) => void
+    onEdit?: (row: FinishedGoodsReceiptRow) => void
     canReceive: boolean
     onReceive: (row: FinishedGoodsReceiptRow) => void
     receivingId: string | null
@@ -1269,7 +1290,7 @@ function inboundColumns(
           ) : null}
           <RowActions
             onView={() => opts.onView(row)}
-            onEdit={() => opts.onEdit(row)}
+            onEdit={opts.onEdit ? () => opts.onEdit?.(row) : undefined}
             editDisabled={row.status === 'PENDING'}
             titles={{
               edit: row.status === 'PENDING' ? 'Nhập kho trước khi chỉnh sửa' : 'Chỉnh sửa',
@@ -1293,7 +1314,7 @@ function outboundColumns(
     receivedByOptions: Array<{ id: string; name: string }>
     onReceivedBy: (id: string) => void
     onView: (row: OutboundMoveRow) => void
-    onEdit: (row: OutboundMoveRow) => void
+    onEdit?: (row: OutboundMoveRow) => void
   },
 ): Column<OutboundMoveRow>[] {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
@@ -1386,22 +1407,38 @@ function outboundColumns(
       ),
     },
     {
+      key: 'approval',
+      header: 'Kế toán',
+      width: 120,
+      render: (row) =>
+        row.pendingApproval ? (
+          <Chip size="small" variant="outlined" color="warning" label="Chờ xác nhận" />
+        ) : row.approved ? (
+          <Chip size="small" variant="outlined" color="success" label="Đã xác nhận" />
+        ) : (
+          '—'
+        ),
+    },
+    {
       key: 'actions',
       card: 'actions',
       header: 'Hành động',
       width: 120,
       align: 'center',
-      render: (row) => (
-        <RowActions
-          onView={() => opts.onView(row)}
-          onEdit={row.autoIssued ? undefined : () => opts.onEdit(row)}
-          titles={
-            row.autoIssued
-              ? { view: 'Xem', edit: 'Phiếu tự tạo từ đơn sản xuất — không sửa tay được' }
-              : undefined
-          }
-        />
-      ),
+      render: (row) => {
+        const onEdit = opts.onEdit
+        return (
+          <RowActions
+            onView={() => opts.onView(row)}
+            onEdit={row.autoIssued || row.approved || !onEdit ? undefined : () => onEdit(row)}
+            titles={
+              row.autoIssued
+                ? { view: 'Xem', edit: 'Phiếu tự tạo từ đơn sản xuất — không sửa tay được' }
+                : undefined
+            }
+          />
+        )
+      },
     },
   ]
 }
