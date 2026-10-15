@@ -233,13 +233,14 @@ export function CastingOrdersPage() {
       issueS999Gram?: number
       issueMasterAlloyGram?: number
       issueS925Gram?: number
-    }) =>
-      issueCastingSlipApi(vars.slip.id, {
-        images: vars.images,
-        issueS999Gram: vars.issueS999Gram,
-        issueMasterAlloyGram: vars.issueMasterAlloyGram,
-        issueS925Gram: vars.issueS925Gram,
-      }),
+      issueS999MaterialId?: string
+      issueMasterAlloyMaterialId?: string
+      issueS925MaterialId?: string
+    }) => {
+      const { slip, ...payload } = vars
+      // Chuyển nguyên payload của dialog — liệt kê tay từng trường từng làm rơi mất mã NVL xuất
+      return issueCastingSlipApi(slip.id, payload)
+    },
     onSuccess: (updated) => {
       setIssueTarget(null)
       toast.success(`Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn sang Chờ đúc`)
