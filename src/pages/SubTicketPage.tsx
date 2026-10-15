@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { defectScopeText, formatDateShort, isSelfTakeStage, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { defectScopeText, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -373,7 +373,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
             disabled={busy}
             onClick={() => setQcEntry(openEntry)}
           >
-            {openEntry.defectReportedAt ? 'QC cân hàng lỗi' : 'QC cân lại'}
+            {qcReturnLabel(openEntry.stage, openEntry.defectReportedAt != null)}
           </Button>,
         )
       }

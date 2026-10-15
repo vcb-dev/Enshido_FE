@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { confirmStageApi, createReworkApi, type ProductionOrderDetail, type StageEntry } from '../api/productionOrders'
-import { defectScopeText, isReceiptStage, STAGE_LABEL } from './catalog'
+import { defectScopeText, isReceiptStage, productionClosed, STAGE_LABEL, ticketReworks } from './catalog'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock } from './nvlStock'
 import { KeeperConfirmDialog } from './KeeperConfirmDialog'
@@ -26,12 +26,12 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
   const allReworks = order.reworks ?? []
   const entries = order.stages.filter((entry) => entry.subTicketNo === ticketNo)
   const pending = entries.find((entry) => isReceiptStage(entry.stage) && entry.returnedAt && !entry.confirmedAt)
-  const reworks = allReworks.filter((item) => item.ticketNo === ticketNo)
+  const reworks = ticketReworks(order, ticketNo)
   const reworkable = entries.filter((entry) =>
     isReceiptStage(entry.stage) && entry.confirmedAt && (entry.defectQty ?? 0) > 0 &&
     !allReworks.some((item) => item.entryId === entry.id),
   )
-  const active = order.status !== 'DELIVERED' && !order.finishedGoods
+  const active = order.status !== 'DELIVERED' && !productionClosed(order)
   const confirm = useOrderMutation(
     order.code,
     (entry: StageEntry) => confirmStageApi(order.code, entry.id),
@@ -51,7 +51,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
 
   return (
     <Stack spacing={1}>
-      <ReworkChildren reworks={reworks} ticketCode={ticketCode} />
+      <ReworkChildren reworks={reworks} ticketCode={ticketCode} orderCode={order.code} />
       {canKeeper && active ? (
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           {pending ? (

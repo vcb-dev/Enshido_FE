@@ -45,6 +45,20 @@ export function SubTicketToolbar({
 
   const tickets = order.subTickets
   if (tickets.length === 0 && !canManage) return null
+  // `subTicketTotals` không tính hàng lỗi (phần đó do lệnh bù làm lại) — dòng "Đã chia" ghi số đã
+  // chia thật rồi tách phần lỗi ra, kẻo đọc như còn hàng chưa chia.
+  const splitQty = tickets.reduce((sum, ticket) => sum + ticket.qty, 0)
+  const defectQty = Math.max(0, splitQty - order.subTicketTotals.qty)
+  const reworkedQty = (order.reworks ?? []).reduce((sum, item) => sum + item.qty, 0)
+  const defectNote = defectQty
+    ? ` · ${defectQty} sp lỗi — ${
+        reworkedQty >= defectQty
+          ? 'đã tạo lệnh bù'
+          : reworkedQty > 0
+            ? `đã tạo lệnh bù ${reworkedQty} sp`
+            : 'chưa tạo lệnh bù'
+      }`
+    : ''
   /**
    * Đơn chỉ có một phiếu (đơn từ đúc luôn có sẵn, hoặc vừa hủy chia): phiếu đó chính là đơn, chưa
    * phải "phiếu con". Còn nguyên (chưa mở khâu / giao thợ / xin NVL) thì chia lại được — phiếu này
@@ -100,7 +114,7 @@ export function SubTicketToolbar({
           <Typography variant="caption" color="text.secondary">
             {single
               ? `Cả đơn làm trên một phiếu ${single.code} · ${single.qty} sp`
-              : `Đã chia ${order.subTicketTotals.qty}/${order.qty} sp`}
+              : `Đã chia ${splitQty}/${order.qty} sp${defectNote}`}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>

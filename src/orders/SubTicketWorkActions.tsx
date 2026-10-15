@@ -23,7 +23,7 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { ReworkChildren } from './ReworkChildren'
-import { defectScopeText, STAGE_LABEL } from './catalog'
+import { defectScopeText, productionClosed, STAGE_LABEL, ticketReworks } from './catalog'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
 import { useOrderMutation } from './useOrderMutation'
 
@@ -63,7 +63,7 @@ export function SubTicketWorkActions({
   const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
   const last = entries.at(-1)
   const openEntry = entries.find((entry) => !entry.returnedAt)
-  const active = !locked && !order.finishedGoods
+  const active = !locked && !productionClosed(order)
   // Tự giao khâu kế tiếp của phiếu; làm lại thì bắt đầu từ khâu mặc định.
   const openable = openableStages(order).byTicket.get(ticket.no) ?? []
   const assignableStages = openable.slice(0, 1)
@@ -90,7 +90,7 @@ export function SubTicketWorkActions({
   )
   // Hàng lỗi Nguội / Vào đá đã được thủ kho xác nhận: thủ kho bấm "Tạo phiếu bù" cho từng lần QC nhận,
   // đơn bù đi lại từ bước sáp rồi thành phiếu con mới của đơn này.
-  const reworks = (order.reworks ?? []).filter((item) => item.ticketNo === ticket.no)
+  const reworks = ticketReworks(order, ticket.no)
   const reworkable = entries.find(
     (entry) =>
       entry.confirmedAt != null &&
@@ -114,7 +114,7 @@ export function SubTicketWorkActions({
         </Alert>
       ) : null}
 
-      <ReworkChildren reworks={reworks} ticketCode={ticket.code} />
+      <ReworkChildren reworks={reworks} ticketCode={ticket.code} orderCode={order.code} />
 
       <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         {ticket.state === 'IDLE' && active ? (

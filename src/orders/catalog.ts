@@ -1,5 +1,7 @@
 import type {
+  ProductionOrderDetail,
   ProductionRequestType,
+  ReworkChainItem,
   ProductionSource,
   ProductionStatus,
   StageCode,
@@ -88,6 +90,37 @@ export const STAGE_LABEL: Record<StageCode, string> = {
   ENGRAVING: 'Khắc',
   POLISHING: 'Đánh bóng',
   PLATING: 'Xi',
+}
+
+/**
+ * Lệnh bù của một phiếu (phiếu con `ticketNo`, null = phiếu mẹ), gồm cả lệnh bù tiếp cho lệnh bù
+ * lại lỗi. Bản chi tiết cũ chưa có `reworkChain` thì chỉ có lệnh bù trực tiếp.
+ */
+export function ticketReworks(
+  order: Pick<ProductionOrderDetail, 'reworks' | 'reworkChain'>,
+  ticketNo: number | null,
+): ReworkChainItem[] {
+  if (order.reworkChain) return order.reworkChain.filter((item) => (item.rootTicketNo ?? null) === ticketNo)
+  return (order.reworks ?? []).filter((item) => item.ticketNo === ticketNo)
+}
+
+/**
+ * Cả đơn đã chốt xong sản xuất: có phiếu nhập kho thành phẩm và không còn phiếu con nào đang
+ * chạy. Đơn chia phiếu con thì phiếu đạt đầu tiên đã sinh phiếu nhập kho — các phiếu còn lại vẫn
+ * làm tiếp. Cùng luật với `assertOrderActive` ở BE.
+ */
+export function productionClosed(order: Pick<ProductionOrderDetail, 'finishedGoods' | 'subTickets'>) {
+  return order.finishedGoods != null && order.subTickets.every((ticket) => ticket.outcome != null)
+}
+
+/** Khắc → khâu trước Xi: QC chỉ chụp ảnh xác nhận, không cân — hao hụt cả chặng tính ở Xi. Cùng luật với BE. */
+export const PHOTO_ONLY_STAGES: StageCode[] = ['ENGRAVING', 'POLISHING']
+
+/** Nhãn nút QC nhận lại một khâu: khâu chỉ chụp ảnh thì "QC xác nhận", còn lại "QC cân lại". */
+export function qcReturnLabel(stage: StageCode | null, defectReported: boolean) {
+  const photoOnly = stage != null && PHOTO_ONLY_STAGES.includes(stage)
+  if (defectReported) return photoOnly ? 'QC xác nhận hàng lỗi' : 'QC cân hàng lỗi'
+  return photoOnly ? 'QC xác nhận' : 'QC cân lại'
 }
 
 /** Trạng thái đơn đang nằm ở một khâu trên phiếu; ngoài các trạng thái này thì được làm lại từ khâu bất kỳ. */

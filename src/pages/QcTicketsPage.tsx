@@ -30,7 +30,7 @@ import {
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { CardGroupSkeleton } from '../components/ui'
-import { formatDateShort, STAGE_LABEL, STAGES } from '../orders/catalog'
+import { formatDateShort, qcReturnLabel, STAGE_LABEL, STAGES } from '../orders/catalog'
 import { applyProductionOrderDetail } from '../orders/orderCache'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
@@ -213,7 +213,7 @@ export function QcTicketsPage() {
           onClick={() => void openQc(entry)}
           sx={{ minWidth: 132 }}
         >
-          {entry.defectReportedAt ? 'QC cân hàng lỗi' : 'QC cân lại'}
+          {qcReturnLabel(entry.stage, entry.defectReportedAt != null)}
         </Button>
       )
     }

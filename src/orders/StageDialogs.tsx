@@ -32,6 +32,7 @@ import { FormImageField } from './FormImageField'
 import { KcsImages } from './KcsImages'
 import {
   formatDateShort,
+  PHOTO_ONLY_STAGES,
   SILVER_LOSS_LIMITS,
   silverLossLevel,
   STAGE_LABEL,
@@ -450,6 +451,8 @@ export function KcsReturnDialog({
   const showDefectReason = reasonRequired
   const defectSection = keeperStage && outcome !== 'ok'
   const handedQty = entry?.handedQty ?? null
+  /** Khắc / Đánh bóng: QC chỉ chụp ảnh xác nhận, không cân — hao hụt cả chặng tính ở Xi. */
+  const photoOnly = entry != null && PHOTO_ONLY_STAGES.includes(entry.stage)
 
   /** Đổi kết quả QC: điền sẵn số theo kết quả mới, xoá số của phần không còn dùng. */
   function chooseOutcome(next: QcOutcome) {
@@ -605,7 +608,7 @@ export function KcsReturnDialog({
   const revising = entry?.returnedAt != null
   const title = revising
     ? `QC sửa lại — ${entry ? STAGE_LABEL[entry.stage] : ''} (lần ${(entry?.kcsRevisionCount ?? 0) + 1}/3)`
-    : `QC cân lại — ${entry ? STAGE_LABEL[entry.stage] : ''}`
+    : `${photoOnly ? 'QC xác nhận' : 'QC cân lại'} — ${entry ? STAGE_LABEL[entry.stage] : ''}`
 
   async function submit(values: ReturnValues) {
     const back =
@@ -614,6 +617,7 @@ export function KcsReturnDialog({
       Number(values.silverRecoveredWeight || 0) +
       Number(values.scrapS999Weight || 0)
     if (
+      !photoOnly &&
       silverLimit != null &&
       !(await confirmWeights([
         ratioWarning(back, 'Nhận lại + thu hồi', silverLimit, 'bạc vào khâu', {
@@ -627,14 +631,14 @@ export function KcsReturnDialog({
     }
     onSave({
       returnedQty: values.returnedQty !== '' ? Number(values.returnedQty) : null,
-      returnedSilverWeight: values.returnedSilverWeight,
+      returnedSilverWeight: photoOnly ? null : values.returnedSilverWeight,
       defectQty: keeperStage ? (defectSection ? Number(values.defectQty || 0) : 0) : null,
       // Lỗi toàn bộ: không có hàng đạt — bỏ qua số đạt còn sót trong form.
       ...(keeperStage && outcome === 'all' ? { returnedQty: 0, returnedSilverWeight: '0' } : {}),
       defectReason: keeperStage && !defectSection ? null : values.defectReason.trim() || null,
       scrapS999Weight: keeperStage ? values.scrapS999Weight || null : null,
-      btpRecoveredWeight: values.btpRecoveredWeight || null,
-      silverRecoveredWeight: values.silverRecoveredWeight || null,
+      btpRecoveredWeight: photoOnly ? null : values.btpRecoveredWeight || null,
+      silverRecoveredWeight: photoOnly ? null : values.silverRecoveredWeight || null,
       ...(stoneStage && entry?.stoneLines.length
         ? {
             returnedStones: values.returnedStones
@@ -670,7 +674,9 @@ export function KcsReturnDialog({
             : 'Lưu QC'
           : revising
             ? 'Lưu bản sửa & chuyển khâu'
-            : 'Lưu cân & chuyển khâu'
+            : photoOnly
+              ? 'Xác nhận & chuyển khâu'
+              : 'Lưu cân & chuyển khâu'
       }
       maxWidth="sm"
       onClose={onClose}
@@ -686,6 +692,11 @@ export function KcsReturnDialog({
             {btpWeight && !stoneStage ? 'TL BTP (bạc + đá) giao' : 'TL bạc giao'}:{' '}
             <b>{entry.handedSilverWeight ? formatQty(entry.handedSilverWeight) : '—'}</b> g
           </Typography>
+          {entry.stage === 'PLATING' ? (
+            <Typography variant="body2" color="text.secondary">
+              Khắc, Đánh bóng không cân — hao hụt ở đây tính gộp từ lúc giao Khắc.
+            </Typography>
+          ) : null}
           {issuedMetal ? (
             <Typography variant="body2">
               Bạc xuất thêm theo yêu cầu: <b>{formatQty(entry.issuedMetalWeight ?? '0')}</b> g → bạc vào khâu{' '}
@@ -854,8 +865,14 @@ export function KcsReturnDialog({
         </Box>
       ) : null}
 
+      {photoOnly ? (
+        <Alert severity="info" sx={{ py: 0.25 }}>
+          Khâu {STAGE_LABEL[entry!.stage]} QC chỉ chụp ảnh xác nhận, không cân lại — hao hụt tính ở khâu Xi.
+        </Alert>
+      ) : null}
+
       {keeperStage && outcome === 'all' ? null : (
-      <FormRow columns={2}>
+      <FormRow columns={photoOnly ? 1 : 2}>
         <FormTextField<ReturnValues>
           name="returnedQty"
           label="Số lượng sản phẩm đạt"
@@ -875,6 +892,7 @@ export function KcsReturnDialog({
             },
           }}
         />
+        {photoOnly ? null : (
         <FormQtyField<ReturnValues>
           name="returnedSilverWeight"
           label={btpWeight ? 'Trọng lượng sản phẩm đạt — BTP (bạc + đá) (g)' : 'Trọng lượng sản phẩm đạt (g)'}
@@ -886,6 +904,7 @@ export function KcsReturnDialog({
           }
           rules={silverRules('returnedSilverWeight')}
         />
+        )}
       </FormRow>
       )}
 
@@ -994,7 +1013,7 @@ export function KcsReturnDialog({
             />
           </FormRow>
         </>
-      ) : (
+      ) : photoOnly ? null : (
         <FormRow columns={2}>
           <FormQtyField<ReturnValues>
             name="btpRecoveredWeight"
