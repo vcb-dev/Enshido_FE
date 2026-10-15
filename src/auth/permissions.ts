@@ -29,6 +29,8 @@ export const Permission = {
   WAREHOUSE_KEEPER: 'warehouse.keeper',
   /** QC: nhận lại hàng, chốt Lỗi / Hoàn thiện. */
   PRODUCTION_QC: 'production.qc',
+  /** Kế toán: xác nhận phiếu xuất hàng (ghi nhận doanh thu, đơn sang Đã giao). */
+  ACCOUNTING_APPROVE: 'accounting.approve',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]

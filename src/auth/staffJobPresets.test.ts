@@ -35,4 +35,12 @@ describe('vai trò ở màn Nhân sự', () => {
     expect(saved).toContain(Permission.INTAKE_APPROVE)
     expect(saved).toContain(Permission.WAREHOUSE_KEEPER)
   })
+
+  it('kế toán lưu kèm quyền xác nhận phiếu xuất, mở lại vẫn là Kế toán', () => {
+    expect(staffJobSelectOptions().map((o) => o.value)).toContain('accountant')
+    const saved = allowedScreensForSave('accountant', [Permission.SCREEN_WAREHOUSE_THANH_PHAM])
+    expect(saved).toContain(Permission.ACCOUNTING_APPROVE)
+    expect(saved).not.toContain(Permission.WAREHOUSE_KEEPER)
+    expect(inferStaffJobPreset({ roleCode: 'USER', allowedScreens: saved })).toBe('accountant')
+  })
 })

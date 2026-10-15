@@ -14,6 +14,7 @@ export type StaffJobPreset =
   | 'worker_filing'
   | 'warehouse'
   | 'kcs'
+  | 'accountant'
 
 const ALL_WORKER_STAGES: StageCode[] = [
   'FILING',
@@ -33,11 +34,12 @@ export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'worker_filing', label: 'Thợ nguội' },
   { value: 'warehouse', label: 'Thủ kho' },
   { value: 'kcs', label: 'QC' },
+  { value: 'accountant', label: 'Kế toán' },
 ]
 
 const HIDDEN_STAFF_JOB_PRESETS = new Set<StaffJobPreset>(['staff'])
 
-/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, QC, các loại thợ). */
+/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, QC, kế toán, các loại thợ). */
 export function staffJobSelectOptions() {
   return STAFF_JOB_OPTIONS.filter((o) => !HIDDEN_STAFF_JOB_PRESETS.has(o.value))
 }
@@ -72,6 +74,8 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
       return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
       return 'Nhận lại hàng từ thợ.'
+    case 'accountant':
+      return 'Kho thành phẩm: xác nhận phiếu xuất hàng.'
     case 'staff':
       return 'Chọn màn được xem ở bước chỉnh sửa nhân sự.'
   }
@@ -87,6 +91,7 @@ export const STAGE_ROLE_PERMISSIONS: PermissionCode[] = [
   Permission.PRODUCTION_QC,
   Permission.INTAKE_CREATE,
   Permission.INTAKE_APPROVE,
+  Permission.ACCOUNTING_APPROVE,
 ]
 
 function isStageRolePermission(key: PermissionCode): boolean {
@@ -161,6 +166,15 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
           Permission.PRODUCTION_QC,
         ],
       }
+    case 'accountant':
+      return {
+        roleCode: 'USER',
+        allowedScreens: [
+          Permission.SCREEN_DASHBOARD,
+          Permission.SCREEN_WAREHOUSE_THANH_PHAM,
+          Permission.ACCOUNTING_APPROVE,
+        ],
+      }
   }
 }
 
@@ -211,6 +225,9 @@ export function inferStaffJobPreset(
   }
   if (screens.has(Permission.PRODUCTION_QC) && screens.has(Permission.SCREEN_DASHBOARD)) {
     return 'kcs'
+  }
+  if (screens.has(Permission.ACCOUNTING_APPROVE) && !screens.has(Permission.WAREHOUSE_KEEPER)) {
+    return 'accountant'
   }
   if (
     screens.has(Permission.WAREHOUSE_KEEPER) &&

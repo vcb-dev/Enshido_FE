@@ -1734,6 +1734,7 @@ function ReworkHistory({ stages }: { stages: StageEntry[] }) {
 
 /** Chốt Hoàn thiện tạo phiếu chờ; kho xác nhận rồi số lượng mới được cộng vào tồn. */
 function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
+  const { user } = useAuth()
   const goods = order.finishedGoods
   return (
     <Section title="Kho thành phẩm & xuất hàng">
@@ -1765,11 +1766,17 @@ function FinishedGoodsCard({ order }: { order: ProductionOrderDetail }) {
                     {shipment.code}
                   </Link>{' '}
                   · {formatStockedDate(shipment.shippedAt)} · {shipment.customerName} · SL {shipment.qty}
+                  {shipment.pendingApproval ? (
+                    <Typography component="span" variant="body2" color="warning.main">
+                      {' '}
+                      · chờ kế toán xác nhận
+                    </Typography>
+                  ) : null}
                 </Typography>
               ))}
             </Stack>
           ) : null}
-          {goods.remainingQty > 0 ? (
+          {goods.remainingQty > 0 && can(user, Permission.WAREHOUSE_KEEPER) ? (
             <Button
               variant="outlined"
               size="small"

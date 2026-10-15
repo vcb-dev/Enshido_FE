@@ -13,6 +13,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
@@ -20,7 +21,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
+import { can, Permission } from '../auth/permissions'
 import {
+  approveShipmentApi,
   deleteShipmentApi,
   getFinishedGoodsLookupsApi,
   getFinishedGoodsStockApi,
@@ -31,6 +34,7 @@ import {
 import { formatMoney, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb, type LightboxImage } from '../components/ImageLightbox'
 import { PageHeader, ShipmentDetailSkeleton } from '../components/ui'
+import { formatGram } from '../finishedGoods/invoice'
 import { ShipmentFormDialog } from '../finishedGoods/ShipmentFormDialog'
 import { formatDateTime } from '../orders/catalog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
@@ -43,6 +47,8 @@ export function ShipmentDetailPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
+  const isKeeper = can(user, Permission.WAREHOUSE_KEEPER)
+  const isAccountant = can(user, Permission.ACCOUNTING_APPROVE)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
@@ -78,6 +84,15 @@ export function ShipmentDetailPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const approve = useMutation({
+    mutationFn: () => approveShipmentApi(code),
+    onSuccess: async (shipment) => {
+      queryClient.setQueryData(['shipment', code], shipment)
+      toast.success(`Đã xác nhận phiếu ${code}`)
+      await refreshRelated()
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   const remove = useMutation({
     mutationFn: () => deleteShipmentApi(code),
     onSuccess: async () => {
@@ -104,6 +119,7 @@ export function ShipmentDetailPage() {
   )
   const margin = Number(shipment.totals.amount) - Number(shipment.totals.costAmount)
   const stale = shipment.lastPrintedAt != null && shipment.dataChangedAt > shipment.lastPrintedAt
+  const canEdit = isKeeper && !shipment.autoIssued && shipment.approvedAt == null
 
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
@@ -120,18 +136,40 @@ export function ShipmentDetailPage() {
         }
         actions={
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button variant="outlined" onClick={() => setEditing(true)}>
-              Sửa phiếu
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<PrintIcon fontSize="small" />}
-              component={RouterLink}
-              to={`/finished-goods/shipments/${shipment.code}/print`}
-              target="_blank"
-            >
-              In phiếu
-            </Button>
+            {shipment.pendingApproval && isAccountant ? (
+              <Tooltip title={shipment.printable ? '' : 'Thủ kho nhập đủ các khoản rồi mới xác nhận được'}>
+                <span>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    loading={approve.isPending}
+                    disabled={!shipment.printable}
+                    onClick={() => approve.mutate()}
+                  >
+                    Kế toán xác nhận
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : null}
+            {canEdit ? (
+              <Button variant="outlined" onClick={() => setEditing(true)}>
+                Sửa phiếu
+              </Button>
+            ) : null}
+            <Tooltip title={shipment.printable ? '' : 'Nhập đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác để in'}>
+              <span>
+                <Button
+                  variant="contained"
+                  startIcon={<PrintIcon fontSize="small" />}
+                  component={RouterLink}
+                  to={`/finished-goods/shipments/${shipment.code}/print`}
+                  target="_blank"
+                  disabled={!shipment.printable}
+                >
+                  In phiếu
+                </Button>
+              </span>
+            </Tooltip>
             {isAdmin ? (
               <Button color="error" onClick={() => setDeleting(true)}>
                 Xóa phiếu
@@ -140,6 +178,31 @@ export function ShipmentDetailPage() {
           </Stack>
         }
       />
+
+      {shipment.pendingApproval ? (
+        <Alert severity="warning">
+          Phiếu chờ kế toán xác nhận — hàng đã ra khỏi kho thành phẩm nhưng đơn chưa tính Đã giao.
+        </Alert>
+      ) : shipment.approvedAt ? (
+        <Alert severity="success">
+          Kế toán {shipment.approvedByName ?? ''} đã xác nhận lúc {formatDateTime(shipment.approvedAt)}.
+        </Alert>
+      ) : null}
+
+      {!shipment.printable ? (
+        <Alert
+          severity="info"
+          action={
+            canEdit ? (
+              <Button color="inherit" size="small" onClick={() => setEditing(true)}>
+                Nhập
+              </Button>
+            ) : undefined
+          }
+        >
+          Phiếu chưa in được — còn dòng thiếu TL, đơn giá NL, tiền công, tiền đá hoặc chi phí khác (khoản không có thì nhập 0).
+        </Alert>
+      ) : null}
 
       {stale ? (
         <Alert severity="warning">Phiếu đã sửa sau lần in gần nhất ({formatDateTime(shipment.lastPrintedAt)}) — nên in lại.</Alert>
@@ -156,16 +219,19 @@ export function ShipmentDetailPage() {
 
       <Paper sx={{ p: { xs: 1.5, md: 2 } }}>
         <TableContainer sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 900, '& td, & th': { px: 1 } }}>
+          <Table size="small" sx={{ minWidth: 1100, '& td, & th': { px: 1 } }}>
             <TableHead>
               <TableRow>
                 <TableCell>Mã SX</TableCell>
                 <TableCell>Sản phẩm</TableCell>
                 <TableCell sx={NUM}>SL</TableCell>
-                <TableCell sx={NUM}>Đơn giá bán</TableCell>
+                <TableCell sx={NUM}>TL (g)</TableCell>
+                <TableCell sx={NUM}>Đơn giá NL</TableCell>
+                <TableCell sx={NUM}>Tiền công</TableCell>
+                <TableCell sx={NUM}>Tiền đá</TableCell>
+                <TableCell sx={NUM}>Chi phí khác</TableCell>
                 <TableCell sx={NUM}>Thành tiền</TableCell>
-                <TableCell sx={NUM}>Giá vốn / SP</TableCell>
-                <TableCell sx={NUM}>Chi phí</TableCell>
+                <TableCell sx={NUM}>Giá vốn</TableCell>
                 <TableCell>Ghi chú</TableCell>
               </TableRow>
             </TableHead>
@@ -197,9 +263,12 @@ export function ShipmentDetailPage() {
                     </Stack>
                   </TableCell>
                   <TableCell sx={NUM}>{line.qty}</TableCell>
-                  <TableCell sx={NUM}>{formatMoney(line.unitPrice)}</TableCell>
+                  <TableCell sx={NUM}>{formatGram(line.weightGram)}</TableCell>
+                  <TableCell sx={NUM}>{moneyOrDash(line.materialUnitPrice)}</TableCell>
+                  <TableCell sx={NUM}>{moneyOrDash(line.laborAmount)}</TableCell>
+                  <TableCell sx={NUM}>{moneyOrDash(line.stoneAmount)}</TableCell>
+                  <TableCell sx={NUM}>{moneyOrDash(line.otherAmount)}</TableCell>
                   <TableCell sx={{ ...NUM, fontWeight: 700 }}>{formatMoney(line.amount)}</TableCell>
-                  <TableCell sx={NUM}>{formatMoney(line.unitCost)}</TableCell>
                   <TableCell sx={NUM}>{formatMoney(line.costAmount)}</TableCell>
                   <TableCell>{line.note ?? '—'}</TableCell>
                 </TableRow>
@@ -207,9 +276,8 @@ export function ShipmentDetailPage() {
               <TableRow sx={{ '& td': { fontWeight: 700, bgcolor: '#f8f3eb' } }}>
                 <TableCell colSpan={2}>Cộng</TableCell>
                 <TableCell sx={NUM}>{shipment.totals.qty}</TableCell>
-                <TableCell />
+                <TableCell colSpan={5} />
                 <TableCell sx={NUM}>{formatMoney(shipment.totals.amount)}</TableCell>
-                <TableCell />
                 <TableCell sx={NUM}>{formatMoney(shipment.totals.costAmount)}</TableCell>
                 <TableCell />
               </TableRow>
@@ -252,6 +320,10 @@ export function ShipmentDetailPage() {
       />
     </Stack>
   )
+}
+
+function moneyOrDash(value: string | null) {
+  return value == null ? '—' : formatMoney(value)
 }
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
