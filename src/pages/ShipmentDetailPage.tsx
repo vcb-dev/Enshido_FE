@@ -156,7 +156,7 @@ export function ShipmentDetailPage() {
                 Sửa phiếu
               </Button>
             ) : null}
-            <Tooltip title={shipment.printable ? '' : 'Nhập đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác để in'}>
+            <Tooltip title={shipment.printable ? '' : 'Nhập đủ TL, đơn giá NL, tiền công, tiền đá để in'}>
               <span>
                 <Button
                   variant="contained"
@@ -200,7 +200,7 @@ export function ShipmentDetailPage() {
             ) : undefined
           }
         >
-          Phiếu chưa in được — còn dòng thiếu TL, đơn giá NL, tiền công, tiền đá hoặc chi phí khác (khoản không có thì nhập 0).
+          Phiếu chưa in được — còn dòng thiếu TL, đơn giá NL, tiền công hoặc tiền đá (khoản không có thì nhập 0).
         </Alert>
       ) : null}
 

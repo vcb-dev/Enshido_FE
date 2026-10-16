@@ -165,7 +165,7 @@ export type ShipmentDetail = {
   updatedAt: string
   lastPrintedAt: string | null
   dataChangedAt: string
-  /** Mọi dòng đã đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác. */
+  /** Mọi dòng đã đủ TL, đơn giá NL, tiền công, tiền đá (chi phí khác không bắt buộc). */
   printable: boolean
   lines: ShipmentLine[]
   totals: { qty: number; amount: string; costAmount: string }
