@@ -21,6 +21,25 @@ export type IntakeOrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
 
+/** Loại vàng/bạc của sản phẩm, chọn lúc tạo đơn. */
+export type OrderMetalType = 'SILVER_925' | 'GOLD_10K' | 'GOLD_14K' | 'GOLD_18K' | 'GOLD_24K'
+
+export const ORDER_METAL_TYPES: OrderMetalType[] = [
+  'SILVER_925',
+  'GOLD_10K',
+  'GOLD_14K',
+  'GOLD_18K',
+  'GOLD_24K',
+]
+
+export const ORDER_METAL_TYPE_LABELS: Record<OrderMetalType, string> = {
+  SILVER_925: 'Bạc S925',
+  GOLD_10K: 'Vàng 10k',
+  GOLD_14K: 'Vàng 14k',
+  GOLD_18K: 'Vàng 18k',
+  GOLD_24K: 'Vàng 24k',
+}
+
 export type IntakeOrder = {
   reworkOfOrderId?: string | null
   id: string
@@ -38,6 +57,8 @@ export type IntakeOrder = {
   customerCode: string | null
   /** Luôn là VCB — form tạo đơn không cho chọn khách khác. */
   customerName: string
+  /** Đơn cũ tạo trước khi có ô này thì để trống. */
+  metalType: OrderMetalType | null
   placedBy: string
   description: string
   createdDate: string
@@ -78,6 +99,7 @@ export type UpsertIntakeOrderPayload = {
   qty: number
   trackingCode?: string | null
   customerCode?: string | null
+  metalType?: OrderMetalType | null
   placedBy: string
   description: string
   createdDate: string

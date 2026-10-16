@@ -9,8 +9,11 @@ import {
   deleteIntakeOrderApi,
   listIntakeOrdersApi,
   updateIntakeOrderApi,
+  ORDER_METAL_TYPES,
+  ORDER_METAL_TYPE_LABELS,
   type IntakeOrder,
   type IntakeOrderStatus,
+  type OrderMetalType,
   type UpsertIntakeOrderPayload,
 } from '../api/intakeOrders'
 import type { OrderImage, ProductionRequestType } from '../api/productionOrders'
@@ -56,6 +59,7 @@ type FormValues = {
   qty: string
   trackingCode: string
   customerCode: string
+  metalType: OrderMetalType | ''
   placedBy: string
   description: string
   createdDate: string
@@ -119,6 +123,7 @@ const EMPTY: FormValues = {
   qty: '',
   trackingCode: '',
   customerCode: '',
+  metalType: '',
   placedBy: '',
   description: '',
   createdDate: todayYmd(),
@@ -256,6 +261,12 @@ export function IntakeOrdersPage() {
         header: 'Loại đơn hàng',
         width: 140,
         render: (row) => <RequestTypeChip type={row.requestType} />,
+      },
+      {
+        key: 'metalType',
+        header: 'Loại vàng/bạc',
+        width: 120,
+        render: (row) => (row.metalType ? ORDER_METAL_TYPE_LABELS[row.metalType] : '—'),
       },
       { key: 'qty', header: 'SL lên đơn', width: 100, align: 'right', render: (row) => row.qty },
       {
@@ -442,6 +453,7 @@ function IntakeOrderFormDialog({
         qty: String(row.qty),
         trackingCode: row.trackingCode ?? '',
         customerCode: row.customerCode ?? '',
+        metalType: row.metalType ?? '',
         placedBy: row.placedBy,
         description: row.description,
         createdDate: row.createdDate,
@@ -465,6 +477,7 @@ function IntakeOrderFormDialog({
       qty,
       trackingCode: values.trackingCode.trim() || null,
       customerCode: values.customerCode.trim() || null,
+      metalType: values.metalType || null,
       placedBy: values.placedBy.trim(),
       description: values.description.trim(),
       createdDate: values.createdDate,
@@ -502,7 +515,7 @@ function IntakeOrderFormDialog({
       ) : null}
 
       <FormSection title="Sản phẩm">
-        <FormRow columns={2}>
+        <FormRow columns={3}>
           <FormSelect<FormValues>
             name="requestType"
             label="Loại đơn hàng"
@@ -511,6 +524,17 @@ function IntakeOrderFormDialog({
             options={REQUEST_TYPES.map((type) => ({
               value: type,
               label: REQUEST_TYPE_META[type].label,
+            }))}
+          />
+          {/* Đơn cũ tạo trước khi có ô này nên để trống được; đơn mới thì bắt chọn. */}
+          <FormSelect<FormValues>
+            name="metalType"
+            label="Loại vàng/bạc"
+            required={!row}
+            clearable
+            options={ORDER_METAL_TYPES.map((type) => ({
+              value: type,
+              label: ORDER_METAL_TYPE_LABELS[type],
             }))}
           />
           <FormTextField<FormValues>
