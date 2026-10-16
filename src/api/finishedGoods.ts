@@ -33,6 +33,8 @@ export type FinishedGoodsStockRow = {
   intakeCode: string | null
   /** Mã SX (vd SZR39) — cột Mã SX bên Lệnh sản xuất; null = đơn tạo tay / tồn đầu kỳ. */
   sxCode: string | null
+  /** Mã của khách trên đơn — điền sẵn vào dòng phiếu xuất. */
+  customerCode: string | null
   description: string
   requestType: ProductionRequestType
   qtyUnit: string | null
@@ -185,6 +187,8 @@ export type ShipmentPayload = {
     stoneAmount?: string
     otherAmount?: string
     note?: string
+    /** Mã của khách in trên phiếu; bỏ trống thì lấy mã trên đơn. */
+    customerCode?: string
   }>
   editReason?: string
 }

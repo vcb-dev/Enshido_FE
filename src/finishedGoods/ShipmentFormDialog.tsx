@@ -26,6 +26,8 @@ type LineValues = {
   stoneAmount: string
   otherAmount: string
   note: string
+  /** Mã của khách in trên phiếu — điền sẵn từ đơn, sửa được. */
+  customerCode: string
 }
 
 type OrderStockInfo = {
@@ -36,6 +38,7 @@ type OrderStockInfo = {
   sizeLabel: string | null
   mainMaterial: string | null
   qtyUnit: string | null
+  customerCode: string | null
   /** Mã hiện trên màn Tồn: Mã SX của lệnh, hoặc mã sản xuất nhập tay (tồn đầu kỳ). */
   stockCode: string | null
 }
@@ -58,6 +61,7 @@ const EMPTY_LINE: LineValues = {
   stoneAmount: '',
   otherAmount: '',
   note: '',
+  customerCode: '',
 }
 
 function lineFromStock(orderCode: string | null | undefined, stock: FinishedGoodsStockRow[]): LineValues {
@@ -70,6 +74,7 @@ function lineFromStock(orderCode: string | null | undefined, stock: FinishedGood
     orderCode: code,
     qty: String(row.remainingQty >= 1 ? row.remainingQty : 1),
     note: row.description,
+    customerCode: row.customerCode ?? '',
   }
 }
 
@@ -154,6 +159,7 @@ export function ShipmentFormDialog({
               stoneAmount: moneyInput(line.stoneAmount),
               otherAmount: moneyInput(line.otherAmount),
               note: line.note ?? '',
+              customerCode: line.customerCode ?? '',
             })),
           }
         : {
@@ -174,6 +180,7 @@ export function ShipmentFormDialog({
     if (!filled.note && filled.qty === '1') return
     form.setValue('lines.0.qty', filled.qty)
     form.setValue('lines.0.note', filled.note)
+    form.setValue('lines.0.customerCode', filled.customerCode)
   }, [open, shipment, initialOrderCode, stock, form])
 
   // Khi sửa, SL của chính phiếu này được cộng lại vào tồn khả dụng.
@@ -188,6 +195,7 @@ export function ShipmentFormDialog({
         sizeLabel: row.sizeLabel,
         mainMaterial: row.mainMaterial,
         qtyUnit: row.qtyUnit,
+        customerCode: row.customerCode,
         stockCode: row.sxCode ?? (row.model3dCode?.trim() || null),
       })
     }
@@ -201,6 +209,7 @@ export function ShipmentFormDialog({
         sizeLabel: current?.sizeLabel ?? line.sizeLabel,
         mainMaterial: current?.mainMaterial ?? line.mainMaterial,
         qtyUnit: current?.qtyUnit ?? null,
+        customerCode: current?.customerCode ?? line.customerCode,
         stockCode: current?.stockCode ?? null,
       })
     }
@@ -245,6 +254,7 @@ export function ShipmentFormDialog({
     form.setValue(`lines.${index}.note`, info?.description ?? '', {
       shouldDirty: true,
     })
+    form.setValue(`lines.${index}.customerCode`, info?.customerCode ?? '', { shouldDirty: true })
   }
 
   const watched = useWatch({ control: form.control, name: 'lines' })
@@ -300,6 +310,7 @@ export function ShipmentFormDialog({
         stoneAmount: line.stoneAmount || undefined,
         otherAmount: line.otherAmount || undefined,
         note: line.note.trim() || undefined,
+        customerCode: line.customerCode.trim() || undefined,
       })),
       editReason: values.editReason?.trim() || undefined,
     })
@@ -412,9 +423,15 @@ export function ShipmentFormDialog({
                   gap: 1.25,
                   mt: 1,
                   alignItems: 'center',
-                  gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) auto' },
+                  gridTemplateColumns: { xs: '1fr', md: '220px minmax(0, 1fr) auto' },
                 }}
               >
+                <FormTextField<FormValues>
+                  name={`lines.${index}.customerCode`}
+                  label="Mã của khách"
+                  placeholder="Lấy theo đơn"
+                  clearable
+                />
                 <FormTextField<FormValues> name={`lines.${index}.note`} label="Ghi chú dòng" />
                 <Typography variant="body2" sx={{ textAlign: { md: 'right' } }}>
                   Thành tiền: <b>{line ? formatMoney(String(invoiceAmount(invoiceOf(line)))) : '0'}</b>
