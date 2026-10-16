@@ -33,6 +33,8 @@ export type FinishedGoodsStockRow = {
   intakeCode: string | null
   /** Mã SX (vd SZR39) — cột Mã SX bên Lệnh sản xuất; null = đơn tạo tay / tồn đầu kỳ. */
   sxCode: string | null
+  /** Mã của khách trên đơn — điền sẵn vào dòng phiếu xuất. */
+  customerCode: string | null
   description: string
   requestType: ProductionRequestType
   qtyUnit: string | null
@@ -165,7 +167,7 @@ export type ShipmentDetail = {
   updatedAt: string
   lastPrintedAt: string | null
   dataChangedAt: string
-  /** Mọi dòng đã đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác. */
+  /** Mọi dòng đã đủ TL, đơn giá NL, tiền công, tiền đá (chi phí khác không bắt buộc). */
   printable: boolean
   lines: ShipmentLine[]
   totals: { qty: number; amount: string; costAmount: string }
@@ -185,6 +187,8 @@ export type ShipmentPayload = {
     stoneAmount?: string
     otherAmount?: string
     note?: string
+    /** Mã của khách in trên phiếu; bỏ trống thì lấy mã trên đơn. */
+    customerCode?: string
   }>
   editReason?: string
 }

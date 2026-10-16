@@ -16,7 +16,8 @@ import {
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller, useForm, useFormContext, useWatch } from 'react-hook-form'
+import { Controller, useFormContext, useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import { toast } from 'sonner'
 import {
   createUserApi,
@@ -377,11 +378,8 @@ function CreateUserDialog({
   onClose: () => void
   onCreated: () => void
 }) {
-  const form = useForm<UserFormValues>({
+  const form = useAppForm<UserFormValues>({
     defaultValues: EMPTY_USER,
-    // Chỉ Tài khoản / Mật khẩu validate khi blur (trigger tay). mode onBlur + autoFocus Họ tên
-    // khiến dialog vừa mở đã blur và báo lỗi required.
-    reValidateMode: 'onBlur',
   })
   const staffJob = useWatch({ control: form.control, name: 'staffJob' })
   useEffect(() => {
@@ -468,7 +466,6 @@ function CreateUserDialog({
               label="Tài khoản"
               required
               rules={usernameRules}
-              onBlur={() => void form.trigger('username')}
             />
             <FormTextField<UserFormValues>
               name="password"
@@ -476,7 +473,6 @@ function CreateUserDialog({
               type="password"
               required
               rules={passwordRules}
-              onBlur={() => void form.trigger('password')}
             />
           </FormRow>
           <FormRow>
@@ -521,7 +517,7 @@ function EditUserDialog({
   onSaved: () => void
 }) {
   const isAdmin = user?.roleCode === 'ADMIN'
-  const form = useForm<EditUserFormValues>({
+  const form = useAppForm<EditUserFormValues>({
     defaultValues: { ...EMPTY_USER, editReason: '' },
   })
   const staffJob = useWatch({ control: form.control, name: 'staffJob' })
