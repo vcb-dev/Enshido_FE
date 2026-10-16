@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { DialogForm, FormCheckbox } from '../components/ui'
 
@@ -15,7 +14,7 @@ type ApproveIntakeDialogProps = {
 }
 
 export function ApproveIntakeDialog({ order, saving, onClose, onConfirm }: ApproveIntakeDialogProps) {
-  const form = useAppForm<Values>({ defaultValues: { hasMold: false } })
+  const form = useForm<Values>({ defaultValues: { hasMold: false } })
   const hasMold = useWatch({ control: form.control, name: 'hasMold' })
 
   useEffect(() => {

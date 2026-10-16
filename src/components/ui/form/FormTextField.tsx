@@ -1,10 +1,10 @@
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
-import { useState, type ChangeEvent, type FocusEvent } from 'react'
+import type { ChangeEvent, FocusEvent } from 'react'
 import { SuggestTextInput } from '../SuggestTextInput'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
-import { isUserBlur, withRequiredRule } from './field'
+import { withRequiredRule } from './field'
 import type { FormFieldBaseProps } from './field'
 
 export type FormTextFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
@@ -33,7 +33,6 @@ export function FormTextField<T extends FieldValues>({
     rules: withRequiredRule(rules, required),
   })
   const { ref, value, onChange, onBlur, ...rest } = field
-  const [autoFocusAt] = useState(() => (props.autoFocus ? Date.now() : null))
   const shared = {
     ...props,
     ...rest,
@@ -43,7 +42,7 @@ export function FormTextField<T extends FieldValues>({
           onChange(transform(event.target.value))
       : onChange,
     onBlur: (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (isUserBlur(event, autoFocusAt)) onBlur()
+      onBlur()
       onBlurProp?.(event)
     },
     inputRef: ref,

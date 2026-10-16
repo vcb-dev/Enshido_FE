@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import { DialogForm, FormTextField } from '../components/ui'
 import type { FinishedGoodsReceiptRow } from '../api/finishedGoods'
 
@@ -25,7 +24,7 @@ export function ReceiveStockDialog({
   const pending = row?.pendingQty ?? 0
   const unit = row?.qtyUnit ?? 'sản phẩm'
   // Kiểm ngay khi gõ để nút Nhập kho khoá lúc số không hợp lệ.
-  const form = useAppForm<Values>({ mode: 'onChange', defaultValues: { qty: '' } })
+  const form = useForm<Values>({ mode: 'onChange', defaultValues: { qty: '' } })
 
   useEffect(() => {
     if (row) form.reset({ qty: String(row.pendingQty) })

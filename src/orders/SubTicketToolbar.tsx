@@ -134,7 +134,7 @@ export function SubTicketToolbar({
             >
               <span>
                 <Button
-                  size="large"
+                  size="small"
                   variant="outlined"
                   disabled={!canSplit}
                   onClick={() => setSplitOpen(true)}
@@ -146,7 +146,7 @@ export function SubTicketToolbar({
           ) : canManage ? (
             <>
               <Button
-                size="large"
+                size="small"
                 variant="outlined"
                 disabled={!canCreate}
                 onClick={() => {
@@ -156,7 +156,7 @@ export function SubTicketToolbar({
                 Thêm phiếu con
               </Button>
               {canClearSplit ? (
-                <Button size="large" color="inherit" onClick={() => setClearingSplit(true)}>
+                <Button size="small" color="inherit" onClick={() => setClearingSplit(true)}>
                   Hủy chia
                 </Button>
               ) : null}

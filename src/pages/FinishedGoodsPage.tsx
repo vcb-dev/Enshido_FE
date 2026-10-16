@@ -818,7 +818,6 @@ function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGo
     model3dCode: payload.model3dCode?.trim() || null,
     intakeCode: null,
     sxCode: null,
-    customerCode: null,
     description: payload.description ?? '',
     requestType: 'RETAIL',
     qtyUnit: payload.qtyUnit ?? null,

@@ -1,6 +1,5 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import { DialogForm, FormTextField } from '../components/ui'
 
 type NoteValues = { note: string }
@@ -19,7 +18,7 @@ export function DefectDialog({
   onClose: () => void
   onSave: (note: string) => void
 }) {
-  const form = useAppForm<NoteValues>({ defaultValues: { note: '' } })
+  const form = useForm<NoteValues>({ defaultValues: { note: '' } })
   const note = useWatch({ control: form.control, name: 'note' })
 
   return (
@@ -81,7 +80,7 @@ export function FinishDialog({
   onClose: () => void
   onSave: (note: string | undefined) => void
 }) {
-  const form = useAppForm<NoteValues>({ defaultValues: { note: '' } })
+  const form = useForm<NoteValues>({ defaultValues: { note: '' } })
 
   return (
     <Dialog

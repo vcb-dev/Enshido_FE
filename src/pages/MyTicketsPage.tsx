@@ -226,7 +226,6 @@ export function MyTicketsPage() {
     if (activeTab === 'available' && item.state === 'WAITING') {
       return (
         <Button
-          size="large"
           variant="contained"
           disabled={busy}
           loading={sending(item, 'claim')}
@@ -240,7 +239,6 @@ export function MyTicketsPage() {
     if (item.state === 'WORKING') {
       return (
         <Button
-          size="large"
           variant="contained"
           disabled={busy}
           loading={sending(item, 'submit')}
@@ -255,7 +253,6 @@ export function MyTicketsPage() {
       return (
         <Stack direction="row" spacing={1}>
           <Button
-            size="large"
             variant="contained"
             disabled={busy}
             loading={sending(item, 'accept')}
@@ -265,7 +262,6 @@ export function MyTicketsPage() {
             Xác nhận
           </Button>
           <Button
-            size="large"
             variant="outlined"
             color="inherit"
             disabled={busy}
@@ -280,7 +276,6 @@ export function MyTicketsPage() {
     if (item.state === 'CLAIMED') {
       return (
         <Button
-          size="large"
           variant="outlined"
           color="inherit"
           disabled={busy}
@@ -294,7 +289,6 @@ export function MyTicketsPage() {
     if (item.state === 'SUBMITTED') {
       return (
         <Button
-          size="large"
           variant="outlined"
           color="inherit"
           disabled={busy}
@@ -515,11 +509,11 @@ function CastingSlipCard({
   const status = castingSlipStatusLine(item, tab)
   const action =
     tab === 'available' && item.status === 'WAIT_CASTING' ? (
-      <Button size="large" variant="contained" loading={starting} onClick={onStart} sx={{ minWidth: 132 }}>
+      <Button size="small" variant="contained" loading={starting} onClick={onStart} sx={{ minWidth: 132 }}>
         Nhận phiếu
       </Button>
     ) : tab === 'mine' && item.status === 'CASTING' ? (
-      <Button size="large" variant="contained" onClick={onEnterResult} sx={{ minWidth: 132 }}>
+      <Button size="small" variant="contained" onClick={onEnterResult} sx={{ minWidth: 132 }}>
         Nhập kết quả đúc
       </Button>
     ) : null

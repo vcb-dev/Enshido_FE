@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import type { CastingSlip, CastingSlipResultPayload } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
@@ -29,7 +28,7 @@ function gram(raw: string, allowZero: boolean) {
 /** Bước 9: thợ đúc nhập kết quả sau đúc — ảnh cân cây thông, bạc và thạch cao đã dùng. */
 export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props) {
   const [uploading, setUploading] = useState(false)
-  const form = useAppForm<Values>({ defaultValues: EMPTY })
+  const form = useForm<Values>({ defaultValues: EMPTY })
 
   useEffect(() => {
     if (slip) form.reset(EMPTY)

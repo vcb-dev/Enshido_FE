@@ -122,7 +122,7 @@ export function SubTicketWorkActions({
             <Tooltip title={assignableStages.length ? '' : 'Phiếu chưa có khâu tiếp theo để giao'}>
               <span>
                 <Button
-                  size="large"
+                  size="small"
                   variant="contained"
                   disabled={assignableStages.length === 0}
                   onClick={() => onAssign(ticket, assignableStages)}
@@ -149,7 +149,7 @@ export function SubTicketWorkActions({
         ) : null}
         {reworkable && canKeeper && active ? (
           <Button
-            size="large"
+            size="small"
             variant="contained"
             color="warning"
             disabled={createRework.isPending}
@@ -181,7 +181,7 @@ export function SubTicketWorkActions({
         {ticket.state === 'CONFIRMING' && last ? (
           // Nguội / Vào đá luôn chờ thủ kho, kể cả không có hàng lỗi.
           canKeeper ? (
-            <Button size="large" variant="contained" onClick={() => onKeeperConfirm(last)}>
+            <Button size="small" variant="contained" onClick={() => onKeeperConfirm(last)}>
               Thủ kho xác nhận{defectScopeText(last)}
             </Button>
           ) : (
@@ -193,29 +193,29 @@ export function SubTicketWorkActions({
 
 
         {ticket.state === 'CLAIMED' ? (
-          <Button size="large" variant="outlined" color="inherit" disabled={pending} onClick={() => unclaim.mutate(undefined)}>
+          <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => unclaim.mutate(undefined)}>
             {unclaim.isPending ? 'Đang gỡ thợ…' : 'Gỡ thợ nhận'}
           </Button>
         ) : null}
         {ticket.state === 'WAITING' || ticket.state === 'CLAIMED' ? (
-          <Button size="large" variant="outlined" color="inherit" disabled={pending} onClick={() => cancel.mutate(undefined)}>
+          <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => cancel.mutate(undefined)}>
             {cancel.isPending ? 'Đang huỷ…' : 'Huỷ mở khâu'}
           </Button>
         ) : null}
         {/* Gỡ nhận lại chỉ còn cho các khâu không qua thủ kho; Nguội / Vào đá khoá khi thủ kho đã xác nhận.
             Khâu kế tự mở sau QC (chờ thợ nhận) được gỡ cùng lúc. */}
         {(ticket.state === 'IDLE' || ticket.state === 'WAITING') && last?.returnedAt && isAdmin && active && last.stage !== 'FILING' && last.stage !== 'STONE_SETTING' ? (
-          <Button size="large" variant="outlined" color="inherit" disabled={pending} onClick={() => onUndoReturn(last)}>
+          <Button size="small" variant="outlined" color="inherit" disabled={pending} onClick={() => onUndoReturn(last)}>
             {undoingEntryId === last.id ? 'Đang gỡ…' : 'Gỡ nhận lại'}
           </Button>
         ) : null}
         {canManage && active && ticket.entryCount === 0 ? (
-          <Button size="large" variant="outlined" color="inherit" onClick={() => setEditOpen(true)}>
+          <Button size="small" variant="outlined" color="inherit" onClick={() => setEditOpen(true)}>
             Sửa phiếu con
           </Button>
         ) : null}
         {canManage && order.subTickets.length > 1 && ticket.entryCount === 0 ? (
-          <Button size="large" variant="outlined" color="error" startIcon={<TrashIcon />} onClick={() => setDeleteOpen(true)}>
+          <Button size="small" variant="outlined" color="error" startIcon={<TrashIcon />} onClick={() => setDeleteOpen(true)}>
             Xoá phiếu con
           </Button>
         ) : null}
