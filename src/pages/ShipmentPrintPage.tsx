@@ -17,8 +17,8 @@ const PAPER_WIDTH: Record<Paper, string> = { A5: '210mm', A4: '297mm' }
 const WORKSHOP = 'T5- 39 Cầu Diễn'
 
 /**
- * Phiếu xuất hàng in theo mẫu "Hoá đơn sản xuất" của xưởng. Chỉ in khi mọi dòng đã đủ TL,
- * đơn giá NL, tiền công, tiền đá, chi phí khác (`printable`).
+ * Phiếu xuất hàng in theo mẫu "Hoá đơn xuất hàng" của xưởng. Chỉ in khi mọi dòng đã đủ TL,
+ * đơn giá NL, tiền công, tiền đá (`printable`; chi phí khác không bắt buộc).
  */
 export function ShipmentPrintPage() {
   const { code = '' } = useParams()
@@ -65,7 +65,7 @@ export function ShipmentPrintPage() {
             </Button>
           }
         >
-          Phiếu {detail.data.code} chưa in được — nhập đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác cho mọi dòng.
+          Phiếu {detail.data.code} chưa in được — nhập đủ TL, đơn giá NL, tiền công, tiền đá cho mọi dòng.
         </Alert>
       </Box>
     )
@@ -145,7 +145,7 @@ function ShipmentSheet({ shipment }: { shipment: ShipmentDetail }) {
   return (
     <>
       <Box sx={{ textAlign: 'center', color: '#2457c5', fontWeight: 700, fontSize: '1.6em', mb: '2mm' }}>
-        HOÁ ĐƠN SẢN XUẤT
+        HOÁ ĐƠN XUẤT HÀNG
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', fontStyle: 'italic', mb: '1.5mm' }}>
         <span>
@@ -183,14 +183,6 @@ function ShipmentSheet({ shipment }: { shipment: ShipmentDetail }) {
           </tr>
         </thead>
         <tbody>
-          <tr className="sum">
-            <td className="lead" />
-            <td className="lead" />
-            <td colSpan={4} />
-            <td style={{ color: '#d32f2f' }}>{shipment.totals.qty}</td>
-            <td colSpan={6} />
-            <td style={{ ...right, color: '#2457c5' }}>{formatMoney(shipment.totals.amount)} đ</td>
-          </tr>
           {shipment.lines.map((line) => (
             <tr key={line.id}>
               <td>{shippedAt}</td>
@@ -212,6 +204,14 @@ function ShipmentSheet({ shipment }: { shipment: ShipmentDetail }) {
               <td style={right}>{formatMoney(line.amount)} đ</td>
             </tr>
           ))}
+          <tr className="sum">
+            <td className="lead" />
+            <td className="lead" />
+            <td colSpan={4} />
+            <td style={{ color: '#d32f2f' }}>{shipment.totals.qty}</td>
+            <td colSpan={6} />
+            <td style={{ ...right, color: '#2457c5' }}>{formatMoney(shipment.totals.amount)} đ</td>
+          </tr>
         </tbody>
       </table>
 

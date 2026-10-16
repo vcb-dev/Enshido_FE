@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Alert, Box, Typography } from '@mui/material'
-import { useForm, useWatch } from 'react-hook-form'
+import { useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type { EarlyStoneReturnPayload, StageEntry } from '../api/productionOrders'
 import { ctToGram, CT_PER_GRAM, formatCt, formatQty, gramToCt } from '../api/inventory'
 import { CrudDialogShell, FormQtyField, FormRow, FormSelect, FormTextField } from '../components/ui'
@@ -27,7 +28,7 @@ export function EarlyStoneReturnDialog({
   onSave: (payload: EarlyStoneReturnPayload) => void
 }) {
   const lines = (entry?.stoneLines ?? []).filter((line) => Number(line.weight) > 0)
-  const form = useForm<Values>({ defaultValues: { materialId: '', weight: '', note: '' } })
+  const form = useAppForm<Values>({ defaultValues: { materialId: '', weight: '', note: '' } })
   // Chỉ điền lại khi mở cho một khâu khác — đơn tải lại giữa chừng không xoá số đang nhập.
   const entryId = entry?.id
   const onlyMaterial = lines.length === 1 ? lines[0].materialId : ''

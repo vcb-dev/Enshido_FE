@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import { toast } from 'sonner'
 import {
   createIntakeOrderApi,
@@ -434,7 +435,7 @@ function IntakeOrderFormDialog({
   onExited: () => void
   onSave: (payload: UpsertIntakeOrderPayload) => void | Promise<unknown>
 }) {
-  const form = useForm<FormValues>({ defaultValues: EMPTY, reValidateMode: 'onSubmit' })
+  const form = useAppForm<FormValues>({ defaultValues: EMPTY })
   const [uploadingDetail, setUploadingDetail] = useState(false)
   const onDetailUploading = useCallback((busy: boolean) => setUploadingDetail(busy), [])
 

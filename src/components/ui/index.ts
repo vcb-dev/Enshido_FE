@@ -12,6 +12,9 @@ export type { RowActionsProps } from './RowActions'
 export { SUMMARY_TONES, SummaryStat, SummaryTile } from './SummaryStat'
 export type { SummaryTone, SummaryTileRow } from './SummaryStat'
 
+export { ChartLegend, ChartSwatch, GroupedBarChart } from './GroupedBarChart'
+export type { ChartBucket, ChartSeries } from './GroupedBarChart'
+
 export { PanelSummaryCard } from './PanelSummaryCard'
 export type { PanelSummaryStat } from './PanelSummaryCard'
 
@@ -39,6 +42,7 @@ export { FILTER_FIELD_SX, PanelToolbar } from './PanelToolbar'
 export type { PanelToolbarProps } from './PanelToolbar'
 
 export { DialogForm, Form, FormActions, FormRow } from './form/Form'
+export { useAppForm } from './form/useAppForm'
 export type { FormProps } from './form/Form'
 
 export { CrudDialogShell } from './form/CrudDialogShell'

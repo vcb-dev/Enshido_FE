@@ -189,7 +189,7 @@ export function QcTicketsPage() {
   const actionFor = (item: QcTicketItem | QcFinishItem): ReactNode => {
     if (tab === 'finishable') {
       return (
-        <Button variant="contained" color="success" onClick={() => setFinishing(item as QcFinishItem)} sx={{ minWidth: 132 }}>
+        <Button size="large" variant="contained" color="success" onClick={() => setFinishing(item as QcFinishItem)} sx={{ minWidth: 132 }}>
           Xác nhận hoàn thiện
         </Button>
       )
@@ -198,7 +198,7 @@ export function QcTicketsPage() {
     const loading = loadingEntry === entry.entryId
     if (tab === 'working') {
       return canReportDefect ? (
-        <Button variant="outlined" color="error" onClick={() => setReporting(entry)}>
+        <Button size="large" variant="outlined" color="error" onClick={() => setReporting(entry)}>
           Báo lỗi
         </Button>
       ) : null
@@ -206,6 +206,7 @@ export function QcTicketsPage() {
     if (tab === 'pending') {
       return (
         <Button
+          size="large"
           variant="contained"
           color={entry.defectReportedAt ? 'error' : 'primary'}
           disabled={entry.pendingRequests > 0 || loadingEntry != null}
@@ -220,6 +221,7 @@ export function QcTicketsPage() {
     if (tab === 'confirming') {
       return (
         <Button
+          size="large"
           variant="outlined"
           color="inherit"
           disabled={entry.kcsRevisionCount >= MAX_REVISIONS || loadingEntry != null}

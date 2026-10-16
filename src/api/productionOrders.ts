@@ -1473,31 +1473,92 @@ export function parseSubTicketCode(value: string): { orderCode: string; no: numb
   return { orderCode: match[1], no: Number(match[2]) }
 }
 
-/** Báo cáo số đơn ở màn Tổng quan. Đã tạo = Hoàn thành + Chưa hoàn thành + Dừng. */
-export type OrderSummary = {
-  created: number
-  completed: number
-  inProgress: number
-  stopped: number
-  breakdown: {
-    delivered: number
-    finished: number
-    preStage: number
-    inStage: number
-    awaitingStock: number
-    rejected: number
-    defect: number
-  }
-  /** Biểu đồ cột: theo ngày khi khoảng thời gian ≤ 62 ngày, còn lại theo tháng. */
-  trend: {
-    unit: 'day' | 'month'
-    buckets: { key: string; created: number; completed: number }[]
-  }
+export type OverviewStageKey =
+  | 'MODEL'
+  | 'CASTING'
+  | 'CUT'
+  | 'FILING'
+  | 'STONE_SETTING'
+  | 'ENGRAVING'
+  | 'POLISHING'
+  | 'PLATING'
+  | 'STOCK'
+
+/** Một chỗ hàng đang trong xưởng: cả đơn (chưa chia) hoặc một phiếu con. */
+export type OverviewTicket = {
+  orderId: string
+  /** null = cả đơn; có số = phiếu con. */
+  subTicketNo: number | null
+  code: string
+  /** Mã đơn hàng DH… */
+  orderCode: string | null
+  productName: string
+  stage: OverviewStageKey
+  working: boolean
+  qty: number
+  assignee: string | null
+  /** Hạn giao của đơn, YYYY-MM-DD. */
+  dueDate: string | null
+  overdue: boolean
 }
 
-export function getOrderSummaryApi(params: { from?: string; to?: string }) {
-  const query = new URLSearchParams()
-  if (params.from) query.set('from', params.from)
-  if (params.to) query.set('to', params.to)
-  return apiFetch<OrderSummary>(`${BASE}/summary?${query.toString()}`)
+/** Màn Tổng quan sản xuất. SL tính theo sản phẩm; mỗi sản phẩm chỉ ở một công đoạn. */
+export type ProductionOverview = {
+  generatedAt: string
+  /** Hôm nay theo giờ Việt Nam, YYYY-MM-DD. */
+  today: string
+  kpis: {
+    inShop: { qty: number; openTickets: number }
+    /** Kế hoạch = tổng SL các lệnh có hạn giao hôm nay. */
+    finishedToday: { qty: number; planQty: number }
+    overdue: { count: number; byStage: { stage: OverviewStageKey; label: string; count: number }[] }
+    qcFirstPassToday: { passed: number; total: number }
+  }
+  stages: { key: OverviewStageKey; label: string; waiting: number; working: number }[]
+  /** 7 ngày gần nhất, tính cả hôm nay. */
+  finishedTrend: { date: string; actual: number; plan: number }[]
+  materials: {
+    silverAtWorkersG: string
+    stonesHeldG: string
+    pendingKeeperConfirm: number
+  }
+  tickets: OverviewTicket[]
+}
+
+export function getProductionOverviewApi() {
+  return apiFetch<ProductionOverview>(`${BASE}/overview`)
+}
+
+/** Chưa làm (đã nhận, chờ giao) · Đang làm (QC chưa nhận lại) · Hoàn thiện (SL đạt) · Lỗi (SL lỗi). */
+export type PerformanceStatus = 'PENDING' | 'WORKING' | 'DONE' | 'DEFECT'
+
+export type PerformanceCount = { orders: number; qty: number }
+export type PerformanceCell = Record<PerformanceStatus, PerformanceCount>
+
+/** Khâu trên bảng hiệu suất: 3D, Sáp, Đúc rồi 5 khâu thợ. */
+export type PerformanceStageKey = 'MODEL3D' | 'WAX' | 'CASTING' | StageCode
+
+/**
+ * Hiệu suất thợ: mọi tài khoản thợ (thợ khâu, 3D, sáp, đúc) một dòng, kể cả chưa có việc. Hoàn thiện /
+ * lỗi theo khoảng ngày; chưa làm / đang làm là việc đang ở thợ lúc xem. Đơn = số đơn khác nhau.
+ */
+export type WorkerPerformance = {
+  from: string
+  to: string
+  /** `statuses` = các trạng thái có nghĩa ở khâu đó (3D / Sáp chỉ có Hoàn thiện). */
+  stages: { key: PerformanceStageKey; label: string; statuses: PerformanceStatus[] }[]
+  rows: {
+    workerKey: string
+    workerName: string
+    /** Khâu tài khoản được làm; trống = không có tài khoản thợ. */
+    workerStages: PerformanceStageKey[]
+    cells: Partial<Record<PerformanceStageKey, PerformanceCell>>
+  }[]
+  totals: Record<PerformanceStageKey, PerformanceCell>
+}
+
+/** `from` / `to` dạng YYYY-MM-DD, tính cả hai đầu. */
+export function getWorkerPerformanceApi(params: { from: string; to: string }) {
+  const query = new URLSearchParams(params)
+  return apiFetch<WorkerPerformance>(`${BASE}/worker-performance?${query.toString()}`)
 }
