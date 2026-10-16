@@ -1,4 +1,12 @@
-import { can, canAny, isWorkerOnly, Permission, type PermissionCode, type PermissionUser } from './permissions'
+import {
+  can,
+  canAny,
+  isCustomerOnly,
+  isWorkerOnly,
+  Permission,
+  type PermissionCode,
+  type PermissionUser,
+} from './permissions'
 import { WAREHOUSES, warehousePath, type WarehouseCode } from '../warehouses/catalog'
 import {
   canAccessProductionOrdersPage,
@@ -71,6 +79,7 @@ export function hasAnyWarehouse(user: PermissionUser | undefined | null) {
 
 export function firstAllowedPath(user: PermissionUser | undefined | null): string {
   if (isWorkerOnly(user)) return '/my-tickets'
+  if (isCustomerOnly(user)) return '/intake-orders'
   // Tài khoản QC (không kiêm thủ kho / admin) vào thẳng màn Phiếu QC.
   if (
     user?.roleCode !== 'ADMIN' &&

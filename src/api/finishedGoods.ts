@@ -29,6 +29,10 @@ export type FinishedGoodsStockRow = {
   orderCode: string
   /** Mã sản xuất trên lệnh / tồn đầu kỳ — hiển thị trên Tồn. */
   model3dCode: string | null
+  /** Mã đơn hàng DH…; null = đơn tạo tay / tồn đầu kỳ. */
+  intakeCode: string | null
+  /** Mã SX (vd SZR39) — cột Mã SX bên Lệnh sản xuất; null = đơn tạo tay / tồn đầu kỳ. */
+  sxCode: string | null
   description: string
   requestType: ProductionRequestType
   qtyUnit: string | null

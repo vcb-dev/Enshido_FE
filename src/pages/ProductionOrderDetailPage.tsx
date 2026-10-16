@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -39,7 +39,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
-import { can, Permission } from '../auth/permissions'
+import { can, canAny, Permission } from '../auth/permissions'
 import {
   changeProductionStatusApi,
   type StatusLog,
@@ -97,6 +97,7 @@ import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { ReworkChildren } from '../orders/ReworkChildren'
 import { AssignWorkerDialog } from '../orders/SubTicketDialogs'
+import { stageWorkersFrom } from '../orders/stageWorkers'
 import { KeeperConfirmDialog } from '../orders/KeeperConfirmDialog'
 import { TicketQcActions } from '../orders/TicketQcActions'
 import { ticketTimeline, TICKET_PHASE_STATUSES, type TicketTimelineRow } from '../orders/ticketTimeline'
@@ -136,7 +137,11 @@ export function ProductionOrderDetailPage() {
   // Tab lưu trên URL để gửi link / quét QR là mở đúng khung cần xem.
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const tab: TabKey = TABS.some((item) => item.value === tabParam) ? (tabParam as TabKey) : 'overview'
+  // Chi phí / giá vốn chỉ thủ kho và kế toán xem (BE cũng chặn).
+  const tabs = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.ACCOUNTING_APPROVE)
+    ? TABS
+    : TABS.filter((item) => item.value !== 'cost')
+  const tab: TabKey = tabs.some((item) => item.value === tabParam) ? (tabParam as TabKey) : 'overview'
   const setTab = (value: TabKey) =>
     setSearchParams(
       (prev) => {
@@ -164,6 +169,7 @@ export function ProductionOrderDetailPage() {
     queryFn: getProductionOrderLookupsApi,
     staleTime: 5 * 60_000,
   })
+  const stageWorkers = useMemo(() => stageWorkersFrom(lookups.data, isAdmin), [lookups.data, isAdmin])
 
   const update = useOrderMutation(
     code,
@@ -281,6 +287,10 @@ export function ProductionOrderDetailPage() {
   // Người lên đơn, thủ kho và admin được chia phiếu con (khớp `canManage` phía BE).
   const canManageTickets =
     isAdmin || can(user, Permission.WAREHOUSE_KEEPER) || (user != null && order.createdByUserId === user.id)
+  // Khớp quyền BE: sửa đơn tay là việc thủ kho; QC chỉ báo Sản xuất lỗi; Báo Đúc thủ kho / thợ đúc.
+  const isKeeper = can(user, Permission.WAREHOUSE_KEEPER)
+  const canChangeStatus = isKeeper || can(user, Permission.PRODUCTION_QC)
+  const canReportCasting = isKeeper || can(user, Permission.PRODUCTION_CAST)
   // QC nhận lại hàng và chốt Lỗi / Hoàn thiện.
   const canDelete =
     isAdmin &&
@@ -343,6 +353,7 @@ export function ProductionOrderDetailPage() {
 
       <Menu anchorEl={moreMenu} open={Boolean(moreMenu)} onClose={() => setMoreMenu(null)}>
         <MenuItem
+          disabled={!isKeeper}
           onClick={() => {
             setMoreMenu(null)
             setEditing(true)
@@ -354,7 +365,7 @@ export function ProductionOrderDetailPage() {
           <ListItemText primary="Sửa đơn" />
         </MenuItem>
         <MenuItem
-          disabled={locked}
+          disabled={locked || !canChangeStatus}
           onClick={() => {
             setMoreMenu(null)
             setStatusPreset(null)
@@ -429,7 +440,7 @@ export function ProductionOrderDetailPage() {
               scrollButtons="auto"
               sx={{ minHeight: 42, '& .MuiTab-root': { minHeight: 42, py: 0 } }}
             >
-              {TABS.map((item) => (
+              {tabs.map((item) => (
                 <Tab
                   key={item.value}
                   value={item.value}
@@ -920,7 +931,7 @@ export function ProductionOrderDetailPage() {
               title="Đúc"
               action={
                 // Đã cắt cây thông hoặc đã giao khâu thì đơn đã vào Nguội — số liệu đúc đã chốt.
-                order.cutAt || order.stages.length > 0 ? null : (
+                order.cutAt || order.stages.length > 0 || !canReportCasting ? null : (
                   <Button
                     size="small"
                     variant={order.castingSentDate ? 'outlined' : 'contained'}
@@ -1000,10 +1011,7 @@ export function ProductionOrderDetailPage() {
         open={assignTarget != null}
         ticket={assignTarget?.ticket ?? null}
         stageOptions={assignTarget?.stageOptions ?? []}
-        workers={(lookups.data?.users ?? []).filter((worker) =>
-          lookups.data?.workerIds.includes(worker.id) &&
-          (isAdmin || !lookups.data?.adminIds?.includes(worker.id)),
-        )}
+        workers={stageWorkers}
         saving={assignWorker.isPending}
         onClose={() => setAssignTarget(null)}
         onSave={(payload) =>
@@ -1033,10 +1041,7 @@ export function ProductionOrderDetailPage() {
         order={order}
         ticket={parentWork}
         stages={parentReceiptStageOverride ? [parentReceiptStageOverride] : parentReceiptStages}
-        workers={(lookups.data?.users ?? []).filter((worker) =>
-          lookups.data?.workerIds.includes(worker.id) &&
-          (isAdmin || !lookups.data?.adminIds?.includes(worker.id)),
-        )}
+        workers={stageWorkers}
         saving={assignParentReceipt.isPending}
         onClose={() => {
           setParentReceiptDialog(false)
@@ -1056,6 +1061,7 @@ export function ProductionOrderDetailPage() {
         open={statusDialog}
         current={order.status}
         isBtp={isBtp}
+        defectOnly={!isKeeper}
         initialTarget={statusPreset}
         saving={status.isPending}
         onClose={() => {
@@ -1884,6 +1890,7 @@ function StatusDialog({
   open,
   current,
   isBtp,
+  defectOnly,
   initialTarget,
   saving,
   onClose,
@@ -1892,6 +1899,8 @@ function StatusDialog({
   open: boolean
   current: ProductionStatus
   isBtp: boolean
+  /** QC chỉ được chuyển Sản xuất lỗi. */
+  defectOnly: boolean
   initialTarget?: ProductionStatus | null
   saving: boolean
   onClose: () => void
@@ -1910,7 +1919,9 @@ function StatusDialog({
   }, [open, initialTarget, form])
 
   // Đơn BTP không qua 3D nên không có Sửa 3D.
-  const manual = MANUAL_STATUSES.filter((item) => item !== current && !(isBtp && item === 'REDO_3D'))
+  const manual = MANUAL_STATUSES.filter(
+    (item) => item !== current && !(isBtp && item === 'REDO_3D') && (!defectOnly || item === 'DEFECT'),
+  )
   const options = manual.map((item) => ({
     value: item,
     label: STATUS_META[item].label,

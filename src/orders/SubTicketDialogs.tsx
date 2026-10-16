@@ -31,6 +31,7 @@ import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashI
 import { isInStage, skipsStone, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
 import { FormImageField } from './FormImageField'
+import { type StageWorker, workersForStage } from './stageWorkers'
 import { STONE_PHOTO_LABEL, STONE_PHOTO_REQUIRED, stonePhotosPayload, useUploadingByKey } from './stonePhotos'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
@@ -400,7 +401,7 @@ export function AssignWorkerDialog({
   open: boolean
   ticket: SubTicket | null
   stageOptions: StageCode[]
-  workers: Array<{ id: string; username: string; fullName: string }>
+  workers: StageWorker[]
   saving: boolean
   onClose: () => void
   onSave: (payload: {
@@ -414,6 +415,14 @@ export function AssignWorkerDialog({
   const stones = useFieldArray({ control: form.control, name: 'stones' })
   const uploading = useUploadingByKey()
   const stage = useWatch({ control: form.control, name: 'stage' })
+  const craftsmanUserId = useWatch({ control: form.control, name: 'craftsmanUserId' })
+  const stageWorkers = useMemo(() => workersForStage(workers, stage), [workers, stage])
+  // Đổi khâu thì thợ đã chọn không làm khâu mới phải chọn lại.
+  useEffect(() => {
+    if (craftsmanUserId && !stageWorkers.some((worker) => worker.id === craftsmanUserId)) {
+      form.setValue('craftsmanUserId', '')
+    }
+  }, [craftsmanUserId, stageWorkers, form])
   const stoneStage = stage === 'STONE_SETTING'
   const nvl = useQuery({
     queryKey: ['nvl-options'],
@@ -493,7 +502,7 @@ export function AssignWorkerDialog({
           name="craftsmanUserId"
           label="Thợ"
           required
-          options={workers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
+          options={stageWorkers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
         />
       </FormRow>
       {stoneStage ? (

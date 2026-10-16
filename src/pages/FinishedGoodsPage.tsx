@@ -142,7 +142,7 @@ function FinishedGoodsStockTable() {
   const queryClient = useQueryClient()
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const dialog = useCrudDialog<FinishedGoodsStockRow>()
-  const table = useTableParams({ pageSize: 8, filters: { unit: '', status: 'ALL', flowStatus: 'ALL' } })
+  const table = useTableParams({ pageSize: 8, filters: { status: 'ALL', flowStatus: 'ALL' } })
   const { params } = table
   // Thêm / sửa thành phẩm là việc của thủ kho — khớp quyền phía BE.
   const { user } = useAuth()
@@ -171,10 +171,6 @@ function FinishedGoodsStockTable() {
     for (const row of items) counts[fgFlowStatus(row)] += 1
     return counts
   }, [items])
-  const unitOptions = useMemo(
-    () => uniqueFilterOptions(items.map((row) => row.qtyUnit)),
-    [items],
-  )
   const statusFilterOptions = useMemo(
     () =>
       STATUS_FILTERS.filter(
@@ -203,19 +199,20 @@ function FinishedGoodsStockTable() {
         nameQuery &&
         !row.description.toLocaleLowerCase('vi').includes(nameQuery) &&
         !row.orderCode.toLocaleLowerCase('vi').includes(nameQuery) &&
-        !(row.model3dCode ?? '').toLocaleLowerCase('vi').includes(nameQuery)
+        !(row.model3dCode ?? '').toLocaleLowerCase('vi').includes(nameQuery) &&
+        !(row.sxCode ?? '').toLocaleLowerCase('vi').includes(nameQuery) &&
+        !(row.intakeCode ?? '').toLocaleLowerCase('vi').includes(nameQuery)
       ) {
         return false
       }
-      if (params.unit && (row.qtyUnit ?? '') !== params.unit) return false
       if (params.status !== 'ALL' && row.availability !== params.status) return false
       if (params.flowStatus !== 'ALL' && fgFlowStatus(row) !== params.flowStatus) return false
       return true
     })
-  }, [items, params.flowStatus, params.search, params.status, params.unit])
+  }, [items, params.flowStatus, params.search, params.status])
 
   const filtered = Boolean(
-    params.search.trim() || params.unit || params.status !== 'ALL' || params.flowStatus !== 'ALL',
+    params.search.trim() || params.status !== 'ALL' || params.flowStatus !== 'ALL',
   )
   const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
@@ -228,7 +225,6 @@ function FinishedGoodsStockTable() {
         totals,
         {
           name: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} placeholder="Tìm tên…" />,
-          unit: { valueId: params.unit, options: unitOptions, onChange: (id) => table.setFilter({ unit: id }) },
           status: {
             valueId: params.status === 'ALL' ? '' : params.status,
             options: statusFilterOptions,
@@ -245,7 +241,7 @@ function FinishedGoodsStockTable() {
           onEdit: canEdit ? dialog.openEdit : undefined,
         },
       ),
-    [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, params.unit, statusFilterOptions, table, totals, unitOptions],
+    [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, statusFilterOptions, table, totals],
   )
 
   const save = useMutation({
@@ -820,6 +816,8 @@ function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGo
     id: `tmp-${Date.now()}`,
     orderCode: '…',
     model3dCode: payload.model3dCode?.trim() || null,
+    intakeCode: null,
+    sxCode: null,
     description: payload.description ?? '',
     requestType: 'RETAIL',
     qtyUnit: payload.qtyUnit ?? null,
@@ -937,7 +935,7 @@ type HeaderFilter = {
 
 function stockColumns(
   totals: StockTotals | undefined,
-  filters: { name: ReactNode; unit: HeaderFilter; status: HeaderFilter; flowStatus: HeaderFilter },
+  filters: { name: ReactNode; status: HeaderFilter; flowStatus: HeaderFilter },
   actions: {
     onView: (row: FinishedGoodsStockRow) => void
     onEdit?: (row: FinishedGoodsStockRow) => void
@@ -950,7 +948,23 @@ function stockColumns(
       card: 'meta',
       header: profile.skuLabel,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
-      render: (row) => row.model3dCode?.trim() || '—',
+      // Mã SX như cột Mã SX bên Lệnh sản xuất; đơn tạo tay / tồn đầu kỳ dùng mã sản xuất nhập tay.
+      render: (row) => {
+        const code = row.sxCode ?? row.model3dCode?.trim()
+        if (!code) return '—'
+        if (row.isOpening) return code
+        return (
+          <Link component={RouterLink} to={`/orders/${row.orderCode}`} sx={{ fontWeight: 700 }}>
+            {code}
+          </Link>
+        )
+      },
+    },
+    {
+      key: 'intakeCode',
+      header: 'Mã đơn hàng',
+      cellSx: { whiteSpace: 'nowrap' },
+      render: (row) => row.intakeCode ?? '—',
     },
     {
       key: 'name',
@@ -959,20 +973,6 @@ function stockColumns(
       cellSx: { minWidth: 220 },
       filter: filters.name,
       render: (row) => row.description,
-    },
-    {
-      key: 'unit',
-      header: 'Đơn vị',
-      align: 'center',
-      filter: <ColumnHeaderFilter {...filters.unit} />,
-      render: (row) => row.qtyUnit ?? '—',
-    },
-    {
-      key: 'sizeLabel',
-      header: 'Size',
-      width: 70,
-      align: 'center',
-      render: (row) => row.sizeLabel ?? '—',
     },
     {
       key: 'openingQty',

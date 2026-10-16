@@ -106,3 +106,24 @@ describe('homePathForUser', () => {
     expect(homePathForUser(staff)).toBe('/')
   })
 })
+
+describe('khách VCB chỉ vào màn Tạo đơn', () => {
+  const vcb: PermissionUser = {
+    roleCode: 'USER',
+    permissions: [Permission.SCREEN_INTAKE_ORDERS, Permission.INTAKE_CREATE, Permission.CUSTOMER],
+  }
+
+  it('đăng nhập vào thẳng Tạo đơn', () => {
+    expect(homePathForUser(vcb)).toBe('/intake-orders')
+  })
+
+  it.each(['/', '/orders', '/orders/A010', '/tickets/A010-1', '/my-tickets', '/casting', '/users'])(
+    'không vào được %s',
+    (path) => expect(canAccessPath(vcb, path)).toBe(false),
+  )
+
+  it('vào được Tạo đơn; admin có mọi mã quyền vẫn không bị coi là khách', () => {
+    expect(canAccessPath(vcb, '/intake-orders')).toBe(true)
+    expect(canAccessPath({ ...admin, permissions: [Permission.CUSTOMER] }, '/orders')).toBe(true)
+  })
+})
