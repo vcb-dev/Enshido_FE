@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useForm } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty, qtyFromApi } from '../api/inventory'
@@ -24,7 +24,7 @@ export function IntakeCastingTreeDialog({
   onSave,
 }: IntakeCastingTreeDialogProps) {
   const [uploading, setUploading] = useState(false)
-  const form = useForm<Values>({ defaultValues: { weight: '', images: [] } })
+  const form = useAppForm<Values>({ defaultValues: { weight: '', images: [] } })
 
   useEffect(() => {
     if (order) {

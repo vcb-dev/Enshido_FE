@@ -106,7 +106,7 @@ export function SubTicketMatrixCard({
           DEFECT: settled ? (
             ticket.outcome === 'DEFECT' && isAdmin && !shipped ? (
               <Button
-                size="small"
+                size="large"
                 color="inherit"
                 disabled={busy}
                 loading={clear.isPending}
@@ -119,7 +119,7 @@ export function SubTicketMatrixCard({
           FINISH: settled ? (
             ticket.outcome === 'FINISH' && isAdmin && !shipped ? (
               <Button
-                size="small"
+                size="large"
                 color="inherit"
                 disabled={busy}
                 loading={clear.isPending}

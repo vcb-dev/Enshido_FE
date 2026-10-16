@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Box, Button, Stack } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import { toast } from 'sonner'
 import {
   createBtpWaitingApi,
@@ -440,7 +440,7 @@ function BtpDialog({
   onExited: () => void
   onSave: (payload: UpsertBtpWaitingPayload) => void
 }) {
-  const form = useForm<BtpFormValues>({ defaultValues: EMPTY_BTP })
+  const form = useAppForm<BtpFormValues>({ defaultValues: EMPTY_BTP })
 
   useEffect(() => {
     if (!open) return

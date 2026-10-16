@@ -25,3 +25,25 @@ export function withRequiredRule<T extends FieldValues>(
   if (!required || rules?.required != null) return rules
   return { ...rules, required: message }
 }
+
+/** Ô tự focus khi mở dialog: blur trong khoảng này là do dialog chuyển focus, không phải người dùng. */
+const AUTO_FOCUS_GRACE_MS = 500
+
+/**
+ * Blur của ô nhập có nên tính là "đã rời ô" (để báo lỗi) không. Bỏ qua khi:
+ * - focus chuyển sang một nút không phải nút Lưu (Huỷ, X, Thêm dòng…) — báo lỗi lúc này làm
+ *   nội dung giãn ra, nút bị xô đi và cú bấm trượt;
+ * - ô `autoFocus` vừa gắn vào chưa lâu — dialog đang mở chuyển focus qua lại.
+ */
+export function isUserBlur(
+  event: { relatedTarget: EventTarget | null },
+  autoFocusAt: number | null,
+) {
+  const next =
+    typeof Element !== 'undefined' && event.relatedTarget instanceof Element
+      ? event.relatedTarget.closest('button')
+      : null
+  if (next && next.type !== 'submit') return false
+  if (autoFocusAt != null && Date.now() - autoFocusAt < AUTO_FOCUS_GRACE_MS) return false
+  return true
+}

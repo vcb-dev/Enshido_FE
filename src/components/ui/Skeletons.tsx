@@ -409,23 +409,35 @@ export function CardGroupSkeleton({ count = 2, media = false }: { count?: number
   )
 }
 
-/** Trang tổng quan: tiêu đề + thẻ nhãn / giá trị. */
+/** Trang tổng quan: tiêu đề + 4 ô số + lưới công đoạn + biểu đồ / vật tư + bảng phiếu. */
 export function DashboardSkeleton() {
   return (
     <Stack spacing={2}>
       <PageHeaderSkeleton />
-      <Paper sx={{ px: { xs: 1.5, sm: 2 }, py: 0.5 }}>
-        {Array.from({ length: 5 }, (_, index) => (
-          <Stack
-            key={index}
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={{ xs: 0.25, sm: 2 }}
-            sx={{ py: 1.25, borderBottom: index < 4 ? '1px solid #ded3c3' : undefined }}
-          >
-            <Skeleton variant="text" sx={{ width: { xs: 100, sm: 180 }, flexShrink: 0 }} />
-            <Skeleton variant="text" sx={{ width: { xs: '70%', sm: 260 } }} />
-          </Stack>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 1.5,
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' },
+        }}
+      >
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} variant="rounded" height={120} />
         ))}
+      </Box>
+      <Skeleton variant="rounded" height={300} />
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 2fr) minmax(0, 1fr)' },
+        }}
+      >
+        <Skeleton variant="rounded" height={300} />
+        <Skeleton variant="rounded" height={300} />
+      </Box>
+      <Paper sx={{ p: 2 }}>
+        <TableRowsSkeleton rows={5} columns={7} />
       </Paper>
     </Stack>
   )

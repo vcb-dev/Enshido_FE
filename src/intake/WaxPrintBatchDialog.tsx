@@ -16,7 +16,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { Controller, useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import { listIntakeOrdersApi, type IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { DialogForm, FormQtyField } from '../components/ui'
@@ -47,7 +48,7 @@ export function WaxPrintBatchDialog({
 }) {
   const fullScreen = useIsMobile()
   const [uploading, setUploading] = useState(false)
-  const form = useForm<Values>({ defaultValues: EMPTY })
+  const form = useAppForm<Values>({ defaultValues: EMPTY })
 
   const list = useQuery({
     queryKey: ['intake-orders', 'wax-print-candidates'],
