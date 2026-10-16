@@ -34,7 +34,8 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import SyncIcon from '@mui/icons-material/Sync'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm, useWatch } from 'react-hook-form'
+import { useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -1840,7 +1841,7 @@ function OpenOrderStageDialog({
   onSave: (payload: { stage: StageCode }) => void
 }) {
   type OpenStageValues = { stage: StageCode | '' }
-  const form = useForm<OpenStageValues>({
+  const form = useAppForm<OpenStageValues>({
     defaultValues: { stage: '' },
   })
   const stage = useWatch({ control: form.control, name: 'stage' })
@@ -1906,7 +1907,7 @@ function StatusDialog({
   onClose: () => void
   onSave: (payload: { status: ProductionStatus; note?: string }) => void
 }) {
-  const form = useForm<StatusValues>({
+  const form = useAppForm<StatusValues>({
     defaultValues: { target: '', note: '' },
   })
   const [target, note] = useWatch({

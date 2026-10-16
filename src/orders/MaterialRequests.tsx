@@ -14,7 +14,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
+import { Controller, useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import {
   cancelMaterialRequestApi,
   issueMaterialRequestApi,
@@ -212,7 +213,7 @@ export function MaterialRequestDialog({
   onClose: () => void
   onSave: (payload: MaterialRequestPayload) => void
 }) {
-  const form = useForm<RequestValues>({ defaultValues: EMPTY_REQUEST })
+  const form = useAppForm<RequestValues>({ defaultValues: EMPTY_REQUEST })
   const materialId = useWatch({ control: form.control, name: 'materialId' })
 
   const stageLabel = stage ? STAGE_LABEL[stage] : null
@@ -372,7 +373,7 @@ export function IssueMaterialDialog({
   onClose: () => void
   onSave: (payload: IssueMaterialPayload) => void
 }) {
-  const form = useForm<IssueValues>({
+  const form = useAppForm<IssueValues>({
     defaultValues: { kind: 'METAL', qty: '', weight: '', stoneCount: '', images: [] },
   })
   const [uploading, setUploading] = useState(false)
@@ -564,7 +565,7 @@ export function RejectMaterialDialog({
   onClose: () => void
   onSave: (reason: string) => void
 }) {
-  const form = useForm<RejectValues>({ defaultValues: { reason: '' } })
+  const form = useAppForm<RejectValues>({ defaultValues: { reason: '' } })
   useEffect(() => {
     if (request) form.reset({ reason: '' })
   }, [request, form])
@@ -1138,6 +1139,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                   label="Số viên"
                   value={input.value}
                   inputRef={input.ref}
+                  onBlur={input.onBlur}
                   slotProps={{ htmlInput: { inputMode: 'numeric' } }}
                   errorText={fieldState.error?.message}
                   helperText={weightOnly ? `Không bắt buộc — đá tính theo ${unit}` : 'Không bắt buộc'}
@@ -1226,6 +1228,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                         required
                         value={formatQtyInput(String(input.value ?? ''))}
                         inputRef={input.ref}
+                        onBlur={input.onBlur}
                         slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                         errorText={fieldState.error?.message}
                         onChange={(event) => {
@@ -1270,6 +1273,7 @@ export function HandoverMaterialsField<T extends { materials: HandoverMaterialLi
                       required={line.kind === 'METAL' || line.kind === 'STONE'}
                       value={formatQtyInput(String(input.value ?? ''))}
                       inputRef={input.ref}
+                      onBlur={input.onBlur}
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                       errorText={fieldState.error?.message}
                       helperText={

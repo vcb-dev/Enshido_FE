@@ -42,6 +42,7 @@ export { FILTER_FIELD_SX, PanelToolbar } from './PanelToolbar'
 export type { PanelToolbarProps } from './PanelToolbar'
 
 export { DialogForm, Form, FormActions, FormRow } from './form/Form'
+export { useAppForm } from './form/useAppForm'
 export type { FormProps } from './form/Form'
 
 export { CrudDialogShell } from './form/CrudDialogShell'

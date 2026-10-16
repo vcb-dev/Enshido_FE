@@ -9,7 +9,8 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useForm, useWatch } from 'react-hook-form'
+import { useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type {
   CastingSlip,
   CastingSlipImage,
@@ -118,7 +119,7 @@ export function CastingSlipsCutDialog({
         ? current
         : { ...current, [key]: uploading },
     )
-  const form = useForm<Values>({ defaultValues: { slips: [] } })
+  const form = useAppForm<Values>({ defaultValues: { slips: [] } })
   const watched = useWatch({ control: form.control, name: 'slips' })
 
   const slipKey = slips.map((slip) => slip.id).join(',')

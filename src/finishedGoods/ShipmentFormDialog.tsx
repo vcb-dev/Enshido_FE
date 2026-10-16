@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Button, IconButton, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { useFieldArray, useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type { FinishedGoodsStockRow, ShipmentDetail, ShipmentPayload } from '../api/finishedGoods'
 import { formatMoney } from '../api/inventory'
 import { listOrderOptionsApi } from '../api/productionOrders'
@@ -125,7 +126,7 @@ export function ShipmentFormDialog({
   onClose: () => void
   onSave: (payload: ShipmentPayload) => void
 }) {
-  const form = useForm<FormValues>({
+  const form = useAppForm<FormValues>({
     defaultValues: { shippedAt: '', customerName: '', paymentMethod: '', note: '', lines: [EMPTY_LINE] },
   })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
