@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Divider } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { Controller, useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useOperatorName } from '../hooks/useOperatorName'
 import {
   listBtpOptionsApi,
@@ -208,8 +207,9 @@ export function ProductionOrderFormDialog({
   onExited?: () => void
   onSave: (payload: UpsertProductionOrderPayload) => void | Promise<unknown>
 }) {
-  const form = useAppForm<FormValues>({
+  const form = useForm<FormValues>({
     defaultValues: EMPTY,
+    reValidateMode: 'onSubmit',
   })
   const operatorName = useOperatorName()
   const [uploadingDetail, setUploadingDetail] = useState(false)

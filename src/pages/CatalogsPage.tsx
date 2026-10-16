@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   createCatalogApi,
@@ -136,7 +136,7 @@ function CatalogTreePage({ copy }: { copy: Copy }) {
   const { params } = table
   const [editId, setEditId] = useState<string | null>(null)
   const createParent = useCrudDialog<CatalogItem>()
-  const parentForm = useAppForm<FormValues>({ defaultValues: EMPTY })
+  const parentForm = useForm<FormValues>({ defaultValues: EMPTY })
 
   const list = useQuery({
     queryKey: ['catalogs', copy.kind],
@@ -333,9 +333,9 @@ function ParentEditorDialog({
   onRefresh: () => Promise<void>
 }) {
   const queryClient = useQueryClient()
-  const form = useAppForm<FormValues>({ defaultValues: EMPTY })
+  const form = useForm<FormValues>({ defaultValues: EMPTY })
   const childDialog = useCrudDialog<CatalogItem>()
-  const childForm = useAppForm<FormValues>({ defaultValues: EMPTY })
+  const childForm = useForm<FormValues>({ defaultValues: EMPTY })
   const [childSearch, setChildSearch] = useState('')
 
   useEffect(() => {

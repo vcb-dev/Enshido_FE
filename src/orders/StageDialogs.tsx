@@ -2,8 +2,7 @@ import { confirmWeights, ratioWarning } from './weightSanity'
 import { STONE_SET_SOURCE_LABEL, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import type {
   CastingPayload,
   HandoverPayload,
@@ -116,7 +115,7 @@ export function AssignReceiptDialog({
     note: string
     materials: HandoverMaterialLine[]
   }
-  const form = useAppForm<Values>({
+  const form = useForm<Values>({
     defaultValues: {
       stage: '',
       craftsmanUserId: '',
@@ -378,7 +377,7 @@ export function KcsReturnDialog({
   const [uploading, setUploading] = useState(false)
   /** Nguội / Vào đá: QC chọn kết quả trước — form chỉ hiện ô của kết quả đó. */
   const [outcome, setOutcome] = useState<QcOutcome>('ok')
-  const form = useAppForm<ReturnValues>({
+  const form = useForm<ReturnValues>({
     defaultValues: {
       images: [],
       returnedQty: '',
@@ -1117,7 +1116,7 @@ export function CastingDialog({
   onClose: () => void
   onSave: (payload: CastingPayload) => void
 }) {
-  const form = useAppForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '' } })
+  const form = useForm<CastingValues>({ defaultValues: { sentDate: '', returnedDate: '' } })
 
   useEffect(() => {
     if (!open) return

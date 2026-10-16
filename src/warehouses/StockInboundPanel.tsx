@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Box, Button, Dialog, Paper, Stack, Autocomplete, TextField } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useFieldArray, useWatch, Controller } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useFieldArray, useForm, useWatch, Controller } from 'react-hook-form'
 import type { Control, UseFormReturn } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
@@ -665,7 +664,7 @@ function InboundDialog({
   onExited: () => void
   onSave: (payloads: CreateInboundPayload[]) => void
 }) {
-  const form = useAppForm<InboundFormValues>({ defaultValues: EMPTY_INBOUND })
+  const form = useForm<InboundFormValues>({ defaultValues: EMPTY_INBOUND })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
   const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
   const profile = stockProfile(warehouseCode)

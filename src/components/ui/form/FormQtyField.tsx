@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
 import {
@@ -11,7 +10,7 @@ import {
 } from '../../../api/inventory'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
-import { isUserBlur, withRequiredRule } from './field'
+import { withRequiredRule } from './field'
 import type { FormFieldBaseProps } from './field'
 
 export type FormQtyFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
@@ -37,8 +36,7 @@ export function FormQtyField<T extends FieldValues>({
     control,
     rules: withRequiredRule(rules, required),
   })
-  const { ref, value, onChange, onBlur, ...rest } = field
-  const [autoFocusAt] = useState(() => (props.autoFocus ? Date.now() : null))
+  const { ref, value, onChange, ...rest } = field
   const readout = isGramLabel(props.label) ? gramReadout(String(value ?? '')) : ''
   const { helperText, ...inputProps } = props
 
@@ -60,9 +58,6 @@ export function FormQtyField<T extends FieldValues>({
           typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
         )
         onChange(transform ? transform(next) : next)
-      }}
-      onBlur={(event) => {
-        if (isUserBlur(event, autoFocusAt)) onBlur()
       }}
       inputRef={ref}
       required={required}

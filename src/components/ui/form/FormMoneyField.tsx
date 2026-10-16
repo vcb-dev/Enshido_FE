@@ -1,10 +1,9 @@
-import { useState } from 'react'
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
 import { formatMoneyInput, moneyDigitsFromInput } from '../../../api/inventory'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
-import { isUserBlur, withRequiredRule } from './field'
+import { withRequiredRule } from './field'
 import type { FormFieldBaseProps } from './field'
 
 export type FormMoneyFieldProps<T extends FieldValues> = FormFieldBaseProps<T> &
@@ -26,8 +25,7 @@ export function FormMoneyField<T extends FieldValues>({
     control,
     rules: withRequiredRule(rules, required),
   })
-  const { ref, value, onChange, onBlur, ...rest } = field
-  const [autoFocusAt] = useState(() => (props.autoFocus ? Date.now() : null))
+  const { ref, value, onChange, ...rest } = field
 
   return (
     <TextInput
@@ -36,9 +34,6 @@ export function FormMoneyField<T extends FieldValues>({
       {...rest}
       value={formatMoneyInput(String(value ?? ''))}
       onChange={(event) => onChange(moneyDigitsFromInput(event.target.value))}
-      onBlur={(event) => {
-        if (isUserBlur(event, autoFocusAt)) onBlur()
-      }}
       inputRef={ref}
       required={required}
       errorText={fieldState.error?.message}

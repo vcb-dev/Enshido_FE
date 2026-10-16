@@ -34,8 +34,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import SyncIcon from '@mui/icons-material/Sync'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import { QRCodeSVG } from 'qrcode.react'
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -516,7 +515,7 @@ export function ProductionOrderDetailPage() {
                         // Lượt nhận kiểu cũ (chưa có nội dung giao): huỷ rồi giao lại cho thợ.
                         canManageTickets ? (
                           <Button
-                            size="large"
+                            size="small"
                             color="inherit"
                             loading={cancelParentStage.isPending}
                             onClick={() => cancelParentStage.mutate(undefined)}
@@ -546,7 +545,7 @@ export function ProductionOrderDetailPage() {
                         </Typography>
                       ) : parentWork?.state === 'WAITING' ? (
                         <Button
-                          size="large"
+                          size="small"
                           color="inherit"
                           loading={cancelParentStage.isPending}
                           onClick={() => cancelParentStage.mutate(undefined)}
@@ -559,7 +558,7 @@ export function ProductionOrderDetailPage() {
                         >
                           <span>
                             <Button
-                              size="large"
+                              size="small"
                               variant="contained"
                               disabled={!castingReady || locked}
                               onClick={() => {
@@ -623,7 +622,7 @@ export function ProductionOrderDetailPage() {
                         FINISH: order.finishedGoods ? (
                           isAdmin && (order.finishedGoods.shippedQty ?? 0) === 0 ? (
                             <Button
-                              size="large"
+                              size="small"
                               color="inherit"
                               loading={undoFinish.isPending}
                               onClick={() => undoFinish.mutate(undefined)}
@@ -934,7 +933,7 @@ export function ProductionOrderDetailPage() {
                 // Đã cắt cây thông hoặc đã giao khâu thì đơn đã vào Nguội — số liệu đúc đã chốt.
                 order.cutAt || order.stages.length > 0 || !canReportCasting ? null : (
                   <Button
-                    size="large"
+                    size="small"
                     variant={order.castingSentDate ? 'outlined' : 'contained'}
                     disabled={order.status === 'DELIVERED'}
                     onClick={() => setCastingOpen(true)}
@@ -1841,7 +1840,7 @@ function OpenOrderStageDialog({
   onSave: (payload: { stage: StageCode }) => void
 }) {
   type OpenStageValues = { stage: StageCode | '' }
-  const form = useAppForm<OpenStageValues>({
+  const form = useForm<OpenStageValues>({
     defaultValues: { stage: '' },
   })
   const stage = useWatch({ control: form.control, name: 'stage' })
@@ -1907,7 +1906,7 @@ function StatusDialog({
   onClose: () => void
   onSave: (payload: { status: ProductionStatus; note?: string }) => void
 }) {
-  const form = useAppForm<StatusValues>({
+  const form = useForm<StatusValues>({
     defaultValues: { target: '', note: '' },
   })
   const [target, note] = useWatch({

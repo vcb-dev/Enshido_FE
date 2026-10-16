@@ -10,8 +10,7 @@ import {
   Paper,
   Typography,
 } from '@mui/material'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import {
   FG_FLOW_STATUS,
   fgFlowStatus,
@@ -143,7 +142,7 @@ function StockForm({
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const readOnly = kind === 'view'
   const initial = useMemo(() => formValuesFromRow(row), [row])
-  const form = useAppForm<FormValues>({ defaultValues: initial })
+  const form = useForm<FormValues>({ defaultValues: initial })
   const openingQty = useWatch({ control: form.control, name: 'openingQty' })
   const stockUnitPrice = useWatch({ control: form.control, name: 'stockUnitPrice' })
   const mainMaterial = useWatch({ control: form.control, name: 'mainMaterial' })

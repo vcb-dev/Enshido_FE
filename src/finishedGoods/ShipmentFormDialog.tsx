@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react'
 import { Alert, Box, Button, IconButton, Paper, Stack, Tooltip, Typography } from '@mui/material'
-import { useFieldArray, useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useQuery } from '@tanstack/react-query'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { FinishedGoodsStockRow, ShipmentDetail, ShipmentPayload } from '../api/finishedGoods'
 import { formatMoney } from '../api/inventory'
+import { listOrderOptionsApi } from '../api/productionOrders'
 import {
   CrudDialogShell,
   FormMoneyField,
@@ -13,8 +14,9 @@ import {
   TextInput,
   TrashIcon,
 } from '../components/ui'
+import { STATUS_META } from '../orders/catalog'
 import { FormFreeSoloField } from '../orders/FreeSoloFields'
-import { gramOf, formatGram, invoiceAmount, INVOICE_FIELD_LABELS, missingInvoiceFields } from './invoice'
+import { gramOf, formatGram, invoiceAmount, invoiceComplete } from './invoice'
 
 type LineValues = {
   orderCode: string
@@ -26,8 +28,6 @@ type LineValues = {
   stoneAmount: string
   otherAmount: string
   note: string
-  /** Mã của khách in trên phiếu — điền sẵn từ đơn, sửa được. */
-  customerCode: string
 }
 
 type OrderStockInfo = {
@@ -38,9 +38,6 @@ type OrderStockInfo = {
   sizeLabel: string | null
   mainMaterial: string | null
   qtyUnit: string | null
-  customerCode: string | null
-  /** Mã hiện trên màn Tồn: Mã SX của lệnh, hoặc mã sản xuất nhập tay (tồn đầu kỳ). */
-  stockCode: string | null
 }
 
 type FormValues = {
@@ -61,7 +58,6 @@ const EMPTY_LINE: LineValues = {
   stoneAmount: '',
   otherAmount: '',
   note: '',
-  customerCode: '',
 }
 
 function lineFromStock(orderCode: string | null | undefined, stock: FinishedGoodsStockRow[]): LineValues {
@@ -74,7 +70,6 @@ function lineFromStock(orderCode: string | null | undefined, stock: FinishedGood
     orderCode: code,
     qty: String(row.remainingQty >= 1 ? row.remainingQty : 1),
     note: row.description,
-    customerCode: row.customerCode ?? '',
   }
 }
 
@@ -89,12 +84,6 @@ function gramInput(value: string) {
 /** Tiền từ API → chuỗi chữ số cho ô nhập; giữ "0" (tiền đá 0 là đã nhập), null là ô trống. */
 function moneyInput(value: string | null) {
   return value == null ? '' : String(Math.round(Number(value)))
-}
-
-/** Viền vàng cho ô còn trống khiến phiếu chưa in được. */
-const MISSING_SX = {
-  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'warning.main', borderWidth: 2 },
-  '& .MuiInputLabel-root': { color: 'warning.dark' },
 }
 
 const MONEY_FIELDS = [
@@ -136,10 +125,16 @@ export function ShipmentFormDialog({
   onClose: () => void
   onSave: (payload: ShipmentPayload) => void
 }) {
-  const form = useAppForm<FormValues>({
+  const form = useForm<FormValues>({
     defaultValues: { shippedAt: '', customerName: '', paymentMethod: '', note: '', lines: [EMPTY_LINE] },
   })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
+  const ordersQuery = useQuery({
+    queryKey: ['production-order-options'],
+    queryFn: () => listOrderOptionsApi(),
+    staleTime: 60_000,
+    enabled: open,
+  })
 
   useEffect(() => {
     if (!open) return
@@ -159,7 +154,6 @@ export function ShipmentFormDialog({
               stoneAmount: moneyInput(line.stoneAmount),
               otherAmount: moneyInput(line.otherAmount),
               note: line.note ?? '',
-              customerCode: line.customerCode ?? '',
             })),
           }
         : {
@@ -180,7 +174,6 @@ export function ShipmentFormDialog({
     if (!filled.note && filled.qty === '1') return
     form.setValue('lines.0.qty', filled.qty)
     form.setValue('lines.0.note', filled.note)
-    form.setValue('lines.0.customerCode', filled.customerCode)
   }, [open, shipment, initialOrderCode, stock, form])
 
   // Khi sửa, SL của chính phiếu này được cộng lại vào tồn khả dụng.
@@ -195,8 +188,6 @@ export function ShipmentFormDialog({
         sizeLabel: row.sizeLabel,
         mainMaterial: row.mainMaterial,
         qtyUnit: row.qtyUnit,
-        customerCode: row.customerCode,
-        stockCode: row.sxCode ?? (row.model3dCode?.trim() || null),
       })
     }
     for (const line of shipment?.lines ?? []) {
@@ -209,52 +200,49 @@ export function ShipmentFormDialog({
         sizeLabel: current?.sizeLabel ?? line.sizeLabel,
         mainMaterial: current?.mainMaterial ?? line.mainMaterial,
         qtyUnit: current?.qtyUnit ?? null,
-        customerCode: current?.customerCode ?? line.customerCode,
-        stockCode: current?.stockCode ?? null,
       })
     }
     return map
   }, [stock, shipment])
 
-  // Xuất theo tồn kho thành phẩm: chỉ liệt kê mặt hàng còn tồn (cộng cả hàng
-  // đang nằm trên chính phiếu khi sửa), hiện bằng Mã sản xuất như màn Tồn.
-  // Giá trị lưu vẫn là mã lệnh (A00x) vì tồn và phiếu xuất đều khoá theo lệnh.
   const orderOptions = useMemo(() => {
-    const items = Array.from(available.entries())
-      .filter(([, info]) => info.remaining > 0)
-      .map(([orderCode, info]) => ({
-        id: orderCode,
-        name: info.stockCode ?? orderCode,
-        secondary: [
-          info.stockCode ? orderCode : null,
-          info.description,
-          info.sizeLabel ? `size ${info.sizeLabel}` : null,
-          `còn ${info.remaining}${info.qtyUnit ? ` ${info.qtyUnit}` : ''}`,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-      }))
-    // Đơn đang chọn sẵn mà hết tồn vẫn phải hiện để không mất nhãn trên ô.
-    const seen = new Set(items.map((item) => item.id))
+    const seen = new Set<string>()
+    const items = (ordersQuery.data ?? []).map((order) => {
+      seen.add(order.code)
+      return {
+        id: order.code,
+        name: order.code,
+        secondary: `${STATUS_META[order.status].label} · ${order.description}`,
+      }
+    })
+    for (const line of shipment?.lines ?? []) {
+      if (seen.has(line.orderCode)) continue
+      seen.add(line.orderCode)
+      items.push({
+        id: line.orderCode,
+        name: line.orderCode,
+        secondary: line.description,
+      })
+    }
     if (initialOrderCode && !seen.has(initialOrderCode)) {
       items.unshift({
         id: initialOrderCode,
-        name: available.get(initialOrderCode)?.stockCode ?? initialOrderCode,
-        secondary: 'hết tồn',
+        name: initialOrderCode,
+        secondary: available.get(initialOrderCode)?.description ?? '',
       })
     }
     return items
-  }, [available, initialOrderCode])
+  }, [available, initialOrderCode, ordersQuery.data, shipment])
 
   function applyOrder(index: number, code: string) {
     const info = available.get(code)
+    const order = ordersQuery.data?.find((item) => item.code === code)
     form.setValue(`lines.${index}.qty`, String(info && info.remaining >= 1 ? info.remaining : 1), {
       shouldDirty: true,
     })
-    form.setValue(`lines.${index}.note`, info?.description ?? '', {
+    form.setValue(`lines.${index}.note`, info?.description || order?.description || '', {
       shouldDirty: true,
     })
-    form.setValue(`lines.${index}.customerCode`, info?.customerCode ?? '', { shouldDirty: true })
   }
 
   const watched = useWatch({ control: form.control, name: 'lines' })
@@ -280,11 +268,7 @@ export function ShipmentFormDialog({
     },
     { qty: 0, amount: 0, cost: 0 },
   )
-  /** Dòng nào còn trống khoản nào — để báo đúng tên ô và tô viền ô đó. */
-  const missingByLine = (watched ?? []).map((line) => (line.orderCode ? missingInvoiceFields(invoiceOf(line)) : []))
-  const incompleteLines = (watched ?? []).flatMap((line, index) =>
-    missingByLine[index].length ? [{ index, orderCode: line.orderCode, missing: missingByLine[index] }] : [],
-  )
+  const incomplete = (watched ?? []).filter((line) => line.orderCode && !invoiceComplete(invoiceOf(line))).length
 
   // Nhiều dòng cùng một đơn thì cộng dồn SL để so với tồn.
   const overStock = Array.from(
@@ -310,7 +294,6 @@ export function ShipmentFormDialog({
         stoneAmount: line.stoneAmount || undefined,
         otherAmount: line.otherAmount || undefined,
         note: line.note.trim() || undefined,
-        customerCode: line.customerCode.trim() || undefined,
       })),
       editReason: values.editReason?.trim() || undefined,
     })
@@ -342,7 +325,6 @@ export function ShipmentFormDialog({
           const line = watched?.[index]
           const info = line?.orderCode ? available.get(line.orderCode) : undefined
           const auto = autoWeight(line)
-          const missing = new Set(missingByLine[index] ?? [])
           return (
             <Paper key={field.id} variant="outlined" sx={{ p: 1.25 }}>
               <Box
@@ -359,11 +341,11 @@ export function ShipmentFormDialog({
               >
                 <FormSearchSelect<FormValues>
                   name={`lines.${index}.orderCode`}
-                  label="Mã sản xuất"
+                  label="Mã đơn SX"
                   options={orderOptions}
                   required
-                  placeholder="Chọn hàng trong kho thành phẩm…"
-                  noOptionsText="Kho thành phẩm không còn hàng"
+                  placeholder="Chọn đơn sản xuất…"
+                  noOptionsText="Không có đơn sản xuất"
                   onPicked={(code) => applyOrder(index, code)}
                 />
                 <FormTextField<FormValues>
@@ -391,18 +373,12 @@ export function ShipmentFormDialog({
                   <FormTextField<FormValues>
                     name={`lines.${index}.weightGram`}
                     label="TL (g)"
-                    sx={missing.has('weightGram') ? MISSING_SX : undefined}
                     transform={gramInput}
                     slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                   />
                 )}
                 {MONEY_FIELDS.map(([key, label]) => (
-                  <FormMoneyField<FormValues>
-                    key={key}
-                    name={`lines.${index}.${key}`}
-                    label={label}
-                    sx={missing.has(key) ? MISSING_SX : undefined}
-                  />
+                  <FormMoneyField<FormValues> key={key} name={`lines.${index}.${key}`} label={label} />
                 ))}
                 <Tooltip title="Bỏ dòng">
                   <span>
@@ -423,15 +399,9 @@ export function ShipmentFormDialog({
                   gap: 1.25,
                   mt: 1,
                   alignItems: 'center',
-                  gridTemplateColumns: { xs: '1fr', md: '220px minmax(0, 1fr) auto' },
+                  gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) auto' },
                 }}
               >
-                <FormTextField<FormValues>
-                  name={`lines.${index}.customerCode`}
-                  label="Mã của khách"
-                  placeholder="Lấy theo đơn"
-                  clearable
-                />
                 <FormTextField<FormValues> name={`lines.${index}.note`} label="Ghi chú dòng" />
                 <Typography variant="body2" sx={{ textAlign: { md: 'right' } }}>
                   Thành tiền: <b>{line ? formatMoney(String(invoiceAmount(invoiceOf(line)))) : '0'}</b>
@@ -476,14 +446,10 @@ export function ShipmentFormDialog({
         <FormTextField<FormValues> name="note" label="Ghi chú phiếu" />
       </FormRow>
 
-      {incompleteLines.length > 0 ? (
+      {incomplete > 0 ? (
         <Alert severity="info" sx={{ py: 0 }}>
-          {incompleteLines.map(({ index, orderCode, missing }) => (
-            <div key={index}>
-              Dòng {index + 1} ({orderCode}) còn trống: <b>{missing.map((key) => INVOICE_FIELD_LABELS[key]).join(', ')}</b>
-            </div>
-          ))}
-          Vẫn lưu được nhưng chưa in được. Khoản không có thì nhập 0.
+          Còn {incomplete} dòng chưa đủ TL, đơn giá NL, tiền công, tiền đá, chi phí khác — vẫn lưu được nhưng chưa in
+          được. Khoản không có thì nhập 0.
         </Alert>
       ) : null}
 

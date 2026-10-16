@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm } from 'react-hook-form'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { DialogForm, FormTextField } from '../components/ui'
 
@@ -14,7 +14,7 @@ type RejectIntakeDialogProps = {
 }
 
 export function RejectIntakeDialog({ order, saving, onClose, onConfirm }: RejectIntakeDialogProps) {
-  const form = useAppForm<Values>({ defaultValues: { reason: '' } })
+  const form = useForm<Values>({ defaultValues: { reason: '' } })
 
   useEffect(() => {
     if (order) form.reset({ reason: '' })

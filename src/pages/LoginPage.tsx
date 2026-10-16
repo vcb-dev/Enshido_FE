@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/material'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { useAuth } from '../auth/AuthContext'
 import { resolvePostLoginPath } from '../auth/homePath'
@@ -25,7 +25,7 @@ export function LoginPage() {
       : null
 
   const [error, setError] = useState('')
-  const form = useAppForm<LoginFormValues>({ defaultValues: { username: '', password: '' } })
+  const form = useForm<LoginFormValues>({ defaultValues: { username: '', password: '' } })
   const submitting = form.formState.isSubmitting
 
   if (user) {

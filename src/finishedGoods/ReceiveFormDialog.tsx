@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import {
   listFinishedGoodsOrderOptionsApi,
   type FinishedGoodsReceiptRow,
@@ -63,7 +62,7 @@ export function ReceiveFormDialog({
   const operatorName = useOperatorName()
   const fullScreen = useIsMobile()
   const readOnly = kind === 'view'
-  const form = useAppForm<FormValues>({
+  const form = useForm<FormValues>({
     defaultValues: {
       orderCode: '',
       qtyUnit: '',

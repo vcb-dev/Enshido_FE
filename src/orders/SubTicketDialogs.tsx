@@ -15,8 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { Controller, useFieldArray, useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
 import { listNvlOptionsApi, type NvlOption, type OrderImage, type StageImage } from '../api/productionOrders'
 import AddIcon from '@mui/icons-material/Add'
@@ -57,7 +56,7 @@ export function SplitSubTicketsDialog({
   onClose: () => void
   onSave: (tickets: SubTicketPayload[]) => void
 }) {
-  const form = useAppForm<SplitValues>({ defaultValues: { rows: [] } })
+  const form = useForm<SplitValues>({ defaultValues: { rows: [] } })
   const { fields, replace } = useFieldArray({ control: form.control, name: 'rows' })
   const seeded = useRef(false)
 
@@ -192,7 +191,7 @@ export function SubTicketFormDialog({
   onExited: () => void
   onSave: (payload: SubTicketPayload) => void
 }) {
-  const form = useAppForm<TicketValues>({ defaultValues: { qty: '', note: '' } })
+  const form = useForm<TicketValues>({ defaultValues: { qty: '', note: '' } })
   const remaining = useMemo(() => remainingSplit(order, ticket?.id), [order, ticket])
   const locked = Boolean(ticket && ticket.entryCount > 0)
   const qtyValue = useWatch({ control: form.control, name: 'qty' })
@@ -412,7 +411,7 @@ export function AssignWorkerDialog({
     stones: Array<{ materialId: string; stoneCount: number | null; weight: string; images: StageImage[] }>
   }) => void
 }) {
-  const form = useAppForm<AssignValues>({ defaultValues: { stage: '', craftsmanUserId: '', stones: [] } })
+  const form = useForm<AssignValues>({ defaultValues: { stage: '', craftsmanUserId: '', stones: [] } })
   const stones = useFieldArray({ control: form.control, name: 'stones' })
   const uploading = useUploadingByKey()
   const stage = useWatch({ control: form.control, name: 'stage' })
@@ -532,7 +531,6 @@ export function AssignWorkerDialog({
                         loading={nvl.isLoading}
                         value={(nvl.data ?? []).find((item) => item.id === input.value) ?? null}
                         onChange={(_, option) => input.onChange(option?.id ?? '')}
-                        onBlur={input.onBlur}
                         isOptionEqualToValue={(option, value) => option.id === value.id}
                         getOptionLabel={(option) => [option.sku, option.name].filter(Boolean).join(' · ')}
                         filterOptions={STONE_FILTER}

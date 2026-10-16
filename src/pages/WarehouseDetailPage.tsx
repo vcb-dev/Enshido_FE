@@ -18,8 +18,7 @@ import {
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller, useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   formatMoney,
@@ -1265,7 +1264,7 @@ function StockEditDialog({
   onExited: () => void
   onSave: (payloads: UpdateStockPayload[]) => void
 }) {
-  const form = useAppForm<StockDialogValues>({
+  const form = useForm<StockDialogValues>({
     defaultValues: { items: [EMPTY_STOCK], editReason: '' },
   })
   const items = useFieldArray({ control: form.control, name: 'items' })

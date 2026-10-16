@@ -13,8 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   deleteLocationApi,
@@ -476,7 +475,7 @@ function GenerateDialog({
     positionCount: number
   }) => void
 }) {
-  const form = useAppForm<GenerateFormValues>({ defaultValues: EMPTY_GENERATE })
+  const form = useForm<GenerateFormValues>({ defaultValues: EMPTY_GENERATE })
 
   useEffect(() => {
     if (!open) return
@@ -565,7 +564,7 @@ function EditLocationDialog({
   onExited: () => void
   onSave: (payload: UpdateLocationPayload) => void
 }) {
-  const form = useAppForm<EditFormValues>({ defaultValues: EMPTY_EDIT })
+  const form = useForm<EditFormValues>({ defaultValues: EMPTY_EDIT })
 
   useEffect(() => {
     if (!open) return

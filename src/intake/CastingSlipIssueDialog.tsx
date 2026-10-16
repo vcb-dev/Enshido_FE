@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useForm, useWatch } from 'react-hook-form'
 import { listRestMaterialOptionsApi, type CastingSlip, type CastingSlipImage } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { DialogForm, FormSelect } from '../components/ui'
@@ -85,7 +84,7 @@ export function CastingSlipIssueDialog({
   }) => void
 }) {
   const [uploading, setUploading] = useState(false)
-  const form = useAppForm<Values>({
+  const form = useForm<Values>({
     defaultValues: { s999: '', hoi: '', s925: '', s999Material: '', hoiMaterial: '', s925Material: '', images: [] },
   })
   const materials = useQuery({

@@ -20,30 +20,24 @@ import {
   useTheme,
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/Logout'
+import TableChartIcon from '@mui/icons-material/TableChart'
 import CloudOffIcon from '@mui/icons-material/CloudOff'
-import MenuOpenIcon from '@mui/icons-material/MenuOpen'
+import PeopleIcon from '@mui/icons-material/People'
 import TableRowsIcon from '@mui/icons-material/TableRows'
+import MenuOpenIcon from '@mui/icons-material/MenuOpen'
+import SettingsIcon from '@mui/icons-material/Settings'
+import PlaceIcon from '@mui/icons-material/Place'
+import CategoryIcon from '@mui/icons-material/Category'
+import WarehouseIcon from '@mui/icons-material/Warehouse'
+import PalletIcon from '@mui/icons-material/Pallet'
 import SouthIcon from '@mui/icons-material/South'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import NoteAddIcon from '@mui/icons-material/NoteAdd'
+import WhatshotIcon from '@mui/icons-material/Whatshot'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
+import FactCheckIcon from '@mui/icons-material/FactCheck'
 import NorthIcon from '@mui/icons-material/North'
-import SpaceDashboardIcon from '@mui/icons-material/SpaceDashboardOutlined'
-import PostAddIcon from '@mui/icons-material/PostAddOutlined'
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturingOutlined'
-import BadgeIcon from '@mui/icons-material/BadgeOutlined'
-import HandymanIcon from '@mui/icons-material/HandymanOutlined'
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartmentOutlined'
-import ForestIcon from '@mui/icons-material/ForestOutlined'
-import VerifiedIcon from '@mui/icons-material/VerifiedOutlined'
-import Inventory2Icon from '@mui/icons-material/Inventory2Outlined'
-import WarehouseIcon from '@mui/icons-material/WarehouseOutlined'
-import DiamondIcon from '@mui/icons-material/DiamondOutlined'
-import ExtensionIcon from '@mui/icons-material/ExtensionOutlined'
-import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasketOutlined'
-import StorefrontIcon from '@mui/icons-material/StorefrontOutlined'
-import ViewListIcon from '@mui/icons-material/ViewListOutlined'
-import TuneIcon from '@mui/icons-material/TuneOutlined'
-import PinDropIcon from '@mui/icons-material/PinDropOutlined'
-import ListAltIcon from '@mui/icons-material/ListAltOutlined'
-import GroupsIcon from '@mui/icons-material/GroupsOutlined'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
@@ -393,33 +387,29 @@ function DrawerNav({
       <Divider />
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
         {showDashboard ? (
-          <NavItem to="/" icon={<SpaceDashboardIcon fontSize="small" />} label="Tổng quan" />
+          <NavItem to="/" icon={<TableChartIcon fontSize="small" />} label="Tổng quan" />
         ) : null}
         {showIntakeOrders ? (
-          <NavItem to="/intake-orders" icon={<PostAddIcon fontSize="small" />} label="Tạo đơn" />
+          <NavItem to="/intake-orders" icon={<NoteAddIcon fontSize="small" />} label="Tạo đơn" />
         ) : null}
         {showProductionOrders ? (
-          <NavItem to="/orders" icon={<PrecisionManufacturingIcon fontSize="small" />} label="Lệnh sản xuất" />
+          <NavItem to="/orders" icon={<AssignmentIcon fontSize="small" />} label="Lệnh sản xuất" />
         ) : null}
-        <MyTicketsMenu
-          items={[
-            showMyTickets
-              ? { to: '/my-tickets', icon: <HandymanIcon fontSize="small" />, label: 'Phiếu khâu' }
-              : null,
-            showCastingOrders
-              ? { to: '/casting', icon: <LocalFireDepartmentIcon fontSize="small" />, label: 'Lệnh đúc' }
-              : null,
-            showCastingCuts
-              ? { to: '/casting-cuts', icon: <ForestIcon fontSize="small" />, label: 'Cắt cây thông' }
-              : null,
-            showQcTickets
-              ? { to: '/qc-tickets', icon: <VerifiedIcon fontSize="small" />, label: 'Phiếu QC' }
-              : null,
-          ]}
-        />
+        {showCastingOrders ? (
+          <NavItem to="/casting" icon={<WhatshotIcon fontSize="small" />} label="Lệnh đúc" />
+        ) : null}
+        {showCastingCuts ? (
+          <NavItem to="/casting-cuts" icon={<ContentCutIcon fontSize="small" />} label="Cắt cây thông" />
+        ) : null}
+        {showMyTickets ? (
+          <NavItem to="/my-tickets" icon={<AssignmentIndIcon fontSize="small" />} label="Phiếu của tôi" />
+        ) : null}
+        {showQcTickets ? (
+          <NavItem to="/qc-tickets" icon={<FactCheckIcon fontSize="small" />} label="Phiếu QC" />
+        ) : null}
         {showKho ? (
           <>
-            <NavItem to="/warehouses" icon={<Inventory2Icon fontSize="small" />} label="Kho" end />
+            <NavItem to="/warehouses" icon={<WarehouseIcon fontSize="small" />} label="Kho" end />
             <List dense disablePadding sx={{ pl: 1.5 }}>
               {warehouses.map((w) =>
                 w.sections ? (
@@ -428,7 +418,7 @@ function DrawerNav({
                   <NavItem
                     key={w.code}
                     to={warehousePath(w)}
-                    icon={warehouseIcon(w.code)}
+                    icon={<PalletIcon fontSize="small" />}
                     label={w.shortName}
                     end
                   />
@@ -439,75 +429,9 @@ function DrawerNav({
         ) : null}
         {canSeeConfig ? <ConfigMenu /> : null}
         {canManageUsers ? (
-          <NavItem to="/users" icon={<GroupsIcon fontSize="small" />} label="Nhân sự" />
+          <NavItem to="/users" icon={<PeopleIcon fontSize="small" />} label="Nhân sự" />
         ) : null}
       </List>
-    </Box>
-  )
-}
-
-/** Icon riêng cho từng kho trên sidebar; kho mới chưa khai thì dùng icon kho chung. */
-function warehouseIcon(code: string) {
-  switch (code) {
-    case 'nvl-chinh':
-      return <DiamondIcon fontSize="small" />
-    case 'btp-cho-vao-da':
-      return <ExtensionIcon fontSize="small" />
-    case 'nvl-tieu-hao':
-      return <ShoppingBasketIcon fontSize="small" />
-    case 'thanh-pham':
-      return <StorefrontIcon fontSize="small" />
-    default:
-      return <WarehouseIcon fontSize="small" />
-  }
-}
-
-type MenuLink = { to: string; icon: ReactNode; label: string }
-
-/** Đang ở trang `to` hoặc trang con của nó (`/casting` không tính `/casting-cuts`). */
-function isOnPath(pathname: string, to: string) {
-  return pathname === to || pathname.startsWith(`${to}/`)
-}
-
-/**
- * Nhóm "Phiếu của tôi": phiếu khâu, lệnh đúc, cắt cây thông, phiếu QC — mục nào có quyền mới hiện.
- * Chỉ còn một mục thì hiện thẳng mục đó, không cần nhóm.
- */
-function MyTicketsMenu({ items }: { items: (MenuLink | null)[] }) {
-  const location = useLocation()
-  const links = items.filter((item): item is MenuLink => item !== null)
-  const onThis = links.some((link) => isOnPath(location.pathname, link.to))
-  const [open, setOpen] = useState(true)
-
-  useEffect(() => {
-    if (onThis) setOpen(true)
-  }, [onThis])
-
-  if (links.length === 0) return null
-  if (links.length === 1) {
-    const [link] = links
-    return <NavItem to={link.to} icon={link.icon} label={link.to === '/my-tickets' ? 'Phiếu của tôi' : link.label} />
-  }
-  return (
-    <Box>
-      <ListItemButton
-        selected={onThis && !open}
-        onClick={() => setOpen((v) => !v)}
-        sx={{ borderRadius: 1, mb: 0.5 }}
-      >
-        <ListItemIcon sx={{ minWidth: 36 }}>
-          <BadgeIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText primary="Phiếu của tôi" />
-        {open ? <NorthIcon sx={{ fontSize: 12 }} /> : <SouthIcon sx={{ fontSize: 12 }} />}
-      </ListItemButton>
-      <Collapse in={open} timeout="auto" unmountOnExit>
-        <List dense disablePadding sx={{ pl: 2 }}>
-          {links.map((link) => (
-            <NavItem key={link.to} to={link.to} icon={link.icon} label={link.label} />
-          ))}
-        </List>
-      </Collapse>
     </Box>
   )
 }
@@ -532,7 +456,7 @@ function ConfigMenu() {
         sx={{ borderRadius: 1, mb: 0.5 }}
       >
         <ListItemIcon sx={{ minWidth: 36 }}>
-          <TuneIcon fontSize="small" />
+          <SettingsIcon fontSize="small" />
         </ListItemIcon>
         <ListItemText primary="Cấu hình" />
         {open ? <NorthIcon sx={{ fontSize: 12 }} /> : <SouthIcon sx={{ fontSize: 12 }} />}
@@ -542,14 +466,14 @@ function ConfigMenu() {
           {showLocations ? (
             <NavItem
               to="/settings/locations"
-              icon={<PinDropIcon fontSize="small" />}
+              icon={<PlaceIcon fontSize="small" />}
               label="Vị trí"
             />
           ) : null}
           {showCatalogs ? (
             <NavItem
               to="/settings/catalogs"
-              icon={<ListAltIcon fontSize="small" />}
+              icon={<CategoryIcon fontSize="small" />}
               label="Danh mục"
             />
           ) : null}
@@ -576,7 +500,7 @@ function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
         sx={{ borderRadius: 1, mb: 0.5 }}
       >
         <ListItemIcon sx={{ minWidth: 36 }}>
-          {warehouseIcon(warehouse.code)}
+          <WarehouseIcon fontSize="small" />
         </ListItemIcon>
         <ListItemText primary={warehouse.shortName} />
         {open ? <NorthIcon sx={{ fontSize: 12 }} /> : <SouthIcon sx={{ fontSize: 12 }} />}
@@ -587,7 +511,7 @@ function WarehouseSectionMenu({ warehouse }: { warehouse: WarehouseDef }) {
             <NavItem
               key={s.code}
               to={warehousePath(warehouse, s.code)}
-              icon={<ViewListIcon fontSize="small" />}
+              icon={<TableRowsIcon fontSize="small" />}
               label={s.name}
               end
             />

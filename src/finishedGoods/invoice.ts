@@ -27,25 +27,8 @@ export function invoiceAmount(parts: InvoiceInput) {
   )
 }
 
-/** Tên khoản hiện cho người lập phiếu — cùng thứ tự với cột trên form. */
-export const INVOICE_FIELD_LABELS: Record<keyof InvoiceInput, string> = {
-  weightGram: 'TL',
-  materialUnitPrice: 'Đơn giá NL',
-  laborAmount: 'Tiền công',
-  stoneAmount: 'Tiền đá',
-  otherAmount: 'Chi phí khác',
-}
-
-/** Chi phí khác không bắt buộc — trống là không có, tính 0. Khớp BE `invoiceComplete`. */
-const REQUIRED_INVOICE_FIELDS: (keyof InvoiceInput)[] = ['weightGram', 'materialUnitPrice', 'laborAmount', 'stoneAmount']
-
-/** Khoản bắt buộc còn để trống. "0" là đã nhập (khoản không có), chỉ chuỗi rỗng mới là thiếu. */
-export function missingInvoiceFields(parts: InvoiceInput): (keyof InvoiceInput)[] {
-  return REQUIRED_INVOICE_FIELDS.filter((key) => parts[key] === '')
-}
-
 export function invoiceComplete(parts: InvoiceInput) {
-  return missingInvoiceFields(parts).length === 0
+  return Object.values(parts).every((value) => value !== '')
 }
 
 /** "33.25" → "33,25" để hiện / in. */

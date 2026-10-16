@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Box, Button, Dialog, Link, Paper, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useFieldArray, useWatch } from 'react-hook-form'
-import { useAppForm } from '../components/ui/form/useAppForm'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { Control } from 'react-hook-form'
 import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -762,7 +761,7 @@ function OutboundDialog({
 }) {
   const profile = stockProfile(warehouseCode)
   const hideIssuedAt = warehouseCode === 'nvl-tieu-hao'
-  const form = useAppForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
+  const form = useForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
   const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
 
