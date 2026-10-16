@@ -516,7 +516,7 @@ export function ProductionOrderDetailPage() {
                         // Lượt nhận kiểu cũ (chưa có nội dung giao): huỷ rồi giao lại cho thợ.
                         canManageTickets ? (
                           <Button
-                            size="small"
+                            size="large"
                             color="inherit"
                             loading={cancelParentStage.isPending}
                             onClick={() => cancelParentStage.mutate(undefined)}
@@ -546,7 +546,7 @@ export function ProductionOrderDetailPage() {
                         </Typography>
                       ) : parentWork?.state === 'WAITING' ? (
                         <Button
-                          size="small"
+                          size="large"
                           color="inherit"
                           loading={cancelParentStage.isPending}
                           onClick={() => cancelParentStage.mutate(undefined)}
@@ -559,7 +559,7 @@ export function ProductionOrderDetailPage() {
                         >
                           <span>
                             <Button
-                              size="small"
+                              size="large"
                               variant="contained"
                               disabled={!castingReady || locked}
                               onClick={() => {
@@ -623,7 +623,7 @@ export function ProductionOrderDetailPage() {
                         FINISH: order.finishedGoods ? (
                           isAdmin && (order.finishedGoods.shippedQty ?? 0) === 0 ? (
                             <Button
-                              size="small"
+                              size="large"
                               color="inherit"
                               loading={undoFinish.isPending}
                               onClick={() => undoFinish.mutate(undefined)}
@@ -934,7 +934,7 @@ export function ProductionOrderDetailPage() {
                 // Đã cắt cây thông hoặc đã giao khâu thì đơn đã vào Nguội — số liệu đúc đã chốt.
                 order.cutAt || order.stages.length > 0 || !canReportCasting ? null : (
                   <Button
-                    size="small"
+                    size="large"
                     variant={order.castingSentDate ? 'outlined' : 'contained'}
                     disabled={order.status === 'DELIVERED'}
                     onClick={() => setCastingOpen(true)}
