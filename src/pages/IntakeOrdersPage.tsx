@@ -102,9 +102,12 @@ function todayYmd() {
   return new Date().toISOString().slice(0, 10)
 }
 
-/** Ngày trả được chọn cả ngày đã qua — để nhập bù đơn cũ. */
-function validateDueDate(value: unknown) {
-  return String(value ?? '').trim() ? true : 'Chọn ngày trả hàng'
+function validateDueDate(value: unknown, createdDate: string, allowPast: boolean) {
+  const due = String(value ?? '').trim()
+  if (!due) return 'Chọn ngày trả hàng'
+  if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
+  if (createdDate && due < createdDate) return 'Ngày trả hàng không được trước ngày tạo'
+  return true
 }
 
 const EMPTY: FormValues = {
@@ -540,7 +543,11 @@ function IntakeOrderFormDialog({
             type="date"
             required
             slotProps={{ inputLabel: { shrink: true } }}
-            rules={{ validate: validateDueDate }}
+            onBlur={() => void form.trigger('dueDate')}
+            rules={{
+              validate: (value, values) =>
+                validateDueDate(value, values.createdDate, Boolean(row)),
+            }}
           />
           <FormTextField<FormValues> name="trackingCode" label="Mã sản phẩm" clearable />
         </FormRow>
