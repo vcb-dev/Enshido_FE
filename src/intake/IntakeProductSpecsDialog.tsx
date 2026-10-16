@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useForm } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty, qtyFromApi } from '../api/inventory'
@@ -45,7 +45,7 @@ export function IntakeProductSpecsDialog({
   onSave,
 }: IntakeProductSpecsDialogProps) {
   const [uploading, setUploading] = useState(false)
-  const form = useForm<Values>({ defaultValues: valuesOf(null) })
+  const form = useAppForm<Values>({ defaultValues: valuesOf(null) })
 
   useEffect(() => {
     if (order) form.reset(valuesOf(order))

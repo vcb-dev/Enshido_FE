@@ -55,12 +55,12 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
       {canKeeper && active ? (
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           {pending ? (
-            <Button variant="contained" disabled={busy || confirm.isPending} onClick={() => setTarget(pending)}>
+            <Button size="large" variant="contained" disabled={busy || confirm.isPending} onClick={() => setTarget(pending)}>
               Thủ kho xác nhận{defectScopeText(pending)}
             </Button>
           ) : null}
           {reworkable.map((entry) => (
-            <Button key={entry.id} variant="contained" color="warning" disabled={busy || rework.isPending}
+            <Button key={entry.id} size="large" variant="contained" color="warning" disabled={busy || rework.isPending}
               onClick={() => rework.mutate(entry, { onSuccess: refreshStock })}>
               Tạo phiếu bù · {entry.defectQty} sp lỗi {STAGE_LABEL[entry.stage]}
             </Button>

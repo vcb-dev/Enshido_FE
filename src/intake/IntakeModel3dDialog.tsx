@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import { useForm } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { DialogForm, FormTextField } from '../components/ui'
 import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
@@ -19,7 +19,7 @@ function valuesOf(order: IntakeOrder | null): Values {
 }
 
 export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeModel3dDialogProps) {
-  const form = useForm<Values>({ defaultValues: valuesOf(null) })
+  const form = useAppForm<Values>({ defaultValues: valuesOf(null) })
 
   useEffect(() => {
     if (order) form.reset(valuesOf(order))

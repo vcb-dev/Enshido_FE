@@ -16,7 +16,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useController, useForm, useWatch } from 'react-hook-form'
+import { useController, useWatch } from 'react-hook-form'
+import { useAppForm } from '../components/ui/form/useAppForm'
 import {
   listCastingSlipCandidatesApi,
   listCastWorkersApi,
@@ -64,7 +65,7 @@ export function CastingSlipCreateDialog({
   const fullScreen = useIsMobile()
   // Ô lọc danh sách đơn — không phải dữ liệu của phiếu nên không nằm trong form.
   const [search, setSearch] = useState('')
-  const form = useForm<Values>({ defaultValues: emptyValues() })
+  const form = useAppForm<Values>({ defaultValues: emptyValues() })
   const pickedField = useController({
     control: form.control,
     name: 'picked',
