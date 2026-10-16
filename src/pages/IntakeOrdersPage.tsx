@@ -566,7 +566,7 @@ function IntakeOrderFormDialog({
           <FormTextField<FormValues> name="customerCode" label="Mã của khách" clearable />
           {/* Khách cố định VCB, server tự gán — không để trong form để khỏi lưu theo giá trị cũ. */}
           <TextInput label="Khách hàng" value={row?.customerName?.trim() || CUSTOMER_NAME} readOnly />
-          <FormTextField<FormValues> name="placedBy" label="Người đặt đơn" required readOnly />
+          <FormTextField<FormValues> name="placedBy" label="Người đặt đơn" required clearable />
         </FormRow>
       </FormSection>
 
