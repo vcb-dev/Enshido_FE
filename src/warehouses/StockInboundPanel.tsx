@@ -64,6 +64,11 @@ import {
 } from './stockFilters'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 
+/** Cột STT do DataTable tự chèn khi `showIndex`. */
+const INDEX_COL_WIDTH = 44
+/** Chỗ tối thiểu cho cột tên NVL — tên đá dài tới ~50 ký tự nên cần rộng hơn các cột khác. */
+const NAME_COL_MIN_WIDTH = 460
+
 export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) {
   const profile = stockProfile(warehouseCode)
   const inboundProfile = useMemo(() => {
@@ -319,7 +324,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         key: 'name',
         card: 'title' as const,
         header: profile.nameLabel,
-        ellipsis: true,
+        // Tên đá dài hơn bề ngang cột nên cho xuống dòng, cắt bớt thì không đọc được đủ tên.
+        cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
         sortable: true,
         filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
       },
@@ -503,6 +509,17 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     [page, params.dir, params.pageSize, params.sort, rows],
   )
 
+  // Cột tên cố tình không đặt width để ăn hết phần dư. Số cột đổi theo từng kho nên
+  // cộng bề ngang các cột cố định (kèm 44px cột STT) rồi chừa chỗ cho tên, hẹp hơn thì trượt ngang.
+  const tableMinWidth = useMemo(
+    () =>
+      columns.reduce(
+        (sum, column) => sum + (typeof column.width === 'number' ? column.width : 0),
+        INDEX_COL_WIDTH + NAME_COL_MIN_WIDTH,
+      ),
+    [columns],
+  )
+
   return (
     <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
@@ -513,7 +530,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         errorText={inbounds.error instanceof Error ? inbounds.error.message : undefined}
         emptyText={filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Chưa có dòng nhập kho.'}
         variant="grid"
-        minWidth={1480}
+        minWidth={tableMinWidth}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}

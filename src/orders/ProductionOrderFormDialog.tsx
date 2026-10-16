@@ -164,7 +164,9 @@ function todayYmd() {
 function validateDueDate(value: unknown, receivedDate: string, allowPast: boolean) {
   const due = String(value ?? '')
   if (!due) return true
-  if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
+  // Tạm tắt theo yêu cầu để nhập được đơn cũ; mở lại khi nhập xong dữ liệu quá khứ.
+  // if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
+  void allowPast
   if (receivedDate && due < receivedDate) return 'Không được trước ngày đặt đơn'
   return true
 }

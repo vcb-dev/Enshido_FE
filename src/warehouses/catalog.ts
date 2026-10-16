@@ -87,6 +87,8 @@ export type StockProfile = {
   showSize: boolean
   /// Trọng lượng (g) trên Tồn / form nhập NVL.
   showWeight: boolean
+  /// Nhóm cột "Thực tế" (tồn thực / giữ chỗ / khả dụng / TL tồn) trên bảng Tồn.
+  showRealStock: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -128,6 +130,7 @@ const DEFAULT_STOCK_PROFILE: StockProfile = {
   showStatus: true,
   showSize: true,
   showWeight: true,
+  showRealStock: true,
   typeLabel: 'Chất loại',
   ...NVL_COPY,
 }
@@ -151,6 +154,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showStatus: false,
     showSize: false,
     showWeight: false,
+    showRealStock: false,
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',
@@ -177,6 +181,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showStatus: true,
     showSize: false,
     showWeight: false,
+    showRealStock: false,
     typeLabel: 'Danh mục',
     typeCodes: CONSUMABLE_TYPE_CODES,
     ...NVL_COPY,
@@ -194,6 +199,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showStatus: true,
     showSize: false,
     showWeight: false,
+    showRealStock: true,
     typeLabel: 'Chất loại',
     noun: 'TP',
     nameLabel: 'Tên thành phẩm',

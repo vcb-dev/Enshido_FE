@@ -419,10 +419,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       {
         key: 'name',
         header: profile.nameLabel,
-        width: 220,
+        // Tên đá dài tới ~50 ký tự nên để rộng và cho xuống dòng thay vì cắt bớt.
+        width: 460,
         sortable: true,
         className: 'name-cell',
-        cellSx: { overflow: 'visible', textOverflow: 'clip' },
+        cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
         filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
         render: (row: OutboundGroup) => (row.lines.length > 1 ? null : row.name),
         renderSub: (line) => line.name,
@@ -626,7 +627,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
         emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
         variant="grid"
-        minWidth={1580}
+        minWidth={1820}
         showIndex
         indexOffset={indexOffset}
         sort={table.sortState}

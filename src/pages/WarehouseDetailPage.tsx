@@ -525,7 +525,8 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     (profile.showWeight ? 110 : 0) +
     (profile.showBodyMetal ? 140 : 0) +
     (profile.showProductKind ? 160 : 0) -
-    (profile.showStatus ? 0 : 110)
+    (profile.showStatus ? 0 : 110) -
+    (profile.showRealStock ? 0 : 400)
 
   return (
     <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
@@ -891,63 +892,68 @@ function stockColumns(
       cellSx: { ...groupBody.stock, borderLeft: '1px solid #cbbda9' },
       render: (row) => formatMoney(row.amount),
     },
-    {
-      key: 'onHandQty',
-      header: 'Tồn thực',
-      group: STOCK_GROUPS.real,
-      headSx: groupHead.real,
-      align: 'right',
-      cellSx: groupBody.real,
-      render: (row) =>
-        row.onHandQty == null ? (
-          '—'
-        ) : row.ledgerMismatch ? (
-          <Tooltip title={`Sổ tồn ghi ${formatQty(row.qty)} nhưng tồn đầu kỳ + nhập − xuất = ${formatQty(row.onHandQty)} — cần kiểm kê`}>
-            <Box component="span" sx={{ color: 'warning.main', fontWeight: 700 }}>
-              {formatQty(row.onHandQty)} ⚠
-            </Box>
-          </Tooltip>
-        ) : (
-          formatQty(row.onHandQty)
-        ),
-    },
-    {
-      key: 'heldQty',
-      header: 'Giữ chỗ',
-      group: STOCK_GROUPS.real,
-      headSx: { bgcolor: groupHead.real.bgcolor },
-      align: 'right',
-      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
-      render: (row) => (Number(row.heldQty) > 0 ? formatQty(row.heldQty ?? '0') : '—'),
-    },
-    {
-      key: 'availableQty',
-      header: 'Khả dụng',
-      group: STOCK_GROUPS.real,
-      headSx: { bgcolor: groupHead.real.bgcolor },
-      align: 'right',
-      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor, fontWeight: 700 },
-      render: (row) => (row.availableQty == null ? '—' : formatQty(row.availableQty)),
-    },
-    {
-      key: 'gramOnHand',
-      header: 'TL tồn',
-      group: STOCK_GROUPS.real,
-      headSx: { bgcolor: groupHead.real.bgcolor },
-      align: 'right',
-      cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
-      render: (row) =>
-        row.gramOnHand != null ? (
-          isStoneMaterial(row) ? formatCt(row.gramOnHand) : `${formatQty(row.gramOnHand)} g`
-        ) : (
-          <Tooltip title="Chưa cân TL tồn — sửa dòng tồn, nhập số cân để bắt đầu theo dõi">
-            <Box component="span" sx={{ color: 'text.disabled' }}>
-              chưa cân
-            </Box>
-          </Tooltip>
-        ),
-    },
   )
+
+  if (profile.showRealStock) {
+    columns.push(
+      {
+        key: 'onHandQty',
+        header: 'Tồn thực',
+        group: STOCK_GROUPS.real,
+        headSx: groupHead.real,
+        align: 'right',
+        cellSx: groupBody.real,
+        render: (row) =>
+          row.onHandQty == null ? (
+            '—'
+          ) : row.ledgerMismatch ? (
+            <Tooltip title={`Sổ tồn ghi ${formatQty(row.qty)} nhưng tồn đầu kỳ + nhập − xuất = ${formatQty(row.onHandQty)} — cần kiểm kê`}>
+              <Box component="span" sx={{ color: 'warning.main', fontWeight: 700 }}>
+                {formatQty(row.onHandQty)} ⚠
+              </Box>
+            </Tooltip>
+          ) : (
+            formatQty(row.onHandQty)
+          ),
+      },
+      {
+        key: 'heldQty',
+        header: 'Giữ chỗ',
+        group: STOCK_GROUPS.real,
+        headSx: { bgcolor: groupHead.real.bgcolor },
+        align: 'right',
+        cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
+        render: (row) => (Number(row.heldQty) > 0 ? formatQty(row.heldQty ?? '0') : '—'),
+      },
+      {
+        key: 'availableQty',
+        header: 'Khả dụng',
+        group: STOCK_GROUPS.real,
+        headSx: { bgcolor: groupHead.real.bgcolor },
+        align: 'right',
+        cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor, fontWeight: 700 },
+        render: (row) => (row.availableQty == null ? '—' : formatQty(row.availableQty)),
+      },
+      {
+        key: 'gramOnHand',
+        header: 'TL tồn',
+        group: STOCK_GROUPS.real,
+        headSx: { bgcolor: groupHead.real.bgcolor },
+        align: 'right',
+        cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
+        render: (row) =>
+          row.gramOnHand != null ? (
+            isStoneMaterial(row) ? formatCt(row.gramOnHand) : `${formatQty(row.gramOnHand)} g`
+          ) : (
+            <Tooltip title="Chưa cân TL tồn — sửa dòng tồn, nhập số cân để bắt đầu theo dõi">
+              <Box component="span" sx={{ color: 'text.disabled' }}>
+                chưa cân
+              </Box>
+            </Tooltip>
+          ),
+      },
+    )
+  }
 
   if (profile.showNvlCategory || profile.showBtpCategory) {
     columns.push({

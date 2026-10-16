@@ -104,8 +104,11 @@ function todayYmd() {
 function validateDueDate(value: unknown, createdDate: string, allowPast: boolean) {
   const due = String(value ?? '').trim()
   if (!due) return 'Chọn ngày trả hàng'
-  if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
-  if (createdDate && due < createdDate) return 'Ngày trả hàng không được trước ngày tạo'
+  // Tạm tắt theo yêu cầu để nhập được đơn cũ; mở lại khi nhập xong dữ liệu quá khứ.
+  // if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
+  // if (createdDate && due < createdDate) return 'Ngày trả hàng không được trước ngày tạo'
+  void allowPast
+  void createdDate
   return true
 }
 
@@ -222,7 +225,7 @@ export function IntakeOrdersPage() {
         key: 'createdDate',
         header: 'Ngày tạo',
         width: 110,
-        render: (row) => formatDateShort(row.createdAt),
+        render: (row) => formatDateShort(row.createdDate ?? row.createdAt),
       },
       {
         key: 'status',
@@ -447,7 +450,7 @@ function IntakeOrderFormDialog({
         detailImages: intakeDetailImages(row.images),
       })
     } else {
-      // Ngày tạo không hiện trên form: đơn mới luôn tính là hôm nay.
+      // Ngày tạo mặc định là hôm nay, sửa được trên form để nhập đơn cũ.
       form.reset({ ...EMPTY, createdDate: todayYmd(), placedBy: operatorName })
     }
   }, [open, row, operatorName, form])
@@ -518,7 +521,7 @@ function IntakeOrderFormDialog({
           />
         </FormRow>
 
-        <FormRow columns={3}>
+        <FormRow columns={4}>
           <FormTextField<FormValues>
             name="qty"
             label="Số lượng cần lên đơn"
@@ -526,6 +529,13 @@ function IntakeOrderFormDialog({
             transform={digitsOnly}
             slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             rules={{ validate: (v) => (Number(v) >= 1 ? true : 'Số lượng phải từ 1') }}
+          />
+          <FormTextField<FormValues>
+            name="createdDate"
+            label="Ngày tạo đơn"
+            type="date"
+            required
+            slotProps={{ inputLabel: { shrink: true } }}
           />
           <FormTextField<FormValues>
             name="dueDate"
