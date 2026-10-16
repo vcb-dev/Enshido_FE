@@ -7,31 +7,55 @@ import { SCREEN_GROUPS, type ScreenGroup } from './screens'
 export type StaffJobPreset =
   | 'admin'
   | 'staff'
-  | 'worker_sx'
   | 'worker_3d'
   | 'worker_wax'
   | 'worker_casting'
   | 'worker_filing'
+  | 'worker_stone'
+  | 'worker_engrave'
+  | 'worker_polish'
+  | 'worker_plate'
+  | 'vcb'
   | 'warehouse'
   | 'kcs'
   | 'accountant'
 
-const ALL_WORKER_STAGES: StageCode[] = [
-  'FILING',
-  'STONE_SETTING',
-  'ENGRAVING',
-  'POLISHING',
-  'PLATING',
-]
+/**
+ * Vai trò thợ lệnh sản xuất (Nguội → Xi): mỗi vai trò một khâu. Người làm nhiều khâu chọn
+ * một vai trò chính rồi bấm "+ Thêm vai trò" để thêm vai trò thợ khâu khác.
+ */
+export const STAGE_WORKER_ROLES = [
+  { preset: 'worker_filing', stage: 'FILING', label: 'Thợ nguội' },
+  { preset: 'worker_stone', stage: 'STONE_SETTING', label: 'Thợ đá' },
+  { preset: 'worker_engrave', stage: 'ENGRAVING', label: 'Thợ khắc' },
+  { preset: 'worker_polish', stage: 'POLISHING', label: 'Thợ đánh bóng' },
+  { preset: 'worker_plate', stage: 'PLATING', label: 'Thợ xi' },
+] as const satisfies readonly { preset: StaffJobPreset; stage: StageCode; label: string }[]
+
+export type StageWorkerPreset = (typeof STAGE_WORKER_ROLES)[number]['preset']
+
+export function isStageWorkerPreset(preset: StaffJobPreset | ''): preset is StageWorkerPreset {
+  return STAGE_WORKER_ROLES.some((role) => role.preset === preset)
+}
+
+function presetOfStage(stage: StageCode): StageWorkerPreset | undefined {
+  return STAGE_WORKER_ROLES.find((role) => role.stage === stage)?.preset
+}
+
+/** "Thợ đánh bóng + Thợ xi" — theo thứ tự khâu. */
+export function stageWorkerLabel(stages: readonly StageCode[]): string {
+  const labels = STAGE_WORKER_ROLES.filter((role) => stages.includes(role.stage)).map((role) => role.label)
+  return labels.length ? labels.join(' + ') : 'Thợ (chưa chọn khâu)'
+}
 
 export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'admin', label: 'Admin' },
   { value: 'staff', label: 'Nhân viên' },
-  { value: 'worker_sx', label: 'Thợ sản xuất' },
+  { value: 'vcb', label: 'VCB' },
   { value: 'worker_3d', label: 'Thợ 3D' },
   { value: 'worker_wax', label: 'Thợ sáp' },
   { value: 'worker_casting', label: 'Thợ đúc' },
-  { value: 'worker_filing', label: 'Thợ nguội' },
+  ...STAGE_WORKER_ROLES.map((role) => ({ value: role.preset, label: role.label })),
   { value: 'warehouse', label: 'Thủ kho' },
   { value: 'kcs', label: 'QC' },
   { value: 'accountant', label: 'Kế toán' },
@@ -39,14 +63,14 @@ export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
 
 const HIDDEN_STAFF_JOB_PRESETS = new Set<StaffJobPreset>(['staff'])
 
-/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, QC, kế toán, các loại thợ). */
+/** Vai trò chọn trên form thêm / sửa — không có Nhân viên (xưởng chỉ có thủ kho, QC, kế toán, VCB, các loại thợ). */
 export function staffJobSelectOptions() {
   return STAFF_JOB_OPTIONS.filter((o) => !HIDDEN_STAFF_JOB_PRESETS.has(o.value))
 }
 
 /** Tài khoản Nhân viên cũ — mở form sửa thì chọn sẵn QC, admin đổi vai trò mới. */
 export function staffJobPresetForEditForm(preset: StaffJobPreset): StaffJobPreset {
-  return HIDDEN_STAFF_JOB_PRESETS.has(preset) ? 'kcs' : preset
+  return preset === 'staff' ? 'kcs' : preset
 }
 
 const WAREHOUSE_SCREENS: PermissionCode[] = [
@@ -60,8 +84,6 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
   switch (preset) {
     case 'admin':
       return 'Xem được mọi màn hình.'
-    case 'worker_sx':
-      return 'Màn Phiếu của tôi.'
     case 'worker_3d':
       return 'Lệnh sản xuất: link 3D, in sáp.'
     case 'worker_wax':
@@ -69,7 +91,13 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
     case 'worker_casting':
       return 'Màn Lệnh đúc.'
     case 'worker_filing':
-      return 'Màn Phiếu của tôi — khâu Nguội.'
+    case 'worker_stone':
+    case 'worker_engrave':
+    case 'worker_polish':
+    case 'worker_plate':
+      return 'Màn Phiếu của tôi — chỉ nhận và xem phiếu khâu của mình. Làm thêm khâu khác thì bấm “+ Thêm vai trò”.'
+    case 'vcb':
+      return 'Khách ngoài xưởng: chỉ lên đơn, xem đơn, sửa đơn đang chờ duyệt.'
     case 'warehouse':
       return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
@@ -92,6 +120,7 @@ export const STAGE_ROLE_PERMISSIONS: PermissionCode[] = [
   Permission.INTAKE_CREATE,
   Permission.INTAKE_APPROVE,
   Permission.ACCOUNTING_APPROVE,
+  Permission.CUSTOMER,
 ]
 
 function isStageRolePermission(key: PermissionCode): boolean {
@@ -111,23 +140,25 @@ export function screenGroupsForUserEdit(): ScreenGroup[] {
 }
 
 export function presetShowsScreenEditor(preset: StaffJobPreset): boolean {
-  return preset !== 'admin'
+  // Khách VCB cố định màn Tạo đơn — không cho tick thêm màn của xưởng.
+  return preset !== 'admin' && preset !== 'vcb'
 }
 
 export function roleAndScreensForPreset(preset: StaffJobPreset): {
   roleCode: RoleCode
   allowedScreens: PermissionCode[]
 } {
+  if (isStageWorkerPreset(preset)) {
+    return {
+      roleCode: 'WORKER',
+      allowedScreens: [Permission.SCREEN_MY_TICKETS, Permission.PRODUCTION_WORKER],
+    }
+  }
   switch (preset) {
     case 'admin':
       return { roleCode: 'ADMIN', allowedScreens: [] }
     case 'staff':
       return { roleCode: 'USER', allowedScreens: [] }
-    case 'worker_sx':
-      return {
-        roleCode: 'WORKER',
-        allowedScreens: [Permission.SCREEN_MY_TICKETS, Permission.PRODUCTION_WORKER],
-      }
     case 'worker_3d':
       return { roleCode: 'WORKER', allowedScreens: [Permission.PRODUCTION_MODEL3D] }
     case 'worker_wax':
@@ -141,10 +172,11 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
           Permission.SCREEN_MY_TICKETS,
         ],
       }
-    case 'worker_filing':
+    case 'vcb':
+      // Khách VCB ngoài xưởng: chỉ lên đơn, xem và sửa đơn — mã CUSTOMER khoá mọi việc khác.
       return {
-        roleCode: 'WORKER',
-        allowedScreens: [Permission.SCREEN_MY_TICKETS, Permission.PRODUCTION_WORKER],
+        roleCode: 'USER',
+        allowedScreens: [Permission.SCREEN_INTAKE_ORDERS, Permission.INTAKE_CREATE, Permission.CUSTOMER],
       }
     case 'warehouse':
       return {
@@ -183,15 +215,16 @@ export function allowedScreensForSave(
   pickedScreens: PermissionCode[],
 ): PermissionCode[] {
   if (preset === 'admin') return []
+  // Khách VCB: đúng bộ quyền cố định, bỏ mọi màn còn tick từ vai trò cũ.
+  if (preset === 'vcb') return roleAndScreensForPreset(preset).allowedScreens
   const screenKeys = new Set(USER_EDIT_SCREEN_KEYS)
   const fromForm = pickedScreens.filter((key) => screenKeys.has(key))
   const fromPreset = roleAndScreensForPreset(preset).allowedScreens
   if (
-    preset === 'worker_sx' ||
+    isStageWorkerPreset(preset) ||
     preset === 'worker_3d' ||
     preset === 'worker_wax' ||
-    preset === 'worker_casting' ||
-    preset === 'worker_filing'
+    preset === 'worker_casting'
   ) {
     return Array.from(new Set([...fromForm, ...fromPreset]))
   }
@@ -199,10 +232,28 @@ export function allowedScreensForSave(
   return Array.from(new Set([...fromForm, ...stage]))
 }
 
-export function workerStagesForPreset(preset: StaffJobPreset): StageCode[] {
-  if (preset === 'worker_filing') return ['FILING']
-  if (preset === 'worker_sx') return ALL_WORKER_STAGES
-  return []
+/**
+ * Khâu lưu kèm tài khoản = vai trò chính + các vai trò thêm (bỏ trùng, theo thứ tự luồng).
+ * Vai trò ngoài lệnh sản xuất không có khâu, kể cả khi form còn sót vai trò thêm.
+ */
+export function workerStagesForSave(
+  preset: StaffJobPreset,
+  extraRoles: readonly (StageWorkerPreset | '')[],
+): StageCode[] {
+  if (!isStageWorkerPreset(preset)) return []
+  const picked = new Set<StaffJobPreset>([preset, ...extraRoles.filter(isStageWorkerPreset)])
+  return STAGE_WORKER_ROLES.filter((role) => picked.has(role.preset)).map((role) => role.stage)
+}
+
+/** Vai trò thêm khi mở form sửa: các khâu còn lại ngoài vai trò chính. */
+export function extraStageRolesOf(
+  user: Pick<UserRow, 'workerStages'>,
+  preset: StaffJobPreset,
+): StageWorkerPreset[] {
+  if (!isStageWorkerPreset(preset)) return []
+  return (user.workerStages ?? [])
+    .map(presetOfStage)
+    .filter((role): role is StageWorkerPreset => role != null && role !== preset)
 }
 
 export function inferStaffJobPreset(
@@ -210,6 +261,7 @@ export function inferStaffJobPreset(
 ): StaffJobPreset {
   if (user.roleCode === 'ADMIN') return 'admin'
   const screens = new Set(user.allowedScreens ?? [])
+  if (screens.has(Permission.CUSTOMER)) return 'vcb'
   if (user.roleCode === 'WORKER') {
     if (screens.has(Permission.PRODUCTION_MODEL3D)) return 'worker_3d'
     if (screens.has(Permission.PRODUCTION_WAX)) return 'worker_wax'
@@ -219,9 +271,9 @@ export function inferStaffJobPreset(
     ) {
       return 'worker_casting'
     }
-    const stages = user.workerStages ?? []
-    if (stages.length === 1 && stages[0] === 'FILING') return 'worker_filing'
-    return 'worker_sx'
+    // Vai trò chính = khâu đầu tiên theo luồng; các khâu sau là vai trò thêm.
+    const first = STAGE_WORKER_ROLES.find((role) => (user.workerStages ?? []).includes(role.stage))
+    return first?.preset ?? 'worker_filing'
   }
   if (screens.has(Permission.PRODUCTION_QC) && screens.has(Permission.SCREEN_DASHBOARD)) {
     return 'kcs'
@@ -283,6 +335,7 @@ export function staffJobLabel(
   user: Pick<UserRow, 'roleCode' | 'allowedScreens' | 'workerStages'>,
 ): string {
   const preset = inferStaffJobPreset(user)
+  if (isStageWorkerPreset(preset)) return stageWorkerLabel(user.workerStages ?? [])
   const match = STAFF_JOB_OPTIONS.find((option) => option.value === preset)
   return match?.label ?? user.roleCode
 }

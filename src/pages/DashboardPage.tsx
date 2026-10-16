@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import { Chip, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useAuth } from '../auth/AuthContext'
+import { isWorkerOnly } from '../auth/permissions'
 import { SCREEN_GROUPS } from '../auth/screens'
 import { PageHeader } from '../components/ui'
+import { OrderSummaryCard } from '../orders/OrderSummaryCard'
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -16,6 +18,7 @@ export function DashboardPage() {
         title="Tổng quan"
         subtitle="Phiên làm việc hiện tại trên hệ thống quản lý xưởng."
       />
+      {user && !isWorkerOnly(user) && <OrderSummaryCard />}
       <Paper sx={{ px: { xs: 1.5, sm: 2 }, py: 0.5 }}>
         <Stack divider={<Divider flexItem />}>
           <InfoRow label="Họ tên" value={user?.fullName} />

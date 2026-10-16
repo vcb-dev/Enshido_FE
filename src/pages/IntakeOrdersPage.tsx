@@ -43,7 +43,7 @@ import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
 import { useAuth } from '../auth/AuthContext'
-import { can, Permission } from '../auth/permissions'
+import { can, isCustomerOnly, Permission } from '../auth/permissions'
 import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useOperatorName } from '../hooks/useOperatorName'
 import { useTableParams } from '../hooks/useTableParams'
@@ -147,6 +147,7 @@ export function IntakeOrdersPage() {
   const { user } = useAuth()
   const canCreate = can(user, Permission.INTAKE_CREATE)
   const canApprove = can(user, Permission.INTAKE_APPROVE)
+  const customer = isCustomerOnly(user)
   const table = useTableParams({
     pageSize: 25,
     filters: { status: '' as IntakeOrderStatus | '', search: '' },
@@ -331,19 +332,23 @@ export function IntakeOrdersPage() {
           <RowActions
             titles={{
               view: 'Xem chi tiết',
-              edit: 'Chỉnh sửa',
+              edit:
+                customer && row.status !== 'PENDING_APPROVAL'
+                  ? 'Chỉ sửa được đơn đang chờ duyệt'
+                  : 'Chỉnh sửa',
               delete:
                 row.status === 'PENDING_APPROVAL' ? 'Xóa' : 'Chỉ xóa được đơn chờ duyệt',
             }}
             onView={() => setViewTarget(row)}
             onEdit={canCreate || canApprove ? () => dialog.openEdit(row) : undefined}
+            editDisabled={customer && row.status !== 'PENDING_APPROVAL'}
             onDelete={canApprove ? () => setDeleteTarget(row) : undefined}
             deleteDisabled={row.status !== 'PENDING_APPROVAL'}
           />
         ),
       },
     ],
-    [dialog.openEdit, params.search, params.status, table],
+    [customer, dialog.openEdit, params.search, params.status, table],
   )
 
   return (
@@ -404,7 +409,11 @@ export function IntakeOrdersPage() {
         }
       />
 
-      <IntakeOrderDetailDialog order={viewTarget} onClose={() => setViewTarget(null)} />
+      <IntakeOrderDetailDialog
+        order={viewTarget}
+        onClose={() => setViewTarget(null)}
+        showProductionLink={!customer}
+      />
 
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}

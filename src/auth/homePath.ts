@@ -1,4 +1,4 @@
-import { can, isWorkerOnly, Permission } from './permissions'
+import { can, isCustomerOnly, isWorkerOnly, Permission } from './permissions'
 import {
   canAccessProductionOrdersPage,
   canSeeCastingSlipsPage,
@@ -17,6 +17,8 @@ export function canAccessPath(
   path: string,
 ): boolean {
   const p = (path.split('?')[0] || '/').replace(/\/$/, '') || '/'
+  // Khách VCB ngoài xưởng: chỉ màn Tạo đơn, kể cả gõ thẳng link phiếu / lệnh SX.
+  if (isCustomerOnly(user)) return p === '/intake-orders'
   if (p === '/' || p === '') {
     return can(user, Permission.SCREEN_DASHBOARD) || firstAllowedPath(user) === '/'
   }

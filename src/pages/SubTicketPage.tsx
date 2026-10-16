@@ -272,7 +272,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
         </Button>,
       )
     } else {
-      hint = 'Chỉ tài khoản có quyền Thợ sản xuất mới nhận phiếu được.'
+      hint = 'Chỉ tài khoản thợ mới nhận phiếu được.'
     }
   } else if (model.state === 'CLAIMED' && model.pendingStage) {
     // Thủ kho chỉ định thợ, thợ quét QR bấm xác nhận mới bắt đầu (hệ thống tự xuất kho nếu khâu có kho).

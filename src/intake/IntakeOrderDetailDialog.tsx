@@ -22,9 +22,15 @@ import { formatDateShort, formatDateTime } from '../orders/catalog'
 type IntakeOrderDetailDialogProps = {
   order: IntakeOrder | null
   onClose: () => void
+  /** Khách VCB không vào được lệnh sản xuất — ẩn nút chuyển sang phiếu SX. */
+  showProductionLink?: boolean
 }
 
-export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDialogProps) {
+export function IntakeOrderDetailDialog({
+  order,
+  onClose,
+  showProductionLink = true,
+}: IntakeOrderDetailDialogProps) {
   const waxWeight = order ? formatIntakeGram(order.productWeightGram) : null
   const treeWeight = order ? formatIntakeGram(order.castingTreeWeightGram) : null
   const checkedWeight = order ? formatIntakeGram(order.waxCheckedWeightGram) : null
@@ -107,7 +113,7 @@ export function IntakeOrderDetailDialog({ order, onClose }: IntakeOrderDetailDia
               </Alert>
             ) : null}
 
-            {order.productionOrderCode ? (
+            {showProductionLink && order.productionOrderCode ? (
               <Button
                 component={RouterLink}
                 to={`/orders/${order.productionOrderCode}`}

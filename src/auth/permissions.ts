@@ -31,6 +31,8 @@ export const Permission = {
   PRODUCTION_QC: 'production.qc',
   /** Kế toán: xác nhận phiếu xuất hàng (ghi nhận doanh thu, đơn sang Đã giao). */
   ACCOUNTING_APPROVE: 'accounting.approve',
+  /** Đánh dấu tài khoản khách (VCB) — khoá tài khoản chỉ còn lên đơn, xem và sửa đơn. */
+  CUSTOMER: 'customer',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]
@@ -117,4 +119,11 @@ export function isWorkerOnly(user: PermissionUser | undefined | null): boolean {
   if (!roles.includes('WORKER') || roles.includes('ADMIN')) return false
   if (isProductionStageWorker(user)) return false
   return true
+}
+
+/** Tài khoản khách ngoài xưởng (VCB): chỉ màn Tạo đơn. Admin có mọi mã quyền nhưng không phải khách. */
+export function isCustomerOnly(user: PermissionUser | undefined | null): boolean {
+  if (!user) return false
+  if (user.roleCode === 'ADMIN' || user.extraRoles?.includes('ADMIN')) return false
+  return Boolean(user.permissions?.includes(Permission.CUSTOMER))
 }

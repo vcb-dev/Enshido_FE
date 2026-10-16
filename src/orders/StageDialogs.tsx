@@ -29,6 +29,7 @@ import {
   type HandoverMaterialLine,
 } from './MaterialRequests'
 import { FormImageField } from './FormImageField'
+import { type StageWorker, workersForStage } from './stageWorkers'
 import { KcsImages } from './KcsImages'
 import {
   formatDateShort,
@@ -101,7 +102,7 @@ export function AssignReceiptDialog({
   order: ProductionOrderDetail
   ticket: OrderWorkTicket | null
   stages: StageCode[]
-  workers: Array<{ id: string; username: string; fullName: string }>
+  workers: StageWorker[]
   saving: boolean
   onClose: () => void
   onSave: (payload: HandoverPayload & { stage: StageCode }) => void
@@ -126,6 +127,13 @@ export function AssignReceiptDialog({
   })
   const stage = useWatch({ control: form.control, name: 'stage' })
   const craftsmanUserId = useWatch({ control: form.control, name: 'craftsmanUserId' })
+  const stageWorkers = useMemo(() => workersForStage(workers, stage), [workers, stage])
+  // Đổi khâu thì thợ đã chọn không làm khâu mới phải chọn lại.
+  useEffect(() => {
+    if (craftsmanUserId && !stageWorkers.some((worker) => worker.id === craftsmanUserId)) {
+      form.setValue('craftsmanUserId', '')
+    }
+  }, [craftsmanUserId, stageWorkers, form])
   const handedQty = useWatch({ control: form.control, name: 'handedQty' })
   const [uploading, setUploading] = useState(false)
   const availableQty = ticket?.availableQty ?? order.qty
@@ -224,7 +232,7 @@ export function AssignReceiptDialog({
           name="craftsmanUserId"
           label="Thợ"
           required
-          options={workers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
+          options={stageWorkers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
         />
       </FormRow>
       <FormRow columns={2}>

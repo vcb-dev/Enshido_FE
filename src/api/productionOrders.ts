@@ -539,6 +539,8 @@ export type ProductionOrderLookups = {
   users: Array<{ id: string; username: string; fullName: string }>
   /** Tài khoản có quyền Thợ sản xuất. */
   workerIds: string[]
+  /** Khâu từng thợ được làm (theo id); admin không có trong map — nhận mọi khâu. */
+  workerStages?: Record<string, StageCode[]>
   /** Admin chỉ được chọn làm thợ khi người giao là admin. */
   adminIds: string[]
   closers: string[]
@@ -1469,4 +1471,33 @@ export function parseSubTicketCode(value: string): { orderCode: string; no: numb
   const match = /^(.+)-(\d+)$/.exec(value.trim().toUpperCase())
   if (!match) return null
   return { orderCode: match[1], no: Number(match[2]) }
+}
+
+/** Báo cáo số đơn ở màn Tổng quan. Đã tạo = Hoàn thành + Chưa hoàn thành + Dừng. */
+export type OrderSummary = {
+  created: number
+  completed: number
+  inProgress: number
+  stopped: number
+  breakdown: {
+    delivered: number
+    finished: number
+    preStage: number
+    inStage: number
+    awaitingStock: number
+    rejected: number
+    defect: number
+  }
+  /** Biểu đồ cột: theo ngày khi khoảng thời gian ≤ 62 ngày, còn lại theo tháng. */
+  trend: {
+    unit: 'day' | 'month'
+    buckets: { key: string; created: number; completed: number }[]
+  }
+}
+
+export function getOrderSummaryApi(params: { from?: string; to?: string }) {
+  const query = new URLSearchParams()
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
+  return apiFetch<OrderSummary>(`${BASE}/summary?${query.toString()}`)
 }
