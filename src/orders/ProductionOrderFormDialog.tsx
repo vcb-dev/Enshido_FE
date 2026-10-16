@@ -162,10 +162,10 @@ function todayYmd() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-function validateDueDate(value: unknown, receivedDate: string, allowPast: boolean) {
+/** Ngày cần trả được chọn cả ngày đã qua (nhập bù đơn cũ), chỉ không trước ngày đặt đơn. */
+function validateDueDate(value: unknown, receivedDate: string) {
   const due = String(value ?? '')
   if (!due) return true
-  if (!allowPast && due < todayYmd()) return 'Không được chọn ngày trong quá khứ'
   if (receivedDate && due < receivedDate) return 'Không được trước ngày đặt đơn'
   return true
 }
@@ -556,7 +556,7 @@ export function ProductionOrderFormDialog({
                 slotProps={{ inputLabel: { shrink: true } }}
                 onBlur={() => void form.trigger('dueDate')}
                 rules={{
-                  validate: (value, values) => validateDueDate(value, values.receivedDate, Boolean(order)),
+                  validate: (value, values) => validateDueDate(value, values.receivedDate),
                 }}
               />
             </FormRow>
@@ -713,7 +713,7 @@ export function ProductionOrderFormDialog({
                 slotProps={{ inputLabel: { shrink: true } }}
                 onBlur={() => void form.trigger('dueDate')}
                 rules={{
-                  validate: (value, values) => validateDueDate(value, values.receivedDate, Boolean(order)),
+                  validate: (value, values) => validateDueDate(value, values.receivedDate),
                 }}
               />
             </FormRow>
