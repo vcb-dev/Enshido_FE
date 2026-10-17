@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Button,
   Checkbox,
@@ -30,23 +30,22 @@ import type { PermissionCode } from '../auth/permissions'
 import {
   allowedScreensForSave,
   defaultEditScreensForPreset,
-  inferStaffJobPreset,
+  extraJobOptions,
+  inferStaffJobPresets,
+  jobPresetsOf,
   permissionUserForForm,
   presetShowsScreenEditor,
-  roleAndScreensForPreset,
+  roleCodeForPresets,
   screenGroupsForUserEdit,
+  screensAfterPresetChange,
   screensFromUserForPreset,
   staffJobLabel,
   staffJobPresetHint,
   staffJobPresetForEditForm,
   staffJobSelectOptions,
-  extraStageRolesOf,
-  isStageWorkerPreset,
-  STAGE_WORKER_ROLES,
   STAFF_JOB_OPTIONS,
   workerStagesForSave,
   type StaffJobPreset,
-  type StageWorkerPreset,
 } from '../auth/staffJobPresets'
 import { STAGE_LABEL } from '../orders/catalog'
 import {
@@ -235,17 +234,19 @@ type UserFormValues = {
   department: string
   /** Màn hình menu được tích thêm (quyền công đoạn đi theo vai trò). */
   screens: PermissionCode[]
-  /** Vai trò thợ khâu thêm ngoài vai trò chính (chỉ Nguội → Xi). '' = ô vừa thêm, chưa chọn. */
-  extraRoles: (StageWorkerPreset | '')[]
+  /** Vai trò thêm ngoài vai trò chính — mọi vai trò trừ VCB. '' = ô vừa thêm, chưa chọn. */
+  extraRoles: (StaffJobPreset | '')[]
 }
+
+const roleLabelOf = (preset: StaffJobPreset) =>
+  STAFF_JOB_OPTIONS.find((option) => option.value === preset)?.label ?? ''
 
 /**
  * Danh sách tích màn hình menu — nối với field `screens` của form qua Controller. Nhóm và thứ tự
  * giống sidebar; mục vai trò bắt buộc mở (thợ đúc luôn thấy Lệnh đúc, thợ khâu luôn thấy Phiếu
  * khâu) hiện đã tích và khoá — dùng chung điều kiện với sidebar nên không lệch.
  */
-function ScreenChecklist({ preset }: { preset: StaffJobPreset }) {
-  const presetLabel = STAFF_JOB_OPTIONS.find((option) => option.value === preset)?.label ?? ''
+function ScreenChecklist({ presets }: { presets: readonly StaffJobPreset[] }) {
   return (
     <Controller<{ screens: PermissionCode[] }, 'screens'>
       name="screens"
@@ -261,9 +262,11 @@ function ScreenChecklist({ preset }: { preset: StaffJobPreset }) {
                 <FormGroup>
                   {group.items.map((item) => {
                     // Bỏ chính ô này mà sidebar vẫn hiện = vai trò đã tự mở mục.
-                    const byRole = Boolean(
-                      item.menu?.(permissionUserForForm(preset, value.filter((key) => key !== item.key))),
-                    )
+                    const without = value.filter((key) => key !== item.key)
+                    const byRole = Boolean(item.menu?.(permissionUserForForm(presets, without)))
+                    // Vai trò nào đã tự mở mục này (một vai trò đủ) — không có thì ghi cả danh sách.
+                    const opener = presets.find((preset) => item.menu?.(permissionUserForForm([preset], without)))
+                    const roleNote = opener ? roleLabelOf(opener) : presets.map(roleLabelOf).join(' + ')
                     return (
                       <FormControlLabel
                         key={item.key}
@@ -275,7 +278,7 @@ function ScreenChecklist({ preset }: { preset: StaffJobPreset }) {
                             onChange={(event) => toggle(item.key, event.target.checked)}
                           />
                         }
-                        label={<ChecklistLabel label={item.label} note={byRole ? `theo vai trò ${presetLabel}` : null} />}
+                        label={<ChecklistLabel label={item.label} note={byRole ? `theo vai trò ${roleNote}` : null} />}
                       />
                     )
                   })}
@@ -304,12 +307,13 @@ function ChecklistLabel({ label, note }: { label: string; note: string | null })
 }
 
 /**
- * Vai trò thêm cho thợ lệnh sản xuất: mỗi lần bấm "+ Thêm vai trò" thêm một ô chọn thợ khâu
- * khác. Ô chỉ liệt kê khâu chưa có (khác vai trò chính và các ô khác).
+ * Vai trò thêm: một người kiêm nhiều vai trò (Thủ kho + QC, QC + Thợ nguội, Admin + Thợ xi, …). Mỗi
+ * lần bấm "+ Thêm vai trò" thêm một ô chọn; ô chỉ liệt kê vai trò chưa có (khác vai trò chính và
+ * các ô khác). Khách VCB bị khoá riêng nên không thêm được và không có ô này.
  */
-function ExtraStageRoles({ primary }: { primary: StageWorkerPreset }) {
-  const { getValues, setValue } = useFormContext<{ extraRoles: (StageWorkerPreset | '')[] }>()
-  // Đổi vai trò chính sang khâu đang nằm ở ô thêm thì bỏ ô đó, khỏi trùng.
+function ExtraJobRoles({ primary }: { primary: StaffJobPreset }) {
+  const { getValues, setValue } = useFormContext<{ extraRoles: (StaffJobPreset | '')[] }>()
+  // Đổi vai trò chính sang vai trò đang nằm ở ô thêm thì bỏ ô đó, khỏi trùng.
   useEffect(() => {
     const rows = getValues('extraRoles') ?? []
     if (rows.includes(primary)) {
@@ -319,22 +323,23 @@ function ExtraStageRoles({ primary }: { primary: StageWorkerPreset }) {
       )
     }
   }, [primary, getValues, setValue])
+  if (primary === 'vcb') return null
   return (
-    <Controller<{ extraRoles: (StageWorkerPreset | '')[] }, 'extraRoles'>
+    <Controller<{ extraRoles: (StaffJobPreset | '')[] }, 'extraRoles'>
       name="extraRoles"
       rules={{
         validate: (value) => !(value ?? []).includes('') || 'Chọn vai trò cho ô vừa thêm hoặc xoá ô đó',
       }}
       render={({ field, fieldState }) => {
         const rows = field.value ?? []
-        const taken = new Set<StaffJobPreset | ''>([primary, ...rows])
-        const remaining = STAGE_WORKER_ROLES.filter((role) => !taken.has(role.preset))
-        const setRow = (index: number, next: StageWorkerPreset | '') =>
+        const taken = [primary, ...rows.filter((row): row is StaffJobPreset => row !== '')]
+        const remaining = extraJobOptions(taken)
+        const setRow = (index: number, next: StaffJobPreset) =>
           field.onChange(rows.map((row, i) => (i === index ? next : row)))
         return (
           <Stack spacing={1}>
             {rows.map((row, index) => (
-              <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                 <TextField
                   select
                   size="small"
@@ -342,15 +347,16 @@ function ExtraStageRoles({ primary }: { primary: StageWorkerPreset }) {
                   label={`Vai trò thêm ${index + 1}`}
                   value={row}
                   error={Boolean(fieldState.error) && row === ''}
-                  onChange={(event) => setRow(index, event.target.value as StageWorkerPreset)}
+                  helperText={row ? staffJobPresetHint(row) : undefined}
+                  onChange={(event) => setRow(index, event.target.value as StaffJobPreset)}
                 >
-                  {STAGE_WORKER_ROLES.filter((role) => role.preset === row || !taken.has(role.preset)).map(
-                    (role) => (
-                      <MenuItem key={role.preset} value={role.preset}>
-                        {role.label}
+                  {staffJobSelectOptions()
+                    .filter((option) => option.value !== 'vcb' && (option.value === row || !taken.includes(option.value)))
+                    .map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
                       </MenuItem>
-                    ),
-                  )}
+                    ))}
                 </TextField>
                 <IconButton
                   aria-label="Xoá vai trò thêm"
@@ -382,6 +388,25 @@ function ExtraStageRoles({ primary }: { primary: StageWorkerPreset }) {
   )
 }
 
+/**
+ * Màn đang tích đi theo danh sách vai trò: thêm / bỏ vai trò thì thêm / bỏ màn mặc định của vai
+ * trò đó, màn đã tích tay giữ nguyên. `baseline` là danh sách vai trò lúc mở form (đặt bởi dialog).
+ */
+function useScreensFollowPresets(
+  setScreens: (updater: (current: PermissionCode[]) => PermissionCode[]) => void,
+  presets: readonly StaffJobPreset[],
+  baseline: RefObject<readonly StaffJobPreset[]>,
+) {
+  const key = presets.join('|')
+  useEffect(() => {
+    const before = baseline.current ?? []
+    if (before.join('|') === key) return
+    baseline.current = presets
+    setScreens((current) => screensAfterPresetChange(current, before, presets))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi danh sách vai trò đổi
+  }, [key])
+}
+
 const EMPTY_USER: UserFormValues = {
   fullName: '',
   username: '',
@@ -410,14 +435,23 @@ function CreateUserDialog({
     defaultValues: EMPTY_USER,
   })
   const staffJob = useWatch({ control: form.control, name: 'staffJob' })
+  const extraRoles = useWatch({ control: form.control, name: 'extraRoles' })
+  const presets = useMemo(() => jobPresetsOf(staffJob, extraRoles ?? []), [staffJob, extraRoles])
+  const presetsBaseline = useRef<readonly StaffJobPreset[]>(['kcs'])
   useEffect(() => {
     if (open) {
+      presetsBaseline.current = ['kcs']
       form.reset(
         { ...EMPTY_USER, screens: defaultEditScreensForPreset('kcs') },
         { keepErrors: false, keepDirty: false, keepTouched: false },
       )
     }
   }, [open, form])
+  useScreensFollowPresets(
+    (update) => form.setValue('screens', update(form.getValues('screens') ?? [])),
+    presets,
+    presetsBaseline,
+  )
 
   const usernameRules = useMemo(
     () => ({
@@ -440,22 +474,17 @@ function CreateUserDialog({
     [],
   )
 
-  useEffect(() => {
-    if (!open) return
-    form.setValue('screens', defaultEditScreensForPreset(staffJob))
-  }, [staffJob, open, form])
-
   const mutation = useMutation({
     mutationFn: (values: UserFormValues) => {
-      const mapped = roleAndScreensForPreset(values.staffJob)
+      const picked = jobPresetsOf(values.staffJob, values.extraRoles)
       return createUserApi({
         username: values.username.trim(),
         fullName: values.fullName.trim(),
         password: values.password,
-        roleCode: mapped.roleCode,
+        roleCode: roleCodeForPresets(picked),
         department: values.department.trim() || undefined,
-        allowedScreens: allowedScreensForSave(values.staffJob, values.screens),
-        workerStages: workerStagesForSave(values.staffJob, values.extraRoles),
+        allowedScreens: allowedScreensForSave(picked, values.screens),
+        workerStages: workerStagesForSave(picked),
       })
     },
     onSuccess: () => {
@@ -515,10 +544,10 @@ function CreateUserDialog({
           <Typography variant="body2" color="text.secondary">
             {staffJobPresetHint(staffJob)}
           </Typography>
-          {isStageWorkerPreset(staffJob) ? <ExtraStageRoles primary={staffJob} /> : null}
-          {presetShowsScreenEditor(staffJob) ? (
+          <ExtraJobRoles primary={staffJob} />
+          {presetShowsScreenEditor(presets) ? (
             <>
-              <ScreenChecklist preset={staffJob} />
+              <ScreenChecklist presets={presets} />
             </>
           ) : null}
         </DialogContent>
@@ -549,51 +578,49 @@ function EditUserDialog({
     defaultValues: { ...EMPTY_USER, editReason: '' },
   })
   const staffJob = useWatch({ control: form.control, name: 'staffJob' })
-  const staffJobLoaded = useRef<StaffJobPreset | null>(null)
+  const extraRoles = useWatch({ control: form.control, name: 'extraRoles' })
+  const presets = useMemo(() => jobPresetsOf(staffJob, extraRoles ?? []), [staffJob, extraRoles])
+  const presetsBaseline = useRef<readonly StaffJobPreset[]>([])
   useEffect(() => {
     if (!user) return
-    staffJobLoaded.current = null
-    const preset = inferStaffJobPreset(user)
-    const formPreset = staffJobPresetForEditForm(preset)
+    // Vai trò đầu danh sách là vai trò chính, còn lại mở ra thành vai trò thêm.
+    const [first, ...rest] = inferStaffJobPresets(user)
+    const primary = staffJobPresetForEditForm(first)
+    const loaded = jobPresetsOf(primary, rest)
+    presetsBaseline.current = loaded
     form.reset({
       fullName: user.fullName,
       username: user.username,
       password: '',
-      staffJob: formPreset,
+      staffJob: primary,
       department: user.department ?? '',
-      screens: isAdmin ? [] : screensFromUserForPreset(user, formPreset),
-      extraRoles: extraStageRolesOf(user, formPreset),
+      screens: isAdmin ? [] : screensFromUserForPreset(user, loaded),
+      extraRoles: rest,
       editReason: '',
     })
   }, [user, isAdmin, form])
-
-  useEffect(() => {
-    if (!user || isAdmin) return
-    if (staffJobLoaded.current === null) {
-      staffJobLoaded.current = staffJob
-      return
-    }
-    if (staffJobLoaded.current === staffJob) return
-    staffJobLoaded.current = staffJob
-    form.setValue('screens', defaultEditScreensForPreset(staffJob))
-  }, [staffJob, user, isAdmin, form])
+  useScreensFollowPresets(
+    (update) => {
+      if (!user || isAdmin) return
+      form.setValue('screens', update(form.getValues('screens') ?? []))
+    },
+    presets,
+    presetsBaseline,
+  )
 
   const mutation = useMutation({
     mutationFn: (values: EditUserFormValues) => {
       const targetId = user?.id
       if (!targetId) throw new Error('Không tìm thấy nhân sự')
-      const mapped = roleAndScreensForPreset(values.staffJob)
+      const picked = jobPresetsOf(values.staffJob, values.extraRoles)
       return updateUserApi(targetId, {
         fullName: values.fullName.trim(),
-        roleCode: isAdmin ? undefined : mapped.roleCode,
+        // Role Admin không đổi được ở đây (BE giữ nguyên); Admin vẫn lưu được vai trò kiêm.
+        roleCode: isAdmin ? undefined : roleCodeForPresets(picked),
         department: values.department.trim(),
         password: values.password.trim() || undefined,
-        allowedScreens: isAdmin
-          ? undefined
-          : allowedScreensForSave(values.staffJob, values.screens),
-        workerStages: isAdmin
-          ? undefined
-          : workerStagesForSave(values.staffJob, values.extraRoles),
+        allowedScreens: allowedScreensForSave(picked, values.screens),
+        workerStages: workerStagesForSave(picked),
         editReason: values.editReason.trim(),
       })
     },
@@ -649,13 +676,13 @@ function EditUserDialog({
               {staffJobPresetHint(staffJob)}
             </Typography>
           )}
-          {!isAdmin && isStageWorkerPreset(staffJob) ? <ExtraStageRoles primary={staffJob} /> : null}
-          {!isAdmin && presetShowsScreenEditor(staffJob) ? (
+          <ExtraJobRoles primary={staffJob} />
+          {!isAdmin && presetShowsScreenEditor(presets) ? (
             <>
               <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
                 Màn hình được xem
               </Typography>
-              <ScreenChecklist preset={staffJob} />
+              <ScreenChecklist presets={presets} />
             </>
           ) : null}
           {user ? (
