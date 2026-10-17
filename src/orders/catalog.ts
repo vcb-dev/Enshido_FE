@@ -269,6 +269,19 @@ export function formatDateTime(value: string | null | undefined) {
   })
 }
 
+/** Ngày đủ ngày/tháng/năm — cột ngày tạo, hạn trả trên danh sách đơn. */
+export function formatDate(value: string | null | undefined, empty = '—') {
+  if (!value) return empty
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-')
+    return `${day}/${month}/${year}`
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
+}
+
 /** Ngày giờ gọn cho ô hẹp (bảng khâu, phiếu in): 14/09 16:32. Dùng chung để phiếu và màn hình khớp nhau. */
 export function formatDateShort(value: string | null | undefined, empty = '—') {
   if (!value) return empty

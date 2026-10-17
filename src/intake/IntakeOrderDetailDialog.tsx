@@ -17,7 +17,7 @@ import { intakeCastingTreeImages, intakeDetailImages, intakeProductOnlyImages } 
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 import { IntakeOrderStatusChips } from './IntakeStatusChip'
 import { RequestTypeChip } from '../orders/OrderChips'
-import { formatDateShort, formatDateTime } from '../orders/catalog'
+import { formatDate, formatDateTime } from '../orders/catalog'
 
 type IntakeOrderDetailDialogProps = {
   order: IntakeOrder | null
@@ -78,8 +78,8 @@ export function IntakeOrderDetailDialog({
                 </Typography>
               </Stack>
               <Typography variant="body2" color="text.secondary">
-                Ngày tạo {formatDateShort(order.createdAt)}
-                {order.dueDate ? ` · Trả ${formatDateShort(order.dueDate)}` : null}
+                Ngày tạo {formatDate(order.createdDate ?? order.createdAt)}
+                {order.dueDate ? ` · Trả ${formatDate(order.dueDate)}` : null}
               </Typography>
               {order.description?.trim() ? (
                 <Typography variant="body2">{order.description}</Typography>

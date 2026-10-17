@@ -450,6 +450,17 @@ export function createWarehouseStockApi(
   })
 }
 
+/** Nhiều dòng một lần — lỗi thì server không ghi dòng nào vào Tồn. */
+export function createWarehouseStockBatchApi(
+  warehouseCode: string,
+  payloads: UpdateStockPayload[],
+) {
+  return apiFetch<StockRow[]>(`/warehouses/${warehouseCode}/stock/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ items: payloads }),
+  })
+}
+
 export type InboundRow = {
   id: string
   stt: number

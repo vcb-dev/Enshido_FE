@@ -51,7 +51,7 @@ import { useTableParams } from '../hooks/useTableParams'
 import { INTAKE_STATUSES, INTAKE_STATUS_META } from '../intake/catalog'
 import { IntakeOrderStatusChips } from '../intake/IntakeStatusChip'
 import { ImageUploadField } from '../orders/ImageUploadField'
-import { formatDateShort, REQUEST_TYPES, REQUEST_TYPE_META } from '../orders/catalog'
+import { formatDate, REQUEST_TYPES, REQUEST_TYPE_META } from '../orders/catalog'
 import { RequestTypeChip } from '../orders/OrderChips'
 type FormValues = {
   status: IntakeOrderStatus
@@ -231,8 +231,8 @@ export function IntakeOrdersPage() {
       {
         key: 'createdDate',
         header: 'Ngày tạo',
-        width: 110,
-        render: (row) => formatDateShort(row.createdDate ?? row.createdAt),
+        width: 120,
+        render: (row) => formatDate(row.createdDate ?? row.createdAt),
       },
       {
         key: 'status',
@@ -274,8 +274,8 @@ export function IntakeOrdersPage() {
       {
         key: 'dueDate',
         header: 'Thời gian trả hàng',
-        width: 130,
-        render: (row) => (row.dueDate ? formatDateShort(row.dueDate) : '—'),
+        width: 140,
+        render: (row) => (row.dueDate ? formatDate(row.dueDate) : '—'),
       },
       {
         key: 'trackingCode',

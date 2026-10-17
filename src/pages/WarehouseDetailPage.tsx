@@ -33,6 +33,7 @@ import {
   stockStatusFromQty,
   updateWarehouseStockApi,
   createWarehouseStockApi,
+  createWarehouseStockBatchApi,
   type AvailabilityCode,
   type InventoryLookups,
   type LookupItem,
@@ -71,6 +72,7 @@ import { LineActions } from '../warehouses/LineActions'
 import type { SearchSelectOption } from '../warehouses/SearchSelect'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
 import { validateStockName } from '../warehouses/stockName'
+import { validateStockLocation } from '../warehouses/stockLocation'
 import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
@@ -432,13 +434,8 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     },
   })
   const saveMany = useMutation({
-    mutationFn: async (payloads: UpdateStockPayload[]) => {
-      const rows: StockRow[] = []
-      for (const payload of payloads) {
-        rows.push(await createWarehouseStockApi(warehouseCode, payload))
-      }
-      return rows
-    },
+    mutationFn: (payloads: UpdateStockPayload[]) =>
+      createWarehouseStockBatchApi(warehouseCode, payloads),
     onSuccess: (rows) => {
       toast.success(`Đã thêm ${rows.length} ${profile.noun}`)
       void queryClient.invalidateQueries({ queryKey: stockKey })
@@ -581,12 +578,11 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         warehouseCode={warehouseCode}
         profile={profile}
         nameSuggestions={nameSuggestions}
-        saving={false}
+        saving={save.isPending || saveMany.isPending}
         onClose={dialog.close}
         onExited={dialog.clear}
         onSave={(payloads) => {
           const id = dialog.row?.id
-          dialog.close()
           if (id) {
             save.mutate({ id, payload: payloads[0] })
             return
@@ -595,7 +591,8 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
             save.mutate({ payload: payloads[0] })
             return
           }
-          saveMany.mutate(payloads)
+          // Không đóng form trước khi server trả lời — lỗi thì giữ form, không ghi nửa danh sách.
+          saveMany.mutate(payloads, { onSuccess: () => dialog.close() })
         }}
       />
     </Stack>
@@ -1442,6 +1439,9 @@ function StockEditDialog({
                   locationOptions={locationOptions}
                   lookups={lookups.data}
                   btpCatalogs={btpCatalogs.data}
+                  occupiedLocations={(locationSlots.data?.items ?? [])
+                    .filter((slot) => slot.occupied)
+                    .map((slot) => ({ code: slot.code, materialName: slot.materialName }))}
                   onUploadingChange={onUploadingChange}
                   showLineActions={!row}
                   onAdd={() => items.insert(index + 1, { ...EMPTY_STOCK }, { shouldFocus: false })}
@@ -1568,6 +1568,7 @@ function StockItemFields({
   locationOptions,
   lookups,
   btpCatalogs,
+  occupiedLocations,
   onUploadingChange,
   showLineActions,
   onAdd,
@@ -1588,6 +1589,7 @@ function StockItemFields({
   locationOptions: SearchSelectOption[]
   lookups: InventoryLookups | undefined
   btpCatalogs: CatalogItem[] | undefined
+  occupiedLocations: Array<{ code: string; materialName?: string | null }>
   onUploadingChange: (busy: boolean) => void
   showLineActions: boolean
   onAdd: () => void
@@ -1600,6 +1602,12 @@ function StockItemFields({
   // với chất liệu gửi lên lúc lưu.
   const pickedCategory = categoryOptions.find((item) => item.id === materialTypeId)
   const isStone = (pickedCategory?.metalKind ?? metalKind) === 'STONE'
+  const allItems = useWatch({ control: form.control, name: 'items' }) ?? []
+  const siblingLocations = allItems.filter((_, i) => i !== index).map((item) => item.locationCode)
+  const lineLocationOptions = locationOptions.filter((option) => {
+    if (allItems[index]?.locationCode === option.id) return true
+    return !siblingLocations.includes(option.id)
+  })
   const openingQty = useWatch({ control: form.control, name: `items.${index}.openingQty` }) ?? '0'
   const stockUnitPrice = useWatch({ control: form.control, name: `items.${index}.stockUnitPrice` }) ?? ''
   const inQty = useWatch({ control: form.control, name: `items.${index}.inQty` }) ?? '0'
@@ -1640,11 +1648,7 @@ function StockItemFields({
             suggestions={nameSuggestions}
             helperText={row ? undefined : 'Gõ phần đầu — Tab hoặc click để nhận gợi ý'}
             onBlur={() => {
-              const typed = String(form.getValues(`items.${index}.name`) ?? '').trim()
-              if (!typed) return
-              const names = form
-                .getValues('items')
-                .flatMap((item, i) => (String(item.name ?? '').trim() ? ([`items.${i}.name`] as const) : []))
+              const names = form.getValues('items').map((_, i) => `items.${i}.name` as const)
               void form.trigger(names)
             }}
             rules={{
@@ -1798,10 +1802,22 @@ function StockItemFields({
               <FormSearchSelect<StockDialogValues>
                 name={`items.${index}.locationCode`}
                 label="Vị trí"
-                options={locationOptions}
+                options={lineLocationOptions}
                 allowClear
                 placeholder="Tìm vị trí trống…"
                 noOptionsText="Chưa có vị trí. Cấu hình ở Cấu hình → Vị trí."
+                onPicked={() => {
+                  const names = allItems.map((_, i) => `items.${i}.locationCode` as const)
+                  void form.trigger(names)
+                }}
+                rules={{
+                  validate: (value) =>
+                    validateStockLocation(value, {
+                      occupied: occupiedLocations,
+                      self: row?.locationCode,
+                      siblings: siblingLocations,
+                    }),
+                }}
               />
             ) : null}
             <FormMoneyField<StockDialogValues>
