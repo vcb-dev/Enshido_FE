@@ -539,7 +539,7 @@ export type ProductionOrderLookups = {
   users: Array<{ id: string; username: string; fullName: string }>
   /** Tài khoản có quyền Thợ sản xuất. */
   workerIds: string[]
-  /** Khâu từng thợ được làm (theo id); admin không có trong map — nhận mọi khâu. */
+  /** Khâu từng thợ được làm (theo id); không có trong map = không nhận khâu nào, kể cả admin. */
   workerStages?: Record<string, StageCode[]>
   /** Admin chỉ được chọn làm thợ khi người giao là admin. */
   adminIds: string[]
