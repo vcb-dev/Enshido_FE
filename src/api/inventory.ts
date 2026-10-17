@@ -285,10 +285,27 @@ export function moneyDigitsFromInput(value: string) {
   return value.replace(/[^\d]/g, '')
 }
 
-/** Chuỗi chữ số về dạng có phân cách nghìn để hiển thị trong ô nhập. */
+/**
+ * Chuỗi chữ số → có chấm nghìn (vi-VN) để hiện trong ô nhập.
+ * Không qua `Number()`: `Number('1.000')` = 1 nên format lại lúc gõ sẽ làm số nhảy.
+ */
 export function formatMoneyInput(value: string) {
-  if (!value) return ''
-  return formatMoney(value)
+  const digits = moneyDigitsFromInput(value)
+  if (!digits) return ''
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+/** Vị trí caret sau khi thêm/bớt dấu chấm nghìn — giữ đúng chữ số đang gõ. */
+export function caretAfterMoneyFormat(formatted: string, digitsBefore: number) {
+  if (digitsBefore <= 0) return 0
+  let seen = 0
+  for (let i = 0; i < formatted.length; i++) {
+    if (formatted[i] >= '0' && formatted[i] <= '9') {
+      seen += 1
+      if (seen >= digitsBefore) return i + 1
+    }
+  }
+  return formatted.length
 }
 
 function parseYmd(value: string) {
