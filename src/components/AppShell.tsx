@@ -55,10 +55,10 @@ import { InstallAppButton } from './InstallAppButton'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets, canUseQcTickets } from '../intake/intake3dAccess'
-import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
+import { canSeeCastingCutsMenu, canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
 import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
@@ -101,7 +101,7 @@ export function AppShell() {
   const showIntakeOrders = canSeeIntakeOrdersMenu(user)
   const showProductionOrders = canAccessProductionOrdersPage(user)
   const showCastingOrders = canSeeCastingOrdersMenu(user)
-  const showCastingCuts = !isWorkerOnly(user) && can(user, Permission.WAREHOUSE_KEEPER)
+  const showCastingCuts = canSeeCastingCutsMenu(user)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
 

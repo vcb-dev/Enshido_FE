@@ -1,6 +1,6 @@
 import type { RoleCode, UserRow } from '../api/auth'
 import type { StageCode } from '../api/productionOrders'
-import { Permission, type PermissionCode } from './permissions'
+import { Permission, permissionsForRoles, type PermissionCode, type PermissionUser } from './permissions'
 import { SCREEN_GROUPS, type ScreenGroup } from './screens'
 
 /** Vai trò nghiệp vụ khi thêm / sửa nhân sự (map xuống roleCode + allowedScreens). */
@@ -184,6 +184,7 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
         allowedScreens: [
           ...WAREHOUSE_SCREENS,
           Permission.SCREEN_PRODUCTION_ORDERS,
+          Permission.SCREEN_CASTING_CUTS,
           Permission.WAREHOUSE_KEEPER,
           Permission.INTAKE_CREATE,
           Permission.INTAKE_APPROVE,
@@ -195,6 +196,7 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
         allowedScreens: [
           Permission.SCREEN_DASHBOARD,
           Permission.SCREEN_PRODUCTION_ORDERS,
+          Permission.SCREEN_QC_TICKETS,
           Permission.PRODUCTION_QC,
         ],
       }
@@ -309,6 +311,30 @@ function legacyProductionOrdersTick(
   return false
 }
 
+/**
+ * Tài khoản sau khi lưu form (vai trò + màn đã tích), dạng dùng được cho các hàm kiểm tra menu —
+ * màn phân quyền dùng để hiện đúng mục sidebar sẽ thấy.
+ */
+export function permissionUserForForm(
+  preset: StaffJobPreset,
+  pickedScreens: PermissionCode[],
+): PermissionUser {
+  const { roleCode } = roleAndScreensForPreset(preset)
+  return {
+    roleCode,
+    extraRoles: [],
+    permissions: Array.from(
+      new Set([...permissionsForRoles(roleCode), ...allowedScreensForSave(preset, pickedScreens)]),
+    ),
+  }
+}
+
+/** Màn vai trò tích sẵn nhưng admin bỏ được: Phiếu QC (QC), Cắt cây thông (Thủ kho). */
+const OPTIONAL_ROLE_DEFAULTS = new Set<PermissionCode>([
+  Permission.SCREEN_QC_TICKETS,
+  Permission.SCREEN_CASTING_CUTS,
+])
+
 export function screensFromUserForPreset(
   user: Pick<UserRow, 'roleCode' | 'allowedScreens'>,
   preset: StaffJobPreset,
@@ -316,7 +342,11 @@ export function screensFromUserForPreset(
   if (preset === 'admin') return []
   const keys = new Set(USER_EDIT_SCREEN_KEYS)
   const picked = ((user.allowedScreens ?? []) as PermissionCode[]).filter((key) => keys.has(key))
-  const roleDefaults = roleAndScreensForPreset(preset).allowedScreens.filter((key) => keys.has(key))
+  // Màn chỉ tích sẵn lúc tạo, bỏ được: không tự tích lại khi mở form sửa (tài khoản cũ đã có
+  // quyền này từ migration).
+  const roleDefaults = roleAndScreensForPreset(preset).allowedScreens.filter(
+    (key) => keys.has(key) && !OPTIONAL_ROLE_DEFAULTS.has(key),
+  )
   const merged = Array.from(new Set([...picked, ...roleDefaults]))
   if (legacyProductionOrdersTick(preset, merged)) {
     merged.push(Permission.SCREEN_PRODUCTION_ORDERS)

@@ -12,18 +12,47 @@ import {
   canAccessProductionOrdersPage,
   canSeeCastingSlipsPage,
   canUseMyTickets,
+  canUseQcTickets,
 } from '../intake/intake3dAccess'
-import { canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from './screenAccess'
+import {
+  canSeeCastingCutsMenu,
+  canSeeCastingOrdersMenu,
+  canSeeIntakeOrdersMenu,
+} from './screenAccess'
+
+/** Ô tích một màn hình menu. `menu` = điều kiện sidebar hiện mục này (vai trò cũng có thể tự mở). */
+export type ScreenItem = {
+  key: PermissionCode
+  label: string
+  menu?: (user: PermissionUser) => boolean
+}
 
 export type ScreenGroup = {
   label: string
-  items: { key: PermissionCode; label: string }[]
+  items: ScreenItem[]
 }
 
+/** Nhóm và thứ tự giống hệt sidebar (AppShell) — sửa sidebar thì sửa cả đây. */
 export const SCREEN_GROUPS: ScreenGroup[] = [
   {
     label: 'Chung',
     items: [{ key: Permission.SCREEN_DASHBOARD, label: 'Tổng quan' }],
+  },
+  {
+    label: 'Sản xuất',
+    items: [
+      { key: Permission.SCREEN_INTAKE_ORDERS, label: 'Tạo đơn' },
+      { key: Permission.SCREEN_PRODUCTION_ORDERS, label: 'Lệnh sản xuất' },
+    ],
+  },
+  {
+    label: 'Phiếu của tôi',
+    items: [
+      { key: Permission.SCREEN_MY_TICKETS, label: 'Phiếu khâu', menu: canUseMyTickets },
+      { key: Permission.SCREEN_CASTING_ORDERS, label: 'Lệnh đúc', menu: canSeeCastingOrdersMenu },
+      { key: Permission.SCREEN_CASTING_CUTS, label: 'Cắt cây thông', menu: canSeeCastingCutsMenu },
+      { key: Permission.SCREEN_QC_TICKETS, label: 'Phiếu QC', menu: canUseQcTickets },
+    ],
   },
   {
     label: 'Kho',
@@ -32,15 +61,6 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
       { key: Permission.SCREEN_WAREHOUSE_BTP, label: 'Kho BTP' },
       { key: Permission.SCREEN_WAREHOUSE_TIEU_HAO, label: 'Kho NVL tiêu hao' },
       { key: Permission.SCREEN_WAREHOUSE_THANH_PHAM, label: 'Kho thành phẩm' },
-    ],
-  },
-  {
-    label: 'Sản xuất (màn hình menu)',
-    items: [
-      { key: Permission.SCREEN_INTAKE_ORDERS, label: 'Tạo đơn' },
-      { key: Permission.SCREEN_PRODUCTION_ORDERS, label: 'Lệnh sản xuất' },
-      { key: Permission.SCREEN_CASTING_ORDERS, label: 'Lệnh đúc' },
-      { key: Permission.SCREEN_MY_TICKETS, label: 'Phiếu của tôi' },
     ],
   },
   {
@@ -80,11 +100,13 @@ export function hasAnyWarehouse(user: PermissionUser | undefined | null) {
 export function firstAllowedPath(user: PermissionUser | undefined | null): string {
   if (isWorkerOnly(user)) return '/my-tickets'
   if (isCustomerOnly(user)) return '/intake-orders'
-  // Tài khoản QC (không kiêm thủ kho / admin) vào thẳng màn Phiếu QC.
+  // Tài khoản QC (không kiêm thủ kho / admin) vào thẳng màn Phiếu QC — chỉ khi còn được tích
+  // màn này, không thì vòng chuyển trang tới màn không vào được.
   if (
     user?.roleCode !== 'ADMIN' &&
     can(user, Permission.PRODUCTION_QC) &&
-    !can(user, Permission.WAREHOUSE_KEEPER)
+    !can(user, Permission.WAREHOUSE_KEEPER) &&
+    canUseQcTickets(user)
   ) {
     return '/qc-tickets'
   }
