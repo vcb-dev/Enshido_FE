@@ -45,10 +45,13 @@ export function canUseMyTickets(user: PermissionUser | null | undefined): boolea
   return true
 }
 
-/** Màn "Phiếu QC": QC cân lại, sửa lại, hoàn thiện — QC không thao tác trong chi tiết lệnh. */
+/**
+ * Màn "Phiếu QC": QC cân lại, sửa lại, hoàn thiện — QC không thao tác trong chi tiết lệnh. Hiện theo
+ * ô tích màn Phiếu QC (vai trò QC tích sẵn); thao tác trong màn vẫn cần `production.qc`.
+ */
 export function canUseQcTickets(user: PermissionUser | null | undefined): boolean {
   if (!user) return false
-  return user.roleCode === 'ADMIN' || can(user, Permission.PRODUCTION_QC)
+  return user.roleCode === 'ADMIN' || can(user, Permission.SCREEN_QC_TICKETS)
 }
 
 export function canAccessProductionOrdersPage(user: PermissionUser | null | undefined): boolean {

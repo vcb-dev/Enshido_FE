@@ -31,6 +31,7 @@ import {
   allowedScreensForSave,
   defaultEditScreensForPreset,
   inferStaffJobPreset,
+  permissionUserForForm,
   presetShowsScreenEditor,
   roleAndScreensForPreset,
   screenGroupsForUserEdit,
@@ -42,6 +43,7 @@ import {
   extraStageRolesOf,
   isStageWorkerPreset,
   STAGE_WORKER_ROLES,
+  STAFF_JOB_OPTIONS,
   workerStagesForSave,
   type StaffJobPreset,
   type StageWorkerPreset,
@@ -237,8 +239,13 @@ type UserFormValues = {
   extraRoles: (StageWorkerPreset | '')[]
 }
 
-/** Danh sách tích màn hình menu — nối với field `screens` của form qua Controller. */
-function ScreenChecklist() {
+/**
+ * Danh sách tích màn hình menu — nối với field `screens` của form qua Controller. Nhóm và thứ tự
+ * giống sidebar; mục vai trò bắt buộc mở (thợ đúc luôn thấy Lệnh đúc, thợ khâu luôn thấy Phiếu
+ * khâu) hiện đã tích và khoá — dùng chung điều kiện với sidebar nên không lệch.
+ */
+function ScreenChecklist({ preset }: { preset: StaffJobPreset }) {
+  const presetLabel = STAFF_JOB_OPTIONS.find((option) => option.value === preset)?.label ?? ''
   return (
     <Controller<{ screens: PermissionCode[] }, 'screens'>
       name="screens"
@@ -252,19 +259,26 @@ function ScreenChecklist() {
               <Stack key={group.label} spacing={0.25}>
                 <Typography variant="subtitle2">{group.label}</Typography>
                 <FormGroup>
-                  {group.items.map((item) => (
-                    <FormControlLabel
-                      key={item.key}
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={value.includes(item.key)}
-                          onChange={(event) => toggle(item.key, event.target.checked)}
-                        />
-                      }
-                      label={item.label}
-                    />
-                  ))}
+                  {group.items.map((item) => {
+                    // Bỏ chính ô này mà sidebar vẫn hiện = vai trò đã tự mở mục.
+                    const byRole = Boolean(
+                      item.menu?.(permissionUserForForm(preset, value.filter((key) => key !== item.key))),
+                    )
+                    return (
+                      <FormControlLabel
+                        key={item.key}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={byRole || value.includes(item.key)}
+                            disabled={byRole}
+                            onChange={(event) => toggle(item.key, event.target.checked)}
+                          />
+                        }
+                        label={<ChecklistLabel label={item.label} note={byRole ? `theo vai trò ${presetLabel}` : null} />}
+                      />
+                    )
+                  })}
                 </FormGroup>
               </Stack>
             ))}
@@ -272,6 +286,20 @@ function ScreenChecklist() {
         )
       }}
     />
+  )
+}
+
+function ChecklistLabel({ label, note }: { label: string; note: string | null }) {
+  return (
+    <>
+      {label}
+      {note ? (
+        <Typography component="span" variant="caption" color="text.secondary">
+          {' '}
+          · {note}
+        </Typography>
+      ) : null}
+    </>
   )
 }
 
@@ -490,7 +518,7 @@ function CreateUserDialog({
           {isStageWorkerPreset(staffJob) ? <ExtraStageRoles primary={staffJob} /> : null}
           {presetShowsScreenEditor(staffJob) ? (
             <>
-              <ScreenChecklist />
+              <ScreenChecklist preset={staffJob} />
             </>
           ) : null}
         </DialogContent>
@@ -627,7 +655,7 @@ function EditUserDialog({
               <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
                 Màn hình được xem
               </Typography>
-              <ScreenChecklist />
+              <ScreenChecklist preset={staffJob} />
             </>
           ) : null}
           {user ? (

@@ -28,6 +28,16 @@ export function canSeeCastingOrdersMenu(user: PermissionUser | null | undefined)
   if (!user) return false
   if (isAdmin(user)) return true
   if (can(user, Permission.SCREEN_CASTING_ORDERS)) return true
-  if (can(user, Permission.PRODUCTION_CAST)) return true
-  return legacyOfficeIntakeCastingMenu(user)
+  // Lệnh đúc theo ô tích (tài khoản cũ đã được thêm quyền ở migration) — không tự mở cho
+  // nhân viên văn phòng nữa, để bỏ tích là ẩn được.
+  return can(user, Permission.PRODUCTION_CAST)
+}
+
+/**
+ * Menu "Cắt cây thông": theo ô tích màn Cắt cây thông (vai trò Thủ kho tích sẵn), không cho tài
+ * khoản chỉ thợ. Cân phôi / cắt cây vẫn cần `warehouse.keeper`. Sidebar và màn phân quyền dùng chung.
+ */
+export function canSeeCastingCutsMenu(user: PermissionUser | null | undefined): boolean {
+  if (!user) return false
+  return !isWorkerOnly(user) && can(user, Permission.SCREEN_CASTING_CUTS)
 }
