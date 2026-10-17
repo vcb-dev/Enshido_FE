@@ -57,7 +57,6 @@ const MINE_ORDER: Partial<Record<SubTicketState, number>> = { WORKING: 0, CLAIME
 const CASTING_MINE_ORDER: Partial<Record<CastingSlipStatus, number>> = {
   CASTING: 0,
   PENDING_CONFIRMATION: 1,
-  PENDING_ISSUE: 2,
 }
 
 const CASTING_SLIP_STATUS_LABEL: Record<CastingSlipStatus, string> = {
