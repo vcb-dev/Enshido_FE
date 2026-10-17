@@ -30,6 +30,7 @@ import UnfoldLessIcon from '@mui/icons-material/UnfoldLess'
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
 import { useIsCardMode, useIsCompact, useIsMobile } from '../../hooks/useBreakpoint'
 import type { SortDir } from '../../hooks/useTableParams'
+import { fixedLayoutMinWidth } from './tableLayout'
 
 /** Nhóm tiêu đề bậc 1 gộp nhiều cột liền kề (vd: "Nhập" gộp SL + TT). */
 export type ColumnGroup = {
@@ -626,7 +627,7 @@ export function DataTable<T, S = never>({
             stickyHeader={stickyHeader && !flowMode}
             sx={{
               width: '100%',
-              minWidth,
+              minWidth: fixedLayout ? fixedLayoutMinWidth(columns, leadCol ? leadColWidth : 0, minWidth) : minWidth,
               ...(fixedLayout ? { tableLayout: 'fixed' } : null),
               ...(variant === 'grid' ? GRID_TABLE_SX : null),
               ...(hasStickyEnd ? STICKY_TABLE_SX : null),
