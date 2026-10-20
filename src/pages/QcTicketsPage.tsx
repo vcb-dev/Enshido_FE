@@ -30,7 +30,7 @@ import {
 } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { CardGroupSkeleton } from '../components/ui'
-import { formatDateShort, qcReturnLabel, STAGE_LABEL, STAGES } from '../orders/catalog'
+import { canReportStageDefect, formatDateShort, qcReturnLabel, STAGE_LABEL, STAGES } from '../orders/catalog'
 import { applyProductionOrderDetail } from '../orders/orderCache'
 import { invalidateBtpStock } from '../orders/btpStock'
 import { invalidateNvlStock } from '../orders/nvlStock'
@@ -197,7 +197,8 @@ export function QcTicketsPage() {
     const entry = item as QcTicketItem
     const loading = loadingEntry === entry.entryId
     if (tab === 'working') {
-      return canReportDefect ? (
+      // Khắc / Xi không báo lỗi.
+      return canReportDefect && canReportStageDefect(entry.stage) ? (
         <Button size="large" variant="outlined" color="error" onClick={() => setReporting(entry)}>
           Báo lỗi
         </Button>

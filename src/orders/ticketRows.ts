@@ -1,4 +1,4 @@
-import type { ProductionOrderDetail, StageCode, StageEntry, SubTicket } from '../api/productionOrders'
+import type { ProductionOrderDetail, ProductionStatus, StageCode, StageEntry, SubTicket } from '../api/productionOrders'
 import { formatCt, formatQty, gramToCt } from '../api/inventory'
 import {
   formatDateShort,
@@ -24,6 +24,8 @@ export type TicketRow = {
   value: (entry: StageEntry) => string
   /** Mức cảnh báo của ô, tô màu theo [SILVER_LOSS_TONE](./catalog.ts). */
   warnLevel?: (entry: StageEntry) => SilverLossLevel | null
+  /** Chia đôi ô theo chiều dọc (vd S925 trên / BTP dưới) — có thì vẽ các phần thay cho `value`. */
+  parts?: Array<{ label: string; value: (entry: StageEntry) => string }>
 }
 
 export const TICKET_TONE_BG: Record<TicketRowTone, string> = {
@@ -180,6 +182,50 @@ export const TICKET_ROWS: TicketRow[] = [
   },
 ]
 
+/** Phiếu in bỏ dòng NVL xuất / bạc vào khâu / hao hụt số lượng, đá chỉ giữ hai dòng TL (giao, gắn). */
+const PRINT_HIDDEN_ROWS = new Set([
+  'issuedAtHandover',
+  'issuedExtra',
+  'silverIn',
+  'handedStoneCount',
+  'issuedStones',
+  'stoneCount',
+  'returnedStoneCount',
+  'qtyLoss',
+  'stoneLoss',
+])
+
+/** Tổng TL (g) các dòng bạc đã xuất vào khâu, tách theo kho: BTP hay bạc S925. */
+function issuedMetal(entry: StageEntry, btp: boolean) {
+  return (entry.issuedLines ?? [])
+    .filter((line) => line.kind === 'METAL' && Boolean(line.btp) === btp && line.weight)
+    .reduce((total, line) => total + Number(line.weight), 0)
+}
+
+/** S925: bạc xuất vào khâu (lúc giao + thợ xin thêm). */
+const handedS925 = (entry: StageEntry) => issuedMetal(entry, false)
+/** BTP: hàng nhận từ khâu trước + BTP xuất từ kho. */
+const handedBtp = (entry: StageEntry) => Number(entry.handedSilverWeight ?? 0) + issuedMetal(entry, true)
+
+const grams = (value: number) => (value ? formatQty(String(round4(value))) : '')
+
+/** Trọng lượng giao trên phiếu in: một dòng, mỗi ô chia đôi — S925 trên, BTP dưới. */
+const PRINT_HANDED_ROW: TicketRow = {
+  key: 'handedSilver',
+  label: 'Trọng lượng giao',
+  hint: '(t - chỉ)',
+  numeric: true,
+  value: (e) => grams(handedS925(e) + handedBtp(e)),
+  parts: [
+    { label: 'S925', value: (e) => grams(handedS925(e)) },
+    { label: 'BTP', value: (e) => grams(handedBtp(e)) },
+  ],
+}
+
+export const PRINT_TICKET_ROWS = TICKET_ROWS.filter((row) => !PRINT_HIDDEN_ROWS.has(row.key)).map((row) =>
+  row.key === 'handedSilver' ? PRINT_HANDED_ROW : row,
+)
+
 export type StageColumn = {
   /** Thứ bảng khâu vẽ: lần gần nhất, hoặc số cộng của các phiếu con. */
   entry: StageEntry | undefined
@@ -247,21 +293,17 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
   const issuedMetal = sumWeights(entries.map((entry) => entry.issuedMetalWeight))
   const silverIn = sumWeights(entries.map((entry) => entry.silverIn))
   const stone = sumWeights(entries.map((entry) => entry.stoneWeight))
-  const returnedSilver = sumWeights(entries.map((entry) => entry.returnedSilverWeight))
+  // Khắc / Đánh bóng QC có thể chỉ chụp ảnh, không cân — thiếu một phiếu là không có tổng đúng.
+  const weighed = entries.every((entry) => entry.returnedSilverWeight != null)
+  const returnedSilver = weighed ? sumWeights(entries.map((entry) => entry.returnedSilverWeight)) : null
   const btp = sumWeights(entries.map((entry) => entry.btpRecoveredWeight))
   const silverRecovered = sumWeights(entries.map((entry) => entry.silverRecoveredWeight))
   const handedQty = sumCounts(entries.map((entry) => entry.handedQty))
-  // Mốc là bạc vào khâu (giao + xuất thêm). Đá gắn ở khâu Vào đá nằm trong TL cân lại nên
-  // phải cộng vào vế giao, giống công thức ở BE.
+  // Hao hụt cột cộng = tổng hao hụt từng phiếu (BE đã tính đủ đá gắn, BTP / bạc / S999 thu hồi).
+  // Thiếu hao hụt ở một phiếu (chưa cân) thì để trống, tránh lấy TL giao cả đơn trừ TL đạt một phần.
   const loss =
-    done && silverIn != null && returnedSilver != null
-      ? round4(
-          Number(silverIn) +
-            Number(stone ?? 0) -
-            Number(returnedSilver) -
-            Number(btp ?? 0) -
-            Number(silverRecovered ?? 0),
-        )
+    done && entries.every((entry) => entry.silverLoss != null)
+      ? round4(entries.reduce((total, entry) => total + Number(entry.silverLoss), 0))
       : null
   const lossPercent =
     loss != null && silverIn != null && Number(silverIn) > 0 ? ((loss / Number(silverIn)) * 100).toFixed(2) : null
@@ -371,8 +413,8 @@ export function outcomeLines(
       outcome === 'DEFECT' && ticket.outcomeStage ? `Khâu ${STAGE_LABEL[ticket.outcomeStage]}` : '',
       formatDateShort(ticket.outcomeAt, ''),
       ticket.outcomeByName ?? '',
-      outcome === 'FINISH' && ticket.outcomeQty != null ? `Vào kho: ${ticket.outcomeQty}` : '',
-      ticket.outcomeNote ? `Lý do: ${ticket.outcomeNote}` : '',
+      outcome === 'FINISH' && ticket.outcomeQty != null ? finishedStockLine(order, ticket.outcomeQty) : '',
+      ticket.outcomeNote && !coversStage(partial, ticket.outcomeStage) ? `Lý do: ${ticket.outcomeNote}` : '',
     ].filter(Boolean)
     return partial.length ? [...partial, '', ...closed] : closed
   }
@@ -383,7 +425,7 @@ export function outcomeLines(
     return [
       formatDateShort(goods.receivedAt),
       goods.receivedByName,
-      goods.pendingQty > 0 ? `Chờ vào tồn: ${goods.pendingQty}` : `Vào tồn: ${goods.qty}`,
+      goods.pendingQty > 0 ? `Chờ vào kho thành phẩm: ${goods.pendingQty}` : `Đã vào kho thành phẩm: ${goods.qty}`,
     ]
   }
 
@@ -397,14 +439,51 @@ export function outcomeLines(
   // Lần ghi lỗi gần nhất — giữ lại cả khi đơn đã được làm lại, để phiếu còn dấu vết lỗi.
   const log = order.statusLogs.find((item) => ['DEFECT', 'FILING_DEFECT', 'STONE_DEFECT'].includes(item.toStatus))
   if (!log) return partial
+  const logStage = log.fromStatus ? STATUS_STAGE[log.fromStatus] : undefined
   return [
     ...partial,
     ...(partial.length ? [''] : []),
-    log.fromStatus ? `Khâu ${STATUS_META[log.fromStatus].label}` : '',
+    log.fromStatus ? `Khâu ${logStage ? STAGE_LABEL[logStage] : STATUS_META[log.fromStatus].label}` : '',
     formatDateShort(log.changedAt),
     log.changedBy ?? '',
-    log.note ? `Lý do: ${log.note}` : '',
+    log.note && !coversStage(partial, logStage) ? `Lý do: ${log.note}` : '',
   ].filter(Boolean)
+}
+
+/** Trạng thái đơn → khâu, để ô Lỗi ghi "Khâu Nguội" thay vì "Khâu Đang nguội". */
+const STATUS_STAGE: Partial<Record<ProductionStatus, StageCode>> = {
+  WAIT_FILING: 'FILING',
+  FILING: 'FILING',
+  FILING_DEFECT: 'FILING',
+  WAIT_STONE: 'STONE_SETTING',
+  STONE_SETTING: 'STONE_SETTING',
+  STONE_DEFECT: 'STONE_SETTING',
+  WAIT_ENGRAVING: 'ENGRAVING',
+  ENGRAVING: 'ENGRAVING',
+  WAIT_POLISHING: 'POLISHING',
+  POLISHING: 'POLISHING',
+  WAIT_PLATING: 'PLATING',
+  PLATING: 'PLATING',
+  PLATED: 'PLATING',
+}
+
+/**
+ * Dòng QC tách lỗi đã ghi số lỗi + lý do của khâu này chưa — có rồi thì lý do lúc chốt / nhật ký
+ * (hệ thống tự viết lại cùng nội dung) không cần lặp.
+ */
+function coversStage(partial: string[], stage: StageCode | null | undefined) {
+  if (!stage) return false
+  const label = STAGE_LABEL[stage]
+  return partial.some((line) => line.startsWith(`${label}: `) || line.includes(` · ${label}: `))
+}
+
+/**
+ * Phiếu con hoàn thiện: kho thành phẩm nhận theo cả đơn chứ không theo từng phiếu, nên chỉ ghi
+ * "Đã vào kho" khi kho đã nhận hết phần hoàn thiện của đơn.
+ */
+function finishedStockLine(order: ProductionOrderDetail, qty: number) {
+  const goods = order.finishedGoods
+  return goods && goods.pendingQty === 0 ? `Đã vào kho thành phẩm: ${qty}` : `Chờ vào kho thành phẩm: ${qty}`
 }
 
 /**

@@ -170,6 +170,8 @@ export type StageEntry = {
     name: string
     unit: string
     kind: MaterialRequestKind
+    /** Xuất từ kho BTP — phiếu in tách TL giao thành S925 / BTP. */
+    btp?: boolean
     qty: string | null
     weight: string | null
     stoneCount: number | null
@@ -325,6 +327,8 @@ export type TicketMaterials = {
     times: number
   }>
   issuedMetalWeight: string
+  /** Chỉ bạc S925 đã xuất (kho NVL), không tính BTP — ô "Bạc xuất thêm" trên phiếu in. */
+  issuedSilverWeight?: string
   issuedStoneCount: number
   pendingCount: number
   silverIn: string | null
@@ -881,6 +885,7 @@ type SparseOrderDetail = Sparse<
 const EMPTY_MATERIALS: TicketMaterials = {
   lines: [],
   issuedMetalWeight: '0',
+  issuedSilverWeight: '0',
   issuedStoneCount: 0,
   pendingCount: 0,
   silverIn: null,

@@ -137,6 +137,51 @@ describe('stageColumns — cột khâu trên phiếu', () => {
     expect(column.tickets).toEqual({ done: 2, total: 2 })
   })
 
+  it('một phiếu con không cân (Khắc chỉ chụp ảnh) thì cột cộng để trống TL đạt và hao hụt', () => {
+    const done = { returnedAt: '2026-10-14T06:00:00.000Z', returnedByName: 'QC', returnedQty: 200 }
+    const stages = [
+      entry({
+        id: 'a',
+        subTicketId: 't1',
+        subTicketNo: 1,
+        stage: 'ENGRAVING',
+        handedSilverWeight: null,
+        silverIn: '7900',
+        returnedSilverWeight: '7800',
+        silverLoss: '100',
+        ...done,
+      }),
+      entry({
+        id: 'b',
+        subTicketId: 't2',
+        subTicketNo: 2,
+        stage: 'ENGRAVING',
+        handedSilverWeight: null,
+        silverIn: '7888',
+        returnedSilverWeight: null,
+        silverLoss: null,
+        ...done,
+      }),
+    ]
+    const column = stageColumns(stages).ENGRAVING.entry!
+    expect(column.silverIn).toBe('15788')
+    expect(column.returnedSilverWeight).toBeNull()
+    expect(column.silverLoss).toBeNull()
+    expect(column.silverLossPercent).toBeNull()
+  })
+
+  it('mọi phiếu con đã cân thì hao hụt cột cộng = tổng hao hụt từng phiếu', () => {
+    const done = { returnedAt: '2026-10-14T06:00:00.000Z', returnedByName: 'QC', returnedQty: 200 }
+    const stages = [
+      entry({ id: 'a', subTicketId: 't1', subTicketNo: 1, stage: 'PLATING', handedSilverWeight: '7500', silverIn: '7500', returnedSilverWeight: '7000', silverLoss: '500', ...done }),
+      entry({ id: 'b', subTicketId: 't2', subTicketNo: 2, stage: 'PLATING', handedSilverWeight: '7888', silverIn: '7888', returnedSilverWeight: '7800', silverLoss: '88', ...done }),
+    ]
+    const column = stageColumns(stages).PLATING.entry!
+    expect(column.returnedSilverWeight).toBe('14800')
+    expect(column.silverLoss).toBe('588')
+    expect(column.silverLossPercent).toBe('3.82')
+  })
+
   it('còn phiếu con chưa được QC nhận lại thì KHÔNG hiện số nhận lại của cả đơn', () => {
     // Nếu hiện, người đọc dễ tưởng số dở dang là số chốt của cả đơn.
     const stages = [
@@ -201,7 +246,7 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
       outcomeQty: 5,
     })
     const lines = outcomeLines(order(), 'FINISH', t)
-    expect(lines).toContain('Vào kho: 5')
+    expect(lines).toContain('Chờ vào kho thành phẩm: 5')
     expect(lines.some((line) => line.startsWith('Khâu'))).toBe(false)
     expect(outcomeLines(order(), 'DEFECT', t)).toEqual([])
   })
@@ -235,6 +280,59 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
     ])
   })
 
+  it('phiếu con lỗi hết ở Nguội: lý do chốt (hệ thống tự viết) không lặp lại dòng QC tách lỗi', () => {
+    const t = ticket({
+      id: 't1',
+      code: 'A007-3',
+      outcome: 'DEFECT',
+      outcomeAt: '2026-10-14T07:00:00.000Z',
+      outcomeByName: 'QC Bình',
+      outcomeStage: 'FILING',
+      outcomeNote: 'Lỗi khâu Nguội. QC ghi lỗi: avb.',
+    })
+    const nguoi = entry({
+      id: 'e1',
+      subTicketId: 't1',
+      returnedAt: '2026-10-14T07:00:00.000Z',
+      defectQty: 200,
+      btpRecoveredWeight: '7800',
+      confirmedAt: '2026-10-14T07:01:00.000Z',
+      defectReason: 'avb',
+    })
+    const lines = outcomeLines(order({ stages: [nguoi], subTickets: [t] }), 'DEFECT', t)
+    expect(lines.filter((line) => line.startsWith('Lý do:'))).toEqual(['Lý do: avb'])
+    expect(lines).toContain('Khâu Nguội')
+  })
+
+  it('phiếu mẹ lỗi: nhật ký ghi tên khâu, không lặp lý do đã có ở dòng QC tách lỗi', () => {
+    const nguoi = entry({
+      id: 'e1',
+      returnedAt: '2026-10-08T03:26:00.000Z',
+      defectQty: 50,
+      btpRecoveredWeight: '190',
+      confirmedAt: '2026-10-08T03:27:00.000Z',
+      defectReason: 'tét',
+    })
+    const lines = outcomeLines(
+      order({
+        stages: [nguoi],
+        statusLogs: [
+          {
+            id: 'l1',
+            fromStatus: 'FILING',
+            toStatus: 'FILING_DEFECT',
+            note: 'Lỗi hết hàng ở khâu Nguội',
+            changedBy: 'Admin',
+            changedAt: '2026-10-08T03:26:00.000Z',
+          },
+        ],
+      }),
+      'DEFECT',
+    )
+    expect(lines).toContain('Khâu Nguội')
+    expect(lines.filter((line) => line.startsWith('Lý do:'))).toEqual(['Lý do: tét'])
+  })
+
   it('không truyền phiếu con thì đọc kết cục của cả đơn', () => {
     const withGoods = order({
       finishedGoods: {
@@ -248,7 +346,7 @@ describe('outcomeLines — hai cột cuối phiếu', () => {
         shipments: [],
       },
     })
-    expect(outcomeLines(withGoods, 'FINISH')).toContain('Vào tồn: 9')
+    expect(outcomeLines(withGoods, 'FINISH')).toContain('Đã vào kho thành phẩm: 9')
   })
 
   it('đơn chưa vào kho thì cột Hoàn thiện trống', () => {

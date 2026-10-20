@@ -33,6 +33,7 @@ import { isInStage, skipsStone, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
 import { FormImageField } from './FormImageField'
 import { type StageWorker, workersForStage } from './stageWorkers'
+import { StoneEstimateNote } from './StoneEstimateNote'
 import { STONE_PHOTO_LABEL, STONE_PHOTO_REQUIRED, stonePhotosPayload, useUploadingByKey } from './stonePhotos'
 
 // ---------------------------------------------------------------- Tạo / sửa phiếu con
@@ -392,6 +393,7 @@ const EMPTY_STONE_LINE: StoneLineValues = { materialId: '', stoneCount: '', weig
  */
 export function AssignWorkerDialog({
   open,
+  order,
   ticket,
   stageOptions,
   workers,
@@ -400,6 +402,8 @@ export function AssignWorkerDialog({
   onSave,
 }: {
   open: boolean
+  /** Đá ước tính theo file 3D của đơn — hiện ở khâu Vào đá. */
+  order: Pick<ProductionOrderDetail, 'qty' | 'stoneCount' | 'stoneWeight'>
   ticket: SubTicket | null
   stageOptions: StageCode[]
   workers: StageWorker[]
@@ -506,6 +510,7 @@ export function AssignWorkerDialog({
           options={stageWorkers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
         />
       </FormRow>
+      {stoneStage && ticket ? <StoneEstimateNote order={order} qty={ticket.availableQty} /> : null}
       {stoneStage ? (
         <Stack spacing={1.25}>
           <Box>

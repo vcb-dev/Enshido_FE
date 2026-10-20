@@ -214,7 +214,7 @@ export function SubTicketWorkActions({
             Sửa phiếu con
           </Button>
         ) : null}
-        {canManage && order.subTickets.length > 1 && ticket.entryCount === 0 ? (
+        {canManage && active && order.subTickets.length > 1 && ticket.entryCount === 0 ? (
           <Button size="large" variant="outlined" color="error" startIcon={<TrashIcon />} onClick={() => setDeleteOpen(true)}>
             Xoá phiếu con
           </Button>
