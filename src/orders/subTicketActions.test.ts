@@ -42,6 +42,7 @@ const CACHED_ORDER = {
   materials: {
     lines: [],
     issuedMetalWeight: '0',
+    issuedSilverWeight: '0',
     issuedStoneCount: 0,
     pendingCount: 0,
     silverIn: null,

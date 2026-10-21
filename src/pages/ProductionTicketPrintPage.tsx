@@ -30,7 +30,7 @@ import {
   TICKET_HEADER_BG,
   TICKET_OUTCOME_LABEL,
   TICKET_OUTCOMES,
-  TICKET_ROWS,
+  PRINT_TICKET_ROWS,
   TICKET_TONE_BG,
 } from '../orders/ticketRows'
 
@@ -43,17 +43,21 @@ const BLUE = '#2f5da8'
 const TITLE_RED = '#e0403a'
 
 /**
- * Bảng phiếu = 1 cột nhãn + mỗi khâu một cột + 2 cột kết cục (Lỗi / Hoàn thiện). Khối thông tin
- * đầu phiếu chỉ xếp theo 6 ô nên ô cuối mỗi hàng nuốt số cột dư — đổi số khâu là phiếu tự khớp
- * lại, không lệch ô.
+ * Bảng phiếu = 1 cột nhãn + mỗi khâu một cột + các cột kết cục (Lỗi / Hoàn thiện — phiếu không
+ * có lỗi thì bỏ cột Lỗi). Khối thông tin đầu phiếu chỉ xếp theo 6 ô nên ô cuối mỗi hàng nuốt số
+ * cột dư — đổi số khâu / số cột kết cục là phiếu tự khớp lại, không lệch ô.
  */
-const TICKET_COLS = STAGES.length + TICKET_OUTCOMES.length + 1
-const SPAN_1 = TICKET_COLS - 5
-const SPAN_2 = SPAN_1 + 1
-const SPAN_3 = SPAN_1 + 2
+function ticketLayout(outcomeCount: number) {
+  const span1 = STAGES.length + outcomeCount + 1 - 5
+  return {
+    span1,
+    span2: span1 + 1,
+    span3: span1 + 2,
+    stageColWidth: `${((81 - OUTCOME_COL_WIDTH * outcomeCount) / STAGES.length).toFixed(2)}%`,
+  }
+}
 /** Cột kết cục rộng hơn cột khâu vì chứa lý do lỗi / thông tin vào kho. */
 const OUTCOME_COL_WIDTH = 13
-const STAGE_COL_WIDTH = `${((81 - OUTCOME_COL_WIDTH * TICKET_OUTCOMES.length) / STAGES.length).toFixed(2)}%`
 
 /**
  * In phiếu mẹ (`/orders/:code/print`), một phiếu con (`/orders/:code/tickets/:no/print`) hoặc
@@ -65,7 +69,8 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [paper, setPaper] = useState<Paper>('A5')
+  // A4 ngang mặc định: chữ to nhất mà phiếu vẫn nằm gọn một tờ (A5 không đủ chỗ cho bảng khâu).
+  const [paper, setPaper] = useState<Paper>('A4')
   const autoPrinted = useRef(false)
 
   const detail = useQuery({
@@ -230,7 +235,8 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
             color: '#000',
             boxShadow: '0 1px 6px rgba(0,0,0,.2)',
             fontFamily: '"Times New Roman", Times, serif',
-            fontSize: paper === 'A5' ? '8.5pt' : '11pt',
+            // 12,5pt là cỡ lớn nhất phiếu tổng (có cột Lỗi) còn vừa một tờ A4 ngang — to hơn là tràn trang.
+            fontSize: paper === 'A5' ? '8.5pt' : '12.5pt',
             lineHeight: 1.2,
             visibility: canPrint ? 'visible' : 'hidden',
             // Mỗi phiếu con một trang giấy.
@@ -256,8 +262,21 @@ function Ticket({
   printedBy: string
 }) {
   const columns = stageColumns(order.stages, subTicket?.id)
+  const outcomes = TICKET_OUTCOMES.map((outcome) => ({
+    outcome,
+    lines: outcomeLines(order, outcome, subTicket),
+  })).filter((item) => item.outcome !== 'DEFECT' || item.lines.length > 0)
+  const { span1: SPAN_1, span2: SPAN_2, span3: SPAN_3, stageColWidth } = ticketLayout(outcomes.length)
   const ticketIndex = subTicket ? order.subTickets.findIndex((ticket) => ticket.id === subTicket.id) : -1
   const materials = subTicket ? subTicket.materials : order.materials
+  // Phiếu con đã chốt Hoàn thiện mang trạng thái "Đã xi xong" của luồng — trên giấy ghi theo kết cục.
+  const statusLabel =
+    subTicket?.outcome === 'FINISH'
+      ? TICKET_OUTCOME_LABEL.FINISH
+      : STATUS_META[subTicket ? subTicket.status : order.status].label
+  // Kho nhập thành phẩm không đổi mốc dữ liệu của đơn — lấy mốc muộn hơn để chân phiếu không cũ.
+  const stockedAt = order.finishedGoods?.receivedAt
+  const dataChangedAt = stockedAt && stockedAt > order.dataChangedAt ? stockedAt : order.dataChangedAt
   const splitNote = subTicket
     ? `Phiếu con của đơn ${order.code} (${order.qty} sp)`
     : order.subTickets.length
@@ -305,9 +324,9 @@ function Ticket({
         <colgroup>
           <col style={{ width: '19%' }} />
           {STAGES.map((stage) => (
-            <col key={stage} style={{ width: STAGE_COL_WIDTH }} />
+            <col key={stage} style={{ width: stageColWidth }} />
           ))}
-          {TICKET_OUTCOMES.map((outcome) => (
+          {outcomes.map(({ outcome }) => (
             <col key={outcome} style={{ width: `${OUTCOME_COL_WIDTH}%` }} />
           ))}
         </colgroup>
@@ -357,7 +376,7 @@ function Ticket({
             )}
           </tr>
           <tr>
-            <td colSpan={2} rowSpan={7} style={{ padding: '1mm', verticalAlign: 'middle' }}>
+            <td colSpan={2} rowSpan={6} style={{ padding: '1mm', verticalAlign: 'middle' }}>
               <Box sx={{ display: 'flex', gap: '1.5mm', justifyContent: 'center', alignItems: 'center', height: '26mm' }}>
                 {images.map((image) => (
                   <Box
@@ -372,16 +391,8 @@ function Ticket({
             </td>
             <Label>Size</Label>
             <Value>{order.sizeLabel}</Value>
-            <Label>Loại đá</Label>
-            <Value colSpan={SPAN_1}>{order.stoneTypes.join(', ')}</Value>
-          </tr>
-          <tr>
             <Label>Kích thước</Label>
-            <Value>{order.size}</Value>
-            <Label>
-              Số lượng đá <i>(viên)</i>:
-            </Label>
-            <Value colSpan={SPAN_1}>{order.stoneCount}</Value>
+            <Value colSpan={SPAN_1}>{order.size}</Value>
           </tr>
           <tr>
             <Label>Số lượng:</Label>
@@ -395,7 +406,7 @@ function Ticket({
           <tr>
             <Label>Bạc xuất thêm (g):</Label>
             <td style={{ ...center, color: BLUE, fontWeight: 700 }}>
-              {Number(materials.issuedMetalWeight) ? formatQty(materials.issuedMetalWeight) : ''}
+              {Number(materials.issuedSilverWeight ?? 0) ? formatQty(materials.issuedSilverWeight ?? '0') : ''}
             </td>
             <td colSpan={SPAN_2} style={{ fontSize: '0.9em' }}>
               {[splitNote, issuedNote].filter(Boolean).join(' — ')}
@@ -433,18 +444,37 @@ function Ticket({
                 </Head>
               )
             })}
-            {TICKET_OUTCOMES.map((outcome) => (
+            {outcomes.map(({ outcome }) => (
               <Head key={outcome}>{TICKET_OUTCOME_LABEL[outcome]}</Head>
             ))}
           </tr>
-          {TICKET_ROWS.map((row, index) => (
+          {PRINT_TICKET_ROWS.map((row, index) => (
             <tr key={row.key} style={row.tone ? { background: TICKET_TONE_BG[row.tone] } : undefined}>
-              <td style={{ fontWeight: row.tone ? 700 : 400 }}>
-                {row.label}
-                {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
+              <td style={{ fontWeight: row.tone ? 700 : 400, ...(row.parts ? splitCell : null) }}>
+                {row.parts ? (
+                  <Box sx={{ display: 'flex', height: '100%' }}>
+                    <Box sx={{ flex: 1, padding: '0.5mm 1.2mm', alignSelf: 'center' }}>
+                      {row.label}
+                      {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
+                    </Box>
+                    <SplitStack cells={row.parts.map((part) => part.label)} bordered />
+                  </Box>
+                ) : (
+                  <>
+                    {row.label}
+                    {row.hint ? <i style={{ whiteSpace: 'nowrap' }}> {row.hint}</i> : null}
+                  </>
+                )}
               </td>
               {STAGES.map((stage) => {
                 const entry = columns[stage].entry
+                if (row.parts) {
+                  return (
+                    <td key={stage} style={splitCell}>
+                      <SplitStack cells={row.parts.map((part) => (entry ? part.value(entry) : ''))} alignRight />
+                    </td>
+                  )
+                }
                 const level = entry && row.warnLevel ? row.warnLevel(entry) : null
                 return (
                   <td
@@ -467,13 +497,13 @@ function Ticket({
                 )
               })}
               {index === 0
-                ? TICKET_OUTCOMES.map((outcome) => (
+                ? outcomes.map(({ outcome, lines }) => (
                     <td
                       key={outcome}
-                      rowSpan={TICKET_ROWS.length}
+                      rowSpan={PRINT_TICKET_ROWS.length}
                       style={{ verticalAlign: 'top', whiteSpace: 'pre-line' }}
                     >
-                      {outcomeLines(order, outcome, subTicket).join('\n')}
+                      {lines.join('\n')}
                     </td>
                   ))
                 : null}
@@ -484,7 +514,8 @@ function Ticket({
 
       <Box sx={{ mt: '1.5mm', display: 'flex', justifyContent: 'space-between', gap: '2mm', fontSize: '0.8em', color: '#333' }}>
         <span>
-          Trạng thái: {STATUS_META[order.status].label} · Dữ liệu cập nhật lúc {formatDateTime(order.dataChangedAt)}
+          Trạng thái: {statusLabel} · Dữ liệu cập nhật lúc{' '}
+          {formatDateTime(dataChangedAt)}
         </span>
         <span>
           In lúc {formatDateTime(new Date().toISOString())}
@@ -496,6 +527,38 @@ function Ticket({
 }
 
 const center: CSSProperties = { textAlign: 'center' }
+
+/** Ô chia đôi (Trọng lượng giao: S925 trên / BTP dưới) — đường kẻ giữa cùng nét với bảng. */
+const SPLIT_BORDER = '0.6pt solid #000'
+/**
+ * `height: 1px` cho ô bảng để phần trong lấy được `height: 100%` = chiều cao thật của hàng —
+ * ô nhãn xuống 2 dòng thì các nửa trong ô khâu giãn theo, đường kẻ giữa thẳng hàng.
+ */
+const splitCell: CSSProperties = { padding: 0, height: '1px' }
+
+/** Chồng các nửa bằng nhau theo chiều dọc, kẻ ngang giữa các nửa. */
+function SplitStack({ cells, alignRight, bordered }: { cells: string[]; alignRight?: boolean; bordered?: boolean }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: bordered ? SPLIT_BORDER : 'none' }}>
+      {cells.map((cell, index) => (
+        <Box
+          key={index}
+          sx={{
+            flex: '1 1 0',
+            minHeight: '4.2mm',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: alignRight ? 'flex-end' : 'flex-start',
+            padding: '0.5mm 1.2mm',
+            borderTop: index ? SPLIT_BORDER : 'none',
+          }}
+        >
+          {cell}
+        </Box>
+      ))}
+    </Box>
+  )
+}
 
 /** Ô tiêu đề nền vàng như mẫu. */
 function Head({ children, colSpan, style }: { children: ReactNode; colSpan?: number; style?: CSSProperties }) {

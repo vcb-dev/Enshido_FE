@@ -284,7 +284,10 @@ export function ProductionOrderDetailPage() {
   // Đơn NVL vào Nguội khi đã cắt cây thông (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
   const canPrint = isBtp || Boolean(order.castingSentDate || order.cutAt)
   const castingReady = isBtp || Boolean(order.cutAt || (order.castingSentDate && order.castingReturnedDate))
-  const locked = order.status === 'DELIVERED' || (order.finishedGoods?.shippedQty ?? 0) > 0
+  // Đã giao = mọi phiếu xong và đã xuất hết → khoá mọi thao tác sản xuất. Mới xuất một phần (phiếu con
+  // xong trước) thì các phiếu còn lại vẫn làm tiếp; chỉ khoá đổi trạng thái cả đơn — BE chặn khi đã có phiếu xuất.
+  const locked = order.status === 'DELIVERED'
+  const shipped = (order.finishedGoods?.shippedQty ?? 0) > 0
   // Người lên đơn, thủ kho và admin được chia phiếu con (khớp `canManage` phía BE).
   const canManageTickets =
     isAdmin || can(user, Permission.WAREHOUSE_KEEPER) || (user != null && order.createdByUserId === user.id)
@@ -366,7 +369,7 @@ export function ProductionOrderDetailPage() {
           <ListItemText primary="Sửa đơn" />
         </MenuItem>
         <MenuItem
-          disabled={locked || !canChangeStatus}
+          disabled={locked || shipped || !canChangeStatus}
           onClick={() => {
             setMoreMenu(null)
             setStatusPreset(null)
@@ -376,7 +379,7 @@ export function ProductionOrderDetailPage() {
           <ListItemIcon>
             <SwapHorizIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Đổi trạng thái" secondary={locked ? 'Đơn đã giao / đã xuất hàng' : undefined} />
+          <ListItemText primary="Đổi trạng thái" secondary={locked || shipped ? 'Đơn đã giao / đã xuất hàng' : undefined} />
         </MenuItem>
         {directOnParent ? null : (
           <MenuItem
@@ -1010,6 +1013,7 @@ export function ProductionOrderDetailPage() {
 
       <AssignWorkerDialog
         open={assignTarget != null}
+        order={order}
         ticket={assignTarget?.ticket ?? null}
         stageOptions={assignTarget?.stageOptions ?? []}
         workers={stageWorkers}

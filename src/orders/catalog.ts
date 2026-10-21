@@ -329,6 +329,11 @@ export function subTicketUrl(ticketCode: string) {
   return `${window.location.origin}/tickets/${ticketCode}`
 }
 
+/** Khâu được báo lỗi (nút Báo lỗi, QC nhận lại 0 sp chốt Lỗi). Khắc / Xi không báo lỗi. */
+export function canReportStageDefect(stage: string | null | undefined) {
+  return stage === 'FILING' || stage === 'STONE_SETTING' || stage === 'POLISHING'
+}
+
 /** Nguội / Vào đá: sau QC còn bước thủ kho xác nhận nhập kho (hàng đạt, hàng lỗi, nguyên liệu thừa). */
 export function isReceiptStage(stage: string | null | undefined) {
   return stage === 'FILING' || stage === 'STONE_SETTING'

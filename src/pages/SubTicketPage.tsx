@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { defectScopeText, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { canReportStageDefect, defectScopeText, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -337,8 +337,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           </Button>,
         )
       }
-    } else if (canReportDefect && model.state !== 'SUBMITTED') {
+    } else if (canReportDefect && model.state !== 'SUBMITTED' && canReportStageDefect(openEntry.stage)) {
       // Thợ đã báo xong thì QC ghi hàng lỗi ngay trong hộp "QC cân lại" — không cần nút báo lỗi riêng.
+      // Khắc / Xi không báo lỗi.
       actions.push(
         <Button key="defect" variant="outlined" color="error" size="large" disabled={busy} onClick={() => setDefectOpen(true)}>
           Báo lỗi · {STAGE_LABEL[openEntry.stage]}

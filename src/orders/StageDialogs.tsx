@@ -32,7 +32,9 @@ import {
 import { FormImageField } from './FormImageField'
 import { type StageWorker, workersForStage } from './stageWorkers'
 import { KcsImages } from './KcsImages'
+import { StoneEstimateNote } from './StoneEstimateNote'
 import {
+  canReportStageDefect,
   formatDateShort,
   PHOTO_ONLY_STAGES,
   SILVER_LOSS_LIMITS,
@@ -293,6 +295,7 @@ export function AssignReceiptDialog({
               {formatQty(previousEntry.returnedSilverWeight ?? '0')} g. Không xuất kho.
             </Alert>
           ) : null}
+          {stage === 'STONE_SETTING' ? <StoneEstimateNote order={order} qty={availableQty} /> : null}
           {carryOver ? null : (
             <HandoverMaterialsField
               form={form}
@@ -897,6 +900,9 @@ export function KcsReturnDialog({
               const handed = entry?.handedQty
               if (handed != null && qty > handed) return `Không quá số đã giao (${handed})`
               if (keeperStage && outcome === 'ok' && qty === 0) return 'Đạt 0 sp — chọn "Lỗi toàn bộ"'
+              if (!canReportStageDefect(entry?.stage) && handed !== 0 && qty === 0) {
+                return `Khâu ${STAGE_LABEL[entry!.stage]} không báo lỗi — nhận lại ít nhất 1 sp`
+              }
               return true
             },
           }}
