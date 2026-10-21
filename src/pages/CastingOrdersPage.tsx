@@ -37,7 +37,7 @@ import {
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
-import { formatQty } from '../api/inventory'
+import { formatMoney, formatQty } from '../api/inventory'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
@@ -233,9 +233,11 @@ export function CastingOrdersPage() {
       issueS999Gram?: number
       issueMasterAlloyGram?: number
       issueS925Gram?: number
+      issueGoldGram?: number
       issueS999MaterialId?: string
       issueMasterAlloyMaterialId?: string
       issueS925MaterialId?: string
+      issueGoldMaterialId?: string
     }) => {
       const { slip, ...payload } = vars
       // Chuyển nguyên payload của dialog — liệt kê tay từng trường từng làm rơi mất mã NVL xuất
@@ -243,7 +245,11 @@ export function CastingOrdersPage() {
     },
     onSuccess: (updated) => {
       setIssueTarget(null)
-      toast.success(`Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn sang Chờ đúc`)
+      toast.success(
+        updated.isServiceCast || updated.startedByName === 'Đúc dịch vụ'
+          ? `Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn Đang đúc (dịch vụ)`
+          : `Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn sang Chờ đúc`,
+      )
       applyCastingSlipUpdate(queryClient, updated)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -271,7 +277,9 @@ export function CastingOrdersPage() {
     mutationFn: (slip: CastingSlip) => rejectCastingSlipApi(slip.id),
     onSuccess: (redo, failedSlip) => {
       toast.success(
-        `Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc). Thợ nhận phiếu và nhập kết quả mới.`,
+        failedSlip.isServiceCast
+          ? `Đã báo lỗi đúc — phiếu làm lại ${redo.code} (đúc dịch vụ). Thủ kho nhập kết quả mới trên Lệnh đúc.`
+          : `Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc). Thợ nhận phiếu và nhập kết quả mới.`,
       )
       applyCastingSlipRejected(
         queryClient,
@@ -332,7 +340,7 @@ export function CastingOrdersPage() {
             Cấp vật tư
           </Button>
         ) : null}
-        {row.status === 'CASTING' && canCast ? (
+        {row.status === 'CASTING' && (canCast || (row.isServiceCast && canConfirm)) ? (
           <Button size="small" variant="contained" onClick={() => setResultTarget(row)}>
             Nhập kết quả đúc
           </Button>
@@ -765,7 +773,8 @@ export function CastingSlipViewDialog({
                 <strong>Ngày:</strong> {view.slipDate}
               </Typography>
               <Typography variant="body2">
-                <strong>Giao cho thợ:</strong> {view.startedByName ?? '—'}
+                <strong>{view.isServiceCast ? 'Hình thức:' : 'Giao cho thợ:'}</strong>{' '}
+                {view.isServiceCast ? 'Đúc dịch vụ' : (view.startedByName ?? '—')}
               </Typography>
               {view.createdByName ? (
                 <Typography variant="body2">
@@ -811,10 +820,12 @@ export function CastingSlipViewDialog({
               estimateS999Gram={view.estimateS999Gram}
               estimateMasterAlloyGram={view.estimateMasterAlloyGram}
               estimateS925Gram={view.estimateS925Gram}
+              estimateGoldGram={view.estimateGoldGram}
               estimateTotalGram={view.estimateTotalGram}
               issueS999Gram={view.issueS999Gram}
               issueMasterAlloyGram={view.issueMasterAlloyGram}
               issueS925Gram={view.issueS925Gram}
+              issueGoldGram={view.issueGoldGram}
               issueTotalGram={view.issueTotalGram}
               returnTotalGram={view.returnTotalGram}
               extraRows={
@@ -863,8 +874,23 @@ export function CastingSlipViewDialog({
                 </Typography>
                 <Typography variant="body2">
                   TL cây thông (trả): <strong>{formatGram(view.castTreeWeightGram)} g</strong> · Bạc đã dùng:{' '}
-                  <strong>{formatGram(view.silverUsedGram)} g</strong> · Thạch cao đã dùng:{' '}
-                  <strong>{formatGram(view.plasterUsedGram)} g</strong>
+                  <strong>{formatGram(view.silverUsedGram)} g</strong>
+                  {view.isServiceCast ? (
+                    <>
+                      {' '}
+                      · Đơn giá dịch vụ:{' '}
+                      <strong>
+                        {view.serviceUnitPrice != null && view.serviceUnitPrice !== ''
+                          ? `${formatMoney(view.serviceUnitPrice)} đ`
+                          : '—'}
+                      </strong>
+                    </>
+                  ) : (
+                    <>
+                      {' '}
+                      · Thạch cao đã dùng: <strong>{formatGram(view.plasterUsedGram)} g</strong>
+                    </>
+                  )}
                 </Typography>
                 {resultThumbs.length ? <IntakeImageThumbs label="Ảnh sau đúc" images={resultThumbs} /> : null}
               </Stack>
@@ -885,7 +911,7 @@ export function CastingSlipViewDialog({
             {view.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
           </Button>
         ) : null}
-        {view?.status === 'CASTING' && canCast ? (
+        {view?.status === 'CASTING' && (canCast || (view.isServiceCast && canConfirm)) ? (
           <Button variant="contained" onClick={() => onEnterResult(view)}>
             Nhập kết quả đúc
           </Button>

@@ -5,19 +5,19 @@ import { useAppForm } from '../components/ui/form/useAppForm'
 import type { CastingSlip, CastingSlipResultPayload } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { DialogForm, FormQtyField } from '../components/ui'
+import { DialogForm, FormMoneyField, FormQtyField } from '../components/ui'
 import { FormImageField } from '../orders/FormImageField'
 
 type Props = {
-  slip: Pick<CastingSlip, 'id' | 'code' | 'issueTotalGram' | 'waxWeightGram'> | null
+  slip: (Pick<CastingSlip, 'id' | 'code' | 'issueTotalGram' | 'waxWeightGram'> & { isServiceCast?: boolean }) | null
   saving: boolean
   onClose: () => void
   onSave: (payload: CastingSlipResultPayload) => void
 }
 
-type Values = { tree: string; silver: string; plaster: string; images: OrderImage[] }
+type Values = { tree: string; silver: string; plaster: string; servicePrice: string; images: OrderImage[] }
 
-const EMPTY: Values = { tree: '', silver: '', plaster: '', images: [] }
+const EMPTY: Values = { tree: '', silver: '', plaster: '', servicePrice: '', images: [] }
 
 /** Số gram đã chuẩn hoá từ FormQtyField; `null` khi trống / âm (hoặc bằng 0 nếu không cho phép). */
 function gram(raw: string, allowZero: boolean) {
@@ -26,10 +26,18 @@ function gram(raw: string, allowZero: boolean) {
   return value
 }
 
-/** Bước 9: thợ đúc nhập kết quả sau đúc — ảnh cân cây thông, bạc và thạch cao đã dùng. */
+function money(raw: string) {
+  if (!raw.trim()) return null
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value < 0) return null
+  return value
+}
+
+/** Bước 9: nhập kết quả sau đúc — ảnh cân cây thông, bạc, và thạch cao hoặc đơn giá dịch vụ. */
 export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props) {
   const [uploading, setUploading] = useState(false)
   const form = useAppForm<Values>({ defaultValues: EMPTY })
+  const isServiceCast = Boolean(slip?.isServiceCast)
 
   useEffect(() => {
     if (slip) form.reset(EMPTY)
@@ -58,7 +66,9 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
           onSave({
             castTreeWeightGram: gram(values.tree, false)!,
             silverUsedGram: gram(values.silver, true)!,
-            plasterUsedGram: gram(values.plaster, true)!,
+            ...(isServiceCast
+              ? { serviceUnitPrice: money(values.servicePrice)! }
+              : { plasterUsedGram: gram(values.plaster, true)! }),
             images: values.images.map(({ url, publicId, width, height }) => ({ url, publicId, width, height })),
           })
         }
@@ -107,17 +117,33 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
                 fullWidth
                 disabled={busy}
               />
-              <FormQtyField<Values>
-                name="plaster"
-                label="Thạch cao đã dùng (g)"
-                required
-                rules={{
-                  validate: (value) => (gram(String(value ?? ''), true) == null ? 'Nhập trọng lượng thạch cao đã dùng (g)' : true),
-                }}
-                size="small"
-                fullWidth
-                disabled={busy}
-              />
+              {isServiceCast ? (
+                <FormMoneyField<Values>
+                  name="servicePrice"
+                  label="Đơn giá dịch vụ (đ)"
+                  required
+                  rules={{
+                    validate: (value) =>
+                      money(String(value ?? '')) == null ? 'Nhập đơn giá dịch vụ' : true,
+                  }}
+                  size="small"
+                  fullWidth
+                  disabled={busy}
+                />
+              ) : (
+                <FormQtyField<Values>
+                  name="plaster"
+                  label="Thạch cao đã dùng (g)"
+                  required
+                  rules={{
+                    validate: (value) =>
+                      gram(String(value ?? ''), true) == null ? 'Nhập trọng lượng thạch cao đã dùng (g)' : true,
+                  }}
+                  size="small"
+                  fullWidth
+                  disabled={busy}
+                />
+              )}
             </Stack>
             {preview ? (
               <Typography variant="body2" color={preview.loss < 0 ? 'error' : undefined}>

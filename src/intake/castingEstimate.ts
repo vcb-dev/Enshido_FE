@@ -1,7 +1,12 @@
-/** 1 g sáp = 24 g bạc — tổng bạc ước tính cho phiếu đúc. */
-export const WAX_TO_SILVER_RATIO = 24
+/** 1 g sáp = 14 g bạc — tổng bạc ước tính cho phiếu đúc. */
+export const WAX_TO_SILVER_RATIO = 14
 /** Bạc 925 = 92.5% bạc nguyên chất, phần còn lại là hội pha. */
 const S999_RATIO = 0.925
+
+/** Ước tính vàng = TL sáp × hệ số theo K của mã NVL đã chọn. */
+export const WAX_TO_GOLD_RATIO = { '10': 11, '14': 13, '18': 16, '24': 18 } as const
+export type GoldKarat = keyof typeof WAX_TO_GOLD_RATIO
+const GOLD_KARATS = Object.keys(WAX_TO_GOLD_RATIO) as GoldKarat[]
 
 export type SilverEstimate = {
   s999: number
@@ -32,4 +37,27 @@ export function silverEstimateFromWax(
     s925: round4(half),
     total: round4(total),
   }
+}
+
+/** Đọc 10k/14k/18k/24k từ mã danh mục, SKU hoặc tên. Nhiều K khác nhau thì không đoán. */
+export function goldKaratFromLabel(...parts: Array<string | null | undefined>): GoldKarat | null {
+  const text = parts.filter(Boolean).join(' ')
+  if (!text.trim()) return null
+  const found = new Set<GoldKarat>()
+  const lower = text.toLowerCase()
+  for (const karat of GOLD_KARATS) {
+    const asCode = new RegExp(`vang[-_]?${karat}k(?:$|[^a-z0-9])`, 'i')
+    const asKarat = new RegExp(`(?:^|[^0-9])${karat}\\s*k(?:$|[^a-z0-9])`, 'i')
+    if (asCode.test(lower) || asKarat.test(lower)) found.add(karat)
+  }
+  return found.size === 1 ? [...found][0] : null
+}
+
+export function goldEstimateFromWax(
+  waxGram: number | string | null | undefined,
+  karat: GoldKarat | null | undefined,
+) {
+  const n = Number(waxGram)
+  if (!karat || !Number.isFinite(n) || n <= 0) return 0
+  return round4(n * WAX_TO_GOLD_RATIO[karat])
 }

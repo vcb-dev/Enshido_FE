@@ -263,8 +263,8 @@ export function CastingCutsPage() {
         align: 'left',
         headSx: cellLeft,
         cellSx: cellLeft,
-        render: (row) => row.startedByName ?? '—',
-        renderSub: (sub) => sub.startedByName ?? '—',
+        render: (row) => (row.isServiceCast ? 'Đúc dịch vụ' : (row.startedByName ?? '—')),
+        renderSub: (sub) => (sub.isServiceCast ? 'Đúc dịch vụ' : (sub.startedByName ?? '—')),
       },
       {
         key: 'castTreeWeightGram',

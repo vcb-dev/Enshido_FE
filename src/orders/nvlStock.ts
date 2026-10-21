@@ -9,6 +9,7 @@ export function invalidateNvlWarehouse(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['warehouse-outbound-drafts', NVL_WAREHOUSE_CODE] })
   void queryClient.invalidateQueries({ queryKey: ['warehouse-outbounds', NVL_WAREHOUSE_CODE] })
   void queryClient.invalidateQueries({ queryKey: ['nvl-options'] })
+  void queryClient.invalidateQueries({ queryKey: ['casting-rest-material-options'] })
 }
 
 /** Đơn mới tự xuất NVL + thành phẩm — làm mới cả kho NVL và sổ thành phẩm. */

@@ -1,6 +1,6 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
 import type { CastingSlip } from '../api/castingSlips'
-import { formatQty } from '../api/inventory'
+import { formatMoney, formatQty } from '../api/inventory'
 import { formatDateTime } from '../orders/catalog'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 
@@ -50,9 +50,20 @@ export function CastingSlipConfirmDialog({
             <Typography variant="body2">
               Bạc đã dùng: <strong>{gram(slip.silverUsedGram)}</strong>
             </Typography>
-            <Typography variant="body2">
-              Thạch cao đã dùng: <strong>{gram(slip.plasterUsedGram)}</strong>
-            </Typography>
+            {slip.isServiceCast ? (
+              <Typography variant="body2">
+                Đơn giá dịch vụ:{' '}
+                <strong>
+                  {slip.serviceUnitPrice != null && slip.serviceUnitPrice !== ''
+                    ? `${formatMoney(slip.serviceUnitPrice)} đ`
+                    : '—'}
+                </strong>
+              </Typography>
+            ) : (
+              <Typography variant="body2">
+                Thạch cao đã dùng: <strong>{gram(slip.plasterUsedGram)}</strong>
+              </Typography>
+            )}
             {slip.leftoverGram != null ? (
               <Typography variant="body2">
                 Bạc giao chưa dùng (trả kho): <strong>{gram(slip.leftoverGram)}</strong>

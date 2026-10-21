@@ -279,6 +279,25 @@ export const CONSUMABLE_CATEGORIES: Array<{ code: string; name: string }> = [
   { code: 'nvl-chinh', name: 'NVL chính' },
 ]
 
+/** NVL tiêu hao cũ gắn materialType (ccdc/nvl-phu) — map sang id danh mục otherClass để lưu được. */
+export function consumableCategoryIdOf(
+  row: {
+    otherClassId?: string | null
+    otherClassCode?: string | null
+    materialTypeId?: string | null
+  },
+  categories: Array<{ id: string; code: string }> | undefined,
+  materialTypes?: Array<{ id: string; code: string }>,
+) {
+  if (row.otherClassId && categories?.some((item) => item.id === row.otherClassId)) {
+    return row.otherClassId
+  }
+  const type = materialTypes?.find((item) => item.id === row.materialTypeId)
+  const code = row.otherClassCode || type?.code
+  const hit = code ? categories?.find((item) => item.code === code) : undefined
+  return hit?.id || row.otherClassId || row.materialTypeId || ''
+}
+
 export function warehouseByCode(code: string) {
   return WAREHOUSES.find((w) => w.code === code)
 }

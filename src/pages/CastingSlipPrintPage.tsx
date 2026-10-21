@@ -143,6 +143,15 @@ function Sheet({ slip, printedBy }: { slip: CastingSlip; printedBy: string }) {
           <div>
             Mã đơn hàng trong lô đúc: <b>{slip.batchOrderCodes}</b>
           </div>
+          {slip.isServiceCast ? (
+            <div>
+              Hình thức: <b>Đúc dịch vụ</b>
+            </div>
+          ) : slip.startedByName ? (
+            <div>
+              Thợ đúc: <b>{slip.startedByName}</b>
+            </div>
+          ) : null}
         </Box>
         <QRCodeSVG value={url} size={72} />
       </Box>
@@ -216,6 +225,15 @@ function Sheet({ slip, printedBy }: { slip: CastingSlip; printedBy: string }) {
             <td style={right}>{gram(slip.issueS925Gram)}</td>
             <td style={crossed}>x</td>
           </tr>
+          {(slip.issueGoldGram != null && Number(slip.issueGoldGram) > 0) ||
+          (slip.estimateGoldGram != null && Number(slip.estimateGoldGram) > 0) ? (
+            <tr>
+              <td>Vàng (g)</td>
+              <td style={right}>{gram(slip.estimateGoldGram)}</td>
+              <td style={right}>{gram(slip.issueGoldGram)}</td>
+              <td style={crossed}>x</td>
+            </tr>
+          ) : null}
           <tr>
             <td style={{ fontWeight: 700 }}>Tổng</td>
             <td style={{ ...right, fontWeight: 700 }}>{gram(slip.estimateTotalGram)}</td>
@@ -250,7 +268,7 @@ function Sheet({ slip, printedBy }: { slip: CastingSlip; printedBy: string }) {
       </table>
 
       <Box sx={{ mt: '2mm', display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: '#333' }}>
-        <span>Thợ đúc quét QR để nhận phiếu</span>
+        <span>{slip.isServiceCast ? 'Đúc dịch vụ — không giao thợ trong xưởng' : 'Thợ đúc quét QR để nhận phiếu'}</span>
         <span>
           In lúc {formatDateTime(new Date().toISOString())}
           {printedBy ? ` · ${printedBy}` : ''}

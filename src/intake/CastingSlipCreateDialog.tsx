@@ -25,7 +25,7 @@ import {
   type CastingSlipCandidate,
   type CreateCastingSlipPayload,
 } from '../api/castingSlips'
-import { DialogForm, FormAutocomplete, SearchInput } from '../components/ui'
+import { DialogForm, FormAutocomplete, FormCheckbox, SearchInput } from '../components/ui'
 import { CastingSlipMetalTable } from './CastingSlipMetalTable'
 import { silverEstimateFromWax } from './castingEstimate'
 import { formatQty } from '../api/inventory'
@@ -35,12 +35,14 @@ import { formatDateShort } from '../orders/catalog'
 type Values = {
   picked: CastingSlipCandidate[]
   assignedUserId: string | null
+  isServiceCast: boolean
 }
 
 function emptyValues(): Values {
   return {
     picked: [],
     assignedUserId: null,
+    isServiceCast: false,
   }
 }
 
@@ -102,10 +104,13 @@ export function CastingSlipCreateDialog({
   }, [open, preselectId, candidates.data, form])
 
   const rows = candidates.data ?? []
-  const [picked, assignedUserId] = useWatch({
+  const [picked, assignedUserId, isServiceCast] = useWatch({
     control: form.control,
-    name: ['picked', 'assignedUserId'],
+    name: ['picked', 'assignedUserId', 'isServiceCast'],
   })
+  useEffect(() => {
+    if (isServiceCast && assignedUserId) form.setValue('assignedUserId', null)
+  }, [isServiceCast, assignedUserId, form])
   const selected = useMemo(() => new Set(picked.map((row) => row.id)), [picked])
   const waxTotal = useMemo(
     () => picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
@@ -137,7 +142,8 @@ export function CastingSlipCreateDialog({
     )
     onSave({
       intakeOrderIds: values.picked.map((row) => row.id),
-      assignedUserId: values.assignedUserId!,
+      isServiceCast: values.isServiceCast,
+      assignedUserId: values.isServiceCast ? undefined : values.assignedUserId!,
       estimateS999Gram: picked.s999 || undefined,
       estimateMasterAlloyGram: picked.masterAlloy || undefined,
       estimateS925Gram: picked.s925 || undefined,
@@ -208,26 +214,35 @@ export function CastingSlipCreateDialog({
               </Typography>
             </Stack>
 
-            <FormAutocomplete<Values, CastCastWorkerOption>
-              name="assignedUserId"
-              valueKey="id"
-              label="Giao cho thợ"
-              required
-              rules={{ required: 'Chọn thợ đúc được giao phiếu' }}
-              options={castWorkers.data ?? []}
-              getOptionLabel={(option) => option.fullName}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              loading={castWorkers.isLoading}
+            <FormCheckbox<Values>
+              name="isServiceCast"
+              label="Đúc dịch vụ"
               disabled={busy}
-              helperText={
-                castWorkers.isError
-                  ? 'Không tải được danh sách thợ đúc'
-                  : !castWorkers.isLoading && (castWorkers.data?.length ?? 0) === 0
-                    ? 'Chưa có tài khoản thợ đúc — tick quyền Thợ đúc ở Nhân sự.'
-                    : 'Chỉ hiện nhân sự vai trò Thợ đúc (Nhân sự).'
-              }
-              noOptionsText="Không có thợ đúc"
+              helperText="Gửi ngoài xưởng — không giao thợ đúc trong hệ thống."
             />
+
+            {isServiceCast ? null : (
+              <FormAutocomplete<Values, CastCastWorkerOption>
+                name="assignedUserId"
+                valueKey="id"
+                label="Giao cho thợ"
+                required
+                rules={{ required: isServiceCast ? false : 'Chọn thợ đúc được giao phiếu' }}
+                options={castWorkers.data ?? []}
+                getOptionLabel={(option) => option.fullName}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                loading={castWorkers.isLoading}
+                disabled={busy}
+                helperText={
+                  castWorkers.isError
+                    ? 'Không tải được danh sách thợ đúc'
+                    : !castWorkers.isLoading && (castWorkers.data?.length ?? 0) === 0
+                      ? 'Chưa có tài khoản thợ đúc — tick quyền Thợ đúc ở Nhân sự.'
+                      : 'Chỉ hiện nhân sự vai trò Thợ đúc (Nhân sự).'
+                }
+                noOptionsText="Không có thợ đúc"
+              />
+            )}
 
             <CastingSlipMetalTable
               estimateS999Gram={gramText(estimate.s999)}
@@ -247,7 +262,7 @@ export function CastingSlipCreateDialog({
           <Button onClick={onClose} disabled={busy}>
             Hủy
           </Button>
-          <Button type="submit" variant="contained" disabled={busy || !assignedUserId}>
+          <Button type="submit" variant="contained" disabled={busy || (!isServiceCast && !assignedUserId)}>
             {saving ? 'Đang lưu…' : `Lưu và in phiếu (${picked.length} đơn)`}
           </Button>
         </DialogActions>

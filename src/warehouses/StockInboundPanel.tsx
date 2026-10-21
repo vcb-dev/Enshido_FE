@@ -52,7 +52,7 @@ import { MaterialField } from './MaterialField'
 import { lineIsStone, matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
-import { CONSUMABLE_CATEGORIES, stockProfile, withFallback } from './catalog'
+import { CONSUMABLE_CATEGORIES, consumableCategoryIdOf, stockProfile, withFallback } from './catalog'
 import {
   CATALOG_FILTER_DEFAULTS,
   hasActiveCatalogFilters,
@@ -164,9 +164,13 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         unit: item.unit,
         metalKind: item.metalKind,
         locationCode: item.locationCode,
-        otherClassId: item.otherClassId,
+        otherClassId: consumableCategoryIdOf(
+          item,
+          lookups.data?.consumableCategories,
+          lookups.data?.materialTypes,
+        ) || item.otherClassId,
       })),
-    [stock.data?.items],
+    [stock.data?.items, lookups.data?.consumableCategories, lookups.data?.materialTypes],
   )
   const stockById = useMemo(() => {
     const map = new Map<string, StockRow>()

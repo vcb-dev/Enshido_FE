@@ -34,10 +34,12 @@ export type CastingSlip = {
   estimateS999Gram: string | null
   estimateMasterAlloyGram: string | null
   estimateS925Gram: string | null
+  estimateGoldGram: string | null
   estimateTotalGram: string
   issueS999Gram: string | null
   issueMasterAlloyGram: string | null
   issueS925Gram: string | null
+  issueGoldGram: string | null
   issueTotalGram: string
   createdByName: string | null
   /** Bạc giao chưa dùng (trả kho) = giao − bạc đã dùng. */
@@ -52,10 +54,13 @@ export type CastingSlip = {
   status: CastingSlipStatus
   startedAt: string | null
   startedByName: string | null
+  /** Đúc gửi ngoài xưởng — không giao thợ đúc. */
+  isServiceCast: boolean
   /** Bước 9: TL cây thông sau đúc, bạc và thạch cao đã dùng (g). */
   castTreeWeightGram: string | null
   silverUsedGram: string | null
   plasterUsedGram: string | null
+  serviceUnitPrice: string | null
   submittedAt: string | null
   submittedByName: string | null
   confirmedAt: string | null
@@ -85,7 +90,8 @@ export type CastingSlipStatus =
 export type CastingSlipResultPayload = {
   castTreeWeightGram: number
   silverUsedGram: number
-  plasterUsedGram: number
+  plasterUsedGram?: number
+  serviceUnitPrice?: number
   images: CastingSlipImage[]
 }
 
@@ -129,7 +135,8 @@ export type CastCastWorkerOption = {
 
 export type CreateCastingSlipPayload = {
   intakeOrderIds: string[]
-  assignedUserId: string
+  assignedUserId?: string
+  isServiceCast?: boolean
   estimateS999Gram?: number
   estimateMasterAlloyGram?: number
   estimateS925Gram?: number
@@ -187,7 +194,7 @@ export function createCastingSlipApi(payload: CreateCastingSlipPayload) {
   return apiFetch<CastingSlip>('/casting-slips', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-/** Bước 7b: thực xuất (trống = ước tính) + ảnh phiếu, Lưu → đơn Chờ đúc. */
+/** Bước 7b: thực xuất (trống = ước tính) + ảnh phiếu. Trong xưởng → Chờ đúc; đúc dịch vụ → Đang đúc. */
 export function issueCastingSlipApi(
   id: string,
   payload: {
@@ -195,10 +202,12 @@ export function issueCastingSlipApi(
     issueS999Gram?: number
     issueMasterAlloyGram?: number
     issueS925Gram?: number
+    issueGoldGram?: number
     /** Mã NVL xuất cho từng dòng — bắt buộc khi dòng đó có số gram (kể cả lấy theo ước tính). */
     issueS999MaterialId?: string
     issueMasterAlloyMaterialId?: string
     issueS925MaterialId?: string
+    issueGoldMaterialId?: string
   },
 ) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/issue`, {
@@ -277,10 +286,18 @@ export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload
   })
 }
 
-/** Mã NVL (gram, kho NVL chính): nhận phần cây còn lại khi cắt cây, xuất bạc / hội khi cấp vật tư đúc. */
+/** Mã NVL (gram, kho NVL chính): nhận phần cây còn lại khi cắt cây, xuất bạc / hội / vàng khi cấp vật tư đúc. */
 export type RestMaterialOptions = {
   defaultName: string
-  items: { id: string; sku: string | null; name: string }[]
+  items: {
+    id: string
+    sku: string | null
+    name: string
+    goldKarat?: '10' | '14' | '18' | '24' | null
+    onHandQty?: string
+    heldQty?: string
+    availableQty?: string
+  }[]
 }
 
 export function listRestMaterialOptionsApi() {

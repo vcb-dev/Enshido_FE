@@ -81,6 +81,7 @@ import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
   CONSUMABLE_CATEGORIES,
+  consumableCategoryIdOf,
   METAL_KINDS,
   THANH_PHAM_WAREHOUSE,
   sectionsOf,
@@ -426,6 +427,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         return { ...current, items: next, totals: sumStockTotals(next) }
       })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
+      if (warehouseCode === 'nvl-chinh') {
+        void queryClient.invalidateQueries({ queryKey: ['casting-rest-material-options'] })
+        void queryClient.invalidateQueries({ queryKey: ['nvl-options'] })
+      }
     },
     onError: (error: Error, _input, ctx) => {
       if (ctx?.tempId && isTempId(ctx.tempId)) rejectTempId(ctx.tempId, error)
@@ -440,6 +445,10 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
       toast.success(`Đã thêm ${rows.length} ${profile.noun}`)
       void queryClient.invalidateQueries({ queryKey: stockKey })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
+      if (warehouseCode === 'nvl-chinh') {
+        void queryClient.invalidateQueries({ queryKey: ['casting-rest-material-options'] })
+        void queryClient.invalidateQueries({ queryKey: ['nvl-options'] })
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -1308,7 +1317,13 @@ function StockEditDialog({
               colorName: row.color ?? '',
               name: row.name,
               unitId: row.unitId,
-              materialTypeId: row.otherClassId ?? row.materialTypeId ?? '',
+              materialTypeId: profile.typeCodes
+                ? consumableCategoryIdOf(
+                    row,
+                    lookups.data?.consumableCategories,
+                    lookups.data?.materialTypes,
+                  )
+                : (row.otherClassId ?? row.materialTypeId ?? ''),
               metalKind: row.otherClassId ? 'OTHER' : (row.metalKind ?? ''),
               bodyMetalId: row.bodyMetalId ?? '',
               productKindId: row.productKindId ?? '',
@@ -1328,7 +1343,7 @@ function StockEditDialog({
           : EMPTY_STOCK,
       ],
     })
-  }, [open, row, form])
+  }, [open, row, form, profile.typeCodes, lookups.data])
 
   const typeOptions: LookupItem[] = materialTypesFor(
     profile,

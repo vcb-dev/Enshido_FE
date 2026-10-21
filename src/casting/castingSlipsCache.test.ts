@@ -27,6 +27,7 @@ function slip(over: Partial<CastingSlip>): CastingSlip {
     startedAt: null,
     confirmedAt: null,
     status: 'PENDING_ISSUE',
+    isServiceCast: false,
     ...over,
   } as CastingSlip
 }
@@ -50,6 +51,19 @@ describe('patchMyTicketsFromCastingSlip', () => {
       castingMine: [{ id: 's1', code: 'DABC1', status: 'PENDING_ISSUE' }],
     })
     patchMyTicketsFromCastingSlip(client, slip({ status: 'PENDING_ISSUE' }))
+    const next = client.getQueryData<MyTickets>(['my-tickets'])!
+    expect(next.castingAvailable).toEqual([])
+    expect(next.castingMine).toEqual([])
+    expect(next.castingRecent).toEqual([])
+  })
+
+  it('đúc dịch vụ không hiện trên phiếu khâu của thợ', () => {
+    const client = new QueryClient()
+    client.setQueryData(['my-tickets'], emptyTickets())
+    patchMyTicketsFromCastingSlip(
+      client,
+      slip({ status: 'CASTING', isServiceCast: true, startedAt: '2026-10-21T01:00:00.000Z' }),
+    )
     const next = client.getQueryData<MyTickets>(['my-tickets'])!
     expect(next.castingAvailable).toEqual([])
     expect(next.castingMine).toEqual([])

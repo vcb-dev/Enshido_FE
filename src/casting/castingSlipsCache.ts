@@ -56,7 +56,7 @@ export function patchMyTicketsFromCastingSlip(queryClient: QueryClient, slip: Ca
     let castingAvailable = without(prev.castingAvailable)
     let castingMine = without(prev.castingMine)
     let castingRecent = without(prev.castingRecent)
-    const bucket = myTicketsBucket(slip.status)
+    const bucket = slip.isServiceCast ? null : myTicketsBucket(slip.status)
     if (bucket) {
       const item = toMyCastingSlipItem(slip)
       if (bucket === 'available') castingAvailable = [item, ...castingAvailable]
