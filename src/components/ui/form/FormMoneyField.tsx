@@ -61,8 +61,7 @@ export function FormMoneyField<T extends FieldValues>({
       }}
       inputRef={(node) => {
         inputEl.current = node
-        if (typeof ref === 'function') ref(node)
-        else if (ref) ref.current = node
+        ref(node)
       }}
       required={required}
       errorText={fieldState.error?.message}
