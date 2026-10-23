@@ -1,34 +1,45 @@
 import { Alert, Box, Paper, Skeleton, Stack, Tab, Tabs, Typography } from '@mui/material'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { can, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, canAny, isWorkerOnly, Permission } from '../auth/permissions'
 import { getProductionOverviewApi, type ProductionOverview } from '../api/productionOrders'
 import { PageHeader } from '../components/ui'
 import { FinishedTrendChart } from '../dashboard/FinishedTrendChart'
+import { LossReportPanel } from '../dashboard/LossReportPanel'
 import { MaterialControlCard } from '../dashboard/MaterialControlCard'
 import { OverviewKpis } from '../dashboard/OverviewKpis'
+import { OverviewPeriodBar } from '../dashboard/OverviewPeriodBar'
+import { defaultPeriod } from '../dashboard/overviewPeriod'
 import { StageBoard } from '../dashboard/StageBoard'
 import { WatchTicketsTable } from '../dashboard/WatchTicketsTable'
 import { WorkerPerformancePanel } from '../dashboard/WorkerPerformancePanel'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
-type DashboardTab = 'overview' | 'workers'
+type DashboardTab = 'overview' | 'workers' | 'loss'
 
 const TAB_SUBTITLE: Record<DashboardTab, string> = {
   overview: 'Tiến độ · Công đoạn · Chất lượng · Vật tư',
   workers: 'Số đơn / sản phẩm mỗi thợ làm xong ở từng khâu',
+  loss: 'Hao hụt bạc mỗi thợ ở từng khâu theo tuần',
 }
 
 export function DashboardPage() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab: DashboardTab = searchParams.get('tab') === 'workers' ? 'workers' : 'overview'
   const allowed = Boolean(user && can(user, Permission.SCREEN_DASHBOARD) && !isWorkerOnly(user))
+  // Báo cáo hao hụt: chỉ thủ kho, kế toán, admin — QC không xem.
+  const canSeeLoss = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.ACCOUNTING_APPROVE)
+  const tabParam = searchParams.get('tab')
+  const tab: DashboardTab =
+    tabParam === 'workers' ? 'workers' : tabParam === 'loss' && canSeeLoss ? 'loss' : 'overview'
+  const [period, setPeriod] = useState(defaultPeriod)
   const overview = useQuery({
-    queryKey: ['production-orders', 'overview'],
-    queryFn: getProductionOverviewApi,
+    queryKey: ['production-orders', 'overview', period.from, period.to, period.groupBy],
+    queryFn: () => getProductionOverviewApi({ from: period.from, to: period.to, groupBy: period.groupBy }),
     enabled: allowed && tab === 'overview',
+    placeholderData: keepPreviousData,
     ...liveRefresh(LIVE_REFRESH_MS.background),
   })
   const data = overview.data
@@ -77,16 +88,38 @@ export function DashboardPage() {
       >
         <Tab value="overview" label="Tổng quan" sx={{ minHeight: 40 }} />
         <Tab value="workers" label="Hiệu suất thợ" sx={{ minHeight: 40 }} />
+        {canSeeLoss ? <Tab value="loss" label="Hao hụt" sx={{ minHeight: 40 }} /> : null}
       </Tabs>
 
       {tab === 'workers' ? (
         <WorkerPerformancePanel />
-      ) : data ? (
-        <OverviewContent data={data} />
-      ) : overview.isError ? (
-        <Alert severity="error">Không tải được báo cáo Tổng quan: {overview.error.message}</Alert>
+      ) : tab === 'loss' ? (
+        <LossReportPanel />
       ) : (
-        <OverviewSkeleton />
+        <>
+          <OverviewPeriodBar
+            value={period}
+            onChange={setPeriod}
+            previous={
+              data &&
+              data.period.from === period.from &&
+              data.period.to === period.to &&
+              data.period.groupBy === period.groupBy
+                ? { from: data.period.previousFrom, to: data.period.previousTo }
+                : undefined
+            }
+          />
+          {overview.isError ? (
+            <Alert severity="error">Không tải được báo cáo Tổng quan: {overview.error.message}</Alert>
+          ) : null}
+          {data ? (
+            <Stack spacing={2} sx={{ opacity: overview.isPlaceholderData ? 0.6 : 1 }}>
+              <OverviewContent data={data} />
+            </Stack>
+          ) : overview.isError ? null : (
+            <OverviewSkeleton />
+          )}
+        </>
       )}
     </Stack>
   )
@@ -105,7 +138,7 @@ function OverviewContent({ data }: { data: ProductionOverview }) {
           alignItems: 'start',
         }}
       >
-        <FinishedTrendChart trend={data.finishedTrend} />
+        <FinishedTrendChart trend={data.trend} period={data.period} />
         <MaterialControlCard materials={data.materials} />
       </Box>
       <WatchTicketsTable data={data} />

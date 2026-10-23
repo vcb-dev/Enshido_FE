@@ -644,7 +644,7 @@ export type HandoverPayload = {
 export type ReturnPayload = {
   returnedQty?: number | null
   laborCost?: string | null
-  /** Khắc / Đánh bóng QC chỉ chụp ảnh — gửi null. */
+  /** Khắc QC chỉ chụp ảnh — gửi null. */
   returnedSilverWeight: string | null
   /** Khâu Vào đá: số viên đá gắn lên. Khâu khác không gửi. */
   stoneCount?: number | null
@@ -1508,20 +1508,38 @@ export type OverviewTicket = {
 }
 
 /** Màn Tổng quan sản xuất. SL tính theo sản phẩm; mỗi sản phẩm chỉ ở một công đoạn. */
+/** Màn Tổng quan gom số theo ngày / tuần (thứ Hai → Chủ nhật) / tháng. */
+export type OverviewGroup = 'day' | 'week' | 'month'
+
 export type ProductionOverview = {
   generatedAt: string
   /** Hôm nay theo giờ Việt Nam, YYYY-MM-DD. */
   today: string
+  /** Kỳ đang xem và kỳ trước để so sánh (lùi đúng số mốc theo đơn vị đang chọn). */
+  period: { from: string; to: string; groupBy: OverviewGroup; previousFrom: string; previousTo: string }
   kpis: {
+    /** Số hiện tại. */
     inShop: { qty: number; openTickets: number }
-    /** Kế hoạch = tổng SL các lệnh có hạn giao hôm nay. */
-    finishedToday: { qty: number; planQty: number }
+    /** Trong kỳ. Kế hoạch = tổng SL các lệnh có hạn giao trong kỳ. */
+    finished: { qty: number; planQty: number; previousQty: number; previousPlanQty: number }
+    /** Số hiện tại — hạn giao trước hôm nay. */
     overdue: { count: number; byStage: { stage: OverviewStageKey; label: string; count: number }[] }
-    qcFirstPassToday: { passed: number; total: number }
+    /** Trong kỳ. */
+    qcFirstPass: { passed: number; total: number; previousPassed: number; previousTotal: number }
   }
   stages: { key: OverviewStageKey; label: string; waiting: number; working: number }[]
-  /** 7 ngày gần nhất, tính cả hôm nay. */
-  finishedTrend: { date: string; actual: number; plan: number }[]
+  /** Mỗi mốc trong kỳ; `key` là đầu mốc đầy đủ, `start` / `end` là phần nằm trong kỳ. */
+  trend: {
+    key: string
+    start: string
+    end: string
+    actual: number
+    plan: number
+    qcPassed: number
+    qcTotal: number
+    /** Thành phẩm của mốc cùng vị trí ở kỳ trước. */
+    previousActual: number
+  }[]
   materials: {
     silverAtWorkersG: string
     stonesHeldG: string
@@ -1530,8 +1548,14 @@ export type ProductionOverview = {
   tickets: OverviewTicket[]
 }
 
-export function getProductionOverviewApi() {
-  return apiFetch<ProductionOverview>(`${BASE}/overview`)
+/** `from` / `to` YYYY-MM-DD tính cả hai đầu; bỏ trống = 7 ngày gần nhất theo ngày. */
+export function getProductionOverviewApi(params: { from?: string; to?: string; groupBy?: OverviewGroup } = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  )
+  const search = query.toString()
+  const suffix = search ? `?${search}` : ''
+  return apiFetch<ProductionOverview>(`${BASE}/overview${suffix}`)
 }
 
 /** Chưa làm (đã nhận, chờ giao) · Đang làm (QC chưa nhận lại) · Hoàn thiện (SL đạt) · Lỗi (SL lỗi). */

@@ -113,8 +113,11 @@ export function productionClosed(order: Pick<ProductionOrderDetail, 'finishedGoo
   return order.finishedGoods != null && order.subTickets.every((ticket) => ticket.outcome != null)
 }
 
-/** Khắc → khâu trước Xi: QC chỉ chụp ảnh xác nhận, không cân — hao hụt cả chặng tính ở Xi. Cùng luật với BE. */
-export const PHOTO_ONLY_STAGES: StageCode[] = ['ENGRAVING', 'POLISHING']
+/** Khắc: QC chỉ chụp ảnh xác nhận, không cân — hao hụt Khắc tính gộp ở Đánh bóng. Cùng luật với BE. */
+export const PHOTO_ONLY_STAGES: StageCode[] = ['ENGRAVING']
+
+/** Đánh bóng / Xi: không qua thủ kho nhưng QC vẫn tách hàng lỗi / S925 / S999 thu hồi — nhập kho NVL lúc QC lưu. Cùng luật với BE. */
+export const QC_STOCK_RECOVERY_STAGES: StageCode[] = ['POLISHING', 'PLATING']
 
 /** Nhãn nút QC nhận lại một khâu: khâu chỉ chụp ảnh thì "QC xác nhận", còn lại "QC cân lại". */
 export function qcReturnLabel(stage: StageCode | null, defectReported: boolean) {

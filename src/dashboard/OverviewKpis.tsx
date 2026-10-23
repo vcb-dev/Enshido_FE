@@ -1,12 +1,33 @@
 import type { ReactNode } from 'react'
 import { Box, Stack, Typography } from '@mui/material'
 import type { ProductionOverview } from '../api/productionOrders'
+import { changePercent } from './overviewPeriod'
 import { fmt, OVERVIEW_COLOR, percent, SplitBar } from './overviewShared'
 
-/** Bốn ô số đầu trang: trong xưởng, thành phẩm hôm nay, quá hạn, QC đạt lần đầu. */
+/** Thay đổi so với kỳ trước: mũi tên + màu (tăng tốt = xanh). */
+function Delta({ value, unit = '%' }: { value: number | null; unit?: string }) {
+  if (value == null) return <Box component="span">không có số kỳ trước để so</Box>
+  const color = value > 0 ? 'success.main' : value < 0 ? 'error.main' : 'text.secondary'
+  const arrow = value > 0 ? '▲' : value < 0 ? '▼' : '='
+  return (
+    <Box component="span" sx={{ color, fontWeight: 600 }}>
+      {arrow} {fmt(Math.abs(value))}
+      {unit} so với kỳ trước
+    </Box>
+  )
+}
+
+/**
+ * Bốn ô số đầu trang. Trong xưởng / quá hạn là số hiện tại; thành phẩm / QC đạt lần đầu tính trong kỳ
+ * đang xem và so với kỳ trước.
+ */
 export function OverviewKpis({ kpis }: { kpis: ProductionOverview['kpis'] }) {
-  const { inShop, finishedToday, overdue, qcFirstPassToday } = kpis
-  const planPct = percent(finishedToday.qty, finishedToday.planQty)
+  const { inShop, finished, overdue, qcFirstPass } = kpis
+  const planPct = percent(finished.qty, finished.planQty)
+  const qcRate = qcFirstPass.total ? (qcFirstPass.passed / qcFirstPass.total) * 100 : null
+  const previousQcRate = qcFirstPass.previousTotal
+    ? (qcFirstPass.previousPassed / qcFirstPass.previousTotal) * 100
+    : null
   return (
     <Box
       sx={{
@@ -21,38 +42,36 @@ export function OverviewKpis({ kpis }: { kpis: ProductionOverview['kpis'] }) {
     >
       <KpiTile
         color={OVERVIEW_COLOR.info}
-        label="Đang trong xưởng"
+        label="Đang trong xưởng · hiện tại"
         value={fmt(inShop.qty)}
         unit="sản phẩm"
         note={`${fmt(inShop.openTickets)} phiếu công đoạn đang mở`}
       />
       <KpiTile
         color={OVERVIEW_COLOR.actual}
-        label="Thành phẩm hôm nay"
-        value={fmt(finishedToday.qty)}
-        unit={finishedToday.planQty ? `/ ${fmt(finishedToday.planQty)} sp kế hoạch` : 'sản phẩm'}
+        label="Thành phẩm trong kỳ"
+        value={fmt(finished.qty)}
+        unit={finished.planQty ? `/ ${fmt(finished.planQty)} sp kế hoạch` : 'sản phẩm'}
         note={
-          finishedToday.planQty ? (
-            <Box component="span" sx={{ color: 'success.main' }}>
-              Đạt {planPct}% kế hoạch ngày
-            </Box>
-          ) : (
-            'Không có lệnh hạn giao hôm nay'
-          )
+          <>
+            {finished.planQty ? `Đạt ${planPct}% kế hoạch · ` : 'Không có lệnh hạn giao trong kỳ · '}
+            <Delta value={changePercent(finished.qty, finished.previousQty)} />
+            {finished.previousQty ? ` (${fmt(finished.previousQty)} sp)` : ''}
+          </>
         }
       >
-        {finishedToday.planQty ? (
+        {finished.planQty ? (
           <SplitBar
             parts={[
-              { value: Math.min(finishedToday.qty, finishedToday.planQty), color: OVERVIEW_COLOR.actual },
-              { value: Math.max(0, finishedToday.planQty - finishedToday.qty), color: OVERVIEW_COLOR.track },
+              { value: Math.min(finished.qty, finished.planQty), color: OVERVIEW_COLOR.actual },
+              { value: Math.max(0, finished.planQty - finished.qty), color: OVERVIEW_COLOR.track },
             ]}
           />
         ) : null}
       </KpiTile>
       <KpiTile
         color={OVERVIEW_COLOR.danger}
-        label="Phiếu quá hạn"
+        label="Phiếu quá hạn · hiện tại"
         value={fmt(overdue.count)}
         valueColor={overdue.count ? 'error.main' : undefined}
         unit="phiếu"
@@ -64,12 +83,20 @@ export function OverviewKpis({ kpis }: { kpis: ProductionOverview['kpis'] }) {
       />
       <KpiTile
         color={OVERVIEW_COLOR.actual}
-        label="Đạt QC lần đầu hôm nay"
-        value={qcFirstPassToday.total ? `${percent(qcFirstPassToday.passed, qcFirstPassToday.total)}%` : '—'}
+        label="Đạt QC lần đầu trong kỳ"
+        value={qcRate == null ? '—' : `${Math.round(qcRate)}%`}
         note={
-          qcFirstPassToday.total
-            ? `${fmt(qcFirstPassToday.passed)} / ${fmt(qcFirstPassToday.total)} lượt kiểm các công đoạn`
-            : 'Chưa có lượt QC hôm nay'
+          qcFirstPass.total ? (
+            <>
+              {fmt(qcFirstPass.passed)} / {fmt(qcFirstPass.total)} lượt kiểm ·{' '}
+              <Delta
+                value={previousQcRate == null || qcRate == null ? null : Math.round(qcRate - previousQcRate)}
+                unit=" điểm %"
+              />
+            </>
+          ) : (
+            'Chưa có lượt QC trong kỳ'
+          )
         }
       />
     </Box>

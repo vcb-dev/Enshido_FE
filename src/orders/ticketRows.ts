@@ -293,7 +293,7 @@ function aggregateEntries(stage: StageCode, entries: StageEntry[]): StageEntry {
   const issuedMetal = sumWeights(entries.map((entry) => entry.issuedMetalWeight))
   const silverIn = sumWeights(entries.map((entry) => entry.silverIn))
   const stone = sumWeights(entries.map((entry) => entry.stoneWeight))
-  // Khắc / Đánh bóng QC có thể chỉ chụp ảnh, không cân — thiếu một phiếu là không có tổng đúng.
+  // Khắc (và Đánh bóng trước 2026-10-23) QC chỉ chụp ảnh, không cân — thiếu một phiếu là không có tổng đúng.
   const weighed = entries.every((entry) => entry.returnedSilverWeight != null)
   const returnedSilver = weighed ? sumWeights(entries.map((entry) => entry.returnedSilverWeight)) : null
   const btp = sumWeights(entries.map((entry) => entry.btpRecoveredWeight))
