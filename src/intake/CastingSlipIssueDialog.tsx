@@ -276,7 +276,7 @@ export function CastingSlipIssueDialog({
                           const item = items.find((row) => row.id === value)
                           return (
                             insufficientIssueStockMessage({
-                              need: needByMaterialId(ids, issued).get(value) ?? issued[index],
+                              need: needByMaterialId(ids, issued).get(String(value)) ?? issued[index],
                               availableQty: item?.availableQty,
                               heldQty: item?.heldQty,
                               onHandQty: item?.onHandQty,
