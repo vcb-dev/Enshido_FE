@@ -79,6 +79,18 @@ export const theme = createTheme({
     },
     MuiButton: {
       defaultProps: { disableElevation: true, size: 'small' },
+      styleOverrides: {
+        // Nút thao tác trong luồng lên đơn → nhập kho thành phẩm (size="large"): to gấp đôi mặc định
+        // (~42px → 80px, chữ 0.9375rem → 1.3rem) để bấm dễ bằng găng tay / màn hình cảm ứng.
+        sizeLarge: {
+          minHeight: 80,
+          padding: '12px 40px',
+          fontSize: '1.3rem',
+          '& .MuiButton-startIcon > *:nth-of-type(1), & .MuiButton-endIcon > *:nth-of-type(1)': {
+            fontSize: '2rem',
+          },
+        },
+      },
     },
     MuiTextField: {
       defaultProps: { size: 'small', fullWidth: true },
