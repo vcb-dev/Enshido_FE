@@ -69,6 +69,12 @@ import {
   upsertMoveList,
 } from './stockFilters'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
+import { invalidateNvlWarehouse, NVL_WAREHOUSE_CODE } from '../orders/nvlStock'
+import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
+
+function canCreateManualOutbound(code: string) {
+  return code === NVL_WAREHOUSE_CODE || code === BTP_WAREHOUSE_CODE || code === 'nvl-tieu-hao'
+}
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {
   const profile = stockProfile(warehouseCode)
@@ -307,7 +313,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       queryClient.setQueryData(outboundKey, (current: OutboundResponse | undefined) =>
         replaceMoveId(current, ctx?.tempId ?? row.id, row),
       )
-      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+      if (warehouseCode === NVL_WAREHOUSE_CODE) invalidateNvlWarehouse(queryClient)
+      else if (warehouseCode === BTP_WAREHOUSE_CODE) invalidateBtpStock(queryClient)
+      else void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
       const orderCode = input.payload.productionOrderCode?.trim()
       if (orderCode) {
         void queryClient.invalidateQueries({ queryKey: ['production-order-costing', orderCode] })
@@ -335,7 +343,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     onSuccess: (rows) => {
       toast.success(`Đã ghi ${rows.length} phiếu xuất`)
       void queryClient.invalidateQueries({ queryKey: outboundKey })
-      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
+      if (warehouseCode === NVL_WAREHOUSE_CODE) invalidateNvlWarehouse(queryClient)
+      else if (warehouseCode === BTP_WAREHOUSE_CODE) invalidateBtpStock(queryClient)
+      else void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', warehouseCode] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -626,7 +636,13 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         }}
         loading={outbounds.isLoading}
         errorText={outbounds.error instanceof Error ? outbounds.error.message : undefined}
-        emptyText={filtering ? 'Không có dòng xuất khớp bộ lọc.' : 'Chưa có dòng xuất kho.'}
+        emptyText={
+          filtering
+            ? 'Không có dòng xuất khớp bộ lọc.'
+            : canCreateManualOutbound(warehouseCode)
+              ? `Chưa có dòng xuất kho. Bấm ${profile.outboundLabel} để ghi phiếu.`
+              : 'Chưa có dòng xuất kho.'
+        }
         variant="grid"
         minWidth={1820}
         showIndex
@@ -647,7 +663,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
                 Xóa lọc
               </Button>
             ) : null}
-            {warehouseCode === 'nvl-tieu-hao' ? (
+            {canCreateManualOutbound(warehouseCode) ? (
               <>
                 <Box sx={{ flex: 1, minWidth: 8 }} />
                 <Button variant="contained" onClick={dialog.openCreate}>
@@ -727,6 +743,10 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   lines: [EMPTY_OUTBOUND_LINE],
 }
 
+/** Mã tính theo gram / ct: TL suy từ SL — không nhập TL riêng. */
+const isGramUnit = (name: string | undefined) =>
+  ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((name ?? '').trim().toLowerCase())
+
 function OutboundDialog({
   open,
   kind,
@@ -761,7 +781,7 @@ function OutboundDialog({
   onSave: (payloads: CreateOutboundPayload[]) => void
 }) {
   const profile = stockProfile(warehouseCode)
-  const hideIssuedAt = warehouseCode === 'nvl-tieu-hao'
+  const hideIssuedAt = canCreateManualOutbound(warehouseCode)
   const form = useAppForm<OutboundFormValues>({ defaultValues: EMPTY_OUTBOUND })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
   const watchedLines = useWatch({ control: form.control, name: 'lines' }) ?? []
@@ -805,15 +825,11 @@ function OutboundDialog({
         : {
             ...EMPTY_OUTBOUND,
             issuedAt: todayYmd(),
-            lines: [{ ...EMPTY_OUTBOUND_LINE, unitId: units[0]?.id ?? '' }],
+            lines: [EMPTY_OUTBOUND_LINE],
           },
     )
   }, [open, row, units, users, form])
 
-  const unitOptions: SearchSelectOption[] = units.map((unit) => ({
-    id: unit.id,
-    name: unit.name,
-  }))
   const userOptions: SearchSelectOption[] = users.map((item) => ({
     id: item.id,
     name: item.fullName,
@@ -824,9 +840,11 @@ function OutboundDialog({
   const isCaratLine = (line: OutboundLineValues | undefined) =>
     units.find((unit) => unit.id === line?.unitId)?.name.trim().toLowerCase() === 'ct'
 
-  /** TL xuất (g) gửi API: mã ct suy từ SL, đá nhập theo ct, mã khác nhập g. */
+  /** TL xuất (g) gửi API: mã gram/ct suy từ SL; mã khác (đá viên…) nhập TL riêng. */
   function outboundGramOf(line: OutboundLineValues) {
+    const unitName = units.find((unit) => unit.id === line.unitId)?.name
     if (isCaratLine(line)) return ctToGram(line.qty) || null
+    if (isGramUnit(unitName)) return line.qty || null
     return (lineIsStone(line, materials, units) ? ctToGram(line.gramQty) : line.gramQty) || null
   }
 
@@ -907,9 +925,10 @@ function OutboundDialog({
       submitLabel={kind === 'create' ? profile.outboundLabel : undefined}
       onClose={onClose}
       onExited={onExited}
+      maxWidth="md"
       editLog={row ? { entityType: 'outbound', entityId: row.id } : undefined}
     >
-      <FormRow columns={hideIssuedAt ? 1 : 2} sx={{ mt: 1 }}>
+      <FormRow columns={hideIssuedAt ? 2 : 3} sx={{ mt: 1 }}>
         {hideIssuedAt ? null : (
           <FormTextField<OutboundFormValues>
             name="issuedAt"
@@ -927,8 +946,17 @@ function OutboundDialog({
           allowClear
           readOnly={readOnly}
           displayValue={row?.productionOrderCode ?? undefined}
-          placeholder="Chọn đơn dùng NVL…"
+          placeholder={warehouseCode === BTP_WAREHOUSE_CODE ? 'Chọn đơn dùng BTP…' : 'Chọn đơn dùng NVL…'}
           noOptionsText="Không có đơn đang sản xuất"
+        />
+        <FormSearchSelect<OutboundFormValues>
+          name="receivedByUserId"
+          label="Người nhận"
+          options={userOptions}
+          required
+          readOnly={readOnly}
+          displayValue={row?.receivedBy ?? undefined}
+          placeholder="Tìm tài khoản…"
         />
       </FormRow>
 
@@ -936,28 +964,34 @@ function OutboundDialog({
         {lines.fields.map((field, index) => {
           const line = watchedLines[index]
           const stock = lineStock(index)
+          const unitName =
+            stock.selected?.unit || units.find((unit) => unit.id === line?.unitId)?.name
+          const needGram =
+            warehouseCode === 'nvl-chinh' && Boolean(line?.materialId) && !isGramUnit(unitName)
           const availableText = !line?.materialId
-            ? 'Chọn tên hàng'
+            ? '—'
             : stock.available <= 0
-              ? 'Không có đủ số lượng để xuất'
-              : `${formatQty(String(stock.available))}${stock.selected?.unit ? ` ${stock.selected.unit}` : ''}`
-          const availableHelper = !line?.materialId
-            ? 'Tồn hiện tại, trừ dần khi xuất'
-            : stock.available <= 0
-              ? 'Hàng này đã hết tồn'
-              : line.qty
-                ? stock.remaining < 0
-                  ? 'Vượt quá số lượng sẵn có'
-                  : `Còn lại ${formatQty(String(stock.remaining))}${stock.selected?.unit ? ` ${stock.selected.unit}` : ''}`
-                : 'Tồn hiện tại, trừ dần khi xuất'
+              ? 'Hết tồn'
+              : `${formatQty(String(stock.available))}${unitName ? ` ${unitName}` : ''}`
           const availableError = Boolean(
             line?.materialId && (stock.available <= 0 || (line.qty && stock.remaining < 0)),
           )
+          const availableHelper = !line?.materialId
+            ? undefined
+            : stock.available <= 0
+              ? 'Hàng này đã hết tồn'
+              : line.qty && stock.remaining < 0
+                ? 'Vượt quá số lượng sẵn có'
+                : line.qty
+                  ? `Còn lại ${formatQty(String(stock.remaining))}${unitName ? ` ${unitName}` : ''}`
+                  : undefined
           return (
             <Paper key={field.id} variant="outlined" sx={{ p: 1.5 }}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                  <FormRow>
+                  <FormRow
+                    sx={{ gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1.7fr) minmax(120px, 0.8fr)' } }}
+                  >
                     <MaterialField
                       control={form.control as unknown as Control<any>}
                       name={`lines.${index}.name`}
@@ -972,6 +1006,9 @@ function OutboundDialog({
                         if (!material) {
                           if (kind !== 'edit') form.setValue(`lines.${index}.materialId`, null)
                           form.setValue(`lines.${index}.sku`, '')
+                          form.setValue(`lines.${index}.unitId`, '')
+                          form.setValue(`lines.${index}.qty`, '')
+                          form.setValue(`lines.${index}.gramQty`, '')
                           return
                         }
                         form.setValue(`lines.${index}.materialId`, material.id)
@@ -984,31 +1021,24 @@ function OutboundDialog({
                     />
                     <TextInput label={profile.skuLabel} value={line?.sku || '—'} readOnly />
                   </FormRow>
-                  <FormRow columns={warehouseCode === 'nvl-chinh' ? 4 : 3}>
-                    <FormSearchSelect<OutboundFormValues>
-                      name={`lines.${index}.unitId`}
-                      label="Đơn vị tính"
-                      options={unitOptions}
-                      required
-                      readOnly={readOnly}
-                      displayValue={index === 0 ? row?.unit : undefined}
-                      placeholder="Tìm đơn vị…"
-                    />
+                  <FormRow columns={3}>
+                    <TextInput label="Đơn vị tính" value={unitName || '—'} readOnly />
                     <TextInput
                       label="SL sẵn có"
                       value={availableText}
                       readOnly
-                      helperText={availableHelper}
+                      helperText={availableError ? availableHelper : undefined}
                       errorText={availableError ? availableHelper : undefined}
                     />
                     <FormQtyField<OutboundFormValues>
                       name={`lines.${index}.qty`}
                       label="Số lượng xuất"
-                      required
+                      required={Boolean(line?.materialId)}
                       readOnly={readOnly}
-                      disabled={stock.available <= 0}
+                      disabled={!line?.materialId || stock.available <= 0}
                       rules={{
                         validate: (value) => {
+                          if (!form.getValues(`lines.${index}.materialId`)) return true
                           const next = Number(value) || 0
                           const current = lineStock(index)
                           if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
@@ -1020,19 +1050,21 @@ function OutboundDialog({
                         },
                       }}
                     />
-                    {warehouseCode === 'nvl-chinh' && !isCaratLine(line) ? (
+                  </FormRow>
+                  {needGram ? (
+                    <FormRow columns={3}>
                       <FormQtyField<OutboundFormValues>
                         name={`lines.${index}.gramQty`}
                         label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'Số gram'}
-                        required
                         readOnly={readOnly}
                         placeholder={lineIsStone(line, materials, units) ? 'Nhập TL ct…' : 'Nhập số gram…'}
                         rules={{
-                          validate: (value) => (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
+                          validate: (value) =>
+                            (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
                         }}
                       />
-                    ) : null}
-                  </FormRow>
+                    </FormRow>
+                  ) : null}
                   <FormRow>
                     <TextInput
                       label="Đơn giá xuất"
@@ -1050,29 +1082,22 @@ function OutboundDialog({
                       readOnly
                     />
                   </FormRow>
-                  <Typography variant="caption" color="text.secondary">
-                    Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
-                  </Typography>
+                  {line?.materialId ? (
+                    <Typography variant="caption" color="text.secondary">
+                      Hết số lượng giá cũ (tồn đầu kỳ) rồi mới đến giá nhập mới.
+                    </Typography>
+                  ) : null}
                 </Box>
                 {kind === 'create' ? (
                   <LineActions
                     addLabel={`Thêm ${profile.noun}`}
                     removeLabel={`Xóa ${profile.noun}`}
                     onAdd={() =>
-                      lines.insert(
-                        index + 1,
-                        {
-                          ...EMPTY_OUTBOUND_LINE,
-                          unitId: form.getValues('lines.0.unitId') || units[0]?.id || '',
-                        },
-                        { shouldFocus: false },
-                      )
+                      lines.insert(index + 1, EMPTY_OUTBOUND_LINE, { shouldFocus: false })
                     }
                     onRemove={() => {
                       if (lines.fields.length <= 1) {
-                        form.setValue('lines', [
-                          { ...EMPTY_OUTBOUND_LINE, unitId: units[0]?.id ?? '' },
-                        ])
+                        form.setValue('lines', [EMPTY_OUTBOUND_LINE])
                         return
                       }
                       lines.remove(index)
@@ -1086,20 +1111,11 @@ function OutboundDialog({
         })}
       </Stack>
 
-      <FormRow>
+      <FormRow columns={1}>
         <TextInput
-          label="Người Xuất"
+          label="Người xuất"
           value={row?.issuedBy || operatorName || '—'}
           readOnly
-        />
-        <FormSearchSelect<OutboundFormValues>
-          name="receivedByUserId"
-          label="Người Nhận"
-          options={userOptions}
-          required
-          readOnly={readOnly}
-          displayValue={row?.receivedBy ?? undefined}
-          placeholder="Tìm tài khoản…"
         />
       </FormRow>
 
