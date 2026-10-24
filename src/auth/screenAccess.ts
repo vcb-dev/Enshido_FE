@@ -41,3 +41,9 @@ export function canSeeCastingCutsMenu(user: PermissionUser | null | undefined): 
   if (!user) return false
   return !isWorkerOnly(user) && can(user, Permission.SCREEN_CASTING_CUTS)
 }
+
+/** Báo cáo hao hụt thợ: chỉ thủ kho, kế toán, admin — QC không xem. */
+export function canSeeLossReport(user: PermissionUser | null | undefined): boolean {
+  if (!user || isWorkerOnly(user)) return false
+  return canAny(user, Permission.WAREHOUSE_KEEPER, Permission.ACCOUNTING_APPROVE)
+}

@@ -7,7 +7,12 @@ import {
   isIntakePipelineScoped,
 } from '../intake/intake3dAccess'
 import { canSeeWarehouse, firstAllowedPath, hasAnyWarehouse } from './screens'
-import { canSeeCastingCutsMenu, canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from './screenAccess'
+import {
+  canSeeCastingCutsMenu,
+  canSeeCastingOrdersMenu,
+  canSeeIntakeOrdersMenu,
+  canSeeLossReport,
+} from './screenAccess'
 export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
   return firstAllowedPath(user)
 }
@@ -49,6 +54,7 @@ export function canAccessPath(
   if (p.startsWith('/tickets/')) return true
   if (p === '/my-tickets') return canUseMyTickets(user)
   if (p === '/qc-tickets') return canUseQcTickets(user)
+  if (p === '/loss-report') return canSeeLossReport(user)
   if (p === '/finished-goods' || p.startsWith('/finished-goods/')) {
     if (isWorkerOnly(user)) return false
     return canSeeWarehouse(user, 'thanh-pham') || user?.roleCode === 'ADMIN'

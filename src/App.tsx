@@ -12,6 +12,9 @@ import { PrintSheetSkeleton } from './components/ui'
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 )
+const LossReportPage = lazy(() =>
+  import('./pages/LossReportPage').then((m) => ({ default: m.LossReportPage })),
+)
 const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })))
 const WarehousesPage = lazy(() =>
   import('./pages/WarehousesPage').then((m) => ({ default: m.WarehousesPage })),
@@ -133,6 +136,7 @@ export default function App() {
           <Route path="/material-requests" element={<MaterialRequestsPage />} />
           <Route path="/tickets/:ticketCode" element={<SubTicketPage />} />
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/loss-report" element={<LossReportPage />} />
           <Route path="/warehouses" element={<WarehousesPage />} />
           <Route path="/finished-goods" element={<FinishedGoodsRedirect />} />
           <Route path="/finished-goods/shipments/:code" element={<ShipmentDetailPage />} />
