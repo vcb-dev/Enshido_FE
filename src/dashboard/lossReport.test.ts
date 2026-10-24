@@ -69,10 +69,11 @@ describe('xuất Excel', () => {
       'Mức cho phép',
     ])
     const [header, total, stage] = sheets[0].rows
-    expect(header).toHaveLength(14)
-    expect(total[2]).toEqual({ value: 'Tổng', style: 'bold' })
-    expect(total[9]).toEqual({ value: 30, style: 'boldGram' })
-    expect(stage[13]).toEqual({ value: 9.33, style: 'warn' })
+    // Không có cột Khâu: 12 cột theo tab BÁO CÁO; dòng khâu ghi tên khâu cạnh tên thợ.
+    expect(header).toHaveLength(12)
+    expect(String(stage[1])).toContain(' · ')
+    expect(total[8]).toEqual({ value: 30, style: 'boldGram' })
+    expect(stage[11]).toEqual({ value: 9.33, style: 'warn' })
     // So sánh: tuần thợ không có việc để trống.
     expect(sheets[1].rows[1].slice(1, 3)).toEqual([null, null])
   })

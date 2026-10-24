@@ -39,7 +39,7 @@ import {
 } from '../api/lossReports'
 import { confirmDialog, TableSkeleton, TrashIcon } from '../components/ui'
 import { LossLimitsDialog } from './LossLimitsDialog'
-import { addDays, buildLossSheets, isOver, stagesCaption, todayKey, weekLabel, weekShort, weekStart } from './lossReport'
+import { addDays, buildLossSheets, isOver, todayKey, weekLabel, weekShort, weekStart } from './lossReport'
 import { OVERVIEW_COLOR } from './overviewShared'
 import { ScrapReturnDialog } from './ScrapReturnDialog'
 import { downloadXlsx } from './xlsx'
@@ -59,8 +59,10 @@ const TABLE_SX = {
   borderCollapse: 'separate',
   borderSpacing: 0,
   '& td, & th': { px: 1, py: 0.75, fontSize: '0.84rem', borderColor: '#e9e0d4' },
-  '& th': { fontWeight: 700, bgcolor: '#f8f3eb', whiteSpace: 'nowrap' },
+  '& th': { fontWeight: 700, bgcolor: '#f8f3eb', whiteSpace: 'nowrap', verticalAlign: 'bottom' },
   '& td.num, & th.num': { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+  // Tên cột theo tài liệu khá dài: cho xuống dòng, giữ cột số gọn.
+  '& th.num': { whiteSpace: 'normal', lineHeight: 1.25, minWidth: 96, maxWidth: 150 },
 } as const
 
 /** Màu % thực tế: đỏ khi vượt mức, xanh khi trong mức, mặc định khi khâu chưa đặt mức. */
@@ -118,11 +120,6 @@ export function LossReportPanel() {
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             Hao hụt bạc theo tuần
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', maxWidth: 720 }}>
-            Hao hụt = TL giao − (trọng lượng hàng trả + BTP thu hồi + NVL thu hồi + mạt vụn). Lượt khâu tính vào tuần được chốt số:
-            Nguội / Vào đá lúc thủ kho xác nhận, khâu khác lúc QC nhận lại, Đúc lúc cắt cây. Khắc / Đánh bóng không cân
-            thì hao cả chặng nằm ở Xi. Mạt vụn trả cả tuần nên chỉ trừ ở dòng tổng của thợ.
-          </Typography>
         </Box>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1, justifyContent: { md: 'flex-end' } }}>
           {isKeeper ? (
@@ -131,7 +128,7 @@ export function LossReportPanel() {
             </Button>
           ) : null}
           <Button variant="outlined" size="small" onClick={() => setLimitsOpen(true)}>
-            Mức cho phép
+            Cấu hình hao hụt
           </Button>
           <Button
             variant="outlined"
@@ -233,11 +230,13 @@ function SumsCells({ row, scrapGram }: { row: LossSums; scrapGram: string | null
     <>
       <TableCell className="num">{row.qty.toLocaleString('vi-VN')}</TableCell>
       <TableCell className="num">{g(row.inGram)}</TableCell>
+      <TableCell className="num" sx={{ fontWeight: 700 }}>
+        {g(row.returnedGram)}
+      </TableCell>
       <TableCell className="num">{g(row.productGram)}</TableCell>
       <TableCell className="num">{g(row.btpGram)}</TableCell>
       <TableCell className="num">{g(row.nvlGram)}</TableCell>
       <TableCell className="num">{scrapGram == null ? '' : g(scrapGram)}</TableCell>
-      <TableCell className="num">{g(row.returnedGram)}</TableCell>
       <TableCell className="num">{g(row.lossGram)}</TableCell>
       <TableCell className="num">{pct(row.limitPercent)}</TableCell>
       <TableCell className="num" sx={{ color: lossColor(row), fontWeight: 700 }}>
@@ -248,16 +247,16 @@ function SumsCells({ row, scrapGram }: { row: LossSums; scrapGram: string | null
 }
 
 const WEEK_HEADERS = [
-  'SL SP',
-  'TL giao',
-  'Trọng lượng hàng trả',
-  'BTP thu hồi',
-  'NVL thu hồi',
-  'Mạt vụn',
-  'Tổng trả lại',
+  'Số lượng sản phẩm trong tuần',
+  'Tổng trọng lượng nguyên liệu Bạc/Vàng được giao',
+  'Tổng trọng lượng trả lại',
+  'Trọng lượng hàng trả (sản phẩm)',
+  'Trọng lượng bán thành phẩm thu hồi (lưu kho để sử dụng sau)',
+  'Trọng lượng NVL thu hồi',
+  'Trọng lượng mạt vụn thu hồi (sau khi cô lại)',
   'Hao hụt',
-  'Cho phép',
-  'Thực tế',
+  'Mức hao hụt cho phép',
+  'Mức hao hụt thực tế',
 ]
 
 /** Một tuần: dòng tổng mỗi thợ (giống bảng Excel), bấm mở xem từng khâu và từng phiếu. */
@@ -290,7 +289,6 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
           <TableHead>
             <TableRow>
               <TableCell>Thợ</TableCell>
-              <TableCell>Khâu</TableCell>
               {WEEK_HEADERS.map((title) => (
                 <TableCell key={title} className="num">
                   {title}
@@ -301,7 +299,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
           <TableBody>
             {data.workers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={WEEK_HEADERS.length + 2}>
+                <TableCell colSpan={WEEK_HEADERS.length + 1}>
                   <Typography variant="body2" color="text.secondary">
                     Tuần này chưa có lượt khâu nào được chốt số.
                   </Typography>
@@ -322,17 +320,18 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
                         )}
                         {row.workerName}
                       </TableCell>
-                      <TableCell sx={{ color: 'text.secondary' }}>{stagesCaption(row) || '—'}</TableCell>
                       <SumsCells row={row} scrapGram={row.scrapGram} />
                     </TableRow>
                     {expanded
                       ? row.stages.map((stage) => (
                           <Fragment key={stage.stage}>
                             <TableRow sx={{ bgcolor: '#fcfaf6' }}>
-                              <TableCell sx={{ pl: 5, color: 'text.secondary' }}>
-                                {stage.tickets.toLocaleString('vi-VN')} phiếu
+                              <TableCell sx={{ pl: 5, whiteSpace: 'nowrap' }}>
+                                <b>{LOSS_STAGE_LABEL[stage.stage]}</b>
+                                <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                  {stage.tickets.toLocaleString('vi-VN')} phiếu
+                                </Typography>
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 600 }}>{LOSS_STAGE_LABEL[stage.stage]}</TableCell>
                               <SumsCells row={stage} scrapGram={null} />
                             </TableRow>
                             {items
@@ -365,7 +364,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
               <TableHead>
                 <TableRow>
                   <TableCell>Thợ</TableCell>
-                  <TableCell className="num">TL mạt</TableCell>
+                  <TableCell className="num">Trọng lượng mạt vụn thu hồi (sau khi cô lại)</TableCell>
                   <TableCell>Thủ kho nhận</TableCell>
                   <TableCell>Ghi chú</TableCell>
                   {canDelete ? <TableCell /> : null}
@@ -423,14 +422,16 @@ function ItemRow({ item }: { item: LossItem }) {
       <TableCell sx={{ pl: 7, whiteSpace: 'nowrap' }}>
         {item.ticketCode}
         {item.attempt > 1 ? ` · lần ${item.attempt}` : ''}
+        <Typography component="span" variant="caption" sx={{ ml: 1 }}>
+          {new Date(item.confirmedAt).toLocaleDateString('vi-VN')}
+        </Typography>
       </TableCell>
-      <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(item.confirmedAt).toLocaleDateString('vi-VN')}</TableCell>
       <TableCell className="num">{item.qty.toLocaleString('vi-VN')}</TableCell>
       <TableCell className="num">{g(item.inGram)}</TableCell>
+      <TableCell />
       <TableCell className="num">{g(item.productGram)}</TableCell>
       <TableCell className="num">{g(item.btpGram)}</TableCell>
       <TableCell className="num">{g(item.nvlGram)}</TableCell>
-      <TableCell />
       <TableCell />
       <TableCell className="num">{g(item.lossGram)}</TableCell>
       <TableCell />

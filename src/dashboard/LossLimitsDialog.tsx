@@ -69,12 +69,12 @@ export function LossLimitsDialog({ open, onClose, canEdit }: { open: boolean; on
 
   return (
     <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="sm">
-      <DialogTitle>Mức hao hụt cho phép</DialogTitle>
+      <DialogTitle>Cấu hình hao hụt</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             % trên TL giao của từng khâu. Mô tả luồng: hao bạc cả đơn &lt; 10%, vàng &lt; 5%. Khắc / Xi tài liệu chưa ghi
-            mức — Xi đang gánh hao cả chặng Khắc → Xi. Để trống = chưa đặt mức, báo cáo không so vượt. Báo cáo hiện tính
+            mức — hao Khắc đang tính gộp vào Đánh bóng. Để trống = chưa đặt mức, báo cáo không so vượt. Báo cáo hiện tính
             bạc; mức vàng để sẵn.
           </Typography>
           {limits.isError ? (

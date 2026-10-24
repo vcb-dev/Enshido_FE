@@ -26,6 +26,7 @@ import TableRowsIcon from '@mui/icons-material/TableRows'
 import SouthIcon from '@mui/icons-material/South'
 import NorthIcon from '@mui/icons-material/North'
 import SpaceDashboardIcon from '@mui/icons-material/SpaceDashboardOutlined'
+import TrendingDownIcon from '@mui/icons-material/TrendingDownOutlined'
 import PostAddIcon from '@mui/icons-material/PostAddOutlined'
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturingOutlined'
 import BadgeIcon from '@mui/icons-material/BadgeOutlined'
@@ -58,7 +59,12 @@ import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse
 import { can, Permission } from '../auth/permissions'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets, canUseQcTickets } from '../intake/intake3dAccess'
-import { canSeeCastingCutsMenu, canSeeCastingOrdersMenu, canSeeIntakeOrdersMenu } from '../auth/screenAccess'
+import {
+  canSeeCastingCutsMenu,
+  canSeeCastingOrdersMenu,
+  canSeeIntakeOrdersMenu,
+  canSeeLossReport,
+} from '../auth/screenAccess'
 import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
@@ -96,6 +102,7 @@ export function AppShell() {
   const canSeeConfig =
     can(user, Permission.SCREEN_LOCATIONS) || can(user, Permission.SCREEN_CATALOGS)
   const showDashboard = can(user, Permission.SCREEN_DASHBOARD)
+  const showLossReport = canSeeLossReport(user)
   const showMyTickets = canUseMyTickets(user)
   const showQcTickets = canUseQcTickets(user)
   const showIntakeOrders = canSeeIntakeOrdersMenu(user)
@@ -231,6 +238,7 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
+            showLossReport={showLossReport}
             showMyTickets={showMyTickets}
             showQcTickets={showQcTickets}
             showIntakeOrders={showIntakeOrders}
@@ -258,6 +266,7 @@ export function AppShell() {
             canManageUsers={canManageUsers}
             canSeeConfig={canSeeConfig}
             showDashboard={showDashboard}
+            showLossReport={showLossReport}
             showMyTickets={showMyTickets}
             showQcTickets={showQcTickets}
             showIntakeOrders={showIntakeOrders}
@@ -355,6 +364,7 @@ function DrawerNav({
   canManageUsers,
   canSeeConfig,
   showDashboard,
+  showLossReport,
   showMyTickets,
   showQcTickets,
   showIntakeOrders,
@@ -367,6 +377,7 @@ function DrawerNav({
   canManageUsers: boolean
   canSeeConfig: boolean
   showDashboard: boolean
+  showLossReport: boolean
   showMyTickets: boolean
   showQcTickets: boolean
   showIntakeOrders: boolean
@@ -394,6 +405,9 @@ function DrawerNav({
       <List dense sx={{ px: 1, py: 1, flex: 1 }}>
         {showDashboard ? (
           <NavItem to="/" icon={<SpaceDashboardIcon fontSize="small" />} label="Tổng quan" />
+        ) : null}
+        {showLossReport ? (
+          <NavItem to="/loss-report" icon={<TrendingDownIcon fontSize="small" />} label="Báo cáo hao hụt" />
         ) : null}
         {showIntakeOrders ? (
           <NavItem to="/intake-orders" icon={<PostAddIcon fontSize="small" />} label="Tạo đơn" />

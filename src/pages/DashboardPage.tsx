@@ -1,13 +1,12 @@
 import { Alert, Box, Paper, Skeleton, Stack, Tab, Tabs, Typography } from '@mui/material'
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { can, canAny, isWorkerOnly, Permission } from '../auth/permissions'
+import { can, isWorkerOnly, Permission } from '../auth/permissions'
 import { getProductionOverviewApi, type ProductionOverview } from '../api/productionOrders'
 import { PageHeader } from '../components/ui'
 import { FinishedTrendChart } from '../dashboard/FinishedTrendChart'
-import { LossReportPanel } from '../dashboard/LossReportPanel'
 import { MaterialControlCard } from '../dashboard/MaterialControlCard'
 import { OverviewKpis } from '../dashboard/OverviewKpis'
 import { OverviewPeriodBar } from '../dashboard/OverviewPeriodBar'
@@ -17,23 +16,19 @@ import { WatchTicketsTable } from '../dashboard/WatchTicketsTable'
 import { WorkerPerformancePanel } from '../dashboard/WorkerPerformancePanel'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 
-type DashboardTab = 'overview' | 'workers' | 'loss'
+type DashboardTab = 'overview' | 'workers'
 
 const TAB_SUBTITLE: Record<DashboardTab, string> = {
   overview: 'Tiến độ · Công đoạn · Chất lượng · Vật tư',
   workers: 'Số đơn / sản phẩm mỗi thợ làm xong ở từng khâu',
-  loss: 'Hao hụt bạc mỗi thợ ở từng khâu theo tuần',
 }
 
 export function DashboardPage() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const allowed = Boolean(user && can(user, Permission.SCREEN_DASHBOARD) && !isWorkerOnly(user))
-  // Báo cáo hao hụt: chỉ thủ kho, kế toán, admin — QC không xem.
-  const canSeeLoss = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.ACCOUNTING_APPROVE)
   const tabParam = searchParams.get('tab')
-  const tab: DashboardTab =
-    tabParam === 'workers' ? 'workers' : tabParam === 'loss' && canSeeLoss ? 'loss' : 'overview'
+  const tab: DashboardTab = tabParam === 'workers' ? 'workers' : 'overview'
   const [period, setPeriod] = useState(defaultPeriod)
   const overview = useQuery({
     queryKey: ['production-orders', 'overview', period.from, period.to, period.groupBy],
@@ -43,6 +38,9 @@ export function DashboardPage() {
     ...liveRefresh(LIVE_REFRESH_MS.background),
   })
   const data = overview.data
+
+  // Link cũ `/?tab=loss` (đã đánh dấu trang) chuyển sang màn Báo cáo hao hụt riêng.
+  if (tabParam === 'loss') return <Navigate to="/loss-report" replace />
 
   if (!allowed) {
     return (
@@ -88,13 +86,10 @@ export function DashboardPage() {
       >
         <Tab value="overview" label="Tổng quan" sx={{ minHeight: 40 }} />
         <Tab value="workers" label="Hiệu suất thợ" sx={{ minHeight: 40 }} />
-        {canSeeLoss ? <Tab value="loss" label="Hao hụt" sx={{ minHeight: 40 }} /> : null}
       </Tabs>
 
       {tab === 'workers' ? (
         <WorkerPerformancePanel />
-      ) : tab === 'loss' ? (
-        <LossReportPanel />
       ) : (
         <>
           <OverviewPeriodBar
