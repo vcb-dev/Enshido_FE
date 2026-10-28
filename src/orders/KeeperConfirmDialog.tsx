@@ -16,6 +16,7 @@ import {
 } from '@mui/material'
 import type { StageEntry } from '../api/productionOrders'
 import { formatCt, formatQty } from '../api/inventory'
+import { isGoldMetal, type OrderMetalType, recoveredMaterialName } from '../api/intakeOrders'
 import { defectScopeText, formatDateShort, STAGE_LABEL } from './catalog'
 import { stoneReturnPreview } from './stoneReturn'
 import { KcsImages } from './KcsImages'
@@ -33,16 +34,24 @@ type Line = { label: string; qty: string; weight: string; warehouse: string; sho
 export function KeeperConfirmDialog({
   entry,
   ticketCode,
+  skipsStone = false,
+  metalType,
   saving,
   onClose,
   onConfirm,
 }: {
   entry: StageEntry | null
   ticketCode: string
+  /** Đơn không có đá: Nguội xác nhận xong là sang thẳng Khắc. */
+  skipsStone?: boolean
+  /** Kim loại của đơn — đơn vàng nhập thu hồi vào mã vàng đúng tuổi. */
+  metalType: OrderMetalType | null | undefined
   saving: boolean
   onClose: () => void
   onConfirm: (entry: StageEntry) => void
 }) {
+  const gold = isGoldMetal(metalType)
+  const recoveredWarehouse = `Kho NVL (${recoveredMaterialName(metalType)})`
   const stage = entry?.stage
   const stoneStage = stage === 'STONE_SETTING'
   const goodQty = entry?.returnedQty ?? 0
@@ -59,21 +68,21 @@ export function KeeperConfirmDialog({
           label: 'Hàng lỗi',
           qty: `${entry.defectQty ?? 0} sp`,
           weight: formatQty(entry.btpRecoveredWeight ?? '0'),
-          warehouse: 'Kho NVL (Bạc thu hồi / đầu cây S925)',
+          warehouse: recoveredWarehouse,
           show: (entry.defectQty ?? 0) > 0 || Number(entry.btpRecoveredWeight ?? 0) > 0,
         },
         {
-          label: 'Nguyên liệu thừa S925',
+          label: gold ? 'Nguyên liệu vàng thừa' : 'Nguyên liệu thừa S925',
           qty: '—',
           weight: formatQty(entry.silverRecoveredWeight ?? '0'),
-          warehouse: 'Kho NVL (Bạc thu hồi / đầu cây S925)',
+          warehouse: recoveredWarehouse,
           show: Number(entry.silverRecoveredWeight ?? 0) > 0,
         },
         {
-          label: 'Nguyên liệu thừa S999',
+          label: gold ? 'Nguyên liệu vàng thừa (ô S999)' : 'Nguyên liệu thừa S999',
           qty: '—',
           weight: formatQty(entry.scrapS999Weight ?? '0'),
-          warehouse: 'Kho NVL (Bạc S999 thu hồi)',
+          warehouse: gold ? recoveredWarehouse : 'Kho NVL (Bạc S999 thu hồi)',
           show: Number(entry.scrapS999Weight ?? 0) > 0,
         },
       ]
@@ -227,7 +236,9 @@ export function KeeperConfirmDialog({
               </Alert>
             ) : (
               <Typography variant="caption" color="text.secondary">
-                Xác nhận xong phiếu sang {stoneStage ? 'Chờ khắc' : 'Chờ vào đá'}.
+                {stoneStage || skipsStone
+                  ? 'Xác nhận xong phiếu tự mở Khắc — thợ khắc tự nhận ở “Phiếu của tôi”.'
+                  : 'Xác nhận xong phiếu sang Chờ vào đá.'}
               </Typography>
             )}
           </>

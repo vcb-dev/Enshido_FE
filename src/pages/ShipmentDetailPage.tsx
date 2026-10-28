@@ -222,7 +222,7 @@ export function ShipmentDetailPage() {
           <Table size="small" sx={{ minWidth: 1100, '& td, & th': { px: 1 } }}>
             <TableHead>
               <TableRow>
-                <TableCell>Mã SX</TableCell>
+                <TableCell>Mã đơn hàng</TableCell>
                 <TableCell>Sản phẩm</TableCell>
                 <TableCell sx={NUM}>SL</TableCell>
                 <TableCell sx={NUM}>TL (g)</TableCell>
@@ -239,9 +239,13 @@ export function ShipmentDetailPage() {
               {shipment.lines.map((line) => (
                 <TableRow key={line.id}>
                   <TableCell>
-                    <Link component={RouterLink} to={`/orders/${line.orderCode}`} sx={{ fontWeight: 700 }}>
-                      {line.orderCode}
-                    </Link>
+                    {line.intakeCode ? (
+                      <Link component={RouterLink} to={`/orders/${line.orderCode}`} sx={{ fontWeight: 700 }}>
+                        {line.intakeCode}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

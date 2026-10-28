@@ -343,11 +343,12 @@ export function isReceiptStage(stage: string | null | undefined) {
 }
 
 /**
- * Đánh bóng / Xi (mô tả luồng bước 21–22): QC xác nhận khâu trước là phiếu tự mở, thợ tự chọn
- * phiếu để nhận và vào làm ngay. Các khâu khác do thủ kho chỉ định thợ.
+ * Khắc / Đánh bóng / Xi (mô tả luồng bước 21–22): khâu trước xác nhận xong là phiếu tự mở, thợ tự
+ * chọn phiếu để nhận và vào làm ngay. Khắc mở sau khi thủ kho xác nhận Vào đá (hoặc Nguội của đơn
+ * không đá). Nguội / Vào đá do thủ kho chỉ định thợ. Khớp `SELF_TAKE_STAGES` phía BE.
  */
 export function isSelfTakeStage(stage: string | null | undefined) {
-  return stage === 'POLISHING' || stage === 'PLATING'
+  return stage === 'ENGRAVING' || stage === 'POLISHING' || stage === 'PLATING'
 }
 
 /**

@@ -1,4 +1,4 @@
-import { LOSS_STAGE_LABEL, type LossWorkerRow, type WeeklyLossReport } from '../api/lossReports'
+import { lossInHeader, LOSS_STAGE_LABEL, type LossWorkerRow, type WeeklyLossReport } from '../api/lossReports'
 import type { XlsxCell, XlsxSheet } from './xlsx'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -52,11 +52,11 @@ function dateTime(iso: string) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const HEADERS = [
+const headers = (report: WeeklyLossReport) => [
   'Tuần',
   'Thợ',
   'Số lượng sản phẩm trong tuần',
-  'Tổng trọng lượng nguyên liệu Bạc/Vàng được giao (g)',
+  `${lossInHeader(report.metal)} (g)`,
   'Tổng trọng lượng trả lại (g)',
   'Trọng lượng hàng trả (sản phẩm) (g)',
   'Trọng lượng bán thành phẩm thu hồi (lưu kho để sử dụng sau) (g)',
@@ -100,7 +100,7 @@ function sumsCells(
 /** Các sheet xuất Excel: báo cáo theo tuần (thợ + từng khâu), so sánh tuần, chi tiết phiếu, mạt vụn. */
 export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
   const header = (titles: string[]): XlsxCell[] => titles.map((title) => ({ value: title, style: 'bold' }))
-  const weekly: XlsxCell[][] = [header(HEADERS)]
+  const weekly: XlsxCell[][] = [header(headers(report))]
   for (const row of report.workers) {
     const week = weekLabel(row.week)
     weekly.push([
@@ -162,7 +162,7 @@ export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
       'Lần',
       'Chốt số lúc',
       'SL',
-      'Tổng trọng lượng nguyên liệu Bạc/Vàng được giao (g)',
+      `${lossInHeader(report.metal)} (g)`,
       'Trọng lượng hàng trả (sản phẩm) (g)',
       'Trọng lượng bán thành phẩm thu hồi (lưu kho để sử dụng sau) (g)',
       'Trọng lượng NVL thu hồi (g)',

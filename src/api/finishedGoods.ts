@@ -93,6 +93,7 @@ export function fgFlowStatus(
 export type ShipmentListLine = {
   id: string
   orderCode: string
+  intakeCode: string | null
   description: string
   sizeLabel: string | null
   mainMaterial: string | null
@@ -125,6 +126,8 @@ export type ShipmentListRow = {
 export type ShipmentLine = {
   id: string
   orderCode: string
+  /** Mã đơn hàng DH… lúc tạo đơn; null = đơn tạo tay / tồn đầu kỳ. */
+  intakeCode: string | null
   description: string
   sizeLabel: string | null
   size: string | null

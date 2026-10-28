@@ -24,6 +24,7 @@ import {
   TextInput,
 } from '../components/ui'
 import { useOperatorName } from '../hooks/useOperatorName'
+import { isGoldMetal, recoveredMaterialName } from '../api/intakeOrders'
 import {
   HandoverMaterialsField,
   handoverLinePayload,
@@ -380,6 +381,10 @@ export function KcsReturnDialog({
 }) {
   const operatorName = useOperatorName()
   const [uploading, setUploading] = useState(false)
+  // Đơn vàng: nguyên liệu thừa nhập mã vàng thu hồi đúng tuổi, không có S999.
+  const gold = isGoldMetal(order.metalType)
+  const recoveredName = recoveredMaterialName(order.metalType)
+  const spareLabel = gold ? 'Nguyên liệu vàng thừa (g)' : 'Nguyên liệu thừa S925 (g)'
   /** Nguội / Vào đá: QC chọn kết quả trước — form chỉ hiện ô của kết quả đó. */
   const [outcome, setOutcome] = useState<QcOutcome>('ok')
   const form = useAppForm<ReturnValues>({
@@ -1018,22 +1023,24 @@ export function KcsReturnDialog({
               ) : null}
             </Typography>
           ) : null}
-          <FormRow columns={2}>
+          <FormRow columns={gold ? 1 : 2}>
             <FormQtyField<ReturnValues>
               name="silverRecoveredWeight"
-              label="Nguyên liệu thừa S925 (g)"
+              label={spareLabel}
               rules={silverRules('silverRecoveredWeight')}
             />
-            <FormQtyField<ReturnValues>
-              name="scrapS999Weight"
-              label="Nguyên liệu thừa S999 (g)"
-              rules={silverRules('scrapS999Weight')}
-            />
+            {gold ? null : (
+              <FormQtyField<ReturnValues>
+                name="scrapS999Weight"
+                label="Nguyên liệu thừa S999 (g)"
+                rules={silverRules('scrapS999Weight')}
+              />
+            )}
           </FormRow>
         </>
       ) : photoOnly ? null : stockAtQc ? (
         <>
-          <FormRow columns={3}>
+          <FormRow columns={gold ? 2 : 3}>
             <FormQtyField<ReturnValues>
               name="btpRecoveredWeight"
               label="TL hàng lỗi / BTP thu hồi (g)"
@@ -1041,18 +1048,21 @@ export function KcsReturnDialog({
             />
             <FormQtyField<ReturnValues>
               name="silverRecoveredWeight"
-              label="Nguyên liệu thừa S925 (g)"
+              label={spareLabel}
               rules={silverRules('silverRecoveredWeight')}
             />
-            <FormQtyField<ReturnValues>
-              name="scrapS999Weight"
-              label="Nguyên liệu thừa S999 (g)"
-              rules={silverRules('scrapS999Weight')}
-            />
+            {gold ? null : (
+              <FormQtyField<ReturnValues>
+                name="scrapS999Weight"
+                label="Nguyên liệu thừa S999 (g)"
+                rules={silverRules('scrapS999Weight')}
+              />
+            )}
           </FormRow>
           <Typography variant="caption" color="text.secondary">
-            Lưu là nhập kho NVL: hàng lỗi + S925 thừa vào &quot;Bạc thu hồi / đầu cây S925&quot;, S999 thừa vào
-            &quot;Bạc S999 thu hồi&quot;.
+            {gold
+              ? `Lưu là nhập kho NVL: hàng lỗi + vàng thừa vào "${recoveredName}".`
+              : 'Lưu là nhập kho NVL: hàng lỗi + S925 thừa vào "Bạc thu hồi / đầu cây S925", S999 thừa vào "Bạc S999 thu hồi".'}
             {entry?.stage === 'PLATING' ? ' Hàng đạt nhập kho thành phẩm như cũ.' : ' Hàng đạt chuyển sang Xi.'}
           </Typography>
         </>
@@ -1065,7 +1075,7 @@ export function KcsReturnDialog({
           />
           <FormQtyField<ReturnValues>
             name="silverRecoveredWeight"
-            label="Bạc S925 thu hồi (g)"
+            label={gold ? 'Vàng thu hồi (g)' : 'Bạc S925 thu hồi (g)'}
             rules={silverRules('silverRecoveredWeight')}
           />
         </FormRow>

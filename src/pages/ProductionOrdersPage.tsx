@@ -46,6 +46,7 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   listProductionOrdersApi,
+  type OrderImage,
   type ProductionOrderRow,
   type ReworkChild,
   type ProductionRequestType,
@@ -352,6 +353,7 @@ export function ProductionOrdersPage() {
     }: {
       id: string
       model3dUrl: string
+      images: OrderImage[]
       stoneCount3d: number | null
       stoneWeight3dGram: number | null
     }) => attachIntakeModel3dApi(id, payload),
@@ -479,7 +481,7 @@ export function ProductionOrdersPage() {
             <ColumnHeaderSearch
               value={params.search}
               onChange={table.setSearch}
-              placeholder="Tìm mã SX, mô tả…"
+              placeholder="Tìm mã đơn, mô tả…"
             />
           ),
           status: {
@@ -943,7 +945,7 @@ function orderColumns(
   const columns: Column<ProductionListRow, SubTicketSummary>[] = [
     {
       key: 'code',
-      header: 'Mã SX',
+      header: 'Mã đơn hàng',
       width: 104,
       sortable: true,
       card: 'title',
@@ -962,14 +964,15 @@ function orderColumns(
                 sx={{ fontWeight: 700 }}
                 onClick={(event) => event.stopPropagation()}
               >
-                {row.row.sxCode}
+                {row.row.code}
               </Link>
             )
           }
-          return row.row.sxCode
+          return row.row.code
         }
         const order = row.row
-        const displayCode = order.intakeSxCode || order.code
+        // Ưu tiên mã đơn hàng DH…; đơn lên thẳng (không qua Tạo đơn) chưa có thì mới hiện mã SX.
+        const displayCode = order.intakeOrderCode?.trim() || order.intakeSxCode || order.code
         const childCount = (order.subTickets.length > 1 ? order.subTickets.length : 0) + (order.reworks?.length ?? 0)
         const body = childCount > 0 ? (
           <>
@@ -1078,14 +1081,6 @@ function orderColumns(
       width: 68,
       numeric: true,
       render: (row) => (row.kind === 'intake' ? '—' : row.row.returnedQty),
-    },
-    {
-      key: 'intakeOrderCode',
-      header: 'Mã đơn hàng',
-      width: 100,
-      ellipsis: true,
-      render: (row) =>
-        row.kind === 'intake' ? row.row.code : row.row.intakeOrderCode?.trim() || '—',
     },
     {
       key: 'trackingCode',
@@ -1230,7 +1225,6 @@ function orderColumns(
           ? <StatusChip status={sub.productionStatus} />
           : <IntakeStatusChip status={intake.status} />
         case 'qty': return intake.qty
-        case 'intakeOrderCode': return intake.code
         case 'description': return intake.description
         case 'actions':
           return <Stack spacing={0.5} onClick={(event) => event.stopPropagation()}>

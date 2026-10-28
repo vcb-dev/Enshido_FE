@@ -262,7 +262,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       },
     ]
     if (!isSelfTakeStage(model.pendingStage)) {
-      // Chỉ Đánh bóng / Xi thợ tự nhận; khâu khác thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
+      // Khắc / Đánh bóng / Xi thợ tự nhận; Nguội / Vào đá thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
       hint = `Khâu ${STAGE_LABEL[model.pendingStage]} do thủ kho chỉ định thợ — nhờ thủ kho giao lại khâu này.`
     } else if (isWorker) {
       hint = 'Bấm Nhận là bắt đầu làm ngay — hàng lấy nguyên số QC đã nhận lại ở khâu trước.'

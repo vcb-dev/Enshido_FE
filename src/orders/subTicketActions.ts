@@ -49,7 +49,7 @@ type TicketActionCtx = {
 
 const ACTIONS: Record<SubTicketAction, ActionDef> = {
   claim: {
-    // Thợ tự chọn phiếu chờ Đánh bóng / Xi: nhận là vào làm ngay, không qua người giao.
+    // Thợ tự chọn phiếu chờ Khắc / Đánh bóng / Xi: nhận là vào làm ngay, không qua người giao.
     run: (code, no) => (no == null ? claimOrderApi(code) : claimSubTicketApi(code, no)),
     queued: (code) =>
       `Đã xếp hàng nhận phiếu ${code} — gửi lên khi có mạng. Thợ khác nhận trước thì sẽ báo lại.`,

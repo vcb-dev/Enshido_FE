@@ -168,7 +168,7 @@ function ShipmentSheet({ shipment }: { shipment: ShipmentDetail }) {
             <th className="lead" style={{ width: '7%' }}>
               Loại đơn hàng
             </th>
-            <th style={{ width: '6%' }}>Mã SX</th>
+            <th style={{ width: '6%' }}>Mã đơn hàng</th>
             <th>Tên sản phẩm - Mã đặt hàng</th>
             <th style={{ width: '6%' }}>Mã của Khách</th>
             <th style={{ width: '7%' }}>Khách hàng</th>
@@ -187,7 +187,7 @@ function ShipmentSheet({ shipment }: { shipment: ShipmentDetail }) {
             <tr key={line.id}>
               <td>{shippedAt}</td>
               <td>{REQUEST_TYPE_META[line.requestType]?.label ?? ''}</td>
-              <td style={{ fontWeight: 700 }}>{line.orderCode}</td>
+              <td style={{ fontWeight: 700 }}>{line.intakeCode ?? '—'}</td>
               <td style={{ fontWeight: 700 }}>
                 {line.description}
                 {line.sizeLabel ? ` ${line.sizeLabel}` : ''}
