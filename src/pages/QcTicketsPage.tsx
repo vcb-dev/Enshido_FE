@@ -19,8 +19,6 @@ import {
   getProductionOrderApi,
   getQcTicketsApi,
   reportStageDefectApi,
-  returnStageApi,
-  reviseReturnApi,
   type ProductionOrderDetail,
   type QcFinishItem,
   type QcTicketItem,
@@ -38,6 +36,7 @@ import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
 import { scheduleProductionStatusCountsRefresh } from '../orders/productionStatusCountsRefresh'
 import { DefectDialog, FinishDialog } from '../orders/OutcomeDialogs'
 import { KcsReturnDialog } from '../orders/StageDialogs'
+import { engravingPending, saveQcReturn } from '../orders/qcEngraving'
 import { dueInfo, EmptyState, FilterPill, MetaItem, TabLabel, TicketThumb } from '../worker/WorkerUi'
 
 type TabKey = 'working' | 'pending' | 'confirming' | 'finishable' | 'recent'
@@ -103,8 +102,17 @@ export function QcTicketsPage() {
   }
 
   const saveReturn = useMutation({
-    mutationFn: ({ order, entry, payload }: { order: ProductionOrderDetail; entry: StageEntry; payload: ReturnPayload }) =>
-      entry.returnedAt ? reviseReturnApi(order.code, entry.id, payload) : returnStageApi(order.code, entry.id, payload),
+    mutationFn: ({
+      order,
+      entry,
+      payload,
+      engraverUserId,
+    }: {
+      order: ProductionOrderDetail
+      entry: StageEntry
+      payload: ReturnPayload
+      engraverUserId?: string | null
+    }) => saveQcReturn(order, entry, payload, engraverUserId),
     onSuccess: (order, vars) => {
       // Xi đạt: phiếu tự chốt, sinh phiếu nhập kho thành phẩm; Khắc / Đánh bóng: tự mở khâu kế cho thợ nhận.
       const next = vars.entry.stage === 'ENGRAVING' ? 'Chờ đánh bóng' : vars.entry.stage === 'POLISHING' ? 'Chờ xi' : null
@@ -113,7 +121,10 @@ export function QcTicketsPage() {
         order,
         vars.entry.returnedAt
           ? 'Đã lưu bản sửa QC'
-          : good > 0 && vars.entry.stage === 'PLATING'
+          : // Giao Khắc lỗi thì saveQcReturn đã báo riêng.
+            vars.engraverUserId && engravingPending(order, vars.entry)
+            ? 'Đã lưu QC và giao Khắc — chờ thợ khắc nhận hàng'
+            : good > 0 && vars.entry.stage === 'PLATING'
             ? 'Đã xi xong — đã tạo phiếu nhập kho thành phẩm, chờ thủ kho xác nhận'
             : good > 0 && next
               ? `Đã lưu kết quả QC — phiếu sang ${next}, thợ tự nhận`
@@ -355,7 +366,7 @@ export function QcTicketsPage() {
           entry={qc.entry}
           saving={saveReturn.isPending}
           onClose={() => setQc(null)}
-          onSave={(payload) => saveReturn.mutate({ ...qc, payload })}
+          onSave={(payload, engraverUserId) => saveReturn.mutate({ ...qc, payload, engraverUserId })}
         />
       ) : null}
       <DefectDialog

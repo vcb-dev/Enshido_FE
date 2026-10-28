@@ -32,11 +32,10 @@ import { useOrderMutation } from '../orders/useOrderMutation'
 import {
   clearStageDefectApi,
   reportStageDefectApi,
-  returnStageApi,
-  reviseReturnApi,
   type ReturnPayload,
 } from '../api/productionOrders'
 import { KcsReturnDialog } from '../orders/StageDialogs'
+import { saveQcReturn } from '../orders/qcEngraving'
 import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 import {
   dueInfo,
@@ -205,8 +204,8 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const [qcEntry, setQcEntry] = useState<StageEntry | null>(null)
   const saveReturn = useOrderMutation(
     order.code,
-    ({ entry, payload }: { entry: StageEntry; payload: ReturnPayload }) =>
-      entry.returnedAt ? reviseReturnApi(order.code, entry.id, payload) : returnStageApi(order.code, entry.id, payload),
+    ({ entry, payload, engraverUserId }: { entry: StageEntry; payload: ReturnPayload; engraverUserId?: string | null }) =>
+      saveQcReturn(order, entry, payload, engraverUserId),
     'Đã lưu kết quả QC',
   )
   const reportDefect = useOrderMutation(
@@ -577,9 +576,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           entry={qcEntry}
           saving={saveReturn.isPending}
           onClose={() => setQcEntry(null)}
-          onSave={(payload) =>
+          onSave={(payload, engraverUserId) =>
             saveReturn.mutate(
-              { entry: qcEntry, payload },
+              { entry: qcEntry, payload, engraverUserId },
               {
                 onSuccess: () => {
                   setQcEntry(null)

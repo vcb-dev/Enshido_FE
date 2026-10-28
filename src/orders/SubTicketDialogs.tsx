@@ -402,8 +402,8 @@ export function AssignWorkerDialog({
   onSave,
 }: {
   open: boolean
-  /** Đá ước tính theo file 3D của đơn — hiện ở khâu Vào đá. */
-  order: Pick<ProductionOrderDetail, 'qty' | 'stoneCount' | 'stoneWeight'>
+  /** Đá ước tính + ảnh file 3D của đơn — hiện ở khâu Vào đá. */
+  order: Pick<ProductionOrderDetail, 'qty' | 'stoneCount' | 'stoneWeight' | 'model3dUrl' | 'images'>
   ticket: SubTicket | null
   stageOptions: StageCode[]
   workers: StageWorker[]

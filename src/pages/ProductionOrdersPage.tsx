@@ -46,6 +46,7 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   listProductionOrdersApi,
+  type OrderImage,
   type ProductionOrderRow,
   type ReworkChild,
   type ProductionRequestType,
@@ -352,6 +353,7 @@ export function ProductionOrdersPage() {
     }: {
       id: string
       model3dUrl: string
+      images: OrderImage[]
       stoneCount3d: number | null
       stoneWeight3dGram: number | null
     }) => attachIntakeModel3dApi(id, payload),

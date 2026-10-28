@@ -468,6 +468,10 @@ export function ProductionOrderDetailPage() {
               <Stack spacing={2} sx={{ mt: 2 }}>
                 <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
                 <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
+                {/* Đơn cũ / đơn có khuôn không qua bước gắn 3D nên không có ảnh — ẩn hẳn cho gọn. */}
+                {order.images.some((image) => image.kind === 'MODEL_3D') ? (
+                  <Gallery label="Ảnh file 3D" images={order.images.filter((image) => image.kind === 'MODEL_3D')} />
+                ) : null}
               </Stack>
             </Section>
           ) : null}
