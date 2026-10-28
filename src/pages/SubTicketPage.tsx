@@ -32,10 +32,11 @@ import { useOrderMutation } from '../orders/useOrderMutation'
 import {
   clearStageDefectApi,
   reportStageDefectApi,
+  returnStageApi,
+  reviseReturnApi,
   type ReturnPayload,
 } from '../api/productionOrders'
 import { KcsReturnDialog } from '../orders/StageDialogs'
-import { saveQcReturn } from '../orders/qcEngraving'
 import { queuedLabel, type SubTicketAction } from '../orders/subTicketQueue'
 import {
   dueInfo,
@@ -204,8 +205,8 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
   const [qcEntry, setQcEntry] = useState<StageEntry | null>(null)
   const saveReturn = useOrderMutation(
     order.code,
-    ({ entry, payload, engraverUserId }: { entry: StageEntry; payload: ReturnPayload; engraverUserId?: string | null }) =>
-      saveQcReturn(order, entry, payload, engraverUserId),
+    ({ entry, payload }: { entry: StageEntry; payload: ReturnPayload }) =>
+      entry.returnedAt ? reviseReturnApi(order.code, entry.id, payload) : returnStageApi(order.code, entry.id, payload),
     'Đã lưu kết quả QC',
   )
   const reportDefect = useOrderMutation(
@@ -261,7 +262,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       },
     ]
     if (!isSelfTakeStage(model.pendingStage)) {
-      // Chỉ Đánh bóng / Xi thợ tự nhận; khâu khác thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
+      // Khắc / Đánh bóng / Xi thợ tự nhận; Nguội / Vào đá thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
       hint = `Khâu ${STAGE_LABEL[model.pendingStage]} do thủ kho chỉ định thợ — nhờ thủ kho giao lại khâu này.`
     } else if (isWorker) {
       hint = 'Bấm Nhận là bắt đầu làm ngay — hàng lấy nguyên số QC đã nhận lại ở khâu trước.'
@@ -576,9 +577,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
           entry={qcEntry}
           saving={saveReturn.isPending}
           onClose={() => setQcEntry(null)}
-          onSave={(payload, engraverUserId) =>
+          onSave={(payload) =>
             saveReturn.mutate(
-              { entry: qcEntry, payload, engraverUserId },
+              { entry: qcEntry, payload },
               {
                 onSuccess: () => {
                   setQcEntry(null)

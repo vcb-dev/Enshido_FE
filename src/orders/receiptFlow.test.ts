@@ -27,12 +27,13 @@ describe('luồng thợ xác nhận', () => {
     expect(usesReceiptFlow(null, 1)).toBe(false)
   })
 
-  it('chỉ Nguội / Vào đá chờ thủ kho xác nhận sau QC; chỉ Đánh bóng / Xi thợ tự nhận', () => {
+  it('chỉ Nguội / Vào đá chờ thủ kho xác nhận sau QC; Khắc / Đánh bóng / Xi thợ tự nhận', () => {
     expect(['FILING', 'STONE_SETTING', 'ENGRAVING', 'POLISHING', 'PLATING'].filter(isReceiptStage)).toEqual([
       'FILING',
       'STONE_SETTING',
     ])
     expect(['FILING', 'STONE_SETTING', 'ENGRAVING', 'POLISHING', 'PLATING', null].filter(isSelfTakeStage)).toEqual([
+      'ENGRAVING',
       'POLISHING',
       'PLATING',
     ])

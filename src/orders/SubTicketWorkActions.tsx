@@ -118,8 +118,7 @@ export function SubTicketWorkActions({
 
       <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         {ticket.state === 'IDLE' && active ? (
-          // QC giao Khắc luôn sau Vào đá, không quay về thủ kho (khớp BE).
-          canManage || (can(user, Permission.PRODUCTION_QC) && assignableStages[0] === 'ENGRAVING') ? (
+          canManage ? (
             <Tooltip title={assignableStages.length ? '' : 'Phiếu chưa có khâu tiếp theo để giao'}>
               <span>
                 <Button

@@ -3,7 +3,6 @@ import { STONE_SET_SOURCE_LABEL, stoneReturnPreview, stoneSetWeight } from './st
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useWatch } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import type {
   CastingPayload,
@@ -15,8 +14,6 @@ import type {
   StageCode,
   StageEntry,
 } from '../api/productionOrders'
-import { getProductionOrderLookupsApi } from '../api/productionOrders'
-import { useAuth } from '../auth/AuthContext'
 import { ctToGram, CT_PER_GRAM, formatCt, formatQty, gramToCt } from '../api/inventory'
 import {
   CrudDialogShell,
@@ -33,8 +30,7 @@ import {
   type HandoverMaterialLine,
 } from './MaterialRequests'
 import { FormImageField } from './FormImageField'
-import { type StageWorker, stageWorkersFrom, workersForStage } from './stageWorkers'
-import { qcConfirmsStage } from './qcEngraving'
+import { type StageWorker, workersForStage } from './stageWorkers'
 import { KcsImages } from './KcsImages'
 import { StoneEstimateNote } from './StoneEstimateNote'
 import {
@@ -351,8 +347,6 @@ type ReturnValues = {
   note: string
   /** Ảnh làm chứng QC — bắt buộc ở mọi khâu Nguội → Xi. */
   images: OrderImage[]
-  /** Vào đá (hoặc Nguội đơn không đá): thợ khắc QC giao luôn sau khi lưu. */
-  engraverUserId: string
 }
 
 /** Gói đá thừa trống theo từng mã có cân gói lúc cấp — sửa lại thì điền số QC cân lần trước. */
@@ -382,11 +376,9 @@ export function KcsReturnDialog({
   entry: StageEntry | null
   saving: boolean
   onClose: () => void
-  /** `engraverUserId`: QC chọn thợ khắc để giao Khắc ngay sau khi lưu (khâu QC xác nhận thay thủ kho). */
-  onSave: (payload: ReturnPayload, engraverUserId?: string | null) => void
+  onSave: (payload: ReturnPayload) => void
 }) {
   const operatorName = useOperatorName()
-  const { user } = useAuth()
   const [uploading, setUploading] = useState(false)
   /** Nguội / Vào đá: QC chọn kết quả trước — form chỉ hiện ô của kết quả đó. */
   const [outcome, setOutcome] = useState<QcOutcome>('ok')
@@ -403,7 +395,6 @@ export function KcsReturnDialog({
       returnedStones: [],
       legacyReturnedCount: '',
       note: '',
-      engraverUserId: '',
     },
   })
 
@@ -477,23 +468,6 @@ export function KcsReturnDialog({
   const photoOnly = entry != null && PHOTO_ONLY_STAGES.includes(entry.stage)
   /** Đánh bóng / Xi: tách thu hồi như Nguội / Vào đá, nhập kho NVL ngay lúc QC lưu. */
   const stockAtQc = entry != null && QC_STOCK_RECOVERY_STAGES.includes(entry.stage)
-  /** Khâu kế là Khắc: QC lưu là xác nhận luôn thay thủ kho, rồi giao Khắc ngay (khớp BE). */
-  const qcConfirms = entry != null && entry.returnedAt == null && qcConfirmsStage(order, entry.stage)
-  const handsOverEngraving = qcConfirms && outcome !== 'all'
-  // Luật của ô thợ khắc đọc ref — ô ẩn khi Lỗi toàn bộ thì không chặn lưu.
-  const handsOverRef = useRef(handsOverEngraving)
-  handsOverRef.current = handsOverEngraving
-  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
-  const lookups = useQuery({
-    queryKey: ['production-order-lookups'],
-    queryFn: getProductionOrderLookupsApi,
-    staleTime: 5 * 60_000,
-    enabled: qcConfirms,
-  })
-  const engravers = useMemo(
-    () => workersForStage(stageWorkersFrom(lookups.data, isAdmin), 'ENGRAVING'),
-    [lookups.data, isAdmin],
-  )
 
   /** Đổi kết quả QC: điền sẵn số theo kết quả mới, xoá số của phần không còn dùng. */
   function chooseOutcome(next: QcOutcome) {
@@ -694,7 +668,7 @@ export function KcsReturnDialog({
         : {}),
       note: values.note.trim(),
       images: values.images.map(({ url, publicId, width, height }) => ({ url, publicId, width, height })),
-    }, handsOverEngraving ? values.engraverUserId || null : null)
+    })
   }
 
   return (
@@ -706,16 +680,13 @@ export function KcsReturnDialog({
       onSubmit={submit}
       saving={saving}
       submitDisabled={uploading}
-      // Nguội (đơn có đá): QC lưu xong chờ thủ kho xác nhận. Vào đá / Nguội đơn không đá: QC xác nhận
-      // luôn thay thủ kho rồi giao Khắc.
+      // Nguội / Vào đá: mọi kết quả QC đều chờ thủ kho xác nhận rồi mới nhập kho, chuyển khâu.
       submitColor={keeperStage && outcome === 'all' ? 'error' : undefined}
       submitLabel={
         keeperStage
           ? revising
             ? 'Lưu bản sửa'
-            : handsOverEngraving
-              ? 'Lưu QC & giao Khắc'
-              : 'Lưu QC'
+            : 'Lưu QC'
           : revising
             ? 'Lưu bản sửa & chuyển khâu'
             : photoOnly
@@ -1124,35 +1095,9 @@ export function KcsReturnDialog({
 
       {keeperStage && outcome === 'all' && entry ? (
         <Alert severity="error" sx={{ py: 0.25 }}>
-          Lỗi toàn bộ {entry.handedQty ?? ''} sp — phiếu dừng ở khâu {STAGE_LABEL[entry.stage]}
-          {qcConfirms ? ' ngay khi lưu' : ' sau khi thủ kho xác nhận'}, không chuyển khâu tiếp. Hàng lỗi về kho NVL.
+          Lỗi toàn bộ {entry.handedQty ?? ''} sp — phiếu dừng ở khâu {STAGE_LABEL[entry.stage]} sau khi thủ kho xác nhận,
+          không chuyển khâu tiếp. Hàng lỗi về kho NVL.
         </Alert>
-      ) : null}
-      {qcConfirms ? (
-        <Alert severity="info" sx={{ py: 0.25 }}>
-          Lưu là xác nhận luôn thay thủ kho: nhập kho hàng đạt, hàng lỗi / bạc thừa
-          {entry?.stage === 'STONE_SETTING' ? ', xuất kho đá đã gắn (đá thừa vẫn tính trong kho)' : ''}. Lưu rồi không
-          sửa lại được.
-        </Alert>
-      ) : null}
-      {handsOverEngraving ? (
-        <FormSelect<ReturnValues>
-          name="engraverUserId"
-          label="Giao Khắc cho thợ"
-          required
-          options={engravers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
-          helperText={
-            lookups.isLoading
-              ? 'Đang tải danh sách thợ…'
-              : engravers.length
-                ? 'Hàng giao thẳng sang Khắc, không quay về thủ kho'
-                : 'Chưa có thợ nào được giao khâu Khắc ở màn Nhân sự'
-          }
-          rules={{
-            required: false,
-            validate: (value) => (!handsOverRef.current || value ? true : 'Chọn thợ khắc'),
-          }}
-        />
       ) : null}
       {allDefect && !keeperStage ? (
         <Alert severity="warning" sx={{ py: 0.25 }}>
