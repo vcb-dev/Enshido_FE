@@ -33,12 +33,15 @@ type Line = { label: string; qty: string; weight: string; warehouse: string; sho
 export function KeeperConfirmDialog({
   entry,
   ticketCode,
+  skipsStone = false,
   saving,
   onClose,
   onConfirm,
 }: {
   entry: StageEntry | null
   ticketCode: string
+  /** Đơn không có đá: Nguội xác nhận xong là sang thẳng Khắc. */
+  skipsStone?: boolean
   saving: boolean
   onClose: () => void
   onConfirm: (entry: StageEntry) => void
@@ -227,7 +230,9 @@ export function KeeperConfirmDialog({
               </Alert>
             ) : (
               <Typography variant="caption" color="text.secondary">
-                Xác nhận xong phiếu sang {stoneStage ? 'Chờ khắc' : 'Chờ vào đá'}.
+                {stoneStage || skipsStone
+                  ? 'Xác nhận xong phiếu tự mở Khắc — thợ khắc tự nhận ở “Phiếu của tôi”.'
+                  : 'Xác nhận xong phiếu sang Chờ vào đá.'}
               </Typography>
             )}
           </>

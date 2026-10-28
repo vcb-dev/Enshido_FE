@@ -44,7 +44,7 @@ export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
 /** Đơn NVL: làm từ đầu (3D → Đúc → khâu). Đơn BTP: lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
 export type ProductionSource = 'NVL' | 'BTP'
 
-export type ProductionImageKind = 'DETAIL' | 'PRODUCT' | 'CASTING_TREE' | 'CUT_BLANK'
+export type ProductionImageKind = 'DETAIL' | 'PRODUCT' | 'CASTING_TREE' | 'CUT_BLANK' | 'MODEL_3D'
 
 export type OrderImage = {
   id?: string
@@ -1350,12 +1350,12 @@ export function acceptOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/accept'), { method: 'POST', body: '{}' })
 }
 
-/** Thợ tự nhận phiếu mẹ đang chờ Đánh bóng / Xi — nhận là vào làm ngay. */
+/** Thợ tự nhận phiếu mẹ đang chờ Khắc / Đánh bóng / Xi — nhận là vào làm ngay. */
 export function claimOrderApi(code: string) {
   return orderFetch(orderPath(code, '/work/claim'), { method: 'POST', body: '{}' })
 }
 
-/** Thợ tự nhận phiếu con đang chờ Đánh bóng / Xi — nhận là vào làm ngay. */
+/** Thợ tự nhận phiếu con đang chờ Khắc / Đánh bóng / Xi — nhận là vào làm ngay. */
 export function claimSubTicketApi(code: string, no: number) {
   return orderFetch(ticketPath(code, no, '/claim'), { method: 'POST', body: '{}' })
 }

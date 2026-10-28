@@ -186,7 +186,12 @@ export function rejectIntakeOrderApi(id: string, payload: { reason?: string }) {
 
 export function attachIntakeModel3dApi(
   id: string,
-  payload: { model3dUrl: string; stoneCount3d?: number | null; stoneWeight3dGram?: number | null },
+  payload: {
+    model3dUrl: string
+    images: OrderImage[]
+    stoneCount3d?: number | null
+    stoneWeight3dGram?: number | null
+  },
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/model-3d`, {
     method: 'POST',

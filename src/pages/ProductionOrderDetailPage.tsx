@@ -276,7 +276,7 @@ export function ProductionOrderDetailPage() {
   // Tự lấy khâu kế tiếp; đơn làm lại bắt đầu từ khâu mặc định, bỏ Vào đá nếu không có đá.
   const parentNextStage = parentOpenableStages.find((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
   const parentDialogStages: StageCode[] = parentNextStage ? [parentNextStage] : []
-  // Thủ kho chỉ định thợ (Nguội, Vào đá, Giao Khắc); Đánh bóng / Xi thợ tự nhận nên chỉ mở lại khâu.
+  // Thủ kho chỉ định thợ (Nguội, Vào đá); Khắc / Đánh bóng / Xi thợ tự nhận nên chỉ mở lại khâu.
   const parentReceiptStages = parentDialogStages.filter((stage) => !isSelfTakeStage(stage))
   const parentReceiptPending = Boolean(parentWork?.receiptPrepared)
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
@@ -468,6 +468,10 @@ export function ProductionOrderDetailPage() {
               <Stack spacing={2} sx={{ mt: 2 }}>
                 <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
                 <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
+                {/* Đơn cũ / đơn có khuôn không qua bước gắn 3D nên không có ảnh — ẩn hẳn cho gọn. */}
+                {order.images.some((image) => image.kind === 'MODEL_3D') ? (
+                  <Gallery label="Ảnh file 3D" images={order.images.filter((image) => image.kind === 'MODEL_3D')} />
+                ) : null}
               </Stack>
             </Section>
           ) : null}
@@ -507,7 +511,7 @@ export function ProductionOrderDetailPage() {
                         Quy trình trên phiếu mẹ
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Thủ kho giao Nguội / Vào đá / Khắc cho thợ; Đánh bóng / Xi thợ tự nhận phiếu {order.code} ở “Phiếu của tôi”.
+                        Thủ kho giao Nguội / Vào đá cho thợ; Khắc / Đánh bóng / Xi thợ tự nhận phiếu {order.code} ở “Phiếu của tôi”.
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -576,9 +580,7 @@ export function ProductionOrderDetailPage() {
                             >
                               {parentReworking
                                 ? 'Chọn khâu'
-                                : parentReceiptStages[0] === 'ENGRAVING'
-                                  ? 'Giao Khắc'
-                                  : parentReceiptStages.length > 0
+                                : parentReceiptStages.length > 0
                                     ? 'Giao khâu cho thợ'
                                     : 'Mở khâu cho thợ nhận'}
                             </Button>
@@ -998,6 +1000,7 @@ export function ProductionOrderDetailPage() {
 
       <KeeperConfirmDialog
         entry={keeperTarget}
+        skipsStone={skipsStone(order)}
         ticketCode={
           order.subTickets.find((ticket) => ticket.no === keeperTarget?.subTicketNo)?.code ?? order.code
         }
