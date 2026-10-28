@@ -47,6 +47,13 @@ import {
   workerStagesForSave,
   type StaffJobPreset,
 } from '../auth/staffJobPresets'
+import {
+  departmentOptions,
+  isWorkerPosition,
+  POSITION_OPTIONS,
+  positionLabel,
+  SKILL_LEVELS,
+} from '../auth/staffPositions'
 import { STAGE_LABEL } from '../orders/catalog'
 import {
   DataTable,
@@ -130,6 +137,18 @@ export function UsersPage() {
         render: (row) => staffJobLabel(row),
       },
       { key: 'department', header: 'Bộ phận', sortable: true },
+      {
+        key: 'position',
+        header: 'Vị trí',
+        sortable: true,
+        render: (row) => positionLabel(row.position) || '—',
+      },
+      {
+        key: 'skillLevel',
+        header: 'Bậc tay nghề',
+        sortable: true,
+        render: (row) => (row.skillLevel != null ? `Bậc ${row.skillLevel}` : '—'),
+      },
       {
         key: 'workerStages',
         header: 'Khâu thợ',
@@ -232,6 +251,10 @@ type UserFormValues = {
   password: string
   staffJob: StaffJobPreset
   department: string
+  /** Vị trí công việc (mã), '' = chưa có. Chỉ để hiển thị. */
+  position: string
+  /** Bậc tay nghề 1–5, chỉ khi vị trí là thợ; '' = chưa có. */
+  skillLevel: number | ''
   /** Màn hình menu được tích thêm (quyền công đoạn đi theo vai trò). */
   screens: PermissionCode[]
   /** Vai trò thêm ngoài vai trò chính — mọi vai trò trừ VCB. '' = ô vừa thêm, chưa chọn. */
@@ -413,8 +436,36 @@ const EMPTY_USER: UserFormValues = {
   password: '',
   staffJob: 'kcs',
   department: '',
+  position: '',
+  skillLevel: '',
   screens: [],
   extraRoles: [],
+}
+
+/** Vị trí công việc + bậc tay nghề (chỉ khi vị trí là thợ). Chỉ để hiển thị, không đổi quyền. */
+function PositionFields() {
+  const form = useFormContext<UserFormValues>()
+  const position = useWatch({ control: form.control, name: 'position' })
+  const worker = isWorkerPosition(position)
+  return (
+    <FormRow>
+      <FormSelect<UserFormValues>
+        name="position"
+        label="Vị trí"
+        options={[...POSITION_OPTIONS]}
+        clearable
+        helperText="Chỉ để hiển thị, không đổi quyền — quyền theo Vai trò"
+      />
+      {worker ? (
+        <FormSelect<UserFormValues, number>
+          name="skillLevel"
+          label="Bậc tay nghề"
+          options={SKILL_LEVELS.map((level) => ({ value: level, label: `Bậc ${level}` }))}
+          clearable
+        />
+      ) : null}
+    </FormRow>
+  )
 }
 
 const USERNAME_TAKEN_MESSAGE = 'Tài khoản đã tồn tại'
@@ -483,6 +534,8 @@ function CreateUserDialog({
         password: values.password,
         roleCode: roleCodeForPresets(picked),
         department: values.department.trim() || undefined,
+        position: values.position || undefined,
+        skillLevel: isWorkerPosition(values.position) && values.skillLevel !== '' ? values.skillLevel : undefined,
         allowedScreens: allowedScreensForSave(picked, values.screens),
         workerStages: workerStagesForSave(picked),
       })
@@ -539,8 +592,9 @@ function CreateUserDialog({
               options={STAFF_JOB_FORM_SELECT}
               required
             />
-            <FormTextField<UserFormValues> name="department" label="Bộ phận" />
+            <FormSelect<UserFormValues> name="department" label="Bộ phận" options={departmentOptions(null)} clearable />
           </FormRow>
+          <PositionFields />
           <Typography variant="body2" color="text.secondary">
             {staffJobPresetHint(staffJob)}
           </Typography>
@@ -594,6 +648,8 @@ function EditUserDialog({
       password: '',
       staffJob: primary,
       department: user.department ?? '',
+      position: user.position ?? '',
+      skillLevel: user.skillLevel ?? '',
       screens: isAdmin ? [] : screensFromUserForPreset(user, loaded),
       extraRoles: rest,
       editReason: '',
@@ -618,6 +674,8 @@ function EditUserDialog({
         // Role Admin không đổi được ở đây (BE giữ nguyên); Admin vẫn lưu được vai trò kiêm.
         roleCode: isAdmin ? undefined : roleCodeForPresets(picked),
         department: values.department.trim(),
+        position: values.position,
+        skillLevel: isWorkerPosition(values.position) && values.skillLevel !== '' ? values.skillLevel : null,
         password: values.password.trim() || undefined,
         allowedScreens: allowedScreensForSave(picked, values.screens),
         workerStages: workerStagesForSave(picked),
@@ -653,7 +711,7 @@ function EditUserDialog({
               helperText="Để trống nếu không đổi."
               rules={{
                 validate: (value) =>
-                  !value || value.length >= 6 || 'Tối thiểu 6 ký tự',
+                  !value || String(value).length >= 6 || 'Tối thiểu 6 ký tự',
               }}
             />
           </FormRow>
@@ -665,8 +723,14 @@ function EditUserDialog({
               required
               disabled={isAdmin}
             />
-            <FormTextField<EditUserFormValues> name="department" label="Bộ phận" />
+            <FormSelect<EditUserFormValues>
+              name="department"
+              label="Bộ phận"
+              options={departmentOptions(user?.department)}
+              clearable
+            />
           </FormRow>
+          <PositionFields />
           {isAdmin ? (
             <Typography variant="body2" color="text.secondary">
               Tài khoản Admin luôn xem được mọi màn hình.

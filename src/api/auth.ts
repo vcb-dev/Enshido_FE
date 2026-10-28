@@ -197,6 +197,10 @@ export type UserRow = {
   extraRoles?: RoleCode[]
   allowedScreens?: string[]
   department: string | null
+  /** Vị trí công việc (mã), chỉ để hiển thị. */
+  position?: string | null
+  /** Bậc tay nghề 1–5, chỉ khi vị trí là thợ. */
+  skillLevel?: number | null
   /** Khâu thợ được nhận trên phiếu (Nguội, Vào đá…). */
   workerStages?: StageCode[]
   isActive: boolean
@@ -213,6 +217,8 @@ export async function createUserApi(payload: {
   fullName: string
   roleCode: RoleCode
   department?: string
+  position?: string
+  skillLevel?: number
   allowedScreens?: string[]
   workerStages?: StageCode[]
 }) {
@@ -228,6 +234,10 @@ export async function updateUserApi(
     fullName?: string
     roleCode?: RoleCode
     department?: string
+    /** '' = bỏ vị trí. */
+    position?: string
+    /** null = bỏ bậc. */
+    skillLevel?: number | null
     isActive?: boolean
     password?: string
     allowedScreens?: string[]
