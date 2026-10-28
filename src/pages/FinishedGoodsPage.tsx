@@ -59,6 +59,8 @@ type OutboundMoveRow = {
   shipmentCode: string
   shippedAt: string
   sku: string
+  /** Mã đơn hàng DH… hiển thị; sku (mã SX) dùng làm đường dẫn. */
+  intakeCode: string | null
   name: string
   qty: string
   unitPrice: string
@@ -545,7 +547,7 @@ function FinishedGoodsOutboundTable() {
     return moves.filter((row) => {
       if (
         nameQuery &&
-        ![row.name, row.sku, row.shipmentCode, row.receivedBy].some((field) =>
+        ![row.name, row.sku, row.intakeCode ?? '', row.shipmentCode, row.receivedBy].some((field) =>
           field.toLocaleLowerCase('vi').includes(nameQuery),
         )
       ) {
@@ -687,6 +689,7 @@ function flattenShipments(items: ShipmentListRow[]): OutboundMoveRow[] {
       shipmentCode: shipment.code,
       shippedAt: shipment.shippedAt,
       sku: line.orderCode,
+      intakeCode: line.intakeCode,
       name: line.description,
       qty: line.qty,
       unitPrice: line.unitPrice,
@@ -1330,14 +1333,17 @@ function outboundColumns(
     },
     {
       key: 'sku',
-      header: profile.skuLabel,
+      header: 'Mã đơn hàng',
       width: 110,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
-      render: (row) => (
-        <Link component={RouterLink} to={`/orders/${row.sku}`} sx={{ fontWeight: 700 }}>
-          {row.sku}
-        </Link>
-      ),
+      render: (row) =>
+        row.intakeCode ? (
+          <Link component={RouterLink} to={`/orders/${row.sku}`} sx={{ fontWeight: 700 }}>
+            {row.intakeCode}
+          </Link>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'name',
@@ -1358,7 +1364,7 @@ function outboundColumns(
     },
     {
       key: 'unitPrice',
-      header: 'Đơn giá bán',
+      header: 'Đơn giá xuất kho',
       width: 120,
       numeric: true,
       render: (row) => formatMoney(row.unitPrice),

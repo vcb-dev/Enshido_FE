@@ -302,11 +302,14 @@ export function ProductionOrderDetailPage() {
     !order.lastPrintedAt &&
     (order.status === 'NEW' || (isBtp && order.status === 'WAIT_FILING'))
   const ticketStale = order.lastPrintedAt != null && order.dataChangedAt > order.lastPrintedAt
+  // Đầu trang ưu tiên mã đơn hàng DH… như danh sách; lệnh bù dùng chung mã DH với đơn gốc nên giữ mã lệnh.
+  const intakeOrderCode = order.reworkOfOrderId ? null : order.intakeOrderCode?.trim() || null
+  const headerCode = intakeOrderCode ?? order.intakeSxCode ?? order.code
 
   return (
     <Stack spacing={1.5} sx={{ pb: 3 }}>
       <PageHeader
-        title={`Lệnh ${order.intakeSxCode || order.code}`}
+        title={intakeOrderCode ? `Đơn hàng ${intakeOrderCode}` : `Lệnh ${headerCode}`}
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
             <StatusChip status={order.status} size="medium" />
@@ -320,7 +323,7 @@ export function ProductionOrderDetailPage() {
             <Link component={RouterLink} to="/orders" underline="hover" color="inherit">
               Lệnh sản xuất
             </Link>
-            <Typography color="text.primary">{order.intakeSxCode || order.code}</Typography>
+            <Typography color="text.primary">{headerCode}</Typography>
           </Breadcrumbs>
         }
         actions={
@@ -1586,6 +1589,7 @@ function OverviewSummary({ order }: { order: ProductionOrderDetail }) {
 
 function InfoGrid({ order }: { order: ProductionOrderDetail }) {
   const orderFields: Array<[string, ReactNode]> = [
+    ['Mã đơn hàng', order.intakeOrderCode],
     ['Ngày đặt đơn', formatStockedDate(order.receivedDate)],
     ['Ngày cần trả', order.dueDate ? formatStockedDate(order.dueDate) : null],
     ['Số lượng', `${order.qty}${order.qtyUnit ? ` ${order.qtyUnit}` : ''} · đã trả ${order.returnedQty}`],
