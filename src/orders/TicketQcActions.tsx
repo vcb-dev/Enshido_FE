@@ -67,7 +67,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
           ))}
         </Stack>
       ) : null}
-      <KeeperConfirmDialog entry={target} ticketCode={ticketCode} saving={confirm.isPending}
+      <KeeperConfirmDialog entry={target} ticketCode={ticketCode} metalType={order.metalType} saving={confirm.isPending}
         onClose={() => setTarget(null)}
         onConfirm={(entry) => confirm.mutate(entry, {
           onSuccess: () => {

@@ -1,6 +1,6 @@
 import { apiFetch } from './auth'
 import type { StockSnapshot } from './inventory'
-import type { IntakeOrder, IntakeOrderStatus } from './intakeOrders'
+import type { IntakeOrder, IntakeOrderStatus, OrderMetalType } from './intakeOrders'
 
 export type PreProductionStatus =
   | 'PENDING_APPROVAL'
@@ -84,6 +84,8 @@ export type ProductionOrderRow = {
   intakeSxCode?: string | null
   /** Mã đơn hàng DH… trên cùng phiếu sản xuất. */
   intakeOrderCode?: string | null
+  /** Loại vàng/bạc chọn lúc tạo đơn; null = đơn cũ, tính là bạc. */
+  metalType?: OrderMetalType | null
   closedBy: string
   customerName: string | null
   /** Mã khách tự đặt cho sản phẩm, nhập từ form tạo đơn. */

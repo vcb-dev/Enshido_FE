@@ -40,6 +40,16 @@ export const ORDER_METAL_TYPE_LABELS: Record<OrderMetalType, string> = {
   GOLD_24K: 'Vàng 24k',
 }
 
+export const GOLD_METAL_TYPES: OrderMetalType[] = ['GOLD_10K', 'GOLD_14K', 'GOLD_18K', 'GOLD_24K']
+
+export const isGoldMetal = (metalType: OrderMetalType | null | undefined) =>
+  metalType != null && GOLD_METAL_TYPES.includes(metalType)
+
+/** Mã NVL nhận kim loại thu hồi theo kim loại của đơn — khớp BE `recoveredMaterialName`. */
+export function recoveredMaterialName(metalType: OrderMetalType | null | undefined) {
+  return isGoldMetal(metalType) ? `Vàng ${metalType!.slice(5)} thu hồi` : 'Bạc thu hồi / đầu cây S925'
+}
+
 export type IntakeOrder = {
   reworkOfOrderId?: string | null
   id: string

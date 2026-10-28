@@ -1,4 +1,5 @@
 import { apiFetch } from './auth'
+import type { OrderMetalType } from './intakeOrders'
 import type { StageCode } from './productionOrders'
 
 const BASE = '/loss-reports'
@@ -17,6 +18,9 @@ export const LOSS_STAGE_LABEL: Record<LossStage, string> = {
 }
 
 export const LOSS_METAL_LABEL: Record<LossMetal, string> = { SILVER: 'Bạc', GOLD: 'Vàng' }
+
+/** Tên cột TL giao theo kim loại — bạc và vàng tính riêng. */
+export const lossInHeader = (metal: LossMetal) => `Tổng trọng lượng nguyên liệu ${LOSS_METAL_LABEL[metal].toLowerCase()} được giao`
 
 /** Các vế theo cột tab BÁO CÁO: giao = hàng trả + BTP thu hồi + NVL thu hồi (+ mạt) + hao hụt. Số gram dạng chuỗi. */
 export type LossSums = {
@@ -82,7 +86,7 @@ export type WeeklyLossReport = {
 }
 
 /** `from` / `to`: ngày bất kỳ trong tuần đầu / tuần cuối (YYYY-MM-DD). */
-export function getWeeklyLossApi(params: { from: string; to: string }) {
+export function getWeeklyLossApi(params: { from: string; to: string; metal: LossMetal }) {
   const query = new URLSearchParams(params)
   return apiFetch<WeeklyLossReport>(`${BASE}/weekly?${query.toString()}`)
 }
@@ -112,6 +116,9 @@ export function getScrapWorkersApi() {
 export function createScrapReturnApi(payload: {
   craftsmanUserId: string
   week: string
+  metal: LossMetal
+  /** Bắt buộc với mạt vàng — mỗi tuổi một mã NVL thu hồi. */
+  goldType?: OrderMetalType
   weightGram: number
   note?: string
 }) {

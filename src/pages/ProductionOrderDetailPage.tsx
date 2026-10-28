@@ -998,6 +998,7 @@ export function ProductionOrderDetailPage() {
 
       <KeeperConfirmDialog
         entry={keeperTarget}
+        metalType={order.metalType}
         ticketCode={
           order.subTickets.find((ticket) => ticket.no === keeperTarget?.subTicketNo)?.code ?? order.code
         }

@@ -31,8 +31,11 @@ import { formatQty } from '../api/inventory'
 import {
   deleteScrapReturnApi,
   getWeeklyLossApi,
+  lossInHeader,
+  LOSS_METAL_LABEL,
   LOSS_STAGE_LABEL,
   type LossItem,
+  type LossMetal,
   type LossSums,
   type LossWorkerRow,
   type WeeklyLossReport,
@@ -72,14 +75,16 @@ function lossColor(row: { lossPercent: string | null; limitPercent: string | nul
 }
 
 /**
- * Tab Hao hụt: báo cáo hao hụt bạc theo tuần của từng thợ ở từng khâu (tab BÁO CÁO trong mô tả luồng).
- * Xem một tuần như bảng Excel, hoặc so sánh nhiều tuần liền nhau; xuất Excel cả hai.
+ * Tab Hao hụt: báo cáo hao hụt theo tuần của từng thợ ở từng khâu (tab BÁO CÁO trong mô tả luồng).
+ * Bạc và vàng xem riêng, không cộng lẫn gram. Xem một tuần như bảng Excel, hoặc so sánh nhiều tuần
+ * liền nhau; xuất Excel cả hai.
  */
 export function LossReportPanel() {
   const { user } = useAuth()
   const isKeeper = can(user, Permission.WAREHOUSE_KEEPER)
   const today = todayKey()
   const thisWeek = weekStart(today)
+  const [metal, setMetal] = useState<LossMetal>('SILVER')
   const [mode, setMode] = useState<Mode>('week')
   const [week, setWeek] = useState(thisWeek)
   const [compareFrom, setCompareFrom] = useState(addDays(thisWeek, -7 * (COMPARE_WEEKS - 1)))
@@ -93,8 +98,8 @@ export function LossReportPanel() {
       : { from: weekStart(compareFrom || thisWeek), to: weekStart(compareTo || thisWeek) }
   const validRange = range.from <= range.to
   const report = useQuery({
-    queryKey: ['loss-reports', 'weekly', range.from, range.to],
-    queryFn: () => getWeeklyLossApi(range),
+    queryKey: ['loss-reports', 'weekly', metal, range.from, range.to],
+    queryFn: () => getWeeklyLossApi({ ...range, metal }),
     enabled: validRange,
     placeholderData: keepPreviousData,
   })
@@ -102,10 +107,11 @@ export function LossReportPanel() {
 
   const exportExcel = () => {
     if (!data) return
+    const prefix = data.metal === 'GOLD' ? 'hao-hut-vang' : 'hao-hut-bac'
     const name =
       data.weeks.length === 1
-        ? `hao-hut-tuan-${data.weeks[0].start}`
-        : `hao-hut-${data.weeks[0].start}-den-${data.weeks[data.weeks.length - 1].start}`
+        ? `${prefix}-tuan-${data.weeks[0].start}`
+        : `${prefix}-${data.weeks[0].start}-den-${data.weeks[data.weeks.length - 1].start}`
     downloadXlsx(name, buildLossSheets(data))
   }
 
@@ -118,7 +124,7 @@ export function LossReportPanel() {
       >
         <Box>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Hao hụt bạc theo tuần
+            Hao hụt {LOSS_METAL_LABEL[metal].toLowerCase()} theo tuần
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1, justifyContent: { md: 'flex-end' } }}>
@@ -143,6 +149,15 @@ export function LossReportPanel() {
       </Stack>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: 'center' } }}>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={metal}
+          onChange={(_, value: LossMetal | null) => value && setMetal(value)}
+        >
+          <ToggleButton value="SILVER">{LOSS_METAL_LABEL.SILVER}</ToggleButton>
+          <ToggleButton value="GOLD">{LOSS_METAL_LABEL.GOLD}</ToggleButton>
+        </ToggleButtonGroup>
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -219,7 +234,12 @@ export function LossReportPanel() {
 
       <LossLimitsDialog open={limitsOpen} onClose={() => setLimitsOpen(false)} canEdit={isKeeper} />
       {isKeeper ? (
-        <ScrapReturnDialog open={scrapOpen} onClose={() => setScrapOpen(false)} defaultWeek={week} />
+        <ScrapReturnDialog
+          open={scrapOpen}
+          onClose={() => setScrapOpen(false)}
+          defaultWeek={week}
+          defaultMetal={metal}
+        />
       ) : null}
     </Paper>
   )
@@ -246,9 +266,9 @@ function SumsCells({ row, scrapGram }: { row: LossSums; scrapGram: string | null
   )
 }
 
-const WEEK_HEADERS = [
+const weekHeaders = (metal: LossMetal) => [
   'Số lượng sản phẩm trong tuần',
-  'Tổng trọng lượng nguyên liệu Bạc/Vàng được giao',
+  lossInHeader(metal),
   'Tổng trọng lượng trả lại',
   'Trọng lượng hàng trả (sản phẩm)',
   'Trọng lượng bán thành phẩm thu hồi (lưu kho để sử dụng sau)',
@@ -281,6 +301,8 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
       return next
     })
   const scraps = data.scrapReturns
+  const headers = weekHeaders(data.metal)
+  const metalLabel = LOSS_METAL_LABEL[data.metal].toLowerCase()
 
   return (
     <Stack spacing={2}>
@@ -289,7 +311,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
           <TableHead>
             <TableRow>
               <TableCell>Thợ</TableCell>
-              {WEEK_HEADERS.map((title) => (
+              {headers.map((title) => (
                 <TableCell key={title} className="num">
                   {title}
                 </TableCell>
@@ -299,7 +321,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
           <TableBody>
             {data.workers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={WEEK_HEADERS.length + 1}>
+                <TableCell colSpan={headers.length + 1}>
                   <Typography variant="body2" color="text.secondary">
                     Tuần này chưa có lượt khâu nào được chốt số.
                   </Typography>
@@ -352,11 +374,11 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
 
       <Box>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-          Mạt vụn đã nhận tuần này
+          Mạt vụn {metalLabel} đã nhận tuần này
         </Typography>
         {scraps.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            Chưa ghi mạt vụn nào cho tuần này.
+            Chưa ghi mạt vụn {metalLabel} nào cho tuần này.
           </Typography>
         ) : (
           <TableContainer sx={{ overflowX: 'auto' }}>
@@ -392,7 +414,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
                               onClick={async () => {
                                 const ok = await confirmDialog({
                                   title: 'Xoá phiếu mạt vụn?',
-                                  message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL bạc thu hồi đi kèm cũng bị gỡ.`,
+                                  message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL ${metalLabel} thu hồi đi kèm cũng bị gỡ.`,
                                   confirmLabel: 'Xoá',
                                   tone: 'error',
                                 })
