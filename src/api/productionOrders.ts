@@ -91,6 +91,8 @@ export type ProductionOrderRow = {
   /** Mã khách tự đặt cho sản phẩm, nhập từ form tạo đơn. */
   customerCode: string | null
   description: string
+  /** Ghi chú tự do ở cột Ghi chú — sửa là ghi đè cả đoạn. */
+  note?: string | null
   stoneColor: string | null
   stoneTypes: string[]
   size: string | null
@@ -1127,6 +1129,14 @@ export function markTicketPrintedApi(code: string) {
   return apiFetch<{ lastPrintedAt: string | null }>(orderPath(code, '/printed'), {
     method: 'POST',
     body: '{}',
+  })
+}
+
+/** Ghi đè ghi chú của lệnh (theo id — dòng đơn tạo chưa có mã lệnh riêng). Chuỗi rỗng = xoá. */
+export function updateProductionOrderNoteApi(id: string, note: string) {
+  return apiFetch<{ note: string | null }>(`${BASE}/notes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note }),
   })
 }
 

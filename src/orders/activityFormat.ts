@@ -13,6 +13,7 @@ export const ACTION_LABEL: Record<string, string> = {
   ORDER_FINISH: 'Hoàn thiện đơn',
   ORDER_UNDO_FINISH: 'Gỡ hoàn thiện',
   ORDER_PRINT: 'In phiếu mẹ',
+  ORDER_NOTE: 'Sửa ghi chú',
   COST_ADD: 'Thêm chi phí',
   COST_UPDATE: 'Sửa chi phí',
   COST_DELETE: 'Xoá chi phí',

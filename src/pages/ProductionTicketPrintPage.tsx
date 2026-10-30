@@ -296,6 +296,9 @@ function Ticket({
   ]
     .filter(Boolean)
     .join(' · ')
+  // Mã SX giống cột Mã SX trên danh sách lệnh; mã đơn hàng DH… ghi nhỏ ngay dưới (đơn lên thẳng thì không có).
+  const sxCode = order.intakeSxCode || order.code
+  const orderCode = order.intakeOrderCode?.trim() || null
   const productImages = order.images.filter((image) => image.kind === 'PRODUCT')
   const images = (productImages.length ? productImages : order.images).slice(0, 2)
 
@@ -333,7 +336,10 @@ function Ticket({
         <tbody>
           <tr>
             <Head>Mã Sản xuất:</Head>
-            <Head style={{ fontSize: '1.1em' }}>{subTicket ? subTicket.code : order.code}</Head>
+            <Head style={{ fontSize: '1.1em' }}>
+              {subTicket ? subTicket.code : sxCode}
+              {orderCode ? <Box sx={{ fontSize: '0.75em', fontWeight: 400 }}>{orderCode}</Box> : null}
+            </Head>
             <Head>Ngày đặt đơn:</Head>
             <Head style={{ color: BLUE }}>{ticketDay(order.receivedDate)}</Head>
             <Head>Ngày cần trả:</Head>
