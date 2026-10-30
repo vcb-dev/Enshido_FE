@@ -120,6 +120,15 @@ export type UpsertIntakeOrderPayload = {
   editReason?: string
 }
 
+/** BE chỉ sắp được theo mã đơn hàng (DH…); bỏ trống = mới tạo lên trước. */
+export type IntakeOrderSort = { key: 'code'; dir: 'asc' | 'desc' }
+
+function setIntakeSort(query: URLSearchParams, sort: IntakeOrderSort | undefined) {
+  if (!sort) return
+  query.set('sort', sort.key)
+  query.set('dir', sort.dir)
+}
+
 export function listIntakeOrdersApi(params: {
   status?: IntakeOrderStatus | ''
   unlinkedOnly?: boolean
@@ -128,6 +137,7 @@ export function listIntakeOrdersApi(params: {
   search?: string
   page: number
   pageSize: number
+  sort?: IntakeOrderSort
 }) {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
@@ -137,6 +147,7 @@ export function listIntakeOrdersApi(params: {
   if (params.search?.trim()) query.set('search', params.search.trim())
   query.set('page', String(params.page))
   query.set('pageSize', String(params.pageSize))
+  setIntakeSort(query, params.sort)
   return apiFetch<IntakeOrderList>(`/intake-orders?${query.toString()}`)
 }
 
@@ -153,12 +164,14 @@ export function getIntakePipelineListsApi(params: {
   requestType?: ProductionRequestType | ''
   search?: string
   pageSize?: number
+  sort?: IntakeOrderSort
 }) {
   const query = new URLSearchParams()
   if (params.rootsOnly) query.set('rootsOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
   if (params.pageSize != null) query.set('pageSize', String(params.pageSize))
+  setIntakeSort(query, params.sort)
   return apiFetch<IntakePipelineLists>(`/intake-orders/pipeline-lists?${query.toString()}`)
 }
 

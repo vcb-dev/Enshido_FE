@@ -201,6 +201,18 @@ const STICKY_TABLE_SX = {
   '& .col-filter-row .dt-sticky-end': { bgcolor: '#fff', backgroundColor: '#fff' },
 } as const
 
+/**
+ * Ghim cả khối tiêu đề thay cho `stickyHeader` của MUI: MUI ghim từng ô ở top 0 nên hàng lọc
+ * và hàng tiêu đề (hoặc hai hàng tiêu đề nhóm) chồng lên nhau khi cuộn.
+ */
+const STICKY_HEAD_SX = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 3,
+  // Nền như ô tiêu đề ghim của MUI trước đây — cuộn qua không lộ dòng bên dưới.
+  bgcolor: 'background.default',
+} as const
+
 const NUMERIC_SX = { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } as const
 
 const ELLIPSIS_SX = {
@@ -624,7 +636,6 @@ export function DataTable<T, S = never>({
         >
           <Table
             size={dense ? 'small' : 'medium'}
-            stickyHeader={stickyHeader && !flowMode}
             sx={{
               width: '100%',
               minWidth: fixedLayout ? fixedLayoutMinWidth(columns, leadCol ? leadColWidth : 0, minWidth) : minWidth,
@@ -642,7 +653,7 @@ export function DataTable<T, S = never>({
                 ))}
               </colgroup>
             ) : null}
-            <TableHead>
+            <TableHead sx={stickyHeader && !flowMode ? STICKY_HEAD_SX : undefined}>
               {showFilterRow ? (
                 <TableRow className="col-filter-row" sx={{ bgcolor: '#fff' }}>
                   {leadCol ? <TableCell sx={leadColSx} /> : null}

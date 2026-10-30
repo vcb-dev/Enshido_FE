@@ -12,6 +12,7 @@ import {
   getIntakePipelineListsApi,
   listIntakeOrdersApi,
   type IntakeOrder,
+  type IntakeOrderSort,
   type IntakeOrderStatus,
 } from '../api/intakeOrders'
 import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
@@ -74,6 +75,12 @@ import {
 import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
 import { deadlineWarning } from '../orders/deadline'
+import {
+  codeSortedProductionWindow,
+  intakeCodeNumber,
+  mergeCodeSortedPage,
+  sortByOrderCode,
+} from '../orders/orderCodeSort'
 
 type ProductionListChild = SubTicketSummary | ReworkChild
 
@@ -167,6 +174,13 @@ export function ProductionOrdersPage() {
       ? `${INTAKE_STATUS_FILTER_PREFIX}PENDING_APPROVAL`
       : params.status
   const search = useDebouncedValue(params.search, 300)
+  // Bảng có đơn tạo chỉ sắp được theo mã đơn hàng — hai nguồn cùng thứ tự DH… nên ghép đúng được.
+  const codeSortOnly = isMergedView || isIntakeOnlyView
+  const codeSort = useMemo<IntakeOrderSort | undefined>(
+    () => (params.sort === 'code' ? { key: 'code', dir: params.dir } : undefined),
+    [params.sort, params.dir],
+  )
+  const listSort = codeSortOnly ? (codeSort ? 'code' : '') : params.sort
 
   const listBaseParams = {
     groupReworks: isAllView,
@@ -174,18 +188,19 @@ export function ProductionOrdersPage() {
     requestType: params.requestType as ProductionRequestType | '',
     search,
     dueDate: params.dueDate,
-    sort: params.sort || undefined,
-    dir: params.sort ? params.dir : undefined,
+    sort: listSort || undefined,
+    dir: listSort ? params.dir : undefined,
   }
 
   const intakePipelineLists = useQuery({
-    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType, { rootsOnly: true }],
+    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType, { rootsOnly: true }, codeSort],
     queryFn: () =>
       getIntakePipelineListsApi({
         rootsOnly: true,
         requestType: params.requestType as ProductionRequestType | '',
         search,
         pageSize: 120,
+        sort: codeSort,
       }),
     placeholderData: keepPreviousData,
     enabled: isAllView,
@@ -215,22 +230,8 @@ export function ProductionOrdersPage() {
   const castDoneItems = intakePipelineLists.data?.CAST_DONE?.items ?? []
   const waitCoolingTotal = intakePipelineLists.data?.WAIT_COOLING?.total ?? 0
   const waitCoolingItems = intakePipelineLists.data?.WAIT_COOLING?.items ?? []
-  const intakeQueueItems = useMemo(
-    () =>
-      mergeIntakeQueueItems(
-        pendingItems,
-        approvedItems,
-        readyItems,
-        warehousePendingItems,
-        waxItems,
-        waxConfirmedItems,
-        waitCastingItems,
-        castingItems,
-        castPendingItems,
-        castDoneItems,
-        waitCoolingItems,
-      ),
-    [
+  const intakeQueueItems = useMemo(() => {
+    const items = mergeIntakeQueueItems(
       pendingItems,
       approvedItems,
       readyItems,
@@ -242,8 +243,22 @@ export function ProductionOrdersPage() {
       castPendingItems,
       castDoneItems,
       waitCoolingItems,
-    ],
-  )
+    )
+    return codeSort ? sortByOrderCode(items, (row) => intakeCodeNumber(row.code), codeSort.dir) : items
+  }, [
+    codeSort,
+    pendingItems,
+    approvedItems,
+    readyItems,
+    warehousePendingItems,
+    waxItems,
+    waxConfirmedItems,
+    waitCastingItems,
+    castingItems,
+    castPendingItems,
+    castDoneItems,
+    waitCoolingItems,
+  ])
   const intakeQueueTotal =
     pendingTotal +
     approvedTotal +
@@ -268,6 +283,7 @@ export function ProductionOrdersPage() {
       isCoolingView ? 120 : params.pageSize,
       search,
       params.requestType,
+      codeSort,
     ],
     queryFn: () =>
       listIntakeOrdersApi({
@@ -277,26 +293,36 @@ export function ProductionOrdersPage() {
         search,
         page: isCoolingView ? 1 : params.page,
         pageSize: isCoolingView ? 120 : params.pageSize,
+        sort: codeSort,
       }),
     placeholderData: keepPreviousData,
     enabled: isIntakeOnlyView || isCoolingView,
     staleTime: 15_000,
   })
+  const mergeIntakeItems = useMemo(
+    () => (isCoolingView ? (intakeStatusList.data?.items ?? []) : intakeQueueItems),
+    [isCoolingView, intakeStatusList.data?.items, intakeQueueItems],
+  )
   const mergeSlice = useMemo(
     () =>
-      sliceMergedPage(
-        params.page,
-        params.pageSize,
-        isCoolingView ? (intakeStatusList.data?.items ?? []) : intakeQueueItems,
-        isCoolingView ? (intakeStatusList.data?.total ?? 0) : intakeQueueTotal,
-      ),
+      codeSort
+        ? {
+            pendingOnPage: [],
+            ...codeSortedProductionWindow(params.page, params.pageSize, mergeIntakeItems.length),
+          }
+        : sliceMergedPage(
+            params.page,
+            params.pageSize,
+            mergeIntakeItems,
+            isCoolingView ? (intakeStatusList.data?.total ?? 0) : intakeQueueTotal,
+          ),
     [
+      codeSort,
       isCoolingView,
-      intakeStatusList.data?.items,
       intakeStatusList.data?.total,
       params.page,
       params.pageSize,
-      intakeQueueItems,
+      mergeIntakeItems,
       intakeQueueTotal,
     ],
   )
@@ -501,8 +527,10 @@ export function ProductionOrdersPage() {
             />
           ),
         },
+        codeSortOnly,
       ),
     [
+      codeSortOnly,
       confirmWarehouse.isPending,
       confirmWarehouse.variables,
       isIntakeWarehouseKeeper,
@@ -529,6 +557,18 @@ export function ProductionOrdersPage() {
     }
     if (!isMergedView) return (list.data?.items ?? []).map((row) => ({ kind: 'order' as const, row }))
     const productionIds = new Set(prodPageItems.map((row) => row.id))
+    if (codeSort) {
+      return mergeCodeSortedPage({
+        page: params.page,
+        pageSize: params.pageSize,
+        dir: codeSort.dir,
+        intake: mergeIntakeItems,
+        intakeKey: (row) => intakeCodeNumber(row.code),
+        production: prodPageItems,
+        productionKey: (row) => intakeCodeNumber(row.intakeOrderCode),
+        prodStart: mergeSlice.prodStart,
+      }).filter((item) => item.kind === 'order' || !productionIds.has(item.row.id))
+    }
     return [
       ...mergeSlice.pendingOnPage
         .filter((row) => !productionIds.has(row.id))
@@ -536,11 +576,16 @@ export function ProductionOrdersPage() {
       ...prodPageItems.map((row) => ({ kind: 'order' as const, row })),
     ]
   }, [
+    codeSort,
     isIntakeOnlyView,
     isMergedView,
     intakeStatusList.data?.items,
     list.data?.items,
+    mergeIntakeItems,
     mergeSlice.pendingOnPage,
+    mergeSlice.prodStart,
+    params.page,
+    params.pageSize,
     prodPageItems,
   ])
   const tableTotal = isIntakeOnlyView
@@ -613,8 +658,8 @@ export function ProductionOrdersPage() {
         variant="grid"
         fixedLayout
         minWidth={1596}
-        sort={isMergedView || isIntakeOnlyView ? undefined : table.sortState}
-        onSortChange={isMergedView || isIntakeOnlyView ? undefined : table.toggleSort}
+        sort={codeSortOnly && !codeSort ? undefined : table.sortState}
+        onSortChange={table.toggleSort}
         page={params.page}
         pageSize={params.pageSize}
         total={tableTotal}
@@ -941,6 +986,8 @@ function orderColumns(
     }
     dueDate: ReactNode
   },
+  /** Bảng có đơn tạo: chỉ cột Mã đơn hàng bấm sắp xếp được. */
+  codeSortOnly: boolean,
 ): Column<ProductionListRow, ProductionListChild>[] {
   const columns: Column<ProductionListRow, SubTicketSummary>[] = [
     {
@@ -1205,6 +1252,7 @@ function orderColumns(
   ]
   return columns.map((column) => ({
     ...column,
+    sortable: column.sortable && (!codeSortOnly || column.key === 'code'),
     renderSub: (sub: ProductionListChild, parent: ProductionListRow) => {
       if (!('intake' in sub)) return column.renderSub?.(sub, parent)
       const intake = sub.intake
