@@ -2,6 +2,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import type {
   IntakeOrder,
   IntakeOrderList,
+  IntakeOrderSort,
   IntakeOrderStatus,
   IntakePipelineLists,
 } from '../api/intakeOrders'
@@ -102,7 +103,7 @@ function listKeyMatchesStatus(queryKey: QueryKey, status: IntakeOrderStatus) {
   return LIST_SLOT_STATUS[slot] === status
 }
 
-/** Màn Tạo đơn: `['intake-orders', page, pageSize, status, search]`. */
+/** Màn Tạo đơn: `['intake-orders', page, pageSize, status, search, sort, requestType]`. */
 function isCatalogListKey(queryKey: QueryKey) {
   const slot = queryKey[1]
   if (typeof slot === 'number') return true
@@ -135,6 +136,8 @@ function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
   if (order.reworkOfOrderId) return false
   const statusFilter = String(queryKey[3] ?? '')
   if (statusFilter && statusFilter !== order.status) return false
+  const requestType = String(queryKey[6] ?? '')
+  if (requestType && requestType !== order.requestType) return false
   const search = String(queryKey[4] ?? '').trim().toLowerCase()
   if (!search) return true
   const hay = [order.code, order.sxCode, order.productName, order.description, order.trackingCode]
@@ -169,6 +172,9 @@ function reconcileOrderInList(
   // Đơn mới lên đầu trang 1 — trang sau để refetch, tránh nhảy sai trang.
   if (isCatalogListKey(queryKey) && Number(queryKey[1]) !== 1) return undefined
   if (isStatusListKey(queryKey) && Number(queryKey[3]) !== 1) return undefined
+  // Đang sắp mã tăng dần thì đơn mới thuộc cuối danh sách — để refetch.
+  const sort = queryKey[isCatalogListKey(queryKey) ? 5 : 7] as IntakeOrderSort | undefined
+  if (sort?.dir === 'asc') return undefined
   return { ...old, items: [order, ...old.items], total: old.total + 1 }
 }
 

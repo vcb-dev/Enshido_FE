@@ -151,20 +151,37 @@ export function IntakeOrdersPage() {
   const customer = isCustomerOnly(user)
   const table = useTableParams({
     pageSize: 25,
-    filters: { status: '' as IntakeOrderStatus | '', search: '' },
+    filters: {
+      status: '' as IntakeOrderStatus | '',
+      requestType: '' as ProductionRequestType | '',
+      search: '',
+    },
   })
   const { params } = table
   const [deleteTarget, setDeleteTarget] = useState<IntakeOrder | null>(null)
   const [viewTarget, setViewTarget] = useState<IntakeOrder | null>(null)
 
+  // BE chỉ sắp được theo mã đơn hàng; chưa bấm cột thì mới tạo lên trước.
+  const sort = params.sort === 'code' ? { key: 'code' as const, dir: params.dir } : undefined
+
   const list = useQuery({
-    queryKey: ['intake-orders', params.page, params.pageSize, params.status, params.search],
+    queryKey: [
+      'intake-orders',
+      params.page,
+      params.pageSize,
+      params.status,
+      params.search,
+      sort,
+      params.requestType,
+    ],
     queryFn: () =>
       listIntakeOrdersApi({
         status: params.status,
+        requestType: params.requestType,
         search: params.search,
         page: params.page,
         pageSize: params.pageSize,
+        sort,
         // Lệnh bù chỉ hiện ở Lệnh sản xuất (dưới đơn gốc), không phải một đơn đặt hàng mới.
         rootsOnly: true,
       }),
@@ -219,6 +236,7 @@ export function IntakeOrdersPage() {
         key: 'code',
         header: 'Mã đơn hàng',
         width: 100,
+        sortable: true,
         render: (row) => row.code,
         filter: (
           <ColumnHeaderSearch
@@ -262,6 +280,15 @@ export function IntakeOrdersPage() {
         key: 'requestType',
         header: 'Loại đơn hàng',
         width: 140,
+        filter: (
+          <ColumnHeaderFilter
+            valueId={params.requestType}
+            onChange={(requestType) =>
+              table.setFilter({ requestType: requestType as ProductionRequestType | '' })
+            }
+            options={REQUEST_TYPES.map((type) => ({ id: type, name: REQUEST_TYPE_META[type].label }))}
+          />
+        ),
         render: (row) => <RequestTypeChip type={row.requestType} />,
       },
       {
@@ -349,7 +376,7 @@ export function IntakeOrdersPage() {
         ),
       },
     ],
-    [customer, dialog.openEdit, params.search, params.status, table],
+    [customer, dialog.openEdit, params.requestType, params.search, params.status, table],
   )
 
   return (
@@ -370,7 +397,7 @@ export function IntakeOrdersPage() {
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
         emptyText={
-          params.search || params.status
+          params.search || params.status || params.requestType
             ? 'Không có đơn khớp bộ lọc.'
             : 'Chưa có đơn. Bấm Tạo đơn mới.'
         }
@@ -380,6 +407,8 @@ export function IntakeOrdersPage() {
         cardBreakpoint={false}
         showIndex
         indexOffset={(params.page - 1) * params.pageSize}
+        sort={sort ? table.sortState : undefined}
+        onSortChange={table.toggleSort}
         page={params.page}
         pageSize={params.pageSize}
         total={list.data?.total ?? 0}
