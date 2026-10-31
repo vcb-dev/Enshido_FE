@@ -157,6 +157,11 @@ export function isStoneMaterial(material: { unit?: string | null; metalKind?: st
   )
 }
 
+/** Mã tính theo gram (không gồm ct): SL chính là TL. */
+export function isGramUnit(unit: string | null | undefined) {
+  return ['g', 'gr', 'gram', 'grams', 'gam'].includes((unit ?? '').trim().toLowerCase())
+}
+
 const round4 = (n: number) => Math.round(n * 10000) / 10000
 
 /** TL g (từ API) → ct, dạng số chuỗi để điền vào ô nhập. Trống / không hợp lệ → ''. */

@@ -14,6 +14,7 @@ import {
   formatCt,
   ctToGram,
   gramToCt,
+  isGramUnit as isGramUnitName,
   isStoneMaterial,
   formatStockedDate,
   getInventoryLookupsApi,
@@ -271,7 +272,11 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         (showUnit && params.unit) ||
         (outboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
-  const totals = filtering ? sumMoveTotals(lines) : apiTotals
+  // Kho NVL chính: mã tính theo gram chỉ hiện TL, SL để trống và không cộng vào tổng SL.
+  const totals =
+    filtering || warehouseCode === 'nvl-chinh'
+      ? sumMoveTotals(filtering ? lines : items, (row) => gramOnly(warehouseCode, row))
+      : apiTotals
 
   const outboundKey = ['warehouse-outbounds', warehouseCode] as const
 
@@ -354,12 +359,16 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     const stockOf = (row: OutboundGroup | OutboundRow) =>
       row.materialId ? stockById.get(row.materialId) : undefined
     // Đá hiện TL theo ct, mã khác theo g.
-    const weightText = (row: OutboundGroup | OutboundRow) =>
-      !row.gramQty
+    const weightText = (row: OutboundGroup | OutboundRow) => {
+      const gram = row.gramQty || (gramOnly(warehouseCode, row) ? row.qty : null)
+      return !gram
         ? '—'
         : isStoneMaterial({ unit: row.unit, metalKind: stockOf(row)?.metalKind })
-          ? formatCt(row.gramQty)
-          : `${formatQty(row.gramQty)} g`
+          ? formatCt(gram)
+          : `${formatQty(gram)} g`
+    }
+    const qtyText = (row: OutboundGroup | OutboundRow) =>
+      gramOnly(warehouseCode, row) ? '—' : formatQty(row.qty)
     const lineActions = (row: OutboundRow) => (
       <RowActions
         onView={() => openView(row)}
@@ -463,8 +472,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         width: 120,
         numeric: true,
         sortable: true,
-        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatQty(row.qty)),
-        renderSub: (line) => formatQty(line.qty),
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : qtyText(row)),
+        renderSub: (line) => qtyText(line),
       },
       ...(warehouseCode === 'nvl-chinh'
         ? [
@@ -1211,6 +1220,10 @@ function takeFifoLayers(
 }
 
 type OutboundGroup = OutboundRow & { lines: OutboundRow[] }
+
+/** Kho NVL chính, mã tính theo gram: SL trùng TL nên bảng chỉ hiện TL. */
+const gramOnly = (warehouseCode: string, row: { unit: string }) =>
+  warehouseCode === 'nvl-chinh' && isGramUnitName(row.unit)
 
 function sameValue(lines: OutboundRow[], pick: (row: OutboundRow) => string) {
   const first = pick(lines[0])

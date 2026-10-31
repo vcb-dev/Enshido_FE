@@ -112,9 +112,15 @@ export function uniqueFilterOptions(values: Array<string | null | undefined>) {
   return uniqueNameOptions(values).map((item) => ({ id: item.value, name: item.label }))
 }
 
-export function sumMoveTotals(rows: Array<{ qty: string; amount: string }>) {
+/** `skipQty`: dòng không hiện SL (mã gram ở Kho NVL chính) thì không cộng vào tổng SL. */
+export function sumMoveTotals<T extends { qty: string; amount: string }>(
+  rows: T[],
+  skipQty?: (row: T) => boolean,
+) {
   return {
-    qty: String(rows.reduce((acc, row) => acc + (Number(row.qty) || 0), 0)),
+    qty: String(
+      rows.reduce((acc, row) => acc + (skipQty?.(row) ? 0 : Number(row.qty) || 0), 0),
+    ),
     amount: String(rows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0)),
   }
 }

@@ -12,6 +12,7 @@ import {
   formatCt,
   ctToGram,
   gramToCt,
+  isGramUnit as isGramUnitName,
   isStoneMaterial,
   formatInboundDateTime,
   getInventoryLookupsApi,
@@ -236,7 +237,11 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         (showUnit && params.unit) ||
         (inboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
-  const totals = filtering ? sumMoveTotals(rows) : apiTotals
+  // Kho NVL chính: mã tính theo gram chỉ hiện TL, SL để trống và không cộng vào tổng SL.
+  const totals =
+    filtering || warehouseCode === 'nvl-chinh'
+      ? sumMoveTotals(filtering ? rows : items, (row) => gramOnly(warehouseCode, row))
+      : apiTotals
 
   const inboundKey = ['warehouse-inbounds', warehouseCode] as const
 
@@ -356,7 +361,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         width: 120,
         numeric: true,
         sortable: true,
-        render: (row: InboundRow) => formatQty(row.qty),
+        render: (row: InboundRow) => (gramOnly(warehouseCode, row) ? '—' : formatQty(row.qty)),
       },
       ...(warehouseCode === 'nvl-chinh'
         ? [
@@ -365,12 +370,14 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
               header: 'TL',
               width: 110,
               numeric: true,
-              render: (row: InboundRow) =>
-                !row.gramQty
+              render: (row: InboundRow) => {
+                const gram = row.gramQty || (gramOnly(warehouseCode, row) ? row.qty : null)
+                return !gram
                   ? '—'
                   : isStoneMaterial({ unit: row.unit, metalKind: stockOf(row)?.metalKind })
-                    ? formatCt(row.gramQty)
-                    : `${formatQty(row.gramQty)} g`,
+                    ? formatCt(gram)
+                    : `${formatQty(gram)} g`
+              },
             },
           ]
         : []),
@@ -592,6 +599,10 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     </Stack>
   )
 }
+
+/** Kho NVL chính, mã tính theo gram: SL trùng TL nên bảng chỉ hiện TL. */
+const gramOnly = (warehouseCode: string, row: { unit: string }) =>
+  warehouseCode === 'nvl-chinh' && isGramUnitName(row.unit)
 
 /** Mã tính theo gram / ct: TL suy từ SL — không nhập TL riêng. */
 const isGramUnit = (name: string | undefined) =>
