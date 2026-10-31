@@ -38,6 +38,7 @@ export function StockFigureGrid({
   notes,
   editableOpeningQty,
   orientation,
+  qtyLabel = 'SL',
 }: {
   values: StockFigures
   /** Hiện phụ đề công thức dưới tên nhóm (dùng trong hộp thoại). */
@@ -46,6 +47,8 @@ export function StockFigureGrid({
   editableOpeningQty?: { value: string; onChange: (value: string) => void }
   /** Bỏ trống thì tự chọn theo bề ngang màn hình. */
   orientation?: 'columns' | 'rows'
+  /** Nhãn dòng số lượng — mã gram / ct là trọng lượng ("TL (g)"). */
+  qtyLabel?: string
 }) {
   const isMobile = useIsMobile()
   const layout = orientation ?? (isMobile ? 'rows' : 'columns')
@@ -104,7 +107,7 @@ export function StockFigureGrid({
           {GROUPS.map((group) => (
             <GroupCell key={group.key} group={group} notes={showNotes} align="center" />
           ))}
-          <AxisCell label="SL" />
+          <AxisCell label={qtyLabel} />
           {GROUPS.map((group) => (
             <Fragment key={group.key}>{qtyCell(group.key)}</Fragment>
           ))}
@@ -116,7 +119,7 @@ export function StockFigureGrid({
       ) : (
         <>
           <CornerCell />
-          <AxisCell label="SL" align="right" />
+          <AxisCell label={qtyLabel} align="right" />
           <AxisCell label="TT" align="right" />
           {GROUPS.map((group) => (
             <Fragment key={group.key}>

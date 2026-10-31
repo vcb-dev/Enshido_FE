@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import { Box, Button, Chip, DialogActions, DialogContent, DialogTitle, Paper, Typography } from '@mui/material'
 import {
+  formatCt,
   formatMoney,
   formatQty,
+  isStoneMaterial,
   formatInboundDateTime,
   formatStockedDate,
   type InboundRow,
@@ -50,7 +52,8 @@ export function InboundView({
           <DetailFact label={profile.skuLabel} value={row.sku} />
           <DetailFact label={profile.nameLabel} value={row.name} />
           <DetailFact label="Đơn vị" value={row.unit} />
-          <DetailFact label="Số lượng" value={formatQty(row.qty)} />
+          {row.qty != null ? <DetailFact label="Số lượng" value={formatQty(row.qty)} /> : null}
+          {row.gramQty ? <DetailFact label="TL" value={weightText(row)} /> : null}
           <DetailFact label="Đơn giá" value={moneyOrDash(row.unitPrice || row.stockUnitPrice)} />
           <DetailFact label="Thành tiền" value={moneyOrDash(row.amount)} />
         </Box>
@@ -111,7 +114,8 @@ export function OutboundView({
           <DetailFact label={profile.skuLabel} value={row.sku} />
           <DetailFact label={profile.nameLabel} value={row.name} />
           <DetailFact label="Đơn vị" value={row.unit} />
-          <DetailFact label="Số lượng xuất" value={formatQty(row.qty)} />
+          {row.qty != null ? <DetailFact label="Số lượng xuất" value={formatQty(row.qty)} /> : null}
+          {row.gramQty ? <DetailFact label="TL xuất" value={weightText(row)} /> : null}
           <DetailFact label="Đơn giá xuất" value={outboundPrice(row)} />
           <DetailFact label="Thành tiền" value={moneyOrDash(row.amount)} />
         </Box>
@@ -169,4 +173,10 @@ function outboundPrice(row: OutboundRow) {
       .join('\n')
   }
   return moneyOrDash(row.inboundUnitPrice)
+}
+
+/** Mã gram / ct không ghi Số lượng — chỉ có TL; đá hiện theo ct, mã khác theo g. */
+function weightText(row: { unit: string; gramQty?: string | null }) {
+  if (!row.gramQty) return '—'
+  return isStoneMaterial({ unit: row.unit }) ? formatCt(row.gramQty) : `${formatQty(row.gramQty)} g`
 }

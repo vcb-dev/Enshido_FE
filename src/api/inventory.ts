@@ -154,7 +154,9 @@ export function formatQty(value: string) {
 }
 
 /** Dòng chỉ cân TL (không nhập SL) thì cột số lượng để trống. */
-export function formatQtyOrDash(qty: string, gram?: string | null) {
+export function formatQtyOrDash(qty: string | null, gram?: string | null) {
+  // Mã gram / ct không ghi Số lượng (null) — chỉ có TL.
+  if (qty == null) return '—'
   const n = Number(qty)
   const g = gram == null || gram === '' ? 0 : Number(gram)
   if (Number.isFinite(n) && n === 0 && Number.isFinite(g) && g > 0) return '—'
@@ -176,9 +178,15 @@ export function isStoneMaterial(material: { unit?: string | null; metalKind?: st
   )
 }
 
-/** Mã tính theo gram (không gồm ct): SL chính là TL. */
-export function isGramUnit(unit: string | null | undefined) {
-  return ['g', 'gr', 'gram', 'grams', 'gam'].includes((unit ?? '').trim().toLowerCase())
+/** Mã tính theo gram / ct chỉ ghi TL — không ghi Số lượng. */
+export function isWeightUnit(unit: string | null | undefined) {
+  return ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((unit ?? '').trim().toLowerCase())
+}
+
+/** Nhãn dòng số lượng của một mã: mã gram / ct là trọng lượng. */
+export function stockQtyLabel(unit: string | null | undefined) {
+  if (!isWeightUnit(unit)) return 'SL'
+  return unit?.trim().toLowerCase() === 'ct' ? 'TL (ct)' : 'TL (g)'
 }
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000
@@ -510,8 +518,11 @@ export type InboundRow = {
   sku: string | null
   unit: string
   unitId: string | null
-  qty: string
-  /** Trọng lượng nhập (g) — kho NVL chính; mã tính theo gram thì bằng SL. */
+  /** Số lượng — null với mã gram / ct (chỉ ghi TL). */
+  qty: string | null
+  /** Lượng tính kho theo đơn vị mã (gram → g, ct → ct, mã khác = SL). */
+  stockQty: string
+  /** Trọng lượng nhập (g) — kho NVL chính; mã gram / ct thì suy từ lượng tính kho. */
   gramQty?: string | null
   stockUnitPrice: string
   unitPrice: string
@@ -596,7 +607,10 @@ export type OutboundRow = {
   sku: string | null
   unit: string
   unitId: string | null
-  qty: string
+  /** Số lượng — null với mã gram / ct (chỉ ghi TL). */
+  qty: string | null
+  /** Lượng tính kho theo đơn vị mã (gram → g, ct → ct, mã khác = SL). */
+  stockQty: string
   /** Số gram xuất — chỉ dùng ở Kho NVL chính. */
   gramQty: string | null
   stockUnitPrice: string
@@ -666,8 +680,10 @@ export type OutboundDraftRow = {
   name: string
   sku: string | null
   unit: string
-  /** SL / TL gói còn đang giữ (đã trừ phần thợ trả giữa khâu). */
-  qty: string
+  /** SL gói còn đang giữ (đã trừ phần thợ trả giữa khâu) — null với mã gram / ct. */
+  qty: string | null
+  /** Lượng tính kho theo đơn vị mã. */
+  stockQty: string
   gramQty: string | null
   stoneCount: number | null
   earlyReturnedWeight: string | null
@@ -679,7 +695,7 @@ export type OutboundDraftRow = {
   /** Thợ xin thêm (true) hay cấp lúc chỉ định thợ. */
   fromRequest: boolean
   /** Phiếu xuất thật khi thủ kho xác nhận. */
-  posted: { stt: number; qty: string; gramQty: string | null } | null
+  posted: { stt: number; qty: string | null; stockQty: string; gramQty: string | null } | null
   closedAt: string | null
   closedByName: string | null
 }
