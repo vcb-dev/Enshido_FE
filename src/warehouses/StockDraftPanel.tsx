@@ -72,7 +72,8 @@ export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
         numeric: true,
         render: (row) => (
           <>
-            {formatQty(row.qty)} {row.unit}
+            {/* Mã ct không ghi Số lượng — chỉ có TL. */}
+            {row.qty != null ? `${formatQty(row.qty)} ${row.unit}` : '—'}
             {row.stoneCount != null && row.unit.trim().toLowerCase() !== 'viên' ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {row.stoneCount} viên
@@ -105,8 +106,11 @@ export function StockDraftPanel({ warehouseCode }: { warehouseCode: string }) {
             <Chip size="small" variant="outlined" color={STATUS_META[row.status].color} label={STATUS_META[row.status].label} />
             {row.posted ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Phiếu xuất STT {row.posted.stt}: {formatQty(row.posted.qty)} {row.unit}
-                {row.posted.gramQty ? ` · ${formatCt(row.posted.gramQty)}` : ''}
+                Phiếu xuất STT {row.posted.stt}:
+                {row.posted.qty != null ? ` ${formatQty(row.posted.qty)} ${row.unit}` : ''}
+                {row.posted.gramQty
+                  ? `${row.posted.qty != null ? ' ·' : ''} ${formatCt(row.posted.gramQty)}`
+                  : ''}
               </Typography>
             ) : null}
             {row.closedByName ? (

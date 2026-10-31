@@ -84,13 +84,14 @@ export function OrderCostingCard({ code }: { code: string }) {
               </Typography>
             ) : (
               <SimpleTable
-                head={['Ngày', 'Kho', 'NVL', 'SL', 'Đơn giá', 'Thành tiền']}
+                head={['Ngày', 'Kho', 'NVL', 'SL / TL', 'Đơn giá', 'Thành tiền']}
                 numericFrom={3}
                 rows={data.materials.map((item) => [
                   formatStockedDate(item.issuedAt),
                   item.warehouseName,
                   `${item.name}${item.isSilver ? ' (bạc)' : ''}`,
-                  `${formatQty(item.qty)} ${item.unit}`,
+                  // Mã gram / ct không ghi SL — hiện TL theo đơn vị mã.
+                  `${formatQty(item.qty ?? item.stockQty)} ${item.unit}`,
                   formatMoney(item.unitPrice),
                   formatMoney(item.amount),
                 ])}

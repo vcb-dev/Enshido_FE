@@ -14,6 +14,7 @@ import {
   ctToGram,
   gramToCt,
   isStoneMaterial,
+  isWeightUnit,
   formatInboundDateTime,
   getInventoryLookupsApi,
   getWarehouseInboundsApi,
@@ -357,6 +358,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         width: 120,
         numeric: true,
         sortable: true,
+        // Mã gram / ct không ghi Số lượng (null) — chỉ có TL.
         render: (row: InboundRow) => formatQtyOrDash(row.qty, row.gramQty),
       },
       ...(warehouseCode === 'nvl-chinh' || profile.showGramQty
@@ -594,9 +596,13 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   )
 }
 
-/** Mã tính theo gram / ct: TL suy từ SL — không nhập TL riêng. */
-const isGramUnit = (name: string | undefined) =>
-  ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((name ?? '').trim().toLowerCase())
+/** Mã gram / ct không ghi Số lượng: ô nhập chính là TL theo đơn vị mã. */
+const qtyLabel = (unitName: string | undefined) =>
+  !isWeightUnit(unitName)
+    ? 'Số lượng'
+    : unitName?.trim().toLowerCase() === 'ct'
+      ? 'TL (ct)'
+      : 'TL (g)'
 
 
 type InboundLineValues = {
@@ -711,7 +717,7 @@ function InboundDialog({
                   '',
                 otherClassId:
                   materials.find((item) => item.id === row.materialId)?.otherClassId ?? '',
-                qty: qtyFromApi(row.qty),
+                qty: qtyFromApi(row.stockQty),
                 gramQty: !row.gramQty
                   ? ''
                   : isStoneMaterial({
@@ -909,11 +915,11 @@ function InboundDialog({
                     />
                     <FormQtyField<InboundFormValues>
                       name={`lines.${index}.qty`}
-                      label="Số lượng"
+                      label={qtyLabel(units.find((unit) => unit.id === line?.unitId)?.name)}
                       required
                       readOnly={readOnly}
                       rules={{
-                        validate: (value) => (Number(value) || 0) > 0 || 'Số lượng phải lớn hơn 0',
+                        validate: (value) => (Number(value) || 0) > 0 || 'Phải lớn hơn 0',
                       }}
                     />
                     <FormMoneyField<InboundFormValues>
@@ -928,7 +934,7 @@ function InboundDialog({
                     />
                   </FormRow>
                   {(warehouseCode === 'nvl-chinh' || profile.showGramQty) &&
-                  !isGramUnit(units.find((unit) => unit.id === line?.unitId)?.name) ? (
+                  !isWeightUnit(units.find((unit) => unit.id === line?.unitId)?.name) ? (
                     <FormRow columns={4}>
                       <FormQtyField<InboundFormValues>
                         name={`lines.${index}.gramQty`}
@@ -1154,8 +1160,13 @@ function inboundOptimisticRow(
     sku: payload.sku ?? null,
     unit: extra.unit,
     unitId: payload.unitId ?? null,
-    qty: payload.qty,
-    gramQty: payload.gramQty ?? null,
+    qty: isWeightUnit(extra.unit) ? null : payload.qty,
+    stockQty: payload.qty,
+    gramQty: !isWeightUnit(extra.unit)
+      ? (payload.gramQty ?? null)
+      : extra.unit.trim().toLowerCase() === 'ct'
+        ? ctToGram(payload.qty)
+        : payload.qty,
     stockUnitPrice: payload.stockUnitPrice ?? '0',
     unitPrice: payload.unitPrice ?? '0',
     amount: payload.amount ?? '0',

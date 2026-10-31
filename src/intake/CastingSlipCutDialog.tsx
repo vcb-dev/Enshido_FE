@@ -7,15 +7,18 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
 import { useWatch } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
-import type {
-  CastingSlip,
-  CastingSlipImage,
-  ConfirmCastingSlipPayload,
-  CutCastingSlipItem,
+import {
+  listRestMaterialOptionsApi,
+  type CastingSlip,
+  type CastingSlipImage,
+  type ConfirmCastingSlipPayload,
+  type CutCastingSlipItem,
 } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
@@ -121,6 +124,13 @@ export function CastingSlipsCutDialog({
     )
   const form = useAppForm<Values>({ defaultValues: { slips: [] } })
   const watched = useWatch({ control: form.control, name: 'slips' })
+  // Form không chọn mã: BE nhập phần cây còn lại vào mã NVL mặc định — hiện tên để thủ kho biết.
+  const restMaterials = useQuery({
+    queryKey: ['casting-rest-material-options'],
+    queryFn: listRestMaterialOptionsApi,
+    enabled: slips.length > 0,
+  })
+  const restMaterialName = restMaterials.data?.defaultName ?? ''
 
   const slipKey = slips.map((slip) => slip.id).join(',')
   useEffect(() => {
@@ -275,28 +285,38 @@ export function CastingSlipsCutDialog({
                     />
                   </Stack>
                 ))}
-                <FormQtyField<Values>
-                  name={`slips.${slipIndex}.rest`}
-                  label="Phần cây còn lại (g)"
-                  required
-                  size="small"
-                  fullWidth
-                  disabled={busy}
-                  rules={{
-                    validate: (value, values) => {
-                      const restGram = gram(String(value ?? ''), true)
-                      if (restGram == null) return 'Nhập phần cây còn lại (g)'
-                      const blankTotal = values.slips[slipIndex].lines.reduce(
-                        (sum, line) => sum + (gram(line.weight, false) ?? 0),
-                        0,
-                      )
-                      if (tree > 0 && round4(restGram + blankTotal) > tree) {
-                        return `Tổng phôi và phần còn lại vượt cây sau đúc (${formatQty(String(tree))} g)`
-                      }
-                      return true
-                    },
-                  }}
-                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  <FormQtyField<Values>
+                    name={`slips.${slipIndex}.rest`}
+                    label="Phần cây còn lại (g)"
+                    required
+                    size="small"
+                    fullWidth
+                    disabled={busy}
+                    rules={{
+                      validate: (value, values) => {
+                        const restGram = gram(String(value ?? ''), true)
+                        if (restGram == null) return 'Nhập phần cây còn lại (g)'
+                        const blankTotal = values.slips[slipIndex].lines.reduce(
+                          (sum, line) => sum + (gram(line.weight, false) ?? 0),
+                          0,
+                        )
+                        if (tree > 0 && round4(restGram + blankTotal) > tree) {
+                          return `Tổng phôi và phần còn lại vượt cây sau đúc (${formatQty(String(tree))} g)`
+                        }
+                        return true
+                      },
+                    }}
+                  />
+                  <TextField
+                    label="Nhập kho NVL vào mã"
+                    value={restMaterialName}
+                    placeholder={restMaterials.isLoading ? 'Đang tải…' : undefined}
+                    size="small"
+                    fullWidth
+                    slotProps={{ input: { readOnly: true } }}
+                  />
+                </Stack>
                 <FormImageField<Values>
                   name={`slips.${slipIndex}.restImages`}
                   label="Ảnh cân phần cây còn lại"

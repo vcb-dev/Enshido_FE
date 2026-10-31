@@ -46,6 +46,7 @@ import {
   ctToGram,
   formatCt,
   gramToCt,
+  isWeightUnit,
   type StockSnapshot,
 } from '../api/inventory'
 import {
@@ -814,7 +815,10 @@ export function MaterialRequestsCard({
                     <TableCell align="right">
                       {request.status === 'ISSUED' ? (
                         <>
-                          {formatQty(request.issuedQty ?? '0')} {request.material.unit}
+                          {/* Mã gram / ct không ghi SL — chỉ còn TL ở dòng dưới. */}
+                          {isWeightUnit(request.material.unit) && request.issuedWeight
+                            ? null
+                            : `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`}
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             {[
                               request.issuedWeight

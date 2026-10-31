@@ -11,10 +11,12 @@ import {
   formatMoney,
   formatPriceOrDash,
   formatQty,
+  formatQtyOrDash,
   formatCt,
   ctToGram,
   gramToCt,
   isStoneMaterial,
+  isWeightUnit,
   formatStockedDate,
   getInventoryLookupsApi,
   getWarehouseOutboundsApi,
@@ -360,6 +362,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         : isStoneMaterial({ unit: row.unit, metalKind: stockOf(row)?.metalKind })
           ? formatCt(row.gramQty)
           : `${formatQty(row.gramQty)} g`
+    // Mã gram / ct không ghi Số lượng — chỉ có TL.
+    const qtyText = (row: OutboundGroup | OutboundRow) => formatQtyOrDash(row.qty, row.gramQty)
     const lineActions = (row: OutboundRow) => (
       <RowActions
         onView={() => openView(row)}
@@ -463,8 +467,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         width: 120,
         numeric: true,
         sortable: true,
-        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatQty(row.qty)),
-        renderSub: (line) => formatQty(line.qty),
+        render: (row: OutboundGroup) => (row.lines.length > 1 ? null : qtyText(row)),
+        renderSub: (line) => qtyText(line),
       },
       ...(warehouseCode === 'nvl-chinh' || profile.showGramQty
         ? [
@@ -743,9 +747,8 @@ const EMPTY_OUTBOUND: OutboundFormValues = {
   lines: [EMPTY_OUTBOUND_LINE],
 }
 
-/** Mã tính theo gram / ct: TL suy từ SL — không nhập TL riêng. */
-const isGramUnit = (name: string | undefined) =>
-  ['g', 'gr', 'gram', 'grams', 'gam', 'ct'].includes((name ?? '').trim().toLowerCase())
+/** Mã gram / ct không ghi Số lượng: ô xuất chính là TL theo đơn vị mã. */
+const isCaratUnit = (name: string | undefined) => name?.trim().toLowerCase() === 'ct'
 
 function OutboundDialog({
   open,
@@ -810,7 +813,7 @@ function OutboundDialog({
                   units.find((item) => item.name === row.unit)?.id ??
                   units[0]?.id ??
                   '',
-                qty: qtyFromApi(row.qty),
+                qty: qtyFromApi(row.stockQty),
                 gramQty: !row.gramQty
                   ? ''
                   : isStoneMaterial({
@@ -844,7 +847,7 @@ function OutboundDialog({
   function outboundGramOf(line: OutboundLineValues) {
     const unitName = units.find((unit) => unit.id === line.unitId)?.name
     if (isCaratLine(line)) return ctToGram(line.qty) || null
-    if (isGramUnit(unitName)) return line.qty || null
+    if (isWeightUnit(unitName)) return line.qty || null
     return (lineIsStone(line, materials, units) ? ctToGram(line.gramQty) : line.gramQty) || null
   }
 
@@ -887,7 +890,7 @@ function OutboundDialog({
     }, 0)
     const held =
       kind !== 'create' && row && row.materialId === line?.materialId
-        ? Number(qtyFromApi(row.qty))
+        ? Number(qtyFromApi(row.stockQty))
         : 0
     const available = onHand + held - reserved
     const qty = Number(line?.qty) || 0
@@ -972,7 +975,8 @@ function OutboundDialog({
           const needGram =
             (warehouseCode === 'nvl-chinh' || profile.showGramQty) &&
             Boolean(line?.materialId) &&
-            !isGramUnit(unitName)
+            !isWeightUnit(unitName)
+          const weight = isWeightUnit(unitName)
           const availableText = !line?.materialId
             ? '—'
             : stock.available <= 0
@@ -986,7 +990,7 @@ function OutboundDialog({
             : stock.available <= 0
               ? 'Hàng này đã hết tồn'
               : line.qty && stock.remaining < 0
-                ? 'Vượt quá số lượng sẵn có'
+                ? `Vượt quá ${weight ? 'TL' : 'số lượng'} sẵn có`
                 : line.qty
                   ? `Còn lại ${formatQty(String(stock.remaining))}${unitName ? ` ${unitName}` : ''}`
                   : undefined
@@ -1029,7 +1033,7 @@ function OutboundDialog({
                   <FormRow columns={3}>
                     <TextInput label="Đơn vị tính" value={unitName || '—'} readOnly />
                     <TextInput
-                      label="SL sẵn có"
+                      label={weight ? 'TL sẵn có' : 'SL sẵn có'}
                       value={availableText}
                       readOnly
                       helperText={availableError ? availableHelper : undefined}
@@ -1037,7 +1041,7 @@ function OutboundDialog({
                     />
                     <FormQtyField<OutboundFormValues>
                       name={`lines.${index}.qty`}
-                      label="Số lượng xuất"
+                      label={!weight ? 'Số lượng xuất' : isCaratUnit(unitName) ? 'TL xuất (ct)' : 'TL xuất (g)'}
                       required={Boolean(line?.materialId)}
                       readOnly={readOnly}
                       disabled={!line?.materialId || stock.available <= 0}
@@ -1046,10 +1050,10 @@ function OutboundDialog({
                           if (!form.getValues(`lines.${index}.materialId`)) return true
                           const next = Number(value) || 0
                           const current = lineStock(index)
-                          if (next <= 0) return 'Số lượng xuất phải lớn hơn 0'
-                          if (current.available <= 0) return 'Không có đủ số lượng để xuất'
+                          if (next <= 0) return `${weight ? 'TL' : 'Số lượng'} xuất phải lớn hơn 0`
+                          if (current.available <= 0) return 'Không đủ tồn để xuất'
                           if (next > current.available) {
-                            return `SL sẵn có ${formatQty(String(current.available))}, không xuất quá số này`
+                            return `${weight ? 'TL' : 'SL'} sẵn có ${formatQty(String(current.available))}, không xuất quá số này`
                           }
                           return true
                         },
@@ -1249,12 +1253,15 @@ function groupOutboundRows(items: OutboundRow[]): OutboundGroup[] {
 function asOutboundGroup(lines: OutboundRow[]): OutboundGroup {
   const primary = lines[0]
   const qty = lines.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)
+  const stockQty = lines.reduce((sum, row) => sum + (Number(row.stockQty) || 0), 0)
   const amount = lines.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
   const issuedAt = lines.reduce((latest, row) => (row.issuedAt > latest ? row.issuedAt : latest), primary.issuedAt)
   return {
     ...primary,
     id: lines.length === 1 ? primary.id : `order:${(primary.productionOrderCode ?? '').toUpperCase()}`,
-    qty: String(qty),
+    // Mã gram / ct không ghi Số lượng — nhóm toàn mã cân thì SL cũng trống.
+    qty: lines.every((row) => row.qty == null) ? null : String(qty),
+    stockQty: String(stockQty),
     amount: String(amount),
     issuedAt,
     sku: lines.length === 1 ? primary.sku : null,
@@ -1306,7 +1313,8 @@ function outboundOptimisticRow(
     sku: payload.sku ?? null,
     unit: extra.unit,
     unitId: payload.unitId ?? null,
-    qty: payload.qty,
+    qty: isWeightUnit(extra.unit) ? null : payload.qty,
+    stockQty: payload.qty,
     gramQty: payload.gramQty ?? null,
     stockUnitPrice: payload.stockUnitPrice ?? '0',
     inboundUnitPrice: payload.inboundUnitPrice ?? '0',

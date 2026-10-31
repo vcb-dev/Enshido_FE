@@ -112,7 +112,8 @@ export function uniqueFilterOptions(values: Array<string | null | undefined>) {
   return uniqueNameOptions(values).map((item) => ({ id: item.value, name: item.label }))
 }
 
-export function sumMoveTotals(rows: Array<{ qty: string; amount: string }>) {
+/** Tổng SL chỉ cộng mã đếm được — mã gram / ct không ghi SL (`qty` = null). */
+export function sumMoveTotals(rows: Array<{ qty: string | null; amount: string }>) {
   return {
     qty: String(rows.reduce((acc, row) => acc + (Number(row.qty) || 0), 0)),
     amount: String(rows.reduce((acc, row) => acc + (Number(row.amount) || 0), 0)),
@@ -120,7 +121,7 @@ export function sumMoveTotals(rows: Array<{ qty: string; amount: string }>) {
 }
 
 export function upsertMoveList<
-  T extends { id: string; qty: string; amount: string },
+  T extends { id: string; qty: string | null; amount: string },
   L extends { items: T[]; totals: { qty: string; amount: string } },
 >(current: L | undefined, row: T, replace: boolean): L | undefined {
   if (!current) return current
@@ -131,7 +132,7 @@ export function upsertMoveList<
 }
 
 export function replaceMoveId<
-  T extends { id: string; qty: string; amount: string },
+  T extends { id: string; qty: string | null; amount: string },
   L extends { items: T[]; totals: { qty: string; amount: string } },
 >(current: L | undefined, fromId: string, row: T): L | undefined {
   if (!current) return current
@@ -146,7 +147,7 @@ export function replaceMoveId<
 }
 
 export function removeMoveList<
-  T extends { id: string; qty: string; amount: string },
+  T extends { id: string; qty: string | null; amount: string },
   L extends { items: T[]; totals: { qty: string; amount: string } },
 >(current: L | undefined, id: string): L | undefined {
   if (!current) return current

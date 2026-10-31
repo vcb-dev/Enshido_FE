@@ -829,7 +829,11 @@ export type OrderCosting = {
     warehouseName: string
     name: string
     sku: string | null
-    qty: string
+    /** Số lượng — null với mã gram / ct (chỉ ghi TL). */
+    qty: string | null
+    /** Lượng tính kho theo đơn vị mã (gram → g, ct → ct). */
+    stockQty: string
+    gramQty: string | null
     unit: string
     unitPrice: string
     amount: string

@@ -19,7 +19,7 @@ import {
   type StageCode,
   type SubTicket,
 } from '../api/productionOrders'
-import { formatCt, formatQty } from '../api/inventory'
+import { formatCt, formatQty, isWeightUnit } from '../api/inventory'
 import { ACTION_LABEL, describeChanges } from './activityFormat'
 import { STAGE_LABEL, formatDateTime } from './catalog'
 
@@ -53,6 +53,16 @@ const g = (value: string | null | undefined) => (value != null ? `${formatQty(va
 /** TL xuất của một yêu cầu: đá theo ct, bạc / khác theo g. */
 const requestWeight = (request: { kind: string; issuedWeight: string | null }) =>
   request.kind === 'STONE' ? formatCt(request.issuedWeight) : g(request.issuedWeight)
+
+/** Mã gram / ct không ghi SL — chỉ hiện TL (đã có ở cột bên cạnh). */
+const issuedQtyText = (request: {
+  issuedQty: string | null
+  issuedWeight: string | null
+  material: { unit: string }
+}) =>
+  isWeightUnit(request.material.unit) && request.issuedWeight
+    ? ''
+    : `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`
 
 /**
  * Lịch sử thao tác của phiếu mẹ / cả đơn (`ticket` null) hoặc một phiếu con, thả xuống khi
@@ -167,7 +177,7 @@ export function WorkHistoryTable({
           details: [
             [
               material,
-              `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`,
+              issuedQtyText(request),
               request.issuedWeight ? requestWeight(request) : '',
               request.issuedStoneCount ? `${request.issuedStoneCount} viên` : '',
             ]
@@ -205,7 +215,7 @@ export function WorkHistoryTable({
               ? [
                   [
                     material,
-                    `${formatQty(request.issuedQty ?? '0')} ${request.material.unit}`,
+                    issuedQtyText(request),
                     request.issuedWeight ? requestWeight(request) : '',
                     request.issuedStoneCount ? `${request.issuedStoneCount} viên` : '',
                   ]
