@@ -13,11 +13,13 @@ import {
   canSeeCastingSlipsPage,
   canUseMyTickets,
   canUseQcTickets,
+  isIntakeWaxScoped,
 } from '../intake/intake3dAccess'
 import {
   canSeeCastingCutsMenu,
   canSeeCastingOrdersMenu,
   canSeeIntakeOrdersMenu,
+  canSeeWaxTreeMenu,
 } from './screenAccess'
 
 /** Ô tích một màn hình menu. `menu` = điều kiện sidebar hiện mục này (vai trò cũng có thể tự mở). */
@@ -50,6 +52,7 @@ export const SCREEN_GROUPS: ScreenGroup[] = [
     items: [
       { key: Permission.SCREEN_MY_TICKETS, label: 'Phiếu khâu', menu: canUseMyTickets },
       { key: Permission.SCREEN_CASTING_ORDERS, label: 'Lệnh đúc', menu: canSeeCastingOrdersMenu },
+      { key: Permission.SCREEN_WAX_TREE, label: 'Cấy cây thông', menu: canSeeWaxTreeMenu },
       { key: Permission.SCREEN_CASTING_CUTS, label: 'Cắt cây thông', menu: canSeeCastingCutsMenu },
       { key: Permission.SCREEN_QC_TICKETS, label: 'Phiếu QC', menu: canUseQcTickets },
     ],
@@ -112,6 +115,7 @@ export function firstAllowedPath(user: PermissionUser | undefined | null): strin
   }
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
   if (canSeeIntakeOrdersMenu(user)) return '/intake-orders'
+  if (isIntakeWaxScoped(user) && canSeeWaxTreeMenu(user)) return '/wax-tree'
   if (canAccessProductionOrdersPage(user)) return '/orders'
   if (canSeeCastingOrdersMenu(user) || canSeeCastingSlipsPage(user)) return '/casting'
   const firstWarehouse = visibleWarehouses(user)[0]

@@ -32,15 +32,27 @@ function emptyList(pageSize = 200): IntakeOrderList {
   return { items: [], total: 0, page: 1, pageSize }
 }
 
+function isIntakeBatchChild(order: Pick<IntakeOrder, 'parentId'>) {
+  return Boolean(order.parentId)
+}
+
+function allowsIntakeChildren(queryKey: QueryKey) {
+  const slot = String(queryKey[1] ?? '')
+  return slot === 'wax-tree' || slot === 'wax-tree-candidates'
+}
+
 /** Danh sách gộp Lệnh sản xuất dùng pipeline-lists — phải patch riêng, không chỉ status-list. */
 function patchPipelineLists(queryClient: QueryClient, order: IntakeOrder) {
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ['intake-orders', 'pipeline-lists'] })) {
     const old = query.state.data as IntakePipelineLists | undefined
     if (!old) continue
     const rootsOnly = query.queryKey.some((part) => typeof part === 'object' && part !== null && 'rootsOnly' in part && part.rootsOnly === true)
-    queryClient.setQueryData(query.queryKey, rootsOnly && order.reworkOfOrderId
-      ? removeOrderFromPipelineLists(old, order.id)
-      : moveOrderInPipelineLists(old, order))
+    queryClient.setQueryData(
+      query.queryKey,
+      (rootsOnly && order.reworkOfOrderId) || isIntakeBatchChild(order)
+        ? removeOrderFromPipelineLists(old, order.id)
+        : moveOrderInPipelineLists(old, order),
+    )
   }
 }
 
@@ -152,8 +164,18 @@ function reconcileOrderInList(
   queryKey: QueryKey,
   order: IntakeOrder,
 ): IntakeOrderList | undefined {
+  if (isIntakeBatchChild(order) && !allowsIntakeChildren(queryKey)) {
+    if (!old.items.some((item) => item.id === order.id)) return undefined
+    return {
+      ...old,
+      items: old.items.filter((item) => item.id !== order.id),
+      total: Math.max(0, old.total - 1),
+    }
+  }
   const inList = old.items.some((item) => item.id === order.id)
-  const shouldBeHere = isCatalogListKey(queryKey)
+  const shouldBeHere = allowsIntakeChildren(queryKey)
+    ? order.status === 'WAX_PRINTED' && (order.remainingQty ?? order.qty) > 0
+    : isCatalogListKey(queryKey)
     ? catalogListAllows(queryKey, order)
     : isStatusListKey(queryKey)
       ? statusListAllows(queryKey, order)
@@ -260,6 +282,11 @@ export function moveIntakeOrderInCaches(
   order: IntakeOrder,
   opts?: { silent?: boolean },
 ) {
+  if (isIntakeBatchChild(order)) {
+    patchPipelineLists(queryClient, order)
+    patchIntakeQueries(queryClient, (old, queryKey) => reconcileOrderInList(old, queryKey, order))
+    return
+  }
   const prev = findIntakeOrderInCaches(queryClient, order.id)
   patchPipelineLists(queryClient, order)
   if (order.reworkOfOrderId) {
@@ -285,7 +312,9 @@ function intakeLiveFieldsChanged(prev: IntakeOrder, next: IntakeOrder) {
     prev.castingTreeWeightGram !== next.castingTreeWeightGram ||
     prev.waxCheckedWeightGram !== next.waxCheckedWeightGram ||
     prev.castingSlip?.code !== next.castingSlip?.code ||
-    prev.castingSlip?.status !== next.castingSlip?.status
+    prev.castingSlip?.status !== next.castingSlip?.status ||
+    prev.waxReleasedQty !== next.waxReleasedQty ||
+    prev.qty !== next.qty
   )
 }
 
@@ -307,6 +336,16 @@ export function applyIntakeLiveSnapshot(queryClient: QueryClient, liveItems: Int
 
   let refreshCatalog = false
   for (const live of liveItems) {
+    if (isIntakeBatchChild(live)) continue
+    const sibling = findIntakeOrderByCodeInCaches(queryClient, live.code)
+    if (
+      sibling &&
+      sibling.id !== live.id &&
+      !sibling.parentId &&
+      (sibling.qty ?? 0) >= (live.qty ?? 0)
+    ) {
+      continue
+    }
     const prev = findIntakeOrderInCaches(queryClient, live.id)
     if (
       intakeHasEnteredProduction(live) &&
@@ -347,18 +386,35 @@ export function mergeIntakeQueueItems(
   waitCoolingItems: IntakeOrder[] = [],
 ): IntakeOrder[] {
   const byId = new Map<string, IntakeOrder>()
-  for (const item of pendingItems) byId.set(item.id, item)
-  for (const item of approvedItems) byId.set(item.id, item)
-  for (const item of readyItems) byId.set(item.id, item)
-  for (const item of warehousePendingItems) byId.set(item.id, item)
-  for (const item of waxItems) byId.set(item.id, item)
-  for (const item of waxConfirmedItems) byId.set(item.id, item)
-  for (const item of waitCastingItems) byId.set(item.id, item)
-  for (const item of castingItems) byId.set(item.id, item)
-  for (const item of castPendingConfirmItems) byId.set(item.id, item)
-  for (const item of castDoneItems) byId.set(item.id, item)
-  for (const item of waitCoolingItems) byId.set(item.id, item)
-  return [...byId.values()].sort((a, b) => {
+  const add = (item: IntakeOrder) => {
+    if (item.parentId) return
+    byId.set(item.id, item)
+  }
+  for (const item of pendingItems) add(item)
+  for (const item of approvedItems) add(item)
+  for (const item of readyItems) add(item)
+  for (const item of warehousePendingItems) add(item)
+  for (const item of waxItems) add(item)
+  for (const item of waxConfirmedItems) add(item)
+  for (const item of waitCastingItems) add(item)
+  for (const item of castingItems) add(item)
+  for (const item of castPendingConfirmItems) add(item)
+  for (const item of castDoneItems) add(item)
+  for (const item of waitCoolingItems) add(item)
+  const byCode = new Map<string, IntakeOrder>()
+  for (const item of byId.values()) {
+    const prev = byCode.get(item.code)
+    if (!prev) {
+      byCode.set(item.code, item)
+      continue
+    }
+    const preferItem =
+      Boolean(prev.parentId) !== Boolean(item.parentId)
+        ? !item.parentId
+        : item.qty > prev.qty
+    if (preferItem) byCode.set(item.code, item)
+  }
+  return [...byCode.values()].sort((a, b) => {
     const tb = Date.parse(b.createdAt) || 0
     const ta = Date.parse(a.createdAt) || 0
     if (tb !== ta) return tb - ta
@@ -387,6 +443,11 @@ export function afterIntakeModel3dAttached(queryClient: QueryClient, order: Inta
 
 export function afterIntakeProductSpecsSubmitted(queryClient: QueryClient, order: IntakeOrder) {
   moveIntakeOrderInCaches(queryClient, order)
+  void queryClient.invalidateQueries({ queryKey: ['intake-orders', 'wax-tree'], refetchType: 'active' })
+  void queryClient.invalidateQueries({
+    queryKey: ['intake-orders', 'wax-tree-candidates'],
+    refetchType: 'active',
+  })
 }
 
 export function afterIntakeWarehouseConfirmed(queryClient: QueryClient, order: IntakeOrder) {

@@ -77,7 +77,7 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
     case 'worker_3d':
       return 'Lệnh sản xuất: link 3D, in sáp.'
     case 'worker_wax':
-      return 'Lệnh sản xuất: bơm sáp, cây thông.'
+      return 'Phiếu của tôi: Cấy cây thông. Lệnh sản xuất: bơm sáp.'
     case 'worker_casting':
       return 'Màn Lệnh đúc.'
     case 'worker_filing':
@@ -195,7 +195,10 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
     case 'worker_3d':
       return { roleCode: 'WORKER', allowedScreens: [Permission.PRODUCTION_MODEL3D] }
     case 'worker_wax':
-      return { roleCode: 'WORKER', allowedScreens: [Permission.PRODUCTION_WAX] }
+      return {
+        roleCode: 'WORKER',
+        allowedScreens: [Permission.PRODUCTION_WAX, Permission.SCREEN_WAX_TREE],
+      }
     case 'worker_casting':
       return {
         roleCode: 'WORKER',

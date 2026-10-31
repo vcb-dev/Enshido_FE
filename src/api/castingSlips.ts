@@ -21,6 +21,8 @@ export type CastingSlipOrderLine = {
   blankImages?: CastingSlipImage[]
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
+  /** Đúc dịch vụ: đơn giá dịch vụ (đ) của đúng đơn này. */
+  serviceUnitPrice?: string | null
 }
 
 export type CastingSlip = {
@@ -92,6 +94,7 @@ export type CastingSlipResultPayload = {
   silverUsedGram: number
   plasterUsedGram?: number
   serviceUnitPrice?: number
+  servicePrices?: Array<{ intakeOrderId: string; serviceUnitPrice: number }>
   images: CastingSlipImage[]
 }
 
@@ -117,6 +120,8 @@ export type CastingSlipList = {
 /** Đơn đã có sáp (E), chưa lên phiếu — thủ kho chọn để gom vào một lần đúc. */
 export type CastingSlipCandidate = {
   id: string
+  /** Các lệnh chờ đúc cùng mã DH (lô SX SLL chưa lên phiếu) — gửi hết khi lập phiếu. */
+  orderIds?: string[]
   code: string
   sxCode: string
   productName: string

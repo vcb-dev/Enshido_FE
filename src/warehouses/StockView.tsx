@@ -13,7 +13,14 @@ import {
   Typography,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { formatMoney, formatQty, type AvailabilityCode, type MaterialImage, type StockRow } from '../api/inventory'
+import {
+  formatMoney,
+  formatQty,
+  formatQtyOrDash,
+  type AvailabilityCode,
+  type MaterialImage,
+  type StockRow,
+} from '../api/inventory'
 import { cloudinaryFit, cloudinaryThumb } from '../api/uploads'
 import { DETAIL_GRID, DetailFact, DetailSection } from './detailView'
 import { StockFigureGrid } from './StockFigureGrid'
@@ -83,7 +90,7 @@ export function WarehouseStockView({
             notes
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, mt: 1.5 }}>
-            Tồn: SL {formatQty(row.qty)} · TT {formatMoney(row.amount)}
+            Tồn: SL {formatQtyOrDash(row.qty, row.closingGram)} · TT {formatMoney(row.amount)}
           </Typography>
         </Paper>
       </DialogContent>
@@ -115,6 +122,11 @@ function stockFacts(row: StockRow, profile: StockProfile) {
       label: 'Trọng lượng (g)',
       value: row.weight ? formatQty(row.weight) : null,
       show: profile.showWeight,
+    },
+    {
+      label: 'TL',
+      value: row.closingGram ? `${formatQty(row.closingGram)} g` : null,
+      show: profile.showGramQty,
     },
     { label: 'Đơn vị', value: row.unit },
     { label: 'Đơn giá tồn', value: formatMoney(row.stockUnitPrice) },

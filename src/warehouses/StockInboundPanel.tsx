@@ -9,6 +9,7 @@ import {
   createWarehouseInboundApi,
   formatMoney,
   formatQty,
+  formatQtyOrDash,
   formatCt,
   ctToGram,
   gramToCt,
@@ -361,9 +362,10 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         width: 120,
         numeric: true,
         sortable: true,
-        render: (row: InboundRow) => (gramOnly(warehouseCode, row) ? '—' : formatQty(row.qty)),
+        render: (row: InboundRow) =>
+          gramOnly(warehouseCode, row) ? '—' : formatQtyOrDash(row.qty, row.gramQty),
       },
-      ...(warehouseCode === 'nvl-chinh'
+      ...(warehouseCode === 'nvl-chinh' || profile.showGramQty
         ? [
             {
               key: 'gramQty',
@@ -778,7 +780,9 @@ function InboundDialog({
         gramQty:
           warehouseCode === 'nvl-chinh'
             ? (lineIsStone(line, materials, units) ? ctToGram(line.gramQty) : line.gramQty) || null
-            : undefined,
+            : profile.showGramQty
+              ? line.gramQty || null
+              : undefined,
         stockUnitPrice: '0',
         unitPrice: line.unitPrice || '0',
         amount: String(Math.round((Number(line.qty) || 0) * (Number(line.unitPrice) || 0))),
@@ -935,17 +939,21 @@ function InboundDialog({
                       readOnly
                     />
                   </FormRow>
-                  {warehouseCode === 'nvl-chinh' && !isGramUnit(units.find((unit) => unit.id === line?.unitId)?.name) ? (
+                  {(warehouseCode === 'nvl-chinh' || profile.showGramQty) &&
+                  !isGramUnit(units.find((unit) => unit.id === line?.unitId)?.name) ? (
                     <FormRow columns={4}>
                       <FormQtyField<InboundFormValues>
                         name={`lines.${index}.gramQty`}
-                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'Số gram'}
-                        required
+                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'TL (g)'}
+                        required={warehouseCode === 'nvl-chinh'}
                         readOnly={readOnly}
                         placeholder="Cân cả lô nhập…"
                         helperText="Cộng vào TL tồn của mã"
                         rules={{
-                          validate: (value) => (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
+                          validate: (value) =>
+                            warehouseCode !== 'nvl-chinh' ||
+                            (Number(value) || 0) > 0 ||
+                            'Trọng lượng phải lớn hơn 0',
                         }}
                       />
                     </FormRow>

@@ -12,6 +12,7 @@ import {
   canSeeCastingOrdersMenu,
   canSeeIntakeOrdersMenu,
   canSeeLossReport,
+  canSeeWaxTreeMenu,
 } from './screenAccess'
 export function homePathForUser(user: { roleCode?: string; permissions?: string[] }): string {
   return firstAllowedPath(user)
@@ -45,6 +46,7 @@ export function canAccessPath(
     return canSeeIntakeOrdersMenu(user)
   }
   if (p === '/casting-cuts') return canSeeCastingCutsMenu(user)
+  if (p === '/wax-tree') return canSeeWaxTreeMenu(user)
   if (p === '/casting' || p.startsWith('/casting/')) {
     if (isIntakePipelineScoped(user)) return false
     if (isWorkerOnly(user)) return false
