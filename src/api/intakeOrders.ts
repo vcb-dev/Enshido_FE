@@ -52,6 +52,7 @@ export function recoveredMaterialName(metalType: OrderMetalType | null | undefin
 
 export type IntakeOrder = {
   reworkOfOrderId?: string | null
+  parentId?: string | null
   id: string
   code: string
   /** Mã lệnh SX (random) — cột Mã SX trên Lệnh sản xuất. */
@@ -62,6 +63,10 @@ export type IntakeOrder = {
   requestType: ProductionRequestType
   productName: string
   qty: number
+  /** SX SLL: số đã tách ra in sáp / cấy cây / đi đúc. */
+  waxReleasedQty?: number
+  /** SX SLL: SL còn chưa in sáp / cấy cây. */
+  remainingQty?: number
   trackingCode: string | null
   /** Mã khách tự đặt cho sản phẩm. */
   customerCode: string | null
@@ -135,6 +140,7 @@ export function listIntakeOrdersApi(params: {
   status?: IntakeOrderStatus | ''
   unlinkedOnly?: boolean
   rootsOnly?: boolean
+  includeChildren?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
   page: number
@@ -144,6 +150,7 @@ export function listIntakeOrdersApi(params: {
   const query = new URLSearchParams()
   if (params.status) query.set('status', params.status)
   if (params.rootsOnly) query.set('rootsOnly', 'true')
+  if (params.includeChildren) query.set('includeChildren', 'true')
   if (params.unlinkedOnly) query.set('unlinkedOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
@@ -229,6 +236,7 @@ export function submitIntakeProductSpecsApi(
   payload: {
     productWeightGram: number
     castingTreeWeightGram?: number
+    produceQty?: number
     images: OrderImage[]
     stoneCount3d?: number | null
     stoneWeight3dGram?: number | null
@@ -249,7 +257,7 @@ export function confirmIntakeWarehouseApi(id: string, checkedWeightGram?: number
 
 /** Bước 4: in sáp nhiều đơn một lần — ảnh cả khay + cân nặng từng đơn. */
 export function waxPrintBatchApi(payload: {
-  items: { id: string; productWeightGram: number }[]
+  items: { id: string; productWeightGram: number; produceQty?: number }[]
   images: OrderImage[]
 }) {
   return apiFetch<{ items: IntakeOrder[] }>('/intake-orders/wax-print', {
@@ -268,9 +276,22 @@ export function submitIntakeCastingTreeSpecsApi(
   })
 }
 
+/** Bước 5: cấy nhiều đơn cùng một cây thông. */
+export function submitIntakeCastingTreeBatchApi(payload: {
+  orderIds: string[]
+  lines?: Array<{ orderId: string; produceQty?: number }>
+  castingTreeWeightGram: number
+  images: OrderImage[]
+}) {
+  return apiFetch<{ items: IntakeOrder[] }>('/intake-orders/casting-tree-batch', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 /** Bước 4: một lượt in sáp nhiều đơn — ảnh cả khay + cân nặng từng đơn. */
 export function submitIntakeWaxPrintBatchApi(payload: {
-  items: { id: string; productWeightGram: number }[]
+  items: { id: string; productWeightGram: number; produceQty?: number }[]
   images: OrderImage[]
 }) {
   return apiFetch<{ count: number }>('/intake-orders/wax-print-batch', {

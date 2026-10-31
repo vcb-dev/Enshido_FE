@@ -33,6 +33,7 @@ import BadgeIcon from '@mui/icons-material/BadgeOutlined'
 import HandymanIcon from '@mui/icons-material/HandymanOutlined'
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartmentOutlined'
 import ForestIcon from '@mui/icons-material/ForestOutlined'
+import ParkIcon from '@mui/icons-material/ParkOutlined'
 import VerifiedIcon from '@mui/icons-material/VerifiedOutlined'
 import Inventory2Icon from '@mui/icons-material/Inventory2Outlined'
 import WarehouseIcon from '@mui/icons-material/WarehouseOutlined'
@@ -64,6 +65,7 @@ import {
   canSeeCastingOrdersMenu,
   canSeeIntakeOrdersMenu,
   canSeeLossReport,
+  canSeeWaxTreeMenu,
 } from '../auth/screenAccess'
 import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
@@ -109,6 +111,7 @@ export function AppShell() {
   const showProductionOrders = canAccessProductionOrdersPage(user)
   const showCastingOrders = canSeeCastingOrdersMenu(user)
   const showCastingCuts = canSeeCastingCutsMenu(user)
+  const showWaxTree = canSeeWaxTreeMenu(user)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
   const showKho = hasAnyWarehouse(user)
 
@@ -245,6 +248,7 @@ export function AppShell() {
             showProductionOrders={showProductionOrders}
             showCastingOrders={showCastingOrders}
             showCastingCuts={showCastingCuts}
+            showWaxTree={showWaxTree}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -273,6 +277,7 @@ export function AppShell() {
             showProductionOrders={showProductionOrders}
             showCastingOrders={showCastingOrders}
             showCastingCuts={showCastingCuts}
+            showWaxTree={showWaxTree}
             showKho={showKho}
             warehouses={warehouses}
           />
@@ -371,6 +376,7 @@ function DrawerNav({
   showProductionOrders,
   showCastingOrders,
   showCastingCuts,
+  showWaxTree,
   showKho,
   warehouses,
 }: {
@@ -384,6 +390,7 @@ function DrawerNav({
   showProductionOrders: boolean
   showCastingOrders: boolean
   showCastingCuts: boolean
+  showWaxTree: boolean
   showKho: boolean
   warehouses: WarehouseDef[]
 }) {
@@ -422,6 +429,9 @@ function DrawerNav({
               : null,
             showCastingOrders
               ? { to: '/casting', icon: <LocalFireDepartmentIcon fontSize="small" />, label: 'Lệnh đúc' }
+              : null,
+            showWaxTree
+              ? { to: '/wax-tree', icon: <ParkIcon fontSize="small" />, label: 'Cấy cây thông' }
               : null,
             showCastingCuts
               ? { to: '/casting-cuts', icon: <ForestIcon fontSize="small" />, label: 'Cắt cây thông' }

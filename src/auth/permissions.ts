@@ -17,6 +17,8 @@ export const Permission = {
   SCREEN_QC_TICKETS: 'screen.qc-tickets',
   /** Màn Cắt cây thông — vào xem; cân phôi / cắt cây vẫn cần `warehouse.keeper`. */
   SCREEN_CASTING_CUTS: 'screen.casting-cuts',
+  /** Màn Cấy cây thông — vào xem; cấy cây vẫn cần `production.wax`. */
+  SCREEN_WAX_TREE: 'screen.wax-tree',
   /** Thợ sản xuất: tự nhận phiếu con ở màn "Phiếu của tôi". */
   PRODUCTION_WORKER: 'production.worker',
   /** Bước 1: tạo đơn. */

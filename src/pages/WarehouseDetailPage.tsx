@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import {
   formatMoney,
   formatQty,
+  formatQtyOrDash,
   formatCt,
   ctToGram,
   isStoneMaterial,
@@ -228,7 +229,7 @@ const groupHead = {
   stock: { ...split, bgcolor: '#e8d8bd', fontWeight: 700, color: 'primary.main' },
   real: { ...split, bgcolor: '#e3ecf3', fontWeight: 700 },
 }
-/** Bốn nhóm tiêu đề bậc 1 của bảng tồn: mỗi nhóm gộp một cặp SL / TT. */
+/** Nhóm tiêu đề bậc 1 của bảng tồn. Kho BTP thêm cột TL giữa SL và TT. */
 const STOCK_GROUPS = {
   open: { key: 'open', label: 'Tồn đầu kỳ', headSx: groupHead.open },
   in: { key: 'in', label: 'Nhập', headSx: groupHead.in },
@@ -826,6 +827,24 @@ function stockColumns(
       render: (row) => (row.weight ? formatQty(row.weight) : '—'),
     })
   }
+  const tlColumn = (
+    key: 'openingGram' | 'inGram' | 'outGram' | 'closingGram',
+    group: (typeof STOCK_GROUPS)['open'],
+    bgcolor: string,
+  ): Column<StockRow> => ({
+    key,
+    header: tlLabel(totals?.[key]),
+    group,
+    headSx: { bgcolor },
+    align: 'right',
+    cellSx: { ...numCell, bgcolor },
+    render: (row) => {
+      const value = row[key]
+      if (value == null || value === '') return '—'
+      return isStoneMaterial(row) ? formatCt(value) : `${formatQty(value)} g`
+    },
+  })
+
   columns.push(
     {
       key: 'openingQty',
@@ -834,8 +853,14 @@ function stockColumns(
       headSx: groupHead.open,
       align: 'right',
       cellSx: groupBody.open,
-      render: (row) => formatQty(row.openingQty),
+      render: (row) =>
+        profile.showGramQty
+          ? formatQtyOrDash(row.openingQty, row.openingGram)
+          : formatQty(row.openingQty),
     },
+    ...(profile.showGramQty
+      ? [tlColumn('openingGram', STOCK_GROUPS.open, groupBody.open.bgcolor)]
+      : []),
     {
       key: 'openingAmount',
       header: ttLabel(totals?.openingAmount),
@@ -852,8 +877,12 @@ function stockColumns(
       headSx: groupHead.in,
       align: 'right',
       cellSx: groupBody.in,
-      render: (row) => formatQty(row.inQty),
+      render: (row) =>
+        profile.showGramQty ? formatQtyOrDash(row.inQty, row.inGram) : formatQty(row.inQty),
     },
+    ...(profile.showGramQty
+      ? [tlColumn('inGram', STOCK_GROUPS.in, groupBody.in.bgcolor)]
+      : []),
     {
       key: 'inAmount',
       header: ttLabel(totals?.inAmount),
@@ -870,8 +899,12 @@ function stockColumns(
       headSx: groupHead.out,
       align: 'right',
       cellSx: groupBody.out,
-      render: (row) => formatQty(row.outQty),
+      render: (row) =>
+        profile.showGramQty ? formatQtyOrDash(row.outQty, row.outGram) : formatQty(row.outQty),
     },
+    ...(profile.showGramQty
+      ? [tlColumn('outGram', STOCK_GROUPS.out, groupBody.out.bgcolor)]
+      : []),
     {
       key: 'outAmount',
       header: ttLabel(totals?.outAmount),
@@ -888,8 +921,12 @@ function stockColumns(
       headSx: groupHead.stock,
       align: 'right',
       cellSx: groupBody.stock,
-      render: (row) => formatQty(row.qty),
+      render: (row) =>
+        profile.showGramQty ? formatQtyOrDash(row.qty, row.closingGram) : formatQty(row.qty),
     },
+    ...(profile.showGramQty
+      ? [tlColumn('closingGram', STOCK_GROUPS.stock, groupBody.stock.bgcolor)]
+      : []),
     {
       key: 'amount',
       header: ttLabel(totals?.amount),
@@ -1036,6 +1073,10 @@ function qtyLabel(value?: string) {
   return value == null ? 'SL' : `SL (${formatQty(value)})`
 }
 
+function tlLabel(value?: string | null) {
+  return value == null || value === '' ? 'TL' : `TL (${formatQty(value)})`
+}
+
 function ttLabel(value?: string) {
   return value == null ? 'TT' : `TT (${formatMoney(value)})`
 }
@@ -1043,6 +1084,11 @@ function ttLabel(value?: string) {
 function sumStockTotals(rows: StockRow[]): StockTotals {
   const sum = (pick: (row: StockRow) => string) =>
     String(rows.reduce((acc, row) => acc + (Number(pick(row)) || 0), 0))
+  const sumGram = (pick: (row: StockRow) => string | null | undefined) => {
+    const present = rows.map(pick).filter((value): value is string => value != null && value !== '')
+    if (!present.length) return null
+    return String(present.reduce((acc, value) => acc + (Number(value) || 0), 0))
+  }
   return {
     openingQty: sum((r) => r.openingQty),
     openingAmount: sum((r) => r.openingAmount),
@@ -1052,6 +1098,11 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
     outAmount: sum((r) => r.outAmount),
     qty: sum((r) => r.qty),
     amount: sum((r) => r.amount),
+    openingGram: sumGram((r) => r.openingGram),
+    inGram: sumGram((r) => r.inGram),
+    outGram: sumGram((r) => r.outGram),
+    closingGram: sumGram((r) => r.closingGram),
+    gramOnHand: sumGram((r) => r.gramOnHand),
   }
 }
 
