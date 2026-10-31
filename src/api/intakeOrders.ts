@@ -71,6 +71,8 @@ export type IntakeOrder = {
   metalType: OrderMetalType | null
   placedBy: string
   description: string
+  /** Ghi chú tự do ở cột Ghi chú của Lệnh sản xuất. */
+  note?: string | null
   createdDate: string
   dueDate: string | null
   /** null = chưa duyệt; false = cần 3D; true = đã có khuôn. */

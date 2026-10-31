@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Chip, Link, Stack, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Link, Stack, Tooltip, Typography } from '@mui/material'
+import EditNoteOutlined from '@mui/icons-material/EditNoteOutlined'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
@@ -47,6 +48,7 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import {
   listProductionOrdersApi,
+  updateProductionOrderNoteApi,
   type OrderImage,
   type ProductionOrderRow,
   type ReworkChild,
@@ -74,6 +76,7 @@ import {
 } from '../orders/catalog'
 import { RequestTypeChip, StatusChip } from '../orders/OrderChips'
 import { ProductionOrderViewDialog } from '../orders/ProductionOrderViewDialog'
+import { OrderNoteDialog, type OrderNoteTarget } from '../orders/OrderNoteDialog'
 import { deadlineWarning } from '../orders/deadline'
 import {
   codeSortedProductionWindow,
@@ -151,6 +154,7 @@ export function ProductionOrdersPage() {
   const [castingTreeTarget, setCastingTreeTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
   const [orderViewTarget, setOrderViewTarget] = useState<ProductionOrderRow | null>(null)
+  const [noteTarget, setNoteTarget] = useState<OrderNoteTarget | null>(null)
   const table = useTableParams({
     pageSize: 25,
     filters: {
@@ -390,6 +394,18 @@ export function ProductionOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const saveNote = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => updateProductionOrderNoteApi(id, note),
+    onSuccess: () => {
+      const label = noteTarget?.label ?? ''
+      setNoteTarget(null)
+      // Ghi chú nằm trên cùng bản ghi cho cả dòng đơn tạo lẫn lệnh SX — làm mới cả hai danh sách.
+      void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['intake-orders'] })
+      toast.success(`Đã lưu ghi chú ${label}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   const rejectIntake = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
       rejectIntakeOrderApi(id, { reason }),
@@ -479,6 +495,7 @@ export function ProductionOrdersPage() {
             if (row.status === 'WAIT_FILING') setOrderViewTarget(row)
             else navigate(`/orders/${row.code}`)
           },
+          onNoteEdit: setNoteTarget,
           onIntakeApprove: (row) => setApproveTarget(row),
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
@@ -507,7 +524,7 @@ export function ProductionOrdersPage() {
             <ColumnHeaderSearch
               value={params.search}
               onChange={table.setSearch}
-              placeholder="Tìm mã đơn, mô tả…"
+              placeholder="Tìm mã SX, mã đơn, mô tả…"
             />
           ),
           status: {
@@ -693,6 +710,15 @@ export function ProductionOrdersPage() {
         onConfirm={(hasMold) => {
           if (!approveTarget) return
           void approveIntake.mutateAsync({ id: approveTarget.id, hasMold })
+        }}
+      />
+      <OrderNoteDialog
+        target={noteTarget}
+        saving={saveNote.isPending}
+        onClose={() => setNoteTarget(null)}
+        onConfirm={(note) => {
+          if (!noteTarget) return
+          void saveNote.mutateAsync({ id: noteTarget.id, note })
         }}
       />
       <RejectIntakeDialog
@@ -959,6 +985,7 @@ function renderIntakeWorkflowAction(
 function orderColumns(
   actions: {
     onView: (row: ProductionOrderRow) => void
+    onNoteEdit: (target: OrderNoteTarget) => void
     onIntakeApprove: (row: IntakeOrder) => void
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
@@ -991,10 +1018,9 @@ function orderColumns(
 ): Column<ProductionListRow, ProductionListChild>[] {
   const columns: Column<ProductionListRow, SubTicketSummary>[] = [
     {
-      key: 'code',
-      header: 'Mã đơn hàng',
+      key: 'sxCode',
+      header: 'Mã SX',
       width: 104,
-      sortable: true,
       card: 'title',
       cellSx: { fontWeight: 700 },
       filter: filters.search,
@@ -1011,15 +1037,14 @@ function orderColumns(
                 sx={{ fontWeight: 700 }}
                 onClick={(event) => event.stopPropagation()}
               >
-                {row.row.code}
+                {row.row.sxCode}
               </Link>
             )
           }
-          return row.row.code
+          return row.row.sxCode
         }
         const order = row.row
-        // Ưu tiên mã đơn hàng DH…; đơn lên thẳng (không qua Tạo đơn) chưa có thì mới hiện mã SX.
-        const displayCode = order.intakeOrderCode?.trim() || order.intakeSxCode || order.code
+        const displayCode = order.intakeSxCode || order.code
         const childCount = (order.subTickets.length > 1 ? order.subTickets.length : 0) + (order.reworks?.length ?? 0)
         const body = childCount > 0 ? (
           <>
@@ -1062,6 +1087,16 @@ function orderColumns(
           ) : null}
         </>
       ),
+    },
+    {
+      key: 'code',
+      header: 'Mã đơn hàng',
+      width: 104,
+      sortable: true,
+      cellSx: { fontWeight: 600 },
+      // Đơn lên thẳng (không qua Tạo đơn) chưa có mã DH.
+      render: (row) =>
+        row.kind === 'intake' ? row.row.code : row.row.intakeOrderCode?.trim() || '—',
     },
     {
       key: 'createdAt',
@@ -1167,9 +1202,43 @@ function orderColumns(
       renderSub: (sub) => sub.note,
     },
     {
+      key: 'note',
+      header: 'Ghi chú',
+      width: 200,
+      card: 'meta',
+      render: (row) => {
+        const note = row.row.note?.trim() || null
+        const label = row.kind === 'intake' ? row.row.sxCode : row.row.intakeSxCode || row.row.code
+        return (
+          <Stack direction="row" spacing={0.5} sx={{ minWidth: 0, alignItems: 'center' }}>
+            <Typography
+              variant="body2"
+              color={note ? 'text.primary' : 'text.secondary'}
+              title={note ?? undefined}
+              sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {note ?? '—'}
+            </Typography>
+            <Tooltip title={note ? 'Sửa ghi chú' : 'Thêm ghi chú'}>
+              <IconButton
+                size="small"
+                aria-label="Sửa ghi chú"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  actions.onNoteEdit({ id: row.row.id, label, note })
+                }}
+              >
+                <EditNoteOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        )
+      },
+    },
+    {
       key: 'detailImages',
       header: 'Ảnh chi tiết',
-      width: 108,
+      width: 120,
       render: (row) =>
         row.kind === 'intake' ? (
           <IntakeImageThumbs
@@ -1183,7 +1252,7 @@ function orderColumns(
     {
       key: 'stageImages',
       header: 'Ảnh công đoạn',
-      width: 108,
+      width: 120,
       render: (row) => {
         if (row.kind !== 'intake') return '—'
         const stage = intakeProductionStageColumn(row.row)
@@ -1259,7 +1328,7 @@ function orderColumns(
       const production = Boolean(intake.productionOrderCode)
       const open = () => actions.onIntakeView(intake)
       switch (column.key) {
-        case 'code':
+        case 'sxCode':
           return <Stack>
             {production ? (
               <Link component={RouterLink} to={`/orders/${sub.orderCode}`} sx={{ fontWeight: 600 }}>{sub.orderCode}</Link>
@@ -1268,6 +1337,7 @@ function orderColumns(
               Bù cho {sub.reworkOfCode && sub.reworkOfCode !== parent.row.code ? sub.reworkOfCode : intake.code}
             </Typography>
           </Stack>
+        case 'code': return intake.code
         case 'createdAt': return formatDateTime(intake.createdAt)
         case 'status': return production
           ? <StatusChip status={sub.productionStatus} />

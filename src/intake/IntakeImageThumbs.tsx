@@ -17,7 +17,8 @@ export function IntakeImageThumbs({ label, images }: { label: string; images: Or
   const shown = images.slice(0, 2)
   return (
     <>
-      <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', py: 0.25 }}>
+      {/* Luôn một hàng: ô bảng hẹp mà wrap thì ảnh thứ hai rơi xuống, dòng bảng cao gấp đôi. */}
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'nowrap', py: 0.25 }}>
         {shown.map((image, index) => (
           <ZoomThumb
             key={image.publicId}
