@@ -28,6 +28,8 @@ import {
   formatCt,
   ctToGram,
   isStoneMaterial,
+  isWeightUnit,
+  stockQtyLabel,
   getInventoryLookupsApi,
   getWarehouseStockApi,
   qtyFromApi,
@@ -706,6 +708,7 @@ function StockCard({
             amount: row.amount,
           }}
           orientation="rows"
+          qtyLabel={stockQtyLabel(row.unit)}
         />
       </Box>
 
@@ -853,10 +856,13 @@ function stockColumns(
       headSx: groupHead.open,
       align: 'right',
       cellSx: groupBody.open,
+      // Mã gram / ct không ghi SL — chỉ có TL ở cột bên cạnh.
       render: (row) =>
-        profile.showGramQty
-          ? formatQtyOrDash(row.openingQty, row.openingGram)
-          : formatQty(row.openingQty),
+        isWeightUnit(row.unit)
+          ? '—'
+          : profile.showGramQty
+            ? formatQtyOrDash(row.openingQty, row.openingGram)
+            : formatQty(row.openingQty),
     },
     ...(profile.showGramQty
       ? [tlColumn('openingGram', STOCK_GROUPS.open, groupBody.open.bgcolor)]
@@ -877,8 +883,13 @@ function stockColumns(
       headSx: groupHead.in,
       align: 'right',
       cellSx: groupBody.in,
+      // Mã gram / ct không ghi SL — chỉ có TL ở cột bên cạnh.
       render: (row) =>
-        profile.showGramQty ? formatQtyOrDash(row.inQty, row.inGram) : formatQty(row.inQty),
+        isWeightUnit(row.unit)
+          ? '—'
+          : profile.showGramQty
+            ? formatQtyOrDash(row.inQty, row.inGram)
+            : formatQty(row.inQty),
     },
     ...(profile.showGramQty
       ? [tlColumn('inGram', STOCK_GROUPS.in, groupBody.in.bgcolor)]
@@ -899,8 +910,13 @@ function stockColumns(
       headSx: groupHead.out,
       align: 'right',
       cellSx: groupBody.out,
+      // Mã gram / ct không ghi SL — chỉ có TL ở cột bên cạnh.
       render: (row) =>
-        profile.showGramQty ? formatQtyOrDash(row.outQty, row.outGram) : formatQty(row.outQty),
+        isWeightUnit(row.unit)
+          ? '—'
+          : profile.showGramQty
+            ? formatQtyOrDash(row.outQty, row.outGram)
+            : formatQty(row.outQty),
     },
     ...(profile.showGramQty
       ? [tlColumn('outGram', STOCK_GROUPS.out, groupBody.out.bgcolor)]
@@ -921,8 +937,13 @@ function stockColumns(
       headSx: groupHead.stock,
       align: 'right',
       cellSx: groupBody.stock,
+      // Mã gram / ct không ghi SL — chỉ có TL ở cột bên cạnh.
       render: (row) =>
-        profile.showGramQty ? formatQtyOrDash(row.qty, row.closingGram) : formatQty(row.qty),
+        isWeightUnit(row.unit)
+          ? '—'
+          : profile.showGramQty
+            ? formatQtyOrDash(row.qty, row.closingGram)
+            : formatQty(row.qty),
     },
     ...(profile.showGramQty
       ? [tlColumn('closingGram', STOCK_GROUPS.stock, groupBody.stock.bgcolor)]
@@ -953,11 +974,11 @@ function stockColumns(
           ) : row.ledgerMismatch ? (
             <Tooltip title={`Sổ tồn ghi ${formatQty(row.qty)} nhưng tồn đầu kỳ + nhập − xuất = ${formatQty(row.onHandQty)} — cần kiểm kê`}>
               <Box component="span" sx={{ color: 'warning.main', fontWeight: 700 }}>
-                {formatQty(row.onHandQty)} ⚠
+                {stockQtyText(row, row.onHandQty)} ⚠
               </Box>
             </Tooltip>
           ) : (
-            formatQty(row.onHandQty)
+            stockQtyText(row, row.onHandQty)
           ),
       },
       {
@@ -967,7 +988,7 @@ function stockColumns(
         headSx: { bgcolor: groupHead.real.bgcolor },
         align: 'right',
         cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor },
-        render: (row) => (Number(row.heldQty) > 0 ? formatQty(row.heldQty ?? '0') : '—'),
+        render: (row) => (Number(row.heldQty) > 0 ? stockQtyText(row, row.heldQty ?? '0') : '—'),
       },
       {
         key: 'availableQty',
@@ -976,7 +997,7 @@ function stockColumns(
         headSx: { bgcolor: groupHead.real.bgcolor },
         align: 'right',
         cellSx: { ...numCell, bgcolor: groupBody.real.bgcolor, fontWeight: 700 },
-        render: (row) => (row.availableQty == null ? '—' : formatQty(row.availableQty)),
+        render: (row) => (row.availableQty == null ? '—' : stockQtyText(row, row.availableQty)),
       },
       {
         key: 'gramOnHand',
@@ -1081,7 +1102,13 @@ function ttLabel(value?: string) {
   return value == null ? 'TT' : `TT (${formatMoney(value)})`
 }
 
+/** Mã gram / ct là trọng lượng — ghi kèm đơn vị để không đọc nhầm thành số cái. */
+function stockQtyText(row: StockRow, value: string) {
+  return isWeightUnit(row.unit) ? `${formatQty(value)} ${row.unit}` : formatQty(value)
+}
+
 function sumStockTotals(rows: StockRow[]): StockTotals {
+  // Tiền cộng mọi mã; SL chỉ cộng mã đếm được (mã gram / ct là trọng lượng).
   const sum = (pick: (row: StockRow) => string) =>
     String(rows.reduce((acc, row) => acc + (Number(pick(row)) || 0), 0))
   const sumGram = (pick: (row: StockRow) => string | null | undefined) => {
@@ -1089,14 +1116,16 @@ function sumStockTotals(rows: StockRow[]): StockTotals {
     if (!present.length) return null
     return String(present.reduce((acc, value) => acc + (Number(value) || 0), 0))
   }
+  const sumQty = (pick: (row: StockRow) => string) =>
+    String(rows.reduce((acc, row) => acc + (isWeightUnit(row.unit) ? 0 : Number(pick(row)) || 0), 0))
   return {
-    openingQty: sum((r) => r.openingQty),
+    openingQty: sumQty((r) => r.openingQty),
     openingAmount: sum((r) => r.openingAmount),
-    inQty: sum((r) => r.inQty),
+    inQty: sumQty((r) => r.inQty),
     inAmount: sum((r) => r.inAmount),
-    outQty: sum((r) => r.outQty),
+    outQty: sumQty((r) => r.outQty),
     outAmount: sum((r) => r.outAmount),
-    qty: sum((r) => r.qty),
+    qty: sumQty((r) => r.qty),
     amount: sum((r) => r.amount),
     openingGram: sumGram((r) => r.openingGram),
     inGram: sumGram((r) => r.inGram),
@@ -1675,6 +1704,8 @@ function StockItemFields({
     return !siblingLocations.includes(option.id)
   })
   const openingQty = useWatch({ control: form.control, name: `items.${index}.openingQty` }) ?? '0'
+  const unitId = useWatch({ control: form.control, name: `items.${index}.unitId` })
+  const unitName = unitOptions.find((option) => option.id === unitId)?.name ?? row?.unit
   const stockUnitPrice = useWatch({ control: form.control, name: `items.${index}.stockUnitPrice` }) ?? ''
   const inQty = useWatch({ control: form.control, name: `items.${index}.inQty` }) ?? '0'
   const inAmount = useWatch({ control: form.control, name: `items.${index}.inAmount` }) ?? '0'
@@ -1918,9 +1949,11 @@ function StockItemFields({
               value: openingQty,
               onChange: (value) => form.setValue(`items.${index}.openingQty`, value),
             }}
+            qtyLabel={stockQtyLabel(unitName)}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
-            Tồn: SL {formatQty(qty)} · TT {formatMoney(amount)}
+            Tồn: {isWeightUnit(unitName) ? `TL ${formatQty(qty)} ${unitName}` : `SL ${formatQty(qty)}`} · TT{' '}
+            {formatMoney(amount)}
           </Typography>
           {profile.showShapeColor && row && !isGramUnitName(row.unit) ? (
             <FormRow columns={2}>

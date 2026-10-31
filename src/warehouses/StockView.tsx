@@ -16,7 +16,11 @@ import CloseIcon from '@mui/icons-material/Close'
 import {
   formatMoney,
   formatQty,
+  formatCt,
   formatQtyOrDash,
+  isStoneMaterial,
+  isWeightUnit,
+  stockQtyLabel,
   type AvailabilityCode,
   type MaterialImage,
   type StockRow,
@@ -88,9 +92,14 @@ export function WarehouseStockView({
               amount: row.amount,
             }}
             notes
+            qtyLabel={stockQtyLabel(row.unit)}
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, mt: 1.5 }}>
-            Tồn: SL {formatQtyOrDash(row.qty, row.closingGram)} · TT {formatMoney(row.amount)}
+            Tồn:{' '}
+            {isWeightUnit(row.unit)
+              ? `TL ${formatQty(row.qty)} ${row.unit}`
+              : `SL ${formatQtyOrDash(row.qty, row.closingGram)}`}{' '}
+            · TT {formatMoney(row.amount)}
           </Typography>
         </Paper>
       </DialogContent>
@@ -125,7 +134,11 @@ function stockFacts(row: StockRow, profile: StockProfile) {
     },
     {
       label: 'TL',
-      value: row.closingGram ? `${formatQty(row.closingGram)} g` : null,
+      value: !row.closingGram
+        ? null
+        : isStoneMaterial(row)
+          ? formatCt(row.closingGram)
+          : `${formatQty(row.closingGram)} g`,
       show: profile.showGramQty,
     },
     { label: 'Đơn vị', value: row.unit },
