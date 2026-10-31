@@ -1,7 +1,11 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import type { IntakeOrder, IntakePipelineLists } from '../api/intakeOrders'
-import { applyIntakeLiveSnapshot, moveIntakeOrderInCaches } from './intakeOrderCache'
+import {
+  applyIntakeLiveSnapshot,
+  mergeIntakeQueueItems,
+  moveIntakeOrderInCaches,
+} from './intakeOrderCache'
 
 vi.mock('./intakePipelineCountsRefresh', () => ({
   patchIntakePipelineCounts: vi.fn(),
@@ -56,4 +60,58 @@ it('handles the unified backend live snapshot without recreating a cooling intak
   expect(client.getQueryData(catalogKey)).toMatchObject({ items: [live], total: 1 })
   expect(invalidate).toHaveBeenCalledTimes(1)
   expect(client.getQueryState(catalogKey)?.isInvalidated).toBe(true)
+})
+
+it('merges SX SLL rows that share a DH code onto the parent', () => {
+  const parent = {
+    id: 'parent',
+    code: 'DH047',
+    status: 'WAX_PRINTED',
+    qty: 20,
+    waxReleasedQty: 15,
+    parentId: null,
+    createdAt: '2026-10-26T14:50:24.116Z',
+  } as IntakeOrder
+  const child = {
+    id: 'child',
+    code: 'DH047',
+    status: 'WAX_CONFIRMED',
+    qty: 10,
+    parentId: null,
+    createdAt: '2026-10-31T01:51:31.752Z',
+  } as IntakeOrder
+  const rows = mergeIntakeQueueItems([], [], [], [], [parent], [child])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]?.id).toBe('parent')
+  expect(rows[0]?.qty).toBe(20)
+})
+
+it('does not insert SX SLL child batches into the production pipeline', () => {
+  const client = new QueryClient()
+  const pipelineKey = ['intake-orders', 'pipeline-lists', '', '', { rootsOnly: true }]
+  const parent = {
+    id: 'parent',
+    code: 'DH047',
+    status: 'READY_FOR_PRODUCTION',
+    qty: 20,
+    waxReleasedQty: 10,
+    remainingQty: 10,
+    parentId: null,
+    images: [],
+  } as unknown as IntakeOrder
+  const child = {
+    id: 'child',
+    code: 'DH047',
+    status: 'WAX_PRINTED',
+    qty: 10,
+    parentId: 'parent',
+    images: [],
+  } as unknown as IntakeOrder
+  client.setQueryData(pipelineKey, {
+    READY_FOR_PRODUCTION: { items: [parent], total: 1, page: 1, pageSize: 120 },
+  })
+  applyIntakeLiveSnapshot(client, [parent, child])
+  const pipeline = client.getQueryData<IntakePipelineLists>(pipelineKey)!
+  expect(pipeline.READY_FOR_PRODUCTION?.items.map((row) => row.id)).toEqual(['parent'])
+  expect(pipeline.WAX_PRINTED).toBeUndefined()
 })

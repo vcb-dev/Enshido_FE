@@ -40,6 +40,7 @@ const IntakeOrdersPage = lazy(() =>
 const CastingCutsPage = lazy(() =>
   import('./pages/CastingCutsPage').then((m) => ({ default: m.CastingCutsPage })),
 )
+const WaxTreePage = lazy(() => import('./pages/WaxTreePage').then((m) => ({ default: m.WaxTreePage })))
 const CastingSlipPrintPage = lazy(() =>
   import('./pages/CastingSlipPrintPage').then((m) => ({ default: m.CastingSlipPrintPage })),
 )
@@ -127,6 +128,7 @@ export default function App() {
           {/* Thợ đúc quét QR trên phiếu đúc giấy → mở thẳng phiếu (bước 8). */}
           <Route path="/casting/:code" element={<CastingOrdersPage />} />
           <Route path="/casting-cuts" element={<CastingCutsPage />} />
+          <Route path="/wax-tree" element={<WaxTreePage />} />
           <Route path="/intake-orders" element={<IntakeOrdersPage />} />
           <Route path="/orders" element={<ProductionOrdersPage />} />
           {/* Thợ quét QR phiếu giấy đã in vào đây: bản chỉ-đọc, không phải màn quản lý đơn. */}

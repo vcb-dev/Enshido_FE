@@ -12,10 +12,11 @@ const myTickets = SCREEN_GROUPS.find((group) => group.label === 'Phiếu của t
 const menuOf = (key: string) => myTickets.items.find((entry) => entry.key === key)!.menu!
 
 describe('Màn phân quyền khớp sidebar — nhóm "Phiếu của tôi"', () => {
-  it('đủ 4 mục theo thứ tự sidebar, đều là ô tích', () => {
+  it('đủ 5 mục theo thứ tự sidebar, đều là ô tích', () => {
     expect(myTickets.items.map((entry) => entry.label)).toEqual([
       'Phiếu khâu',
       'Lệnh đúc',
+      'Cấy cây thông',
       'Cắt cây thông',
       'Phiếu QC',
     ])
@@ -30,6 +31,9 @@ describe('Màn phân quyền khớp sidebar — nhóm "Phiếu của tôi"', () 
     const cuts = menuOf(Permission.SCREEN_CASTING_CUTS)
     expect(cuts(permissionUserForForm('warehouse', [Permission.SCREEN_CASTING_CUTS]))).toBe(true)
     expect(cuts(permissionUserForForm('warehouse', []))).toBe(false)
+    const waxTree = menuOf(Permission.SCREEN_WAX_TREE)
+    expect(waxTree(permissionUserForForm('worker_wax', [Permission.SCREEN_WAX_TREE]))).toBe(true)
+    expect(waxTree(permissionUserForForm('warehouse', []))).toBe(false)
     // Tích cho vai trò khác cũng hiện (chỉ xem — thao tác vẫn theo vai trò).
     expect(qc(permissionUserForForm('accountant', [Permission.SCREEN_QC_TICKETS]))).toBe(true)
   })

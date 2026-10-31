@@ -39,6 +39,7 @@ import {
 } from '../api/castingSlips'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { formatCt, formatQty } from '../api/inventory'
+import { invalidateBtpStock } from '../orders/btpStock'
 import { applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { CardGroupSkeleton } from '../components/ui'
 import { formatDateShort, usesReceiptFlow, STAGE_LABEL } from '../orders/catalog'
@@ -187,6 +188,7 @@ export function MyTicketsPage() {
     onSuccess: (slip) => {
       setResultSlip(null)
       applyCastingSlipUpdate(queryClient, slip)
+      invalidateBtpStock(queryClient)
       toast.success(`Phiếu ${slip.code}: đã gửi kết quả — chờ thủ kho xác nhận`)
     },
     onError: (error: Error, _vars, ctx) => {

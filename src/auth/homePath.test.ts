@@ -49,6 +49,16 @@ describe('canAccessPath — thợ không có màn quản lý đơn', () => {
     expect(canAccessPath(worker3d, '/my-tickets')).toBe(false)
   })
 
+  it('cho thợ sáp vào Cấy cây thông, không vào Phiếu khâu', () => {
+    const workerWax: PermissionUser = {
+      roleCode: 'WORKER',
+      permissions: [Permission.PRODUCTION_WAX, Permission.SCREEN_WAX_TREE],
+    }
+    expect(canAccessPath(workerWax, '/wax-tree')).toBe(true)
+    expect(canAccessPath(workerWax, '/my-tickets')).toBe(false)
+    expect(canAccessPath(worker, '/wax-tree')).toBe(false)
+  })
+
   it('vẫn cho mở /orders/:code — rơi vào trang tham khảo chỉ-đọc', () => {
     // QR trên phiếu mẹ đã in trỏ vào đây, chặn cứng là thợ quét ra trang trắng.
     expect(canAccessPath(worker, '/orders/A012')).toBe(true)

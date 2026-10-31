@@ -4,7 +4,7 @@ import { useAppForm } from '../components/ui/form/useAppForm'
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty, qtyFromApi } from '../api/inventory'
-import { DialogForm, FormQtyField } from '../components/ui'
+import { DialogForm, FormQtyField, FormTextField } from '../components/ui'
 import { FormImageField } from '../orders/FormImageField'
 import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
 
@@ -15,13 +15,30 @@ type IntakeProductSpecsDialogProps = {
   onSave: (payload: {
     productWeightGram: number
     castingTreeWeightGram?: number
+    produceQty?: number
     images: OrderImage[]
     stoneCount3d?: number | null
     stoneWeight3dGram?: number | null
   }) => void
 }
 
-type Values = StoneSpecs & { waxWeight: string; treeWeight: string; images: OrderImage[] }
+type Values = StoneSpecs & {
+  waxWeight: string
+  treeWeight: string
+  produceQty: string
+  images: OrderImage[]
+}
+
+function leftoverOf(order: IntakeOrder | null) {
+  if (!order) return 0
+  return order.remainingQty ?? Math.max(0, order.qty - (order.waxReleasedQty ?? 0))
+}
+
+function intQty(raw: string) {
+  const value = raw.trim() ? Number(raw) : NaN
+  if (!Number.isInteger(value) || value < 1) return null
+  return value
+}
 
 function valuesOf(order: IntakeOrder | null): Values {
   return {
@@ -33,6 +50,7 @@ function valuesOf(order: IntakeOrder | null): Values {
       order?.castingTreeWeightGram != null && order.castingTreeWeightGram !== ''
         ? qtyFromApi(String(order.castingTreeWeightGram))
         : '',
+    produceQty: '',
     images: [],
     ...stoneSpecsOf(order),
   }
@@ -58,10 +76,11 @@ export function IntakeProductSpecsDialog({
       </DialogTitle>
       <DialogForm
         form={form}
-        onSubmit={({ waxWeight, treeWeight, images, ...stone }) =>
+        onSubmit={({ waxWeight, treeWeight, produceQty, images, ...stone }) =>
           onSave({
             productWeightGram: Number(waxWeight),
             ...(order?.hasMold ? { castingTreeWeightGram: Number(treeWeight) } : {}),
+            ...(order?.requestType === 'BULK' ? { produceQty: intQty(produceQty) ?? undefined } : {}),
             images,
             // Đơn cần 3D đã khai đá ở bước link 3D — không gửi lại để khỏi ghi đè.
             ...(order?.hasMold ? stoneSpecsPayload(stone) : {}),
@@ -74,7 +93,36 @@ export function IntakeProductSpecsDialog({
               <Typography variant="body2">
                 {order.productName?.trim() || '—'}
                 {order.qty ? ` · SL ${formatQty(String(order.qty))}` : null}
+                {order.requestType === 'BULK' && (order.waxReleasedQty ?? 0) > 0
+                  ? ` · đã in sáp ${order.waxReleasedQty}`
+                  : null}
               </Typography>
+            ) : null}
+            {order?.requestType === 'BULK' ? (
+              <FormTextField<Values>
+                name="produceQty"
+                label={`Số đơn SX lần này (tổng ${order.qty})`}
+                required
+                transform={(value) => value.replace(/\D/g, '')}
+                rules={{
+                  validate: (value) => {
+                    const leftover = leftoverOf(order)
+                    const qty = intQty(String(value ?? ''))
+                    if (qty == null) return 'Nhập số đơn SX lần này'
+                    if (qty > leftover) return `Không vượt số còn lại (${leftover})`
+                    return true
+                  },
+                }}
+                helperText={
+                  leftoverOf(order) < order.qty
+                    ? `Còn ${leftoverOf(order)}/${order.qty} chưa in sáp. Nhập ít hơn tổng nếu đây là lô bổ sung.`
+                    : `Còn ${leftoverOf(order)}/${order.qty}. Nhập ít hơn tổng nếu chỉ in một phần.`
+                }
+                size="small"
+                fullWidth
+                disabled={saving || uploading}
+                slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+              />
             ) : null}
             <FormQtyField<Values>
               name="waxWeight"

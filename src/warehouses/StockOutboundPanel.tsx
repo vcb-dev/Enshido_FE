@@ -466,7 +466,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         render: (row: OutboundGroup) => (row.lines.length > 1 ? null : formatQty(row.qty)),
         renderSub: (line) => formatQty(line.qty),
       },
-      ...(warehouseCode === 'nvl-chinh'
+      ...(warehouseCode === 'nvl-chinh' || profile.showGramQty
         ? [
             {
               key: 'gramQty',
@@ -860,7 +860,10 @@ function OutboundDialog({
         unitId: line.unitId || undefined,
         unitName: units.find((unit) => unit.id === line.unitId)?.name,
         qty: line.qty,
-        gramQty: warehouseCode === 'nvl-chinh' ? outboundGramOf(line) : undefined,
+        gramQty:
+          warehouseCode === 'nvl-chinh' || profile.showGramQty
+            ? outboundGramOf(line)
+            : undefined,
         stockUnitPrice: '0',
         inboundUnitPrice: '0',
         amount: '0',
@@ -967,7 +970,9 @@ function OutboundDialog({
           const unitName =
             stock.selected?.unit || units.find((unit) => unit.id === line?.unitId)?.name
           const needGram =
-            warehouseCode === 'nvl-chinh' && Boolean(line?.materialId) && !isGramUnit(unitName)
+            (warehouseCode === 'nvl-chinh' || profile.showGramQty) &&
+            Boolean(line?.materialId) &&
+            !isGramUnit(unitName)
           const availableText = !line?.materialId
             ? '—'
             : stock.available <= 0
@@ -1055,12 +1060,15 @@ function OutboundDialog({
                     <FormRow columns={3}>
                       <FormQtyField<OutboundFormValues>
                         name={`lines.${index}.gramQty`}
-                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'Số gram'}
+                        label={lineIsStone(line, materials, units) ? 'TL (ct)' : 'TL (g)'}
+                        required={warehouseCode === 'nvl-chinh'}
                         readOnly={readOnly}
-                        placeholder={lineIsStone(line, materials, units) ? 'Nhập TL ct…' : 'Nhập số gram…'}
+                        placeholder={lineIsStone(line, materials, units) ? 'Nhập TL ct…' : 'Nhập TL g…'}
                         rules={{
                           validate: (value) =>
-                            (Number(value) || 0) > 0 || 'Trọng lượng phải lớn hơn 0',
+                            warehouseCode !== 'nvl-chinh' ||
+                            (Number(value) || 0) > 0 ||
+                            'Trọng lượng phải lớn hơn 0',
                         }}
                       />
                     </FormRow>

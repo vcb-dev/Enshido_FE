@@ -75,6 +75,12 @@ export type StockRow = {
   availableQty?: string
   ledgerMismatch?: boolean
   gramOnHand?: string | null
+  /** TL (g) đầu kỳ / nhập / xuất — cạnh SL trên bảng Tồn kho BTP. */
+  openingGram?: string | null
+  inGram?: string | null
+  outGram?: string | null
+  /** TL tồn (g) không suy từ SL. Khác `gramOnHand` của mã tính bằng gram. */
+  closingGram?: string | null
   gramBaseAt?: string | null
   priceLayers?: { qty: string; unitPrice: string; source?: 'opening' | 'inbound' }[]
   materialTypeId: string | null
@@ -119,6 +125,11 @@ export type StockTotals = {
   outAmount: string
   qty: string
   amount: string
+  openingGram?: string | null
+  inGram?: string | null
+  outGram?: string | null
+  closingGram?: string | null
+  gramOnHand?: string | null
 }
 
 export type StockResponse = {
@@ -140,6 +151,14 @@ export function formatQty(value: string) {
   const n = Number(value)
   if (!Number.isFinite(n)) return value
   return n.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+}
+
+/** Dòng chỉ cân TL (không nhập SL) thì cột số lượng để trống. */
+export function formatQtyOrDash(qty: string, gram?: string | null) {
+  const n = Number(qty)
+  const g = gram == null || gram === '' ? 0 : Number(gram)
+  if (Number.isFinite(n) && n === 0 && Number.isFinite(g) && g > 0) return '—'
+  return formatQty(qty)
 }
 
 /**

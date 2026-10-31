@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -97,7 +98,9 @@ export function CastingSlipCreateDialog({
   // Tích sẵn đơn được mở từ dòng Lệnh sản xuất khi danh sách tải về.
   useEffect(() => {
     if (!open || !preselectId || !candidates.data) return
-    const row = candidates.data.find((item) => item.id === preselectId)
+    const row = candidates.data.find(
+      (item) => item.id === preselectId || (item.orderIds ?? []).includes(preselectId),
+    )
     if (!row) return
     const current = form.getValues('picked')
     if (!current.some((item) => item.id === row.id)) form.setValue('picked', [...current, row])
@@ -141,7 +144,7 @@ export function CastingSlipCreateDialog({
       values.picked.reduce((sum, row) => sum + Number(row.waxWeightGram ?? 0), 0),
     )
     onSave({
-      intakeOrderIds: values.picked.map((row) => row.id),
+      intakeOrderIds: values.picked.flatMap((row) => row.orderIds ?? [row.id]),
       isServiceCast: values.isServiceCast,
       assignedUserId: values.isServiceCast ? undefined : values.assignedUserId!,
       estimateS999Gram: picked.s999 || undefined,
@@ -152,113 +155,145 @@ export function CastingSlipCreateDialog({
 
   const busy = saving
   return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} fullScreen={fullScreen} fullWidth maxWidth="lg">
-      <DialogTitle>Lên phiếu đúc</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={busy ? undefined : onClose}
+      fullScreen={fullScreen}
+      fullWidth
+      maxWidth="lg"
+      scroll="paper"
+      slotProps={{
+        paper: {
+          sx: {
+            maxHeight: '90dvh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        },
+      }}
+    >
+      <DialogTitle sx={{ flexShrink: 0 }}>Lên lệnh đúc</DialogTitle>
       <DialogForm form={form} onSubmit={submit}>
-        <DialogContent dividers>
-          <Stack spacing={2}>
-            <Stack spacing={1}>
-              <Typography variant="subtitle2">Lọc đơn chờ đúc</Typography>
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Mã đơn, mã SX, mã SP, tên sản phẩm…"
-                sx={{ maxWidth: 420 }}
-              />
-              <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      size="small"
-                      checked={allVisibleChecked}
-                      indeterminate={!allVisibleChecked && rows.some((row) => selected.has(row.id))}
-                      onChange={(event) => toggleAll(event.target.checked)}
-                      disabled={!rows.length}
-                    />
-                  </TableCell>
-                  <TableCell>Mã đơn</TableCell>
-                  <TableCell>Mã SP</TableCell>
-                  <TableCell>Sản phẩm</TableCell>
-                  <TableCell align="right">SL</TableCell>
-                  <TableCell align="right">TL sáp (g)</TableCell>
-                  <TableCell>Cần trả</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id} hover onClick={() => toggle(row, !selected.has(row.id))} sx={{ cursor: 'pointer' }}>
-                    <TableCell padding="checkbox">
-                      <Checkbox size="small" checked={selected.has(row.id)} />
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{row.code}</TableCell>
-                    <TableCell>{row.trackingCode ?? '—'}</TableCell>
-                    <TableCell>{row.productName || '—'}</TableCell>
-                    <TableCell align="right">{row.qty}</TableCell>
-                    <TableCell align="right">{row.waxWeightGram ? formatQty(row.waxWeightGram) : '—'}</TableCell>
-                    <TableCell>{row.dueDate ? formatDateShort(row.dueDate) : '—'}</TableCell>
-                  </TableRow>
-                ))}
-                {!rows.length ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary', py: 2 }}>
-                      {candidates.isFetching ? 'Đang tải…' : 'Không có đơn nào đã có sáp chờ đúc'}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-              <Typography variant="body2">
-                Đã chọn <strong>{picked.length}</strong> đơn · Trọng lượng sáp (cây thông) giao:{' '}
-                <strong>{formatQty(String(waxTotal))} g</strong>
-              </Typography>
-            </Stack>
-
-            <FormCheckbox<Values>
-              name="isServiceCast"
-              label="Đúc dịch vụ"
-              disabled={busy}
-              helperText="Gửi ngoài xưởng — không giao thợ đúc trong hệ thống."
-            />
-
-            {isServiceCast ? null : (
-              <FormAutocomplete<Values, CastCastWorkerOption>
-                name="assignedUserId"
-                valueKey="id"
-                label="Giao cho thợ"
-                required
-                rules={{ required: isServiceCast ? false : 'Chọn thợ đúc được giao phiếu' }}
-                options={castWorkers.data ?? []}
-                getOptionLabel={(option) => option.fullName}
-                isOptionEqualToValue={(a, b) => a.id === b.id}
-                loading={castWorkers.isLoading}
-                disabled={busy}
-                helperText={
-                  castWorkers.isError
-                    ? 'Không tải được danh sách thợ đúc'
-                    : !castWorkers.isLoading && (castWorkers.data?.length ?? 0) === 0
-                      ? 'Chưa có tài khoản thợ đúc — tick quyền Thợ đúc ở Nhân sự.'
-                      : 'Chỉ hiện nhân sự vai trò Thợ đúc (Nhân sự).'
-                }
-                noOptionsText="Không có thợ đúc"
-              />
-            )}
-
-            <CastingSlipMetalTable
-              estimateS999Gram={gramText(estimate.s999)}
-              estimateMasterAlloyGram={gramText(estimate.masterAlloy)}
-              estimateS925Gram={gramText(estimate.s925)}
-              estimateTotalGram={gramText(estimate.total)}
-            />
-            <Typography variant="caption" color="text.secondary">
-              Lưu và in phiếu trước. Thủ kho nhập trọng lượng thực xuất lúc cấp vật tư — để trống thì lấy số
-              ước tính.
+        <DialogContent
+          dividers
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minHeight: 0, flex: 1 }}
+        >
+          <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
+            <Typography variant="subtitle2" sx={{ flexShrink: 0 }}>
+              Lọc đơn đã nhập TL cây thông / đã có sáp
             </Typography>
-
-            {formError ? <Alert severity="error">{formError}</Alert> : null}
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Mã đơn, mã SX, mã SP, tên sản phẩm…"
+              sx={{ maxWidth: 420, flexShrink: 0 }}
+            />
+            <TableContainer sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <Table size="small" stickyHeader sx={{ '& td, & th': { px: 1 } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell padding="checkbox" sx={{ bgcolor: 'background.paper' }}>
+                      <Checkbox
+                        size="small"
+                        checked={allVisibleChecked}
+                        indeterminate={!allVisibleChecked && rows.some((row) => selected.has(row.id))}
+                        onChange={(event) => toggleAll(event.target.checked)}
+                        disabled={!rows.length}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Mã đơn</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Mã SP</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Sản phẩm</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'background.paper' }}>
+                      SL
+                    </TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'background.paper' }}>
+                      TL sáp (g)
+                    </TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Cần trả</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      hover
+                      onClick={() => toggle(row, !selected.has(row.id))}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell padding="checkbox">
+                        <Checkbox size="small" checked={selected.has(row.id)} />
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{row.code}</TableCell>
+                      <TableCell>{row.trackingCode ?? '—'}</TableCell>
+                      <TableCell>{row.productName || '—'}</TableCell>
+                      <TableCell align="right">{row.qty}</TableCell>
+                      <TableCell align="right">
+                        {row.waxWeightGram ? formatQty(row.waxWeightGram) : '—'}
+                      </TableCell>
+                      <TableCell>{row.dueDate ? formatDateShort(row.dueDate) : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                  {!rows.length ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary', py: 2 }}>
+                        {candidates.isFetching ? 'Đang tải…' : 'Không có đơn nào đã có sáp chờ đúc'}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <Typography variant="body2" sx={{ flexShrink: 0 }}>
+              Đã chọn <strong>{picked.length}</strong> đơn · Trọng lượng sáp (cây thông) giao:{' '}
+              <strong>{formatQty(String(waxTotal))} g</strong>
+            </Typography>
           </Stack>
+
+          <FormCheckbox<Values>
+            name="isServiceCast"
+            label="Đúc dịch vụ"
+            disabled={busy}
+            helperText="Gửi ngoài xưởng — không giao thợ đúc trong hệ thống."
+          />
+
+          {isServiceCast ? null : (
+            <FormAutocomplete<Values, CastCastWorkerOption>
+              name="assignedUserId"
+              valueKey="id"
+              label="Giao cho thợ"
+              required
+              rules={{ required: isServiceCast ? false : 'Chọn thợ đúc được giao phiếu' }}
+              options={castWorkers.data ?? []}
+              getOptionLabel={(option) => option.fullName}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              loading={castWorkers.isLoading}
+              disabled={busy}
+              helperText={
+                castWorkers.isError
+                  ? 'Không tải được danh sách thợ đúc'
+                  : !castWorkers.isLoading && (castWorkers.data?.length ?? 0) === 0
+                    ? 'Chưa có tài khoản thợ đúc — tick quyền Thợ đúc ở Nhân sự.'
+                    : 'Chỉ hiện nhân sự vai trò Thợ đúc (Nhân sự).'
+              }
+              noOptionsText="Không có thợ đúc"
+            />
+          )}
+
+          <CastingSlipMetalTable
+            estimateS999Gram={gramText(estimate.s999)}
+            estimateMasterAlloyGram={gramText(estimate.masterAlloy)}
+            estimateS925Gram={gramText(estimate.s925)}
+            estimateTotalGram={gramText(estimate.total)}
+          />
+          <Typography variant="caption" color="text.secondary">
+            Lưu và in phiếu trước. Thủ kho nhập trọng lượng thực xuất lúc cấp vật tư — để trống thì lấy số ước tính.
+          </Typography>
+
+          {formError ? <Alert severity="error">{formError}</Alert> : null}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexShrink: 0 }}>
           <Button onClick={onClose} disabled={busy}>
             Hủy
           </Button>

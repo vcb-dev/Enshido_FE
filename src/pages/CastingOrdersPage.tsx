@@ -37,7 +37,8 @@ import {
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
-import { formatMoney, formatQty } from '../api/inventory'
+import { formatQty } from '../api/inventory'
+import { invalidateBtpStock } from '../orders/btpStock'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
@@ -50,7 +51,7 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
-import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
+import { CastingSlipConfirmDialog, serviceCastPriceLines } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
@@ -296,6 +297,7 @@ export function CastingOrdersPage() {
       submitCastingSlipResultApi(slip.id, payload),
     onSuccess: (updated) => {
       setResultTarget(null)
+      invalidateBtpStock(queryClient)
       afterSlipUpdated(updated, `Phiếu ${updated.code}: đã nhập kết quả — chờ thủ kho kiểm tra`)
     },
     onError: (error: Error) => toast.error(error.message),
@@ -534,6 +536,13 @@ export function CastingOrdersPage() {
         title="Lệnh đúc"
         subtitle="Thủ kho lọc đơn đã có sáp, lên một phiếu cho một lần đúc và in giao thợ đúc; thợ đúc quét QR để nhận."
         compactSubtitle
+        actions={
+          canConfirm ? (
+            <Button variant="contained" disabled={create.isPending} onClick={() => setCreateOpen(true)}>
+              Lên lệnh đúc
+            </Button>
+          ) : null
+        }
       />
       <DataTable
         columns={columns}
@@ -880,9 +889,7 @@ export function CastingSlipViewDialog({
                       {' '}
                       · Đơn giá dịch vụ:{' '}
                       <strong>
-                        {view.serviceUnitPrice != null && view.serviceUnitPrice !== ''
-                          ? `${formatMoney(view.serviceUnitPrice)} đ`
-                          : '—'}
+                        {serviceCastPriceLines(view).length ? serviceCastPriceLines(view).join(' · ') : '—'}
                       </strong>
                     </>
                   ) : (

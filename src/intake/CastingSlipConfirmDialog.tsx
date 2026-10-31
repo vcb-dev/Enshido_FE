@@ -9,6 +9,37 @@ function gram(value: string | null | undefined) {
   return `${formatQty(value)} g`
 }
 
+export function serviceCastPriceLines(slip: Pick<CastingSlip, 'orders' | 'serviceUnitPrice'>) {
+  const priced = slip.orders.filter((row) => row.serviceUnitPrice != null && row.serviceUnitPrice !== '')
+  if (priced.length > 0) {
+    return priced.map((row) => `${row.code}: ${formatMoney(row.serviceUnitPrice!)} đ`)
+  }
+  if (slip.serviceUnitPrice != null && slip.serviceUnitPrice !== '') {
+    return [`${formatMoney(slip.serviceUnitPrice)} đ`]
+  }
+  return [] as string[]
+}
+
+function ServiceCastPriceSummary({ slip }: { slip: Pick<CastingSlip, 'orders' | 'serviceUnitPrice'> }) {
+  const lines = serviceCastPriceLines(slip)
+  return (
+    <Stack spacing={0.25}>
+      <Typography variant="body2">Đơn giá dịch vụ:</Typography>
+      {lines.length ? (
+        lines.map((line) => (
+          <Typography key={line} variant="body2">
+            <strong>{line}</strong>
+          </Typography>
+        ))
+      ) : (
+        <Typography variant="body2">
+          <strong>—</strong>
+        </Typography>
+      )}
+    </Stack>
+  )
+}
+
 /** Thủ kho xem lại đúng số liệu thợ đúc vừa nhập — không nhập lại, không cắt cây thông. */
 export function CastingSlipConfirmDialog({
   slip,
@@ -51,14 +82,7 @@ export function CastingSlipConfirmDialog({
               Bạc đã dùng: <strong>{gram(slip.silverUsedGram)}</strong>
             </Typography>
             {slip.isServiceCast ? (
-              <Typography variant="body2">
-                Đơn giá dịch vụ:{' '}
-                <strong>
-                  {slip.serviceUnitPrice != null && slip.serviceUnitPrice !== ''
-                    ? `${formatMoney(slip.serviceUnitPrice)} đ`
-                    : '—'}
-                </strong>
-              </Typography>
+              <ServiceCastPriceSummary slip={slip} />
             ) : (
               <Typography variant="body2">
                 Thạch cao đã dùng: <strong>{gram(slip.plasterUsedGram)}</strong>

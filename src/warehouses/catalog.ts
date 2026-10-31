@@ -89,6 +89,8 @@ export type StockProfile = {
   showWeight: boolean
   /// Nhóm cột "Thực tế" (tồn thực / giữ chỗ / khả dụng / TL tồn) trên bảng Tồn.
   showRealStock: boolean
+  /// Cột TL (g) trên Tồn / Nhập / Xuất — cân thực, không phải trọng lượng định mức.
+  showGramQty?: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -140,6 +142,8 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     ...DEFAULT_STOCK_PROFILE,
     showSize: false,
     showWeight: false,
+    showRealStock: false,
+    showGramQty: true,
   },
   'btp-cho-vao-da': {
     showSku: true,
@@ -155,6 +159,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showSize: false,
     showWeight: false,
     showRealStock: false,
+    showGramQty: true,
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',

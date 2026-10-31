@@ -47,3 +47,12 @@ export function canSeeLossReport(user: PermissionUser | null | undefined): boole
   if (!user || isWorkerOnly(user)) return false
   return canAny(user, Permission.WAREHOUSE_KEEPER, Permission.ACCOUNTING_APPROVE)
 }
+
+/**
+ * Menu "Cấy cây thông": thợ sáp (quyền `production.wax`) hoặc ô tích màn Cấy cây thông.
+ */
+export function canSeeWaxTreeMenu(user: PermissionUser | null | undefined): boolean {
+  if (!user) return false
+  if (isWorkerOnly(user)) return false
+  return canAny(user, Permission.PRODUCTION_WAX, Permission.SCREEN_WAX_TREE)
+}
