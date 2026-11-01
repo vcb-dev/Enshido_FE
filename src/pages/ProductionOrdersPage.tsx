@@ -1117,6 +1117,20 @@ function orderColumns(
         row.kind === 'intake' ? row.row.code : row.row.intakeOrderCode?.trim() || '—',
     },
     {
+      key: 'detailImages',
+      header: 'Ảnh chi tiết',
+      width: 120,
+      render: (row) =>
+        row.kind === 'intake' ? (
+          <IntakeImageThumbs
+            label="Ảnh chi tiết"
+            images={intakeDetailImages(row.row.images)}
+          />
+        ) : (
+          '—'
+        ),
+    },
+    {
       key: 'createdAt',
       header: 'Ngày tạo',
       width: 136,
@@ -1266,20 +1280,6 @@ function orderColumns(
           </Stack>
         )
       },
-    },
-    {
-      key: 'detailImages',
-      header: 'Ảnh chi tiết',
-      width: 120,
-      render: (row) =>
-        row.kind === 'intake' ? (
-          <IntakeImageThumbs
-            label="Ảnh chi tiết"
-            images={intakeDetailImages(row.row.images)}
-          />
-        ) : (
-          '—'
-        ),
     },
     {
       key: 'stageImages',

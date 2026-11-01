@@ -247,6 +247,17 @@ export function IntakeOrdersPage() {
         ),
       },
       {
+        key: 'detailImages',
+        header: 'Ảnh chi tiết',
+        width: 120,
+        render: (row) => (
+          <IntakeImageThumbs
+            label="Ảnh chi tiết"
+            images={intakeDetailImages(row.images)}
+          />
+        ),
+      },
+      {
         key: 'createdDate',
         header: 'Ngày tạo',
         width: 120,
@@ -338,17 +349,6 @@ export function IntakeOrdersPage() {
         width: 260,
         ellipsis: true,
         render: (row) => row.description || '—',
-      },
-      {
-        key: 'detailImages',
-        header: 'Ảnh chi tiết',
-        width: 120,
-        render: (row) => (
-          <IntakeImageThumbs
-            label="Ảnh chi tiết"
-            images={intakeDetailImages(row.images)}
-          />
-        ),
       },
       {
         key: 'actions',
