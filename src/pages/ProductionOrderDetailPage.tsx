@@ -439,6 +439,10 @@ export function ProductionOrderDetailPage() {
         }}
       >
         <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+          {/* Màn hẹp cột phải rơi xuống cuối trang — đưa ảnh đơn lên trên tab cho thợ thấy ngay. */}
+          <Box sx={{ display: { xs: 'block', lg: 'none' } }}>
+            <OrderImagesSection images={order.images} />
+          </Box>
           <Paper sx={{ px: { xs: 0.5, md: 1 } }}>
             <Tabs
               value={tab}
@@ -468,13 +472,9 @@ export function ProductionOrderDetailPage() {
               {splitIntoTickets ? <ProductionTicketSummary tickets={order.subTickets} /> : null}
               <Divider sx={{ my: 2 }} />
               <InfoGrid order={order} />
+              {/* Ảnh lên đơn / ảnh 3D nằm ở khối "Ảnh đơn" luôn hiện cạnh các tab. */}
               <Stack spacing={2} sx={{ mt: 2 }}>
-                <Gallery label="Ảnh chi tiết đơn hàng" images={order.images.filter((image) => image.kind === 'DETAIL')} />
                 <Gallery label="Ảnh sản phẩm" images={order.images.filter((image) => image.kind === 'PRODUCT')} />
-                {/* Đơn cũ / đơn có khuôn không qua bước gắn 3D nên không có ảnh — ẩn hẳn cho gọn. */}
-                {order.images.some((image) => image.kind === 'MODEL_3D') ? (
-                  <Gallery label="Ảnh file 3D" images={order.images.filter((image) => image.kind === 'MODEL_3D')} />
-                ) : null}
               </Stack>
             </Section>
           ) : null}
@@ -913,6 +913,10 @@ export function ProductionOrderDetailPage() {
               </Stack>
             </Section>
           ) : null}
+
+          <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
+            <OrderImagesSection images={order.images} />
+          </Box>
 
           <Section title="Trạng thái đơn">
             <StatusTimeline order={order} isBtp={isBtp} selectedTicketId={selectedSubTicketId} />
@@ -1702,6 +1706,21 @@ function FieldGroup({
         <VerticalInfoList items={fields.map(([label, value]) => ({ label, value }))} />
       </Box>
     </Box>
+  )
+}
+
+/** Ảnh lúc lên đơn + ảnh file 3D — thợ cần đối chiếu ở mọi tab nên không nhét vào tab Tổng quan. */
+function OrderImagesSection({ images }: { images: ProductionOrderDetail['images'] }) {
+  const detail = images.filter((image) => image.kind === 'DETAIL')
+  const model3d = images.filter((image) => image.kind === 'MODEL_3D')
+  return (
+    <Section title="Ảnh đơn">
+      <Stack spacing={1.5}>
+        <Gallery label="Ảnh lúc lên đơn" images={detail} />
+        {/* Đơn cũ / đơn có khuôn không qua bước gắn 3D nên không có ảnh — ẩn hẳn cho gọn. */}
+        {model3d.length > 0 ? <Gallery label="Ảnh file 3D" images={model3d} /> : null}
+      </Stack>
+    </Section>
   )
 }
 
