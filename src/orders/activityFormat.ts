@@ -46,6 +46,7 @@ export const ACTION_LABEL: Record<string, string> = {
   STONE_UNSKIP: 'Bỏ đánh dấu không có đá',
   MODEL3D_DONE: 'Gắn file 3D',
   WAX_DONE: 'Báo in / bơm sáp xong',
+  WAX_EDIT: 'Sửa TL sáp',
   WAX_TREE_DONE: 'Gắn cây sáp',
   MATERIAL_REJECT: 'Không xuất NVL',
   TICKET_OUTCOME: 'Chốt kết cục phiếu con',
@@ -103,6 +104,8 @@ const FIELD_LABEL: Record<string, string> = {
   stockInboundIds: 'Phiếu nhập kho',
   acceptedBy: 'Thợ xác nhận',
   heldStoneCount: 'Đá giữ chỗ (viên)',
+  productWeightGram: 'TL sáp (g)',
+  castingTreeWeightGram: 'TL cây thông (g)',
 }
 
 /**

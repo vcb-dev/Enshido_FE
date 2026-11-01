@@ -8,6 +8,7 @@ import {
   attachIntakeModel3dApi,
   rejectIntakeOrderApi,
   submitIntakeProductSpecsApi,
+  updateIntakeWaxWeightApi,
   getIntakePipelineListsApi,
   listIntakeOrdersApi,
   type IntakeOrder,
@@ -18,7 +19,9 @@ import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
 import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
 import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
 import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
+import { IntakeWaxWeightDialog } from '../intake/IntakeWaxWeightDialog'
 import {
+  intakeCanEditWaxWeight,
   intakeNeedsCastingSlip,
   intakeNeedsCastingTreeSpecs,
   intakeNeedsModel3d,
@@ -144,6 +147,7 @@ export function ProductionOrdersPage() {
   const [rejectTarget, setRejectTarget] = useState<IntakeOrder | null>(null)
   const [model3dTarget, setModel3dTarget] = useState<IntakeOrder | null>(null)
   const [productSpecsTarget, setProductSpecsTarget] = useState<IntakeOrder | null>(null)
+  const [waxWeightTarget, setWaxWeightTarget] = useState<IntakeOrder | null>(null)
   const [intakeViewTarget, setIntakeViewTarget] = useState<IntakeOrder | null>(null)
   const [orderViewTarget, setOrderViewTarget] = useState<ProductionOrderRow | null>(null)
   const [noteTarget, setNoteTarget] = useState<OrderNoteTarget | null>(null)
@@ -447,6 +451,16 @@ export function ProductionOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const updateWaxWeight = useMutation({
+    mutationFn: ({ id, ...payload }: { id: string; productWeightGram: number; castingTreeWeightGram?: number }) =>
+      updateIntakeWaxWeightApi(id, payload),
+    onSuccess: (order) => {
+      setWaxWeightTarget(null)
+      afterIntakeProductSpecsSubmitted(queryClient, order)
+      toast.success(`Đã sửa TL sáp — ${order.code}`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   function goCastingIssue(order: IntakeOrder) {
     const code = order.castingSlip?.code
     if (!code) return
@@ -471,6 +485,7 @@ export function ProductionOrdersPage() {
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
           onIntakeProductSpecs: (row) => setProductSpecsTarget(row),
+          onIntakeWaxWeight: (row) => setWaxWeightTarget(row),
           onIntakeCastingSlipIssue: goCastingIssue,
           onIntakeView: (row) => setIntakeViewTarget(row),
           can: {
@@ -709,6 +724,15 @@ export function ProductionOrdersPage() {
           void submitProductSpecs.mutateAsync({ id: productSpecsTarget.id, ...payload })
         }}
       />
+      <IntakeWaxWeightDialog
+        order={waxWeightTarget}
+        saving={updateWaxWeight.isPending}
+        onClose={() => setWaxWeightTarget(null)}
+        onSave={(payload) => {
+          if (!waxWeightTarget) return
+          void updateWaxWeight.mutateAsync({ id: waxWeightTarget.id, ...payload })
+        }}
+      />
       <IntakeOrderDetailDialog
         order={intakeViewTarget}
         onClose={() => setIntakeViewTarget(null)}
@@ -721,13 +745,29 @@ export function ProductionOrdersPage() {
   )
 }
 
-function renderIntakeWorkflowAction(
+/** Bước kế tiếp của đơn, kèm nút sửa TL sáp khi người báo số liệu còn sửa được. */
+function renderIntakeWorkflowAction(order: IntakeOrder, actions: Parameters<typeof renderIntakeWorkflowStep>[1]) {
+  const step = renderIntakeWorkflowStep(order, actions)
+  const canEdit = intakeCanEditWaxWeight(order) && (order.hasMold ? actions.can.wax : actions.can.model3d)
+  if (!canEdit) return step
+  return (
+    <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+      {step}
+      <Button size="small" variant="text" onClick={() => actions.onIntakeWaxWeight(order)} sx={actionTextButtonSx}>
+        Sửa TL sáp
+      </Button>
+    </Stack>
+  )
+}
+
+function renderIntakeWorkflowStep(
   order: IntakeOrder,
   actions: {
     onIntakeApprove: (row: IntakeOrder) => void
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
     onIntakeProductSpecs: (row: IntakeOrder) => void
+    onIntakeWaxWeight: (row: IntakeOrder) => void
     onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     /** Quyền theo việc của người đang đăng nhập — không có quyền thì chỉ hiện "Chờ …". */
     can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
@@ -953,6 +993,7 @@ function orderColumns(
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
     onIntakeProductSpecs: (row: IntakeOrder) => void
+    onIntakeWaxWeight: (row: IntakeOrder) => void
     onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     onIntakeView: (row: IntakeOrder) => void
     can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }

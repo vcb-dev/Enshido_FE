@@ -19,6 +19,17 @@ export function intakeNeedsCastingTreeSpecs(row: IntakeOrder) {
   return (row.remainingQty ?? row.qty) > 0
 }
 
+/**
+ * Sửa TL sáp đã báo khi bước sau chưa dùng tới: không khuôn còn chờ cấy cây thông, có khuôn còn
+ * chờ thủ kho xác nhận — khớp BE `updateWaxWeight`.
+ */
+export function intakeCanEditWaxWeight(row: IntakeOrder) {
+  if (row.castingSlip) return false
+  return row.hasMold
+    ? row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
+    : row.status === 'WAX_PRINTED'
+}
+
 /** Đã nhập TL cây thông / đã có sáp — lên phiếu đúc trên màn Lệnh đúc. */
 export function intakeNeedsCastingSlip(row: IntakeOrder) {
   return row.status === 'WAX_CONFIRMED' || row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
