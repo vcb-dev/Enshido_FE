@@ -51,7 +51,7 @@ function intQty(raw: string) {
 }
 
 /**
- * Cấy nhiều đơn cùng một cây thông: tích đơn Chờ SX · Đã in sáp, cân cả cây, chụp ảnh cây.
+ * Cấy nhiều đơn cùng một cây thông: tích đơn Chờ SX · Đã in / bơm sáp, cân cả cây, chụp ảnh cây.
  * Đơn SX SLL bắt buộc nhập số lượng làm lần này — phần còn lại giữ Chờ SX.
  */
 export function WaxTreeBatchDialog({
@@ -161,7 +161,7 @@ export function WaxTreeBatchDialog({
           }}
         >
           <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
-            Tích các đơn đang Chờ SX · Đã in sáp cùng một cây. Nhập trọng lượng cả cây — hệ thống chia theo TL
+            Tích các đơn đang Chờ SX · Đã in / bơm sáp cùng một cây. Nhập trọng lượng cả cây — hệ thống chia theo TL
             sáp từng đơn. Đơn SX SLL phải nhập số lượng làm lần này.
           </Typography>
           <TableContainer sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>

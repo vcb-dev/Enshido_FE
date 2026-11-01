@@ -430,7 +430,6 @@ export function ProductionOrdersPage() {
     mutationFn: ({
       id,
       productWeightGram,
-      castingTreeWeightGram,
       produceQty,
       images,
       stoneCount3d,
@@ -438,7 +437,6 @@ export function ProductionOrdersPage() {
     }: {
       id: string
       productWeightGram: number
-      castingTreeWeightGram?: number
       produceQty?: number
       images: IntakeOrder['images']
       stoneCount3d?: number | null
@@ -446,7 +444,6 @@ export function ProductionOrdersPage() {
     }) =>
       submitIntakeProductSpecsApi(id, {
         productWeightGram,
-        castingTreeWeightGram,
         produceQty,
         images,
         stoneCount3d,
@@ -456,17 +453,15 @@ export function ProductionOrdersPage() {
       setProductSpecsTarget(null)
       afterIntakeProductSpecsSubmitted(queryClient, order)
       toast.success(
-        order.status === 'PENDING_WAREHOUSE_CONFIRMATION'
-          ? `Đã gửi số liệu — chờ thủ kho (${order.code})`
-          : order.status === 'READY_FOR_PRODUCTION'
-            ? `Đã cập nhật sáp — còn ${order.remainingQty ?? 0} đơn (${order.code})`
-            : `Đã in sáp — ${order.code}`,
+        order.status === 'READY_FOR_PRODUCTION'
+          ? `Đã cập nhật sáp — còn ${order.remainingQty ?? 0} đơn (${order.code})`
+          : `${order.hasMold ? 'Đã bơm sáp' : 'Đã in sáp'} — ${order.code}`,
       )
     },
     onError: (error: Error) => toast.error(error.message),
   })
   const updateWaxWeight = useMutation({
-    mutationFn: ({ id, ...payload }: { id: string; productWeightGram: number; castingTreeWeightGram?: number }) =>
+    mutationFn: ({ id, ...payload }: { id: string; productWeightGram: number }) =>
       updateIntakeWaxWeightApi(id, payload),
     onSuccess: (order) => {
       setWaxWeightTarget(null)
@@ -845,10 +840,10 @@ function renderIntakeWorkflowStep(
         >
           {(order.waxReleasedQty ?? 0) > 0
             ? order.hasMold
-              ? 'Cập nhật số liệu cây thông bổ sung'
+              ? 'Cập nhật số liệu bơm sáp bổ sung'
               : 'Cập nhật số liệu sáp bổ sung'
             : order.hasMold
-              ? 'Cập nhật số liệu cây thông'
+              ? 'Cập nhật số liệu bơm sáp'
               : 'Cập nhật số liệu sáp'}
         </Typography>
       </Button>
@@ -892,10 +887,10 @@ function renderIntakeWorkflowStep(
         size="small"
         variant="outlined"
         component={RouterLink}
-        to={order.hasMold ? '/casting' : '/wax-tree'}
+        to="/wax-tree"
         sx={{ minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5, whiteSpace: 'normal', lineHeight: 1.35 }}
       >
-        {order.hasMold ? 'Xem Lệnh đúc' : 'Vào mục “Cấy cây thông”'}
+        Vào mục “Cấy cây thông”
       </Button>
     )
   }
@@ -1176,7 +1171,7 @@ function orderColumns(
             {released > 0 ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {row.row.status === 'READY_FOR_PRODUCTION'
-                  ? `Đã in sáp ${released} đơn`
+                  ? `${row.row.hasMold ? 'Đã bơm sáp' : 'Đã in sáp'} ${released} đơn`
                   : `Đang đúc ${released} đơn`}
               </Typography>
             ) : null}

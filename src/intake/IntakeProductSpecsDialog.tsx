@@ -14,7 +14,6 @@ type IntakeProductSpecsDialogProps = {
   onClose: () => void
   onSave: (payload: {
     productWeightGram: number
-    castingTreeWeightGram?: number
     produceQty?: number
     images: OrderImage[]
     stoneCount3d?: number | null
@@ -24,7 +23,6 @@ type IntakeProductSpecsDialogProps = {
 
 type Values = StoneSpecs & {
   waxWeight: string
-  treeWeight: string
   produceQty: string
   images: OrderImage[]
 }
@@ -45,10 +43,6 @@ function valuesOf(order: IntakeOrder | null): Values {
     waxWeight:
       order?.productWeightGram != null && order.productWeightGram !== ''
         ? qtyFromApi(String(order.productWeightGram))
-        : '',
-    treeWeight:
-      order?.castingTreeWeightGram != null && order.castingTreeWeightGram !== ''
-        ? qtyFromApi(String(order.castingTreeWeightGram))
         : '',
     produceQty: '',
     images: [],
@@ -72,14 +66,13 @@ export function IntakeProductSpecsDialog({
   return (
     <Dialog open={Boolean(order)} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        {order?.hasMold ? 'Bơm sáp & cấy cây thông' : 'Cập nhật số liệu sáp'} — {order?.code ?? ''}
+        {order?.hasMold ? 'Bơm sáp' : 'Cập nhật số liệu sáp'} — {order?.code ?? ''}
       </DialogTitle>
       <DialogForm
         form={form}
-        onSubmit={({ waxWeight, treeWeight, produceQty, images, ...stone }) =>
+        onSubmit={({ waxWeight, produceQty, images, ...stone }) =>
           onSave({
             productWeightGram: Number(waxWeight),
-            ...(order?.hasMold ? { castingTreeWeightGram: Number(treeWeight) } : {}),
             ...(order?.requestType === 'BULK' ? { produceQty: intQty(produceQty) ?? undefined } : {}),
             images,
             // Đơn cần 3D đã khai đá ở bước link 3D — không gửi lại để khỏi ghi đè.
@@ -134,22 +127,10 @@ export function IntakeProductSpecsDialog({
               fullWidth
               disabled={saving || uploading}
             />
-            {order?.hasMold ? (
-              <FormQtyField<Values>
-                name="treeWeight"
-                label="Trọng lượng cây thông (g)"
-                required
-                rules={{ validate: (value) => (Number(value) > 0 ? true : 'Nhập trọng lượng cây thông (gram)') }}
-                helperText="VD: 1.250,5"
-                size="small"
-                fullWidth
-                disabled={saving || uploading}
-              />
-            ) : null}
             {order?.hasMold ? <StoneSpecsFields disabled={saving || uploading} /> : null}
             <FormImageField<Values>
               name="images"
-              label={order?.hasMold ? 'Ảnh sáp / cây thông' : 'Ảnh sản phẩm / sáp'}
+              label={order?.hasMold ? 'Ảnh sáp' : 'Ảnh sản phẩm / sáp'}
               kind="PRODUCT"
               required
               onUploadingChange={setUploading}

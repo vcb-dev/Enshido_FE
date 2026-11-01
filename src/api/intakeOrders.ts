@@ -243,7 +243,6 @@ export function submitIntakeProductSpecsApi(
   id: string,
   payload: {
     productWeightGram: number
-    castingTreeWeightGram?: number
     produceQty?: number
     images: OrderImage[]
     stoneCount3d?: number | null
@@ -256,10 +255,10 @@ export function submitIntakeProductSpecsApi(
   })
 }
 
-/** Sửa TL sáp đã báo (đơn có khuôn sửa kèm TL cây thông) khi bước sau chưa dùng tới. */
+/** Sửa TL sáp đã báo khi chưa cấy cây thông — TL cây thông chỉ nhập ở màn Cấy cây thông. */
 export function updateIntakeWaxWeightApi(
   id: string,
-  payload: { productWeightGram: number; castingTreeWeightGram?: number },
+  payload: { productWeightGram: number },
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/wax-weight`, {
     method: 'PATCH',
