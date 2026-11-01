@@ -20,14 +20,17 @@ export function intakeNeedsCastingTreeSpecs(row: IntakeOrder) {
 }
 
 /**
- * Sửa TL sáp đã báo khi bước sau chưa dùng tới: không khuôn còn chờ cấy cây thông, có khuôn còn
- * chờ thủ kho xác nhận — khớp BE `updateWaxWeight`.
+ * Sửa TL sáp đã báo khi bước sau chưa dùng tới: đơn còn chờ cấy cây thông. Đơn có khuôn bơm theo
+ * luồng cũ (còn chờ thủ kho xác nhận) vẫn sửa được — khớp BE `updateWaxWeight`.
  */
 export function intakeCanEditWaxWeight(row: IntakeOrder) {
   if (row.castingSlip) return false
-  return row.hasMold
-    ? row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
-    : row.status === 'WAX_PRINTED'
+  return row.status === 'WAX_PRINTED' || intakeIsLegacyMoldWax(row)
+}
+
+/** Đơn có khuôn bơm theo luồng cũ (bơm sáp + cây thông một lần), còn chờ thủ kho xác nhận. */
+export function intakeIsLegacyMoldWax(row: IntakeOrder) {
+  return row.hasMold === true && row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
 }
 
 /** Đã nhập TL cây thông / đã có sáp — lên phiếu đúc trên màn Lệnh đúc. */

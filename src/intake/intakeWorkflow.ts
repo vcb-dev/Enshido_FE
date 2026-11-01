@@ -25,11 +25,8 @@ export function intake3dActionsDone(order: IntakeOrder): boolean {
   return false
 }
 
-/** Thợ sáp — cây thông: có khuôn ở Chờ SX · Đã có 3D; không khuôn ở Chờ SX · Đã in sáp. */
+/** Thợ sáp — cây thông: mọi đơn ở Chờ SX · Đã in / bơm sáp (có khuôn đã bơm sáp, không khuôn đã in sáp). */
 export function intakeWaxNeedsCastingTree(order: IntakeOrder): boolean {
-  if (order.hasMold === true) {
-    return order.status === 'READY_FOR_PRODUCTION'
-  }
   return intakeNeedsCastingTreeSpecs(order)
 }
 

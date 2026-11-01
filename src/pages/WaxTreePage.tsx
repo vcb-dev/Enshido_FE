@@ -37,7 +37,7 @@ function stoneLabel(row: IntakeOrder) {
 }
 
 /**
- * Màn Cấy cây thông: đơn Chờ SX · Đã in sáp. Thợ sáp chọn nhiều đơn cùng một cây, cân cả cây.
+ * Màn Cấy cây thông: đơn Chờ SX · Đã in / bơm sáp. Thợ sáp chọn nhiều đơn cùng một cây, cân cả cây.
  */
 export function WaxTreePage() {
   const queryClient = useQueryClient()
@@ -275,7 +275,7 @@ export function WaxTreePage() {
     >
       <PageHeader
         title="Cấy cây thông"
-        subtitle="Đơn Chờ SX · Đã in sáp. Bấm Cấy cây thông để chọn nhiều đơn cùng một cây."
+        subtitle="Đơn Chờ SX · Đã in / bơm sáp. Bấm Cấy cây thông để chọn nhiều đơn cùng một cây."
         compactSubtitle
         actions={
           canWax ? (
@@ -291,7 +291,7 @@ export function WaxTreePage() {
         rowKey={(row) => row.id}
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
-        emptyText="Chưa có đơn Chờ SX · Đã in sáp."
+        emptyText="Chưa có đơn Chờ SX · Đã in / bơm sáp."
         variant="grid"
         fixedLayout
         minWidth={1730}

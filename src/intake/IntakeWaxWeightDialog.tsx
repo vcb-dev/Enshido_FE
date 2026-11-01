@@ -9,16 +9,14 @@ type IntakeWaxWeightDialogProps = {
   order: IntakeOrder | null
   saving: boolean
   onClose: () => void
-  onSave: (payload: { productWeightGram: number; castingTreeWeightGram?: number }) => void
+  onSave: (payload: { productWeightGram: number }) => void
 }
 
-type Values = { waxWeight: string; treeWeight: string }
-
-const gramOf = (value: string | number | null | undefined) =>
-  value != null && value !== '' ? qtyFromApi(String(value)) : ''
+type Values = { waxWeight: string }
 
 function valuesOf(order: IntakeOrder | null): Values {
-  return { waxWeight: gramOf(order?.productWeightGram), treeWeight: gramOf(order?.castingTreeWeightGram) }
+  const wax = order?.productWeightGram
+  return { waxWeight: wax != null && wax !== '' ? qtyFromApi(String(wax)) : '' }
 }
 
 /** Sửa TL sáp đã báo — chỉ mở khi bước sau chưa dùng số liệu (`intakeCanEditWaxWeight`). */
@@ -34,19 +32,14 @@ export function IntakeWaxWeightDialog({ order, saving, onClose, onSave }: Intake
       <DialogTitle>Sửa TL sáp — {order?.code ?? ''}</DialogTitle>
       <DialogForm
         form={form}
-        onSubmit={({ waxWeight, treeWeight }) =>
-          onSave({
-            productWeightGram: Number(waxWeight),
-            ...(order?.hasMold ? { castingTreeWeightGram: Number(treeWeight) } : {}),
-          })
-        }
+        onSubmit={({ waxWeight }) => onSave({ productWeightGram: Number(waxWeight) })}
       >
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             {order ? (
               <Typography variant="body2" color="text.secondary">
                 {order.productName?.trim() || '—'}
-                {order.hasMold ? ' · sửa được đến khi thủ kho xác nhận' : ' · sửa được đến khi cấy cây thông'}
+                {order.status === 'WAX_PRINTED' ? ' · sửa được đến khi cấy cây thông' : ' · sửa được đến khi lên phiếu đúc'}
               </Typography>
             ) : null}
             <FormQtyField<Values>
@@ -59,18 +52,6 @@ export function IntakeWaxWeightDialog({ order, saving, onClose, onSave }: Intake
               fullWidth
               disabled={saving}
             />
-            {order?.hasMold ? (
-              <FormQtyField<Values>
-                name="treeWeight"
-                label="Trọng lượng cây thông (g)"
-                required
-                rules={{ validate: (value) => (Number(value) > 0 ? true : 'Nhập trọng lượng cây thông (gram)') }}
-                helperText="VD: 1.250,5"
-                size="small"
-                fullWidth
-                disabled={saving}
-              />
-            ) : null}
           </Stack>
         </DialogContent>
         <DialogActions>
