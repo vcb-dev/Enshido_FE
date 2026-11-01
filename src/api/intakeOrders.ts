@@ -250,6 +250,17 @@ export function submitIntakeProductSpecsApi(
   })
 }
 
+/** Sửa TL sáp đã báo (đơn có khuôn sửa kèm TL cây thông) khi bước sau chưa dùng tới. */
+export function updateIntakeWaxWeightApi(
+  id: string,
+  payload: { productWeightGram: number; castingTreeWeightGram?: number },
+) {
+  return apiFetch<IntakeOrder>(`/intake-orders/${id}/wax-weight`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function confirmIntakeWarehouseApi(id: string, checkedWeightGram?: number) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/confirm-warehouse`, {
     method: 'POST',
