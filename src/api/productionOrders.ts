@@ -564,6 +564,8 @@ export type ProductionOrderListParams = {
   requestType?: ProductionRequestType | ''
   source?: ProductionSource | ''
   search?: string
+  /** Lọc riêng theo mã đơn hàng (DH…). */
+  orderCode?: string
   receivedDate?: string
   dueDate?: string
   page: number

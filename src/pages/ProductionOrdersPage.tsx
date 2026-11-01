@@ -157,6 +157,7 @@ export function ProductionOrdersPage() {
       status: '',
       requestType: '',
       dueDate: '',
+      orderCode: '',
     },
   })
   const { params } = table
@@ -174,6 +175,7 @@ export function ProductionOrdersPage() {
       ? `${INTAKE_STATUS_FILTER_PREFIX}PENDING_APPROVAL`
       : params.status
   const search = useDebouncedValue(params.search, 300)
+  const orderCode = params.orderCode.trim()
   // Bảng có đơn tạo chỉ sắp được theo mã đơn hàng — hai nguồn cùng thứ tự DH… nên ghép đúng được.
   const codeSortOnly = isMergedView || isIntakeOnlyView
   const codeSort = useMemo<IntakeOrderSort | undefined>(
@@ -187,18 +189,28 @@ export function ProductionOrdersPage() {
     status: statusTab,
     requestType: params.requestType as ProductionRequestType | '',
     search,
+    orderCode,
     dueDate: params.dueDate,
     sort: listSort || undefined,
     dir: listSort ? params.dir : undefined,
   }
 
   const intakePipelineLists = useQuery({
-    queryKey: ['intake-orders', 'pipeline-lists', search, params.requestType, { rootsOnly: true }, codeSort],
+    queryKey: [
+      'intake-orders',
+      'pipeline-lists',
+      search,
+      orderCode,
+      params.requestType,
+      { rootsOnly: true },
+      codeSort,
+    ],
     queryFn: () =>
       getIntakePipelineListsApi({
         rootsOnly: true,
         requestType: params.requestType as ProductionRequestType | '',
         search,
+        orderCode,
         pageSize: 120,
         sort: codeSort,
       }),
@@ -282,6 +294,7 @@ export function ProductionOrdersPage() {
       isCoolingView ? 1 : params.page,
       isCoolingView ? 120 : params.pageSize,
       search,
+      orderCode,
       params.requestType,
       codeSort,
     ],
@@ -291,6 +304,7 @@ export function ProductionOrdersPage() {
         unlinkedOnly: true,
         requestType: params.requestType as ProductionRequestType | '',
         search,
+        orderCode,
         page: isCoolingView ? 1 : params.page,
         pageSize: isCoolingView ? 120 : params.pageSize,
         sort: codeSort,
@@ -505,6 +519,13 @@ export function ProductionOrdersPage() {
               placeholder="Tìm mã SX, mã đơn, mô tả…"
             />
           ),
+          orderCode: (
+            <ColumnHeaderSearch
+              value={params.orderCode}
+              onChange={(value) => table.setFilter({ orderCode: value })}
+              placeholder="Lọc mã đơn…"
+            />
+          ),
           status: {
             valueId: statusFilterValue,
             options: STATUS_COLUMN_FILTER_OPTIONS,
@@ -530,6 +551,7 @@ export function ProductionOrdersPage() {
       user,
       navigate,
       params.dueDate,
+      params.orderCode,
       params.requestType,
       params.search,
       statusFilterValue,
@@ -1000,6 +1022,7 @@ function orderColumns(
   },
   filters: {
     search: ReactNode
+    orderCode: ReactNode
     status: {
       valueId: string
       options: Array<{ id: string; name: string }>
@@ -1093,6 +1116,7 @@ function orderColumns(
       width: 104,
       sortable: true,
       cellSx: { fontWeight: 600 },
+      filter: filters.orderCode,
       // Đơn lên thẳng (không qua Tạo đơn) chưa có mã DH.
       render: (row) =>
         row.kind === 'intake' ? row.row.code : row.row.intakeOrderCode?.trim() || '—',
