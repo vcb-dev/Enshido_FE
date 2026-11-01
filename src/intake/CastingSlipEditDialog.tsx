@@ -100,9 +100,10 @@ function valuesOf(slip: CastingSlip | null): Values {
   }
 }
 
-/** Phiếu đúc sửa được cho tới khi thủ kho xác nhận Đúc xong. */
-export function canEditCastingSlip(slip: Pick<CastingSlip, 'status'>) {
-  return slip.status !== 'DONE' && slip.status !== 'CAST_FAILED'
+/** Thủ kho sửa được tới lúc chờ xác nhận; admin sửa được cả phiếu Đúc xong. */
+export function canEditCastingSlip(slip: Pick<CastingSlip, 'status'>, isAdmin: boolean) {
+  if (slip.status === 'CAST_FAILED') return false
+  return slip.status !== 'DONE' || isAdmin
 }
 
 /**
@@ -112,11 +113,13 @@ export function canEditCastingSlip(slip: Pick<CastingSlip, 'status'>) {
  */
 export function CastingSlipEditDialog({
   slip,
+  isAdmin,
   saving,
   onClose,
   onSave,
 }: {
   slip: CastingSlip | null
+  isAdmin: boolean
   saving: boolean
   onClose: () => void
   onSave: (payload: UpdateCastingSlipPayload) => void
@@ -133,8 +136,11 @@ export function CastingSlipEditDialog({
   const status = current?.status
   const isService = Boolean(current?.isServiceCast)
   const canWorker = !isService && (status === 'PENDING_ISSUE' || status === 'WAIT_CASTING')
-  const canIssue = status === 'WAIT_CASTING' || status === 'CASTING' || status === 'PENDING_CONFIRMATION'
-  const canResult = status === 'PENDING_CONFIRMATION'
+  const adminDone = status === 'DONE' && isAdmin
+  const canIssue =
+    status === 'WAIT_CASTING' || status === 'CASTING' || status === 'PENDING_CONFIRMATION' || adminDone
+  const canResult = status === 'PENDING_CONFIRMATION' || adminDone
+  const isCut = current?.restWeightGram != null
 
   const workers = useQuery({
     queryKey: ['casting-cast-workers'],
@@ -365,6 +371,14 @@ export function CastingSlipEditDialog({
                   <strong>Bắt đầu đúc:</strong> {formatDateTime(view.startedAt)}
                   {view.startedByName ? ` · ${view.startedByName}` : ''}
                 </Typography>
+              ) : null}
+
+              {adminDone ? (
+                <Alert severity="warning">
+                  Phiếu đã Đúc xong — chỉ admin sửa được. Số vật tư và kết quả lưu lại sẽ đổi tồn kho NVL chính, Kho
+                  BTP và báo cáo hao hụt đúc.
+                  {isCut ? ' Cây đã cắt: TL cây thông không được nhỏ hơn tổng phôi + phần còn lại.' : ''}
+                </Alert>
               ) : null}
 
               {canResult ? (

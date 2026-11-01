@@ -327,6 +327,7 @@ export function CastingOrdersPage() {
   )
   const canConfirm = canConfirmIntakeWarehouse(user)
   const canCast = can(user, Permission.PRODUCTION_CAST)
+  const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
 
   const renderSlipActions = useCallback(
     (row: CastingSlip) => (
@@ -344,7 +345,7 @@ export function CastingOrdersPage() {
             {row.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
           </Button>
         ) : null}
-        {canConfirm && canEditCastingSlip(row) ? (
+        {canConfirm && canEditCastingSlip(row, isAdmin) ? (
           <Button size="small" variant="outlined" onClick={() => setEditTarget(row)}>
             Sửa phiếu đúc
           </Button>
@@ -387,6 +388,7 @@ export function CastingOrdersPage() {
       askRejectCast,
       canCast,
       canConfirm,
+      isAdmin,
       setConfirmTarget,
       confirmingId,
       dialog.openView,
@@ -602,6 +604,7 @@ export function CastingOrdersPage() {
       />
       <CastingSlipEditDialog
         slip={editTarget}
+        isAdmin={isAdmin}
         saving={editSlip.isPending}
         onClose={() => setEditTarget(null)}
         onSave={(payload) => editTarget && editSlip.mutate({ slip: editTarget, payload })}
