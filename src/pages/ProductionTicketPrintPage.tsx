@@ -299,8 +299,11 @@ function Ticket({
   // Mã SX giống cột Mã SX trên danh sách lệnh; mã đơn hàng DH… ghi nhỏ ngay dưới (đơn lên thẳng thì không có).
   const sxCode = order.intakeSxCode || order.code
   const orderCode = order.intakeOrderCode?.trim() || null
-  const productImages = order.images.filter((image) => image.kind === 'PRODUCT')
-  const images = (productImages.length ? productImages : order.images).slice(0, 2)
+  // Ảnh lúc lên đơn trước; đơn không có thì ảnh sản phẩm, rồi ảnh 3D. Không lấy ảnh cân / ảnh khâu.
+  const pickImages = (kind: string) => order.images.filter((image) => image.kind === kind)
+  const images = [pickImages('DETAIL'), pickImages('PRODUCT'), pickImages('MODEL_3D')]
+    .find((list) => list.length > 0)
+    ?.slice(0, 2) ?? []
 
   return (
     <>
@@ -382,15 +385,29 @@ function Ticket({
             )}
           </tr>
           <tr>
-            <td colSpan={2} rowSpan={6} style={{ padding: '1mm', verticalAlign: 'middle' }}>
-              <Box sx={{ display: 'flex', gap: '1.5mm', justifyContent: 'center', alignItems: 'center', height: '26mm' }}>
+            {/* Ảnh phủ kín ô 6 dòng bên cạnh (đặt tuyệt đối nên không đẩy bảng cao thêm — phiếu vẫn vừa một tờ). */}
+            <td colSpan={2} rowSpan={6} style={{ position: 'relative', padding: 0 }}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: '1mm',
+                  display: 'flex',
+                  gap: '1.5mm',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 {images.map((image) => (
                   <Box
                     key={image.id}
                     component="img"
-                    src={cloudinaryFit(image.url, 500)}
+                    src={cloudinaryFit(image.url, 900)}
                     alt=""
-                    sx={{ maxWidth: images.length > 1 ? '48%' : '100%', maxHeight: '26mm', objectFit: 'contain' }}
+                    sx={{
+                      width: images.length > 1 ? 'calc(50% - 0.75mm)' : '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                    }}
                   />
                 ))}
               </Box>
