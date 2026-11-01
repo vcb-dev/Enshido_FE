@@ -145,6 +145,8 @@ export function listIntakeOrdersApi(params: {
   includeChildren?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
+  /** Lọc riêng theo mã đơn hàng (DH…). */
+  orderCode?: string
   page: number
   pageSize: number
   sort?: IntakeOrderSort
@@ -156,6 +158,7 @@ export function listIntakeOrdersApi(params: {
   if (params.unlinkedOnly) query.set('unlinkedOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
+  if (params.orderCode?.trim()) query.set('orderCode', params.orderCode.trim())
   query.set('page', String(params.page))
   query.set('pageSize', String(params.pageSize))
   setIntakeSort(query, params.sort)
@@ -174,6 +177,8 @@ export function getIntakePipelineListsApi(params: {
   rootsOnly?: boolean
   requestType?: ProductionRequestType | ''
   search?: string
+  /** Lọc riêng theo mã đơn hàng (DH…). */
+  orderCode?: string
   pageSize?: number
   sort?: IntakeOrderSort
 }) {
@@ -181,6 +186,7 @@ export function getIntakePipelineListsApi(params: {
   if (params.rootsOnly) query.set('rootsOnly', 'true')
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
+  if (params.orderCode?.trim()) query.set('orderCode', params.orderCode.trim())
   if (params.pageSize != null) query.set('pageSize', String(params.pageSize))
   setIntakeSort(query, params.sort)
   return apiFetch<IntakePipelineLists>(`/intake-orders/pipeline-lists?${query.toString()}`)
