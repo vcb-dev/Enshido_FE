@@ -423,15 +423,12 @@ function Ticket({
               {subTicket ? subTicket.qty : order.qty}
               {order.qtyUnit ? ` ${order.qtyUnit}` : ''}
             </Value>
-            <Label>Trọng lượng:</Label>
-            <Value colSpan={SPAN_1}>{order.weight != null ? formatQty(order.weight) : ''}</Value>
+            <Label>Loại đá:</Label>
+            <Value colSpan={SPAN_1}>{order.stoneTypes.join(', ')}</Value>
           </tr>
           <tr>
-            <Label>Bạc xuất thêm (g):</Label>
-            <td style={{ ...center, color: BLUE, fontWeight: 700 }}>
-              {Number(materials.issuedSilverWeight ?? 0) ? formatQty(materials.issuedSilverWeight ?? '0') : ''}
-            </td>
-            <td colSpan={SPAN_2} style={{ fontSize: '0.9em' }}>
+            {/* Bỏ ô "Bạc xuất thêm (g)" theo mẫu phiếu giấy; dòng ghi chú phiếu con / vật tư giữ, kéo hết bề ngang. */}
+            <td colSpan={SPAN_3 + 1} style={{ fontSize: '0.9em' }}>
               {[splitNote, issuedNote].filter(Boolean).join(' — ')}
             </td>
           </tr>
@@ -443,7 +440,7 @@ function Ticket({
             </td>
           </tr>
           <tr>
-            <Label>Màu sắc:</Label>
+            <Label>Màu xi:</Label>
             <Value>{order.platingColor}</Value>
             <td colSpan={SPAN_2} style={{ ...center, whiteSpace: 'pre-wrap' }}>
               {order.laserEngraving ?? ''}
