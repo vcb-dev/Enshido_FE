@@ -29,6 +29,8 @@ import {
   getCastingSlipByCodeApi,
   listCastingSlipsApi,
   submitCastingSlipResultApi,
+  updateCastingSlipApi,
+  type UpdateCastingSlipPayload,
   type CastingSlip,
   type CastingSlipImage,
   type CreateCastingSlipPayload,
@@ -39,6 +41,7 @@ import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { formatQty } from '../api/inventory'
 import { invalidateBtpStock } from '../orders/btpStock'
+import { invalidateNvlStock } from '../orders/nvlStock'
 import {
   ColumnHeaderDate,
   ColumnHeaderFilter,
@@ -51,6 +54,7 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useTableParams } from '../hooks/useTableParams'
 import { formatDateTime } from '../orders/catalog'
 import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
+import { CastingSlipEditDialog, canEditCastingSlip } from '../intake/CastingSlipEditDialog'
 import { CastingSlipConfirmDialog, serviceCastPriceLines } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
@@ -110,6 +114,7 @@ export function CastingOrdersPage() {
   /** Phiếu đang mở hộp xem lại số liệu thợ đúc vừa nhập. */
   const [confirmTarget, setConfirmTarget] = useState<CastingSlip | null>(null)
   const [resultTarget, setResultTarget] = useState<CastingSlip | null>(null)
+  const [editTarget, setEditTarget] = useState<CastingSlip | null>(null)
   // `?new=<id>`: mở từ nút "Lên lệnh đúc" trên một dòng Lệnh sản xuất.
   const preselectId = searchParams.get('new')
   /** `?issue=<mã phiếu>`: từ Lệnh sản xuất — sang Lệnh đúc và mở form cấp vật tư. */
@@ -287,6 +292,7 @@ export function CastingOrdersPage() {
         { ...failedSlip, status: 'CAST_FAILED' },
         redo,
       )
+      invalidateBtpStock(queryClient)
       scheduleMyTicketsRefresh(queryClient)
       closeView()
     },
@@ -299,6 +305,18 @@ export function CastingOrdersPage() {
       setResultTarget(null)
       invalidateBtpStock(queryClient)
       afterSlipUpdated(updated, `Phiếu ${updated.code}: đã nhập kết quả — chờ thủ kho kiểm tra`)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const editSlip = useMutation({
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: UpdateCastingSlipPayload }) =>
+      updateCastingSlipApi(slip.id, payload),
+    onSuccess: (updated) => {
+      setEditTarget(null)
+      invalidateBtpStock(queryClient)
+      invalidateNvlStock(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['casting-slip', 'edit', updated.id] })
+      afterSlipUpdated(updated, `Đã sửa phiếu đúc ${updated.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -335,6 +353,11 @@ export function CastingOrdersPage() {
             target="_blank"
           >
             {row.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
+          </Button>
+        ) : null}
+        {canConfirm && canEditCastingSlip(row) ? (
+          <Button size="small" variant="outlined" onClick={() => setEditTarget(row)}>
+            Sửa phiếu đúc
           </Button>
         ) : null}
         {row.status === 'PENDING_ISSUE' && canConfirm ? (
@@ -587,6 +610,12 @@ export function CastingOrdersPage() {
         saving={submitResult.isPending}
         onClose={() => setResultTarget(null)}
         onSave={(payload) => resultTarget && submitResult.mutate({ slip: resultTarget, payload })}
+      />
+      <CastingSlipEditDialog
+        slip={editTarget}
+        saving={editSlip.isPending}
+        onClose={() => setEditTarget(null)}
+        onSave={(payload) => editTarget && editSlip.mutate({ slip: editTarget, payload })}
       />
       <CastingSlipConfirmDialog
         slip={confirmTarget}

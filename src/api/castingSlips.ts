@@ -56,6 +56,12 @@ export type CastingSlip = {
   status: CastingSlipStatus
   startedAt: string | null
   startedByName: string | null
+  /** Thợ đúc được giao phiếu. */
+  startedByUserId?: string | null
+  /** Mã NVL đã xuất lúc cấp vật tư — chỉ có khi lấy chi tiết một phiếu. */
+  issueMaterialIds?: Partial<
+    Record<'issueS999Gram' | 'issueMasterAlloyGram' | 'issueS925Gram' | 'issueGoldGram', string | null>
+  >
   /** Đúc gửi ngoài xưởng — không giao thợ đúc. */
   isServiceCast: boolean
   /** Bước 9: TL cây thông sau đúc, bạc và thạch cao đã dùng (g). */
@@ -217,6 +223,31 @@ export function issueCastingSlipApi(
 ) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/issue`, {
     method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Chỉ gửi nhóm đã đổi; phiếu Đúc xong / Lỗi đúc BE chặn. */
+export type UpdateCastingSlipPayload = {
+  editReason: string
+  assignedUserId?: string
+  issueS999Gram?: number
+  issueMasterAlloyGram?: number
+  issueS925Gram?: number
+  issueGoldGram?: number
+  issueS999MaterialId?: string
+  issueMasterAlloyMaterialId?: string
+  issueS925MaterialId?: string
+  issueGoldMaterialId?: string
+  castTreeWeightGram?: number
+  silverUsedGram?: number
+  plasterUsedGram?: number
+  servicePrices?: Array<{ intakeOrderId: string; serviceUnitPrice: number }>
+}
+
+export function updateCastingSlipApi(id: string, payload: UpdateCastingSlipPayload) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   })
 }

@@ -146,6 +146,7 @@ export function CastingCutsPage() {
     onSuccess: (redo, failedSlip) => {
       toast.success(`Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc).`)
       applyCastingSlipRejected(queryClient, { ...failedSlip, status: 'CAST_FAILED' }, redo)
+      invalidateBtpStock(queryClient)
       scheduleMyTicketsRefresh(queryClient)
       dialog.close()
     },
