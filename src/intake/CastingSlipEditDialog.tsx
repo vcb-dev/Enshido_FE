@@ -3,11 +3,17 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
@@ -30,6 +36,9 @@ import {
   FormQtyField,
   FormSelect,
 } from '../components/ui'
+import { formatDateTime } from '../orders/catalog'
+import { CastingSlipMetalFormTable, CastingSlipMetalTable } from './CastingSlipMetalTable'
+import { SlipStatusChip } from './CastingSlipStatusChip'
 
 type MetalKey = 's999' | 'hoi' | 's925' | 'gold'
 
@@ -53,6 +62,10 @@ type Values = {
 
 function gramText(value: string | null | undefined) {
   return value != null && value !== '' ? qtyFromApi(value) : ''
+}
+
+function formatGram(value: string | null | undefined) {
+  return value != null && value !== '' ? formatQty(value) : '—'
 }
 
 function num(raw: string) {
@@ -93,8 +106,9 @@ export function canEditCastingSlip(slip: Pick<CastingSlip, 'status'>) {
 }
 
 /**
- * Sửa phiếu đúc chưa đúc xong. Thợ đúc: trước khi thợ nhận phiếu. Vật tư cấp: sau khi cấp (hoàn kho
- * rồi trừ lại). Kết quả: khi chờ thủ kho xác nhận (đổi TL cây thì nhập lại Kho BTP).
+ * Sửa phiếu đúc chưa đúc xong, cùng bố cục với phiếu xem chi tiết. Thợ đúc: trước khi thợ nhận phiếu.
+ * Vật tư cấp: sau khi cấp (hoàn kho rồi trừ lại). Kết quả: khi chờ thủ kho xác nhận (đổi TL cây thì
+ * nhập lại Kho BTP).
  */
 export function CastingSlipEditDialog({
   slip,
@@ -115,6 +129,7 @@ export function CastingSlipEditDialog({
     staleTime: 0,
   })
   const current = detail.data ?? null
+  const view = current ?? slip
   const status = current?.status
   const isService = Boolean(current?.isServiceCast)
   const canWorker = !isService && (status === 'PENDING_ISSUE' || status === 'WAIT_CASTING')
@@ -151,6 +166,8 @@ export function CastingSlipEditDialog({
   const issuedTotal = round4(
     (['s999', 'hoi', 's925'] as const).reduce((sum, key) => sum + (num(grams?.[key] ?? '') ?? 0), 0),
   )
+  const treeGram = num(tree ?? '')
+  const usedGram = num(silver ?? '')
   useEffect(() => {
     if (!canResult) return
     if (form.getFieldState('tree').isDirty) void form.trigger('tree')
@@ -199,152 +216,264 @@ export function CastingSlipEditDialog({
   const busy = saving || detail.isFetching
   const rootError = form.formState.errors.root?.message
   const nothingEditable = current && !canWorker && !canIssue && !canResult
+  const leftover = usedGram != null && issuedTotal > 0 ? round4(issuedTotal - usedGram) : null
+  const castLoss = usedGram != null && treeGram != null ? round4(usedGram - treeGram) : null
 
   return (
-    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Sửa phiếu đúc — {slip?.code ?? ''}</DialogTitle>
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ textAlign: 'center', fontWeight: 800 }}>SỬA PHIẾU ĐÚC — {slip?.code ?? ''}</DialogTitle>
       <DialogForm form={form} onSubmit={submit}>
         <DialogContent>
-          <Stack spacing={2} sx={{ pt: 0.5 }}>
-            {detail.isError ? <Alert severity="error">Không tải được phiếu — đóng rồi mở lại.</Alert> : null}
-            {current ? (
-              <Typography variant="body2" color="text.secondary">
-                Đơn trong lô: {current.batchOrderCodes} · Sáp {formatQty(current.waxWeightGram)} g
-              </Typography>
-            ) : null}
-            {nothingEditable ? (
-              <Alert severity="info">
-                Đúc dịch vụ đang chờ cấp vật tư — chưa có gì để sửa. Huỷ phiếu nếu lên nhầm đơn.
-              </Alert>
-            ) : null}
-
-            {canWorker ? (
-              <FormAutocomplete<Values, CastCastWorkerOption>
-                name="assignedUserId"
-                valueKey="id"
-                label="Giao cho thợ"
-                required
-                rules={{ required: 'Chọn thợ đúc được giao phiếu' }}
-                options={workers.data ?? []}
-                getOptionLabel={(option) => option.fullName}
-                isOptionEqualToValue={(a, b) => a.id === b.id}
-                loading={workers.isLoading}
-                disabled={busy}
-              />
-            ) : null}
-
-            {canIssue ? (
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-                  Vật tư cấp (g)
+          {detail.isError ? <Alert severity="error">Không tải được phiếu — đóng rồi mở lại.</Alert> : null}
+          {view ? (
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <SlipStatusChip status={view.status} />
+                {detail.isFetching && !current ? <CircularProgress size={16} /> : null}
+              </Stack>
+              <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1.5, columnGap: 2.5, alignItems: 'center' }}>
+                <Typography variant="body2">
+                  <strong>Ngày:</strong> {view.slipDate}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Lưu là hoàn phiếu xuất cũ rồi trừ kho NVL chính theo số mới. Để 0 nếu không cấp loại đó.
-                </Typography>
-                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
-                  {METALS.map((m) => (
-                    <Stack key={m.key} spacing={1}>
-                      <FormQtyField<Values>
-                        name={`grams.${m.key}`}
-                        label={`${m.label} (g)`}
-                        size="small"
-                        fullWidth
+                {canWorker ? (
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Box sx={{ width: 260 }}>
+                      <FormAutocomplete<Values, CastCastWorkerOption>
+                        name="assignedUserId"
+                        valueKey="id"
+                        label="Giao cho thợ"
+                        rules={{ required: 'Chọn thợ đúc được giao phiếu' }}
+                        options={workers.data ?? []}
+                        getOptionLabel={(option) => option.fullName}
+                        isOptionEqualToValue={(a, b) => a.id === b.id}
+                        loading={workers.isLoading}
                         disabled={busy}
                       />
-                      <FormSelect<Values>
-                        name={`materials.${m.key}`}
-                        label={`Mã NVL ${m.label}`}
-                        options={materialOptions}
-                        placeholder="Chọn mã NVL"
-                        disabled={busy}
-                        rules={{
-                          validate: (value, all) =>
-                            (num(all.grams[m.key]) ?? 0) > 0 && !value ? `Chọn mã NVL xuất cho ${m.label}` : true,
-                        }}
-                      />
-                    </Stack>
+                    </Box>
+                  </Stack>
+                ) : (
+                  <Typography variant="body2">
+                    <strong>{view.isServiceCast ? 'Hình thức:' : 'Giao cho thợ:'}</strong>{' '}
+                    {view.isServiceCast ? 'Đúc dịch vụ' : (view.startedByName ?? '—')}
+                  </Typography>
+                )}
+                {view.createdByName ? (
+                  <Typography variant="body2">
+                    <strong>Thủ kho lập:</strong> {view.createdByName}
+                  </Typography>
+                ) : null}
+              </Stack>
+
+              <Table size="small" sx={{ '& td, & th': { px: 1 } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Đơn trong lô</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Mã SP</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Sản phẩm</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      SL
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      TL sáp (g)
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {view.orders.map((line) => (
+                    <TableRow key={line.intakeOrderId}>
+                      <TableCell sx={{ fontWeight: 700 }}>{line.code}</TableCell>
+                      <TableCell>{line.trackingCode ?? '—'}</TableCell>
+                      <TableCell>{line.productName || '—'}</TableCell>
+                      <TableCell align="right">{line.qty}</TableCell>
+                      <TableCell align="right">{formatGram(line.waxWeightGram)}</TableCell>
+                    </TableRow>
                   ))}
-                </Box>
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Tổng vật tư giao: <strong>{formatQty(String(issuedTotal))} g</strong>
-                </Typography>
-              </Box>
-            ) : null}
+                  <TableRow>
+                    <TableCell colSpan={4} align="right" sx={{ fontWeight: 700 }}>
+                      Trọng lượng sáp (cây thông) giao
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {formatGram(view.waxWeightGram)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
 
-            {canResult ? (
-              <Stack spacing={2}>
-                <Typography variant="subtitle2">Kết quả đúc</Typography>
-                <FormQtyField<Values>
-                  name="tree"
-                  label="TL cây thông sau đúc — Trả (g)"
-                  required
-                  rules={{
-                    validate: (value, all) => {
-                      const treeGram = num(String(value ?? ''))
-                      if (treeGram == null || treeGram <= 0) return 'Nhập trọng lượng cây thông sau đúc (g)'
-                      const used = num(all.silver)
-                      if (used != null && round4(treeGram) > round4(used)) {
-                        const over = round4(treeGram - used)
-                        return `TL cây thông sau đúc nặng hơn bạc đã dùng ${formatQty(String(over))} g (cây ${formatQty(String(treeGram))} g, bạc đã dùng ${formatQty(String(used))} g)`
-                      }
-                      return true
-                    },
-                  }}
-                  helperText="Đổi số này thì phiếu nhập Kho BTP sau đúc được nhập lại theo số mới."
-                  size="small"
-                  fullWidth
-                  disabled={busy}
+              {canIssue ? (
+                <>
+                  <CastingSlipMetalFormTable<Values>
+                    issueNames={{ s999: 'grams.s999', hoi: 'grams.hoi', s925: 'grams.s925', gold: 'grams.gold' }}
+                    estimate={{
+                      s999: Number(view.estimateS999Gram ?? 0),
+                      masterAlloy: Number(view.estimateMasterAlloyGram ?? 0),
+                      s925: Number(view.estimateS925Gram ?? 0),
+                      total: Number(view.estimateTotalGram ?? 0),
+                    }}
+                    goldEstimate={Number(view.estimateGoldGram ?? 0)}
+                    issueTotal={issuedTotal}
+                    disabled={busy}
+                  />
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                      Xuất từ kho NVL chính
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Đổi thực xuất thì phiếu xuất cũ được hoàn kho rồi trừ lại theo số mới. Để 0 nếu không cấp loại đó.
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 1.5,
+                        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                      }}
+                    >
+                      {METALS.map((m) => (
+                        <FormSelect<Values>
+                          key={m.key}
+                          name={`materials.${m.key}`}
+                          label={`Mã NVL ${m.label}`}
+                          options={materialOptions}
+                          placeholder="Chọn mã NVL"
+                          disabled={busy || (num(grams?.[m.key] ?? '') ?? 0) <= 0}
+                          rules={{
+                            validate: (value, all) =>
+                              (num(all.grams[m.key]) ?? 0) > 0 && !value ? `Chọn mã NVL xuất cho ${m.label}` : true,
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                </>
+              ) : (
+                <CastingSlipMetalTable
+                  estimateS999Gram={view.estimateS999Gram}
+                  estimateMasterAlloyGram={view.estimateMasterAlloyGram}
+                  estimateS925Gram={view.estimateS925Gram}
+                  estimateGoldGram={view.estimateGoldGram}
+                  estimateTotalGram={view.estimateTotalGram}
+                  issueS999Gram={view.issueS999Gram}
+                  issueMasterAlloyGram={view.issueMasterAlloyGram}
+                  issueS925Gram={view.issueS925Gram}
+                  issueGoldGram={view.issueGoldGram}
+                  issueTotalGram={view.issueTotalGram}
+                  returnTotalGram={view.returnTotalGram}
                 />
-                <FormQtyField<Values>
-                  name="silver"
-                  label="Bạc đã dùng (g)"
-                  required
-                  rules={{
-                    validate: (value) => {
-                      const used = num(String(value ?? ''))
-                      if (used == null || used < 0) return 'Nhập trọng lượng bạc đã dùng (g)'
-                      if (issuedTotal > 0 && round4(used) > issuedTotal) {
-                        return `Bạc đã dùng vượt tổng vật tư giao (${formatQty(String(issuedTotal))} g)`
-                      }
-                      return true
-                    },
-                  }}
-                  size="small"
-                  fullWidth
-                  disabled={busy}
-                />
-                {isService ? (
-                  current?.orders.map((line) => (
-                    <FormMoneyField<Values>
-                      key={line.intakeOrderId}
-                      name={`servicePrices.${line.intakeOrderId}`}
-                      label={`Đơn giá dịch vụ — ${line.code} (đ)`}
+              )}
+
+              {view.startedAt ? (
+                <Typography variant="body2">
+                  <strong>Bắt đầu đúc:</strong> {formatDateTime(view.startedAt)}
+                  {view.startedByName ? ` · ${view.startedByName}` : ''}
+                </Typography>
+              ) : null}
+
+              {canResult ? (
+                <Stack spacing={1.5}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    Kết quả sau đúc{view.submittedByName ? ` (${view.submittedByName})` : ''}
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gap: 1.5,
+                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+                    }}
+                  >
+                    <FormQtyField<Values>
+                      name="tree"
+                      label="TL cây thông (trả) (g)"
                       required
-                      rules={{ validate: (value) => (num(String(value ?? '')) == null ? 'Nhập đơn giá dịch vụ' : true) }}
+                      rules={{
+                        validate: (value, all) => {
+                          const t = num(String(value ?? ''))
+                          if (t == null || t <= 0) return 'Nhập trọng lượng cây thông sau đúc (g)'
+                          const used = num(all.silver)
+                          if (used != null && round4(t) > round4(used)) {
+                            return `Nặng hơn bạc đã dùng ${formatQty(String(round4(t - used)))} g`
+                          }
+                          return true
+                        },
+                      }}
                       size="small"
                       fullWidth
                       disabled={busy}
                     />
-                  ))
-                ) : (
-                  <FormQtyField<Values>
-                    name="plaster"
-                    label="Thạch cao đã dùng (g)"
-                    required
-                    rules={{ validate: (value) => (num(String(value ?? '')) == null ? 'Nhập thạch cao đã dùng (g)' : true) }}
-                    size="small"
-                    fullWidth
-                    disabled={busy}
-                  />
-                )}
-              </Stack>
-            ) : null}
+                    <FormQtyField<Values>
+                      name="silver"
+                      label="Bạc đã dùng (g)"
+                      required
+                      rules={{
+                        validate: (value) => {
+                          const used = num(String(value ?? ''))
+                          if (used == null || used < 0) return 'Nhập trọng lượng bạc đã dùng (g)'
+                          if (issuedTotal > 0 && round4(used) > issuedTotal) {
+                            return `Vượt tổng vật tư giao (${formatQty(String(issuedTotal))} g)`
+                          }
+                          return true
+                        },
+                      }}
+                      size="small"
+                      fullWidth
+                      disabled={busy}
+                    />
+                    {isService ? null : (
+                      <FormQtyField<Values>
+                        name="plaster"
+                        label="Thạch cao đã dùng (g)"
+                        required
+                        rules={{
+                          validate: (value) => (num(String(value ?? '')) == null ? 'Nhập thạch cao đã dùng (g)' : true),
+                        }}
+                        size="small"
+                        fullWidth
+                        disabled={busy}
+                      />
+                    )}
+                  </Box>
+                  {isService ? (
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 1.5,
+                        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                      }}
+                    >
+                      {view.orders.map((line) => (
+                        <FormMoneyField<Values>
+                          key={line.intakeOrderId}
+                          name={`servicePrices.${line.intakeOrderId}`}
+                          label={`Đơn giá dịch vụ — ${line.code} (đ)`}
+                          required
+                          rules={{
+                            validate: (value) => (num(String(value ?? '')) == null ? 'Nhập đơn giá dịch vụ' : true),
+                          }}
+                          size="small"
+                          fullWidth
+                          disabled={busy}
+                        />
+                      ))}
+                    </Box>
+                  ) : null}
+                  <Typography variant="body2" color="text.secondary">
+                    Bạc giao chưa dùng (trả kho):{' '}
+                    <strong>{leftover != null ? `${formatQty(String(leftover))} g` : '—'}</strong> · Hao hụt đúc:{' '}
+                    <strong>{castLoss != null ? `${formatQty(String(castLoss))} g` : '—'}</strong>. Đổi TL cây thông thì
+                    phiếu nhập Kho BTP sau đúc được nhập lại theo số mới.
+                  </Typography>
+                </Stack>
+              ) : null}
 
-            {current && !nothingEditable ? (
-              <FormEditReasonBlock<Values> name="editReason" entityType="casting_slip" entityId={current.id} required />
-            ) : null}
-            {rootError ? <Alert severity="error">{rootError}</Alert> : null}
-          </Stack>
+              {nothingEditable ? (
+                <Alert severity="info">
+                  Đúc dịch vụ đang chờ cấp vật tư — chưa có gì để sửa. Huỷ phiếu nếu lên nhầm đơn.
+                </Alert>
+              ) : null}
+              {current && !nothingEditable ? (
+                <FormEditReasonBlock<Values> name="editReason" entityType="casting_slip" entityId={current.id} required />
+              ) : null}
+              {rootError ? <Alert severity="error">{rootError}</Alert> : null}
+            </Stack>
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>
