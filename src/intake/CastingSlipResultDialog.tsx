@@ -59,6 +59,11 @@ function gram(raw: string, allowZero: boolean) {
   return value
 }
 
+/** Cộng số thực JS lệch ở chữ số rất nhỏ (142,8375 → 142,83749999…); so ở 4 chữ số như lúc hiển thị. */
+function round4(value: number) {
+  return Math.round(value * 10000) / 10000
+}
+
 function money(raw: string) {
   if (!raw.trim()) return null
   const value = Number(raw)
@@ -153,7 +158,7 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
                 validate: (value) => {
                   const used = gram(String(value ?? ''), true)
                   if (used == null) return 'Nhập trọng lượng bạc đã dùng (g)'
-                  if (issued > 0 && used > issued) {
+                  if (issued > 0 && round4(used) > round4(issued)) {
                     return `Bạc đã dùng vượt tổng vật tư giao (${formatQty(String(issued))} g)`
                   }
                   return true
