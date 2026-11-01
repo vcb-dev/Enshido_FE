@@ -22,10 +22,11 @@ export type IntakeOrderStatus =
   | 'CANCELLED'
 
 /** Loại vàng/bạc của sản phẩm, chọn lúc tạo đơn. */
-export type OrderMetalType = 'SILVER_925' | 'GOLD_10K' | 'GOLD_14K' | 'GOLD_18K' | 'GOLD_24K'
+export type OrderMetalType = 'SILVER_925' | 'SILVER_999' | 'GOLD_10K' | 'GOLD_14K' | 'GOLD_18K' | 'GOLD_24K'
 
 export const ORDER_METAL_TYPES: OrderMetalType[] = [
   'SILVER_925',
+  'SILVER_999',
   'GOLD_10K',
   'GOLD_14K',
   'GOLD_18K',
@@ -34,6 +35,7 @@ export const ORDER_METAL_TYPES: OrderMetalType[] = [
 
 export const ORDER_METAL_TYPE_LABELS: Record<OrderMetalType, string> = {
   SILVER_925: 'Bạc S925',
+  SILVER_999: 'Bạc S999',
   GOLD_10K: 'Vàng 10k',
   GOLD_14K: 'Vàng 14k',
   GOLD_18K: 'Vàng 18k',
