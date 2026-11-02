@@ -356,6 +356,18 @@ export function IntakeOrdersPage() {
         width: 140,
         align: 'center',
         card: 'actions',
+        // Nút tạo đơn nằm ngay trên hàng lọc, ở ô trống của cột ghim phải.
+        filter: canCreate ? (
+          <Button
+            variant="contained"
+            size="small"
+            fullWidth
+            sx={{ whiteSpace: 'nowrap' }}
+            onClick={() => dialog.openCreate()}
+          >
+            Tạo đơn mới
+          </Button>
+        ) : undefined,
         render: (row) => (
           <RowActions
             titles={{
@@ -376,7 +388,16 @@ export function IntakeOrdersPage() {
         ),
       },
     ],
-    [customer, dialog.openEdit, params.requestType, params.search, params.status, table],
+    [
+      canCreate,
+      customer,
+      dialog.openCreate,
+      dialog.openEdit,
+      params.requestType,
+      params.search,
+      params.status,
+      table,
+    ],
   )
 
   return (
@@ -416,13 +437,6 @@ export function IntakeOrdersPage() {
         onPageSizeChange={table.setPageSize}
         rowsLabel="đơn"
         sx={{ flex: { md: 1 } }}
-        toolbar={
-          canCreate ? (
-            <Button variant="contained" sx={{ ml: 'auto' }} onClick={() => dialog.openCreate()}>
-              Tạo đơn mới
-            </Button>
-          ) : undefined
-        }
       />
 
       <IntakeOrderFormDialog
