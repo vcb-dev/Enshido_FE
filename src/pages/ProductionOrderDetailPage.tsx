@@ -190,18 +190,20 @@ export function ProductionOrderDetailPage() {
       ticket,
       stage,
       craftsmanUserId,
+      handedWeight,
       stones,
     }: {
       ticket: SubTicket
       stage: StageCode
       craftsmanUserId: string
+      handedWeight: string | null
       stones: Array<{
         materialId: string
         stoneCount: number | null
         weight: string
         images: StageImage[]
       }>
-    }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, stones }),
+    }) => assignSubTicketApi(code, ticket.no, { stage, craftsmanUserId, handedWeight, stones }),
     'Đã chỉ định thợ — thợ quét QR xác nhận',
   )
   const confirmStage = useOrderMutation(

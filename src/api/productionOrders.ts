@@ -389,6 +389,8 @@ export type SubTicket = {
   pendingStage: StageCode | null
   pendingAt: string | null
   pendingByName: string | null
+  /** Nguội: TL phôi thủ kho cân lúc chỉ định, chờ thợ nhận hàng. */
+  pendingWeight: string | null
   claimedByUserId: string | null
   claimedByName: string | null
   claimedAt: string | null
@@ -1348,6 +1350,8 @@ export function assignSubTicketApi(
   payload: {
     stage?: StageCode
     craftsmanUserId: string
+    /** Khâu Nguội: TL phôi thủ kho cân (g); bỏ trống = chia đều theo phôi còn lại. */
+    handedWeight?: string | null
     /** Khâu Vào đá: đá thủ kho cấp (giữ chỗ, xuất kho khi xác nhận sau QC). */
     stones?: Array<{ materialId: string; stoneCount?: number | null; weight: string; images: StageImage[] }>
   },
