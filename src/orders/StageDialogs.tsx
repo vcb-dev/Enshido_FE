@@ -91,7 +91,7 @@ export function carriesStone(
 
 /**
  * Chỉ định thợ và ghi sẵn nội dung giao trên phiếu mẹ; thợ xác nhận nhận hàng ở bước sau. Nguội tự
- * gắn phôi, Vào đá chọn đá; Khắc ("Giao Khắc") trở đi chỉ chọn thợ — hàng chuyển nguyên từ khâu trước.
+ * gắn phôi, thủ kho nhập TL phôi cân; Vào đá chọn đá; Khắc ("Giao Khắc") trở đi chỉ chọn thợ — hàng chuyển nguyên từ khâu trước.
  */
 export function AssignReceiptDialog({
   open,
@@ -162,6 +162,8 @@ export function AssignReceiptDialog({
         ? cutBtp.leftWeight
         : Math.round((cutBtp.leftWeight * autoCutQty / cutBtp.leftQty) * 10_000) / 10_000
       : null
+  /** Giao nốt phôi cuối thì nhận hết TL còn lại — không sửa TL (khớp BE). */
+  const lastBlanks = autoCutBtp && cutBtp != null && autoCutQty === cutBtp.leftQty
   const cutBtpLabel = cutBtp
     ? order.btp?.id === cutBtp.materialId
       ? [order.btp.sku, order.btp.name].filter(Boolean).join(' — ')
@@ -195,6 +197,10 @@ export function AssignReceiptDialog({
       materials: [],
     })
   }, [open, stages, ticket, order.qty, order.stages.length, form])
+  // Đặt sau lần reset lúc mở: Nguội điền sẵn TL phôi chia đều, thủ kho cân lại rồi sửa.
+  useEffect(() => {
+    if (open && autoCutWeight != null) form.setValue('handedSilverWeight', String(autoCutWeight))
+  }, [open, autoCutWeight, form])
 
   return (
     <CrudDialogShell<Values>
@@ -215,7 +221,14 @@ export function AssignReceiptDialog({
           handedQty: availableQty,
           // Bạc vào khâu lấy từ dòng BTP xuất kho; đá giao máy chủ tính từ các dòng đá — không gửi
           // kèm tổng, gửi cả hai là cộng đôi.
-          handedSilverWeight: firstStage || autoFiledBtp || carryOver ? null : values.handedSilverWeight || null,
+          // Nguội: TL phôi thủ kho cân — BE ghi vào dòng xuất BTP, không thành TL chuyển tay.
+          handedSilverWeight: autoCutBtp
+            ? lastBlanks
+              ? null
+              : values.handedSilverWeight || null
+            : firstStage || autoFiledBtp || carryOver
+              ? null
+              : values.handedSilverWeight || null,
           note: values.note.trim(),
           materials: materialLines.map(handoverLinePayload),
         })
@@ -259,7 +272,23 @@ export function AssignReceiptDialog({
             },
           }}
         />
-        {!firstStage && !autoFiledBtp && !carryOver ? (
+        {autoCutBtp && cutBtp ? (
+          <FormQtyField<Values>
+            name="handedSilverWeight"
+            label="TL phôi giao (g)"
+            required
+            readOnly={lastBlanks}
+            rules={{
+              validate: (value) => {
+                if (lastBlanks) return true
+                const weight = Number(value)
+                if (!(weight > 0)) return 'Nhập TL phôi giao'
+                if (weight >= cutBtp.leftWeight) return `Phải nhỏ hơn ${formatQty(String(cutBtp.leftWeight))} g`
+                return true
+              },
+            }}
+          />
+        ) : !firstStage && !autoFiledBtp && !carryOver ? (
           <FormQtyField<Values>
             name="handedSilverWeight"
             label="TL bạc giao (g)"
@@ -271,10 +300,10 @@ export function AssignReceiptDialog({
       {autoCutBtp && cutBtp ? (
         <Alert severity="info" sx={{ mt: 1 }}>
           Tự gắn {cutBtpLabel}. Còn {formatQty(String(cutBtp.leftQty))} chiếc ·{' '}
-          {formatQty(String(cutBtp.leftWeight))} g.
-          {autoCutWeight != null
-            ? ` Dự kiến xuất ${autoCutQty} chiếc · ${formatQty(String(autoCutWeight))} g.`
-            : ''}{' '}
+          {formatQty(String(cutBtp.leftWeight))} g.{' '}
+          {lastBlanks
+            ? `Giao nốt ${autoCutQty} phôi cuối — nhận hết TL còn lại.`
+            : 'Đã điền TL chia đều — cân lại rồi sửa nếu khác.'}{' '}
           Kho xuất khi thợ bấm “Xác nhận”.
         </Alert>
       ) : (

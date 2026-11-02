@@ -28,7 +28,7 @@ import type {
   SubTicketPayload,
 } from '../api/productionOrders'
 import { ctToGram, formatQty } from '../api/inventory'
-import { CrudDialogShell, DialogForm, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
+import { CrudDialogShell, DialogForm, FormQtyField, FormRow, FormSelect, FormTextField, TrashIcon } from '../components/ui'
 import { isInStage, skipsStone, STAGE_LABEL, STAGES } from './catalog'
 import { evenSplit } from './evenSplit'
 import { FormImageField } from './FormImageField'
@@ -376,7 +376,13 @@ function computeOpenableStages(order: ProductionOrderDetail): OpenableStages {
 }
 
 type StoneLineValues = { materialId: string; stoneCount: string; weight: string; images: OrderImage[] }
-type AssignValues = { stage: StageCode | ''; craftsmanUserId: string; stones: StoneLineValues[] }
+type AssignValues = {
+  stage: StageCode | ''
+  craftsmanUserId: string
+  /** Nguội: TL phôi thủ kho cân (g). */
+  handedWeight: string
+  stones: StoneLineValues[]
+}
 
 /** Tìm theo mã hoặc tên đá — gõ "moiss 4.0" hay "MROW" đều ra. */
 const STONE_FILTER = createFilterOptions<NvlOption>({
@@ -387,7 +393,7 @@ const EMPTY_STONE_LINE: StoneLineValues = { materialId: '', stoneCount: '', weig
 
 /**
  * Thủ kho chỉ định thợ cho một khâu của phiếu con. Chưa giao hàng: thợ quét QR bấm nhận —
- * Nguội tự xuất phôi, Vào đá tự xuất BTP đã nguội. Khâu Vào đá kèm đá cấp cho thợ: chỉ giữ
+ * Nguội xuất phôi theo TL thủ kho cân ở đây, Vào đá tự xuất BTP đã nguội. Khâu Vào đá kèm đá cấp cho thợ: chỉ giữ
  * chỗ trong tồn, xuất kho khi thủ kho xác nhận sau QC (số cấp − đá thừa trả lại).
  * Khâu khác người giao cân bạc rồi bấm "Xác nhận giao".
  */
@@ -403,7 +409,7 @@ export function AssignWorkerDialog({
 }: {
   open: boolean
   /** Đá ước tính + ảnh file 3D của đơn — hiện ở khâu Vào đá. */
-  order: Pick<ProductionOrderDetail, 'qty' | 'stoneCount' | 'stoneWeight' | 'model3dUrl' | 'images'>
+  order: Pick<ProductionOrderDetail, 'qty' | 'stoneCount' | 'stoneWeight' | 'model3dUrl' | 'images' | 'cut'>
   ticket: SubTicket | null
   stageOptions: StageCode[]
   workers: StageWorker[]
@@ -413,10 +419,13 @@ export function AssignWorkerDialog({
     ticket: SubTicket
     stage: StageCode
     craftsmanUserId: string
+    handedWeight: string | null
     stones: Array<{ materialId: string; stoneCount: number | null; weight: string; images: StageImage[] }>
   }) => void
 }) {
-  const form = useAppForm<AssignValues>({ defaultValues: { stage: '', craftsmanUserId: '', stones: [] } })
+  const form = useAppForm<AssignValues>({
+    defaultValues: { stage: '', craftsmanUserId: '', handedWeight: '', stones: [] },
+  })
   const stones = useFieldArray({ control: form.control, name: 'stones' })
   const uploading = useUploadingByKey()
   const stage = useWatch({ control: form.control, name: 'stage' })
@@ -429,6 +438,28 @@ export function AssignWorkerDialog({
     }
   }, [craftsmanUserId, stageWorkers, form])
   const stoneStage = stage === 'STONE_SETTING'
+  /**
+   * Nguội: phôi đơn còn trên kho BTP. Gợi ý TL chia đều theo phôi còn lại; phiếu lấy nốt phôi cuối
+   * nhận hết TL còn lại, không sửa được (khớp BE).
+   */
+  const blank =
+    stage === 'FILING' && ticket && order.cut?.leftQty != null && order.cut.leftWeight != null
+      ? (() => {
+          const leftQty = Number(order.cut.leftQty)
+          const leftWeight = Number(order.cut.leftWeight)
+          const last = leftQty === ticket.qty
+          return {
+            leftQty,
+            leftWeight,
+            last,
+            suggested:
+              last || leftQty <= 0
+                ? leftWeight
+                : Math.round(((leftWeight * ticket.qty) / leftQty) * 10_000) / 10_000,
+          }
+        })()
+      : null
+  const suggestedWeight = blank?.suggested ?? null
   const nvl = useQuery({
     queryKey: ['nvl-options'],
     queryFn: () => listNvlOptionsApi(),
@@ -443,8 +474,13 @@ export function AssignWorkerDialog({
     }
     if (initializedTicket.current === ticket.id) return
     initializedTicket.current = ticket.id
-    form.reset({ stage: stageOptions[0] ?? '', craftsmanUserId: '', stones: [] })
+    form.reset({ stage: stageOptions[0] ?? '', craftsmanUserId: '', handedWeight: '', stones: [] })
   }, [open, ticket, stageOptions, form])
+  // Đặt sau lần reset lúc mở: điền TL gợi ý khi mở / đổi phiếu / phôi còn lại đổi — không ghi đè
+  // số thủ kho đang gõ ở các lần render khác.
+  useEffect(() => {
+    if (open) form.setValue('handedWeight', suggestedWeight != null ? String(suggestedWeight) : '')
+  }, [open, ticket?.id, suggestedWeight, form])
   // Vào đá luôn có ít nhất một dòng đá để thủ kho điền.
   useEffect(() => {
     if (stoneStage && stones.fields.length === 0) stones.append({ ...EMPTY_STONE_LINE })
@@ -482,6 +518,7 @@ export function AssignWorkerDialog({
           ticket,
           stage: values.stage,
           craftsmanUserId: values.craftsmanUserId,
+          handedWeight: blank && !blank.last ? values.handedWeight || null : null,
           stones:
             values.stage === 'STONE_SETTING'
               ? values.stones.map((line) => ({
@@ -510,6 +547,32 @@ export function AssignWorkerDialog({
           options={stageWorkers.map((worker) => ({ value: worker.id, label: worker.fullName || worker.username }))}
         />
       </FormRow>
+      {blank && ticket ? (
+        <FormRow columns={1}>
+          <FormQtyField<AssignValues>
+            name="handedWeight"
+            label="TL phôi giao (g)"
+            required
+            readOnly={blank.last}
+            rules={{
+              validate: (value) => {
+                if (blank.last) return true
+                const weight = Number(value)
+                if (!(weight > 0)) return 'Nhập TL phôi giao'
+                if (weight >= blank.leftWeight) {
+                  return `Phải nhỏ hơn ${formatQty(String(blank.leftWeight))} g — còn ${blank.leftQty - ticket.qty} chiếc chưa giao`
+                }
+                return true
+              },
+            }}
+            helperText={
+              blank.last
+                ? `Phiếu lấy nốt ${ticket.qty} phôi cuối — nhận hết ${formatQty(String(blank.leftWeight))} g còn lại`
+                : `Phôi còn ${formatQty(String(blank.leftQty))} chiếc · ${formatQty(String(blank.leftWeight))} g. Đã điền TL chia đều — cân lại rồi sửa nếu khác. Kho xuất khi thợ bấm “Xác nhận”.`
+            }
+          />
+        </FormRow>
+      ) : null}
       {stoneStage && ticket ? <StoneEstimateNote order={order} qty={ticket.availableQty} /> : null}
       {stoneStage ? (
         <Stack spacing={1.25}>
