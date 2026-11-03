@@ -164,9 +164,11 @@ export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
   SAMPLE: { label: 'Dựng mẫu', bg: '#27ae60', fg: '#ffffff' },
   RETAIL: { label: 'Đơn khách lẻ', bg: '#2563eb', fg: '#ffffff' },
   BULK: { label: 'SX SLL', bg: '#c0392b', fg: '#ffffff' },
+  VIDEO: { label: 'Đơn quay video', bg: '#8e44ad', fg: '#ffffff' },
+  MOLD: { label: 'Đơn làm khuôn', bg: '#d68910', fg: '#ffffff' },
 }
 
-export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK']
+export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK', 'VIDEO', 'MOLD']
 
 /**
  * Ngưỡng cảnh báo hao hụt bạc của một khâu (%). Đổi hai số này là đổi màu ở cả phiếu trên

@@ -39,7 +39,7 @@ export type ProductionStatus =
 /** Khâu giao thợ trên phiếu. Lỗi / Hoàn thiện là kết cục cuối phiếu, không phải khâu. */
 export type StageCode = 'FILING' | 'STONE_SETTING' | 'ENGRAVING' | 'POLISHING' | 'PLATING'
 
-export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK'
+export type ProductionRequestType = 'SAMPLE' | 'RETAIL' | 'BULK' | 'VIDEO' | 'MOLD'
 
 /** Đơn NVL: làm từ đầu (3D → Đúc → khâu). Đơn BTP: lấy BTP có sẵn theo mã, bỏ 3D + Đúc. */
 export type ProductionSource = 'NVL' | 'BTP'
