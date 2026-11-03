@@ -307,26 +307,27 @@ function Ticket({
 
   return (
     <>
-      <Box sx={{ position: 'relative', textAlign: 'center', minHeight: subTicket || order.subTickets.length === 0 ? '21mm' : '11mm' }}>
+      <Box sx={{ position: 'relative', textAlign: 'center', minHeight: subTicket || order.subTickets.length === 0 ? '23mm' : '11mm' }}>
         <Box sx={{ color: TITLE_RED, fontWeight: 700, fontSize: '1.45em', pt: '2mm' }}>
           {subTicket ? 'Phiếu sản xuất — phiếu con' : 'Phiếu sản xuất'}
         </Box>
         {/* Đơn đã chia: mã QR nằm trên từng phiếu con, phiếu tổng không có QR. Đơn chưa chia
-            (BTP, đơn cũ) thợ vẫn quét QR của chính phiếu mẹ. */}
+            (BTP, đơn cũ) thợ vẫn quét QR của chính phiếu mẹ. Mã phiếu ghi bên trái QR, khoảng
+            cách trên bảng / chân phiếu thu nhỏ để QR to mà phiếu vẫn vừa một tờ A4 ngang. */}
         {subTicket || order.subTickets.length === 0 ? (
-          <Box sx={{ position: 'absolute', right: 0, top: 0, textAlign: 'center' }}>
+          <Box sx={{ position: 'absolute', right: 0, top: 0, display: 'flex', alignItems: 'flex-end', gap: '1.5mm' }}>
+            <Box sx={{ fontSize: '0.75em', fontWeight: 700 }}>{subTicket ? subTicket.code : order.code}</Box>
             <QRCodeSVG
               value={subTicket ? subTicketUrl(subTicket.code) : parentWorkTicketUrl(order.code)}
-              size={128}
+              size={256}
               marginSize={0}
-              style={{ width: '17mm', height: '17mm' }}
+              style={{ width: '22mm', height: '22mm', display: 'block' }}
             />
-            <Box sx={{ fontSize: '0.75em', fontWeight: 700 }}>{subTicket ? subTicket.code : order.code}</Box>
           </Box>
         ) : null}
       </Box>
 
-      <table style={{ marginTop: '1mm' }}>
+      <table>
         <colgroup>
           <col style={{ width: '19%' }} />
           {STAGES.map((stage) => (
@@ -532,7 +533,7 @@ function Ticket({
         </tbody>
       </table>
 
-      <Box sx={{ mt: '1.5mm', display: 'flex', justifyContent: 'space-between', gap: '2mm', fontSize: '0.8em', color: '#333' }}>
+      <Box sx={{ mt: '0.5mm', display: 'flex', justifyContent: 'space-between', gap: '2mm', fontSize: '0.8em', color: '#333' }}>
         <span>
           Trạng thái: {statusLabel} · Dữ liệu cập nhật lúc{' '}
           {formatDateTime(dataChangedAt)}

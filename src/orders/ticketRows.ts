@@ -71,7 +71,7 @@ export const TICKET_ROWS: TicketRow[] = [
   {
     key: 'handedSilver',
     label: 'Trọng lượng giao (bạc)',
-    hint: '(t - chỉ)',
+    hint: '(gram)',
     numeric: true,
     value: (e) => weight(e.handedSilverWeight),
   },
@@ -213,7 +213,7 @@ const grams = (value: number) => (value ? formatQty(String(round4(value))) : '')
 const PRINT_HANDED_ROW: TicketRow = {
   key: 'handedSilver',
   label: 'Trọng lượng giao',
-  hint: '(t - chỉ)',
+  hint: '(gram)',
   numeric: true,
   value: (e) => grams(handedS925(e) + handedBtp(e)),
   parts: [
