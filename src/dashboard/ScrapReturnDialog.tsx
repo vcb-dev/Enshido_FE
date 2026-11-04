@@ -36,7 +36,7 @@ import { todayKey, weekLabel, weekStart } from './lossReport'
 
 /**
  * Thủ kho nhận mạt vụn thợ gom cả tuần, cô lại và cân trả — một lần nhập được cho nhiều thợ, cùng một
- * kim loại. Mỗi dòng là một phiếu: lưu là nhập kho NVL "Bạc thu hồi / đầu cây S925" (bạc) hoặc
+ * kim loại. Mỗi dòng là một phiếu: lưu là nhập kho NVL "Bạc nguyên liệu S925" A00001 (bạc) hoặc
  * "Vàng <tuổi> thu hồi" (vàng, chọn tuổi) và trừ vào hao hụt tuần đó của thợ ở báo cáo kim loại đó.
  */
 type Row = { key: number; worker: ScrapWorker | null; weight: string; note: string }
