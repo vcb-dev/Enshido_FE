@@ -6,18 +6,24 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  FormControlLabel,
+  FormHelperText,
+  FormLabel,
+  Radio,
+  RadioGroup,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useWatch } from 'react-hook-form'
+import { useController, useWatch, type Control } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import {
   listRestMaterialOptionsApi,
   type CastingSlip,
   type CastingSlipImage,
   type ConfirmCastingSlipPayload,
+  type RestMaterialOptions,
   type CutCastingSlipItem,
 } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
@@ -31,9 +37,13 @@ type LineValues = {
   weight: string
   images: OrderImage[]
 }
+/** Phần cây còn lại nhập kho NVL vào: bạc nguyên liệu S925 hay bạc thu hồi. */
+type RestTarget = '' | 'S925' | 'RECOVERED'
+type RestChoice = NonNullable<RestMaterialOptions['choices']>[number]
 type SlipValues = {
   lines: LineValues[]
   rest: string
+  restTarget: RestTarget
   restImages: OrderImage[]
 }
 type Values = { slips: SlipValues[] }
@@ -66,8 +76,64 @@ function defaultValues(slip: CastingSlip): SlipValues {
       images: [],
     })),
     rest: '0',
+    restTarget: '',
     restImages: [],
   }
+}
+
+/** Hai ô tích chọn mã kho NVL nhận phần cây còn lại — bắt buộc chọn khi còn phần cây. */
+function RestTargetField({
+  control,
+  slipIndex,
+  choices,
+  loading,
+  disabled,
+}: {
+  control: Control<Values>
+  slipIndex: number
+  choices: RestChoice[]
+  loading: boolean
+  disabled: boolean
+}) {
+  const { field, fieldState } = useController({
+    name: `slips.${slipIndex}.restTarget`,
+    control,
+    rules: {
+      validate: (value) =>
+        value ? true : 'Chọn nhập phần cây còn lại vào bạc nguyên liệu S925 hay bạc thu hồi',
+    },
+  })
+  return (
+    <FormControl error={Boolean(fieldState.error)} disabled={disabled}>
+      <FormLabel sx={{ fontSize: '0.8rem' }}>Nhập kho NVL phần còn lại vào</FormLabel>
+      <RadioGroup
+        value={field.value}
+        onChange={(event) => field.onChange(event.target.value as RestTarget)}
+        onBlur={field.onBlur}
+      >
+        {choices.map((choice) => (
+          <FormControlLabel
+            key={choice.key}
+            value={choice.key}
+            disabled={disabled || !choice.material}
+            control={<Radio size="small" />}
+            label={
+              <span>
+                {choice.label}
+                <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {choice.material
+                    ? [choice.material.sku, choice.material.name].filter(Boolean).join(' · ')
+                    : `Kho NVL chưa có mã ${choice.sku}`}
+                </Typography>
+              </span>
+            }
+          />
+        ))}
+      </RadioGroup>
+      {loading ? <FormHelperText>Đang tải mã NVL…</FormHelperText> : null}
+      {fieldState.error ? <FormHelperText>{fieldState.error.message}</FormHelperText> : null}
+    </FormControl>
+  )
 }
 
 function toImages(images: OrderImage[]): CastingSlipImage[] {
@@ -124,15 +190,16 @@ export function CastingSlipsCutDialog({
     )
   const form = useAppForm<Values>({ defaultValues: { slips: [] } })
   const watched = useWatch({ control: form.control, name: 'slips' })
-  // Form không chọn mã: BE nhập phần cây còn lại vào mã NVL mặc định — hiện tên để thủ kho biết.
+  const slipKey = slips.map((slip) => slip.id).join(',')
   const restMaterials = useQuery({
     queryKey: ['casting-rest-material-options'],
     queryFn: listRestMaterialOptionsApi,
     enabled: slips.length > 0,
   })
-  const restMaterialName = restMaterials.data?.defaultName ?? ''
+  const restChoices = restMaterials.data?.choices ?? []
+  const restMaterialOf = (target: RestTarget) =>
+    restChoices.find((choice) => choice.key === target)?.material?.id ?? null
 
-  const slipKey = slips.map((slip) => slip.id).join(',')
   useEffect(() => {
     form.reset({ slips: slips.map(defaultValues) })
     setUploads({})
@@ -175,10 +242,13 @@ export function CastingSlipsCutDialog({
               )
             )
               return
+            const restMaterialId = restGram > 0 ? restMaterialOf(value.restTarget) : null
+            if (restGram > 0 && !restMaterialId) return
             items.push({
               slipId: slips[index].id,
               blanks,
               restWeightGram: restGram,
+              restMaterialId,
               restImages: toImages(value.restImages),
             })
           }
@@ -308,15 +378,16 @@ export function CastingSlipsCutDialog({
                       },
                     }}
                   />
-                  <TextField
-                    label="Nhập kho NVL vào mã"
-                    value={restMaterialName}
-                    placeholder={restMaterials.isLoading ? 'Đang tải…' : undefined}
-                    size="small"
-                    fullWidth
-                    slotProps={{ input: { readOnly: true } }}
-                  />
                 </Stack>
+                {Number(watched?.[slipIndex]?.rest) > 0 ? (
+                  <RestTargetField
+                    control={form.control}
+                    slipIndex={slipIndex}
+                    choices={restChoices}
+                    loading={restMaterials.isLoading}
+                    disabled={busy}
+                  />
+                ) : null}
                 <FormImageField<Values>
                   name={`slips.${slipIndex}.restImages`}
                   label="Ảnh cân phần cây còn lại"

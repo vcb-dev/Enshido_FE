@@ -325,6 +325,13 @@ export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload
 /** Mã NVL (gram, kho NVL chính): nhận phần cây còn lại khi cắt cây, xuất bạc / hội / vàng khi cấp vật tư đúc. */
 export type RestMaterialOptions = {
   defaultName: string
+  /** Hai mã kho NVL thủ kho tích chọn khi nhập phần cây còn lại (null = mã chưa có trong kho). */
+  choices?: {
+    key: 'S925' | 'RECOVERED'
+    label: string
+    sku: string
+    material: { id: string; sku: string | null; name: string } | null
+  }[]
   items: {
     id: string
     sku: string | null
