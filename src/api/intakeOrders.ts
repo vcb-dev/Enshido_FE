@@ -47,9 +47,12 @@ export const GOLD_METAL_TYPES: OrderMetalType[] = ['GOLD_10K', 'GOLD_14K', 'GOLD
 export const isGoldMetal = (metalType: OrderMetalType | null | undefined) =>
   metalType != null && GOLD_METAL_TYPES.includes(metalType)
 
-/** Mã NVL nhận kim loại thu hồi theo kim loại của đơn — khớp BE `recoveredMaterialName`. */
+/**
+ * Mã NVL nhận kim loại thu hồi theo kim loại của đơn — khớp BE `recoveredMaterialId`: vàng theo
+ * tuổi, bạc vào bạc nguyên liệu S925 (A00001) từ 2026-11-04.
+ */
 export function recoveredMaterialName(metalType: OrderMetalType | null | undefined) {
-  return isGoldMetal(metalType) ? `Vàng ${metalType!.slice(5)} thu hồi` : 'Bạc thu hồi / đầu cây S925'
+  return isGoldMetal(metalType) ? `Vàng ${metalType!.slice(5)} thu hồi` : 'Bạc nguyên liệu S925 (A00001)'
 }
 
 export type IntakeOrder = {

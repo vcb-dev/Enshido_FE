@@ -1091,7 +1091,7 @@ export function KcsReturnDialog({
           <Typography variant="caption" color="text.secondary">
             {gold
               ? `Lưu là nhập kho NVL: hàng lỗi + vàng thừa vào "${recoveredName}".`
-              : 'Lưu là nhập kho NVL: hàng lỗi + S925 thừa vào "Bạc thu hồi / đầu cây S925", S999 thừa vào "Bạc S999 thu hồi".'}
+              : 'Lưu là nhập kho NVL: hàng lỗi + S925 thừa vào "Bạc nguyên liệu S925 (A00001)", S999 thừa vào "Bạc S999 thu hồi".'}
             {entry?.stage === 'PLATING' ? ' Hàng đạt nhập kho thành phẩm như cũ.' : ' Hàng đạt chuyển sang Xi.'}
           </Typography>
         </>
