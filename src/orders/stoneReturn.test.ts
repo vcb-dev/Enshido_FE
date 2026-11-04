@@ -38,11 +38,8 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
     returnedCount: 0,
   }
 
-  it('ưu tiên TL đá 3D chia theo số hàng giao', () => {
-    expect(stoneSetWeight({ ...base, stone3dGram: 3 })).toEqual({ gram: 1.5, source: '3d' })
-  })
-
-  it('không có 3D: TL đá cấp − gói thừa', () => {
+  it('theo đá thực tế: TL đá cấp − gói thừa, kể cả đơn có TL đá 3D', () => {
+    expect(stoneSetWeight({ ...base, stone3dGram: 3 })).toEqual({ gram: 1.5, source: 'pack' })
     expect(stoneSetWeight(base)).toEqual({ gram: 1.5, source: 'pack' })
     expect(stoneSetWeight({ ...base, returnedPackGram: 5 })).toEqual({ gram: 0, source: 'pack' })
   })
@@ -53,7 +50,11 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
     ).toEqual({ gram: 1.5, source: 'count' })
   })
 
-  it('chưa cấp đá cân gói và không có 3D thì không có số', () => {
+  it('khâu chưa cấp đá nào: dùng TL đá 3D chia theo số hàng giao', () => {
+    expect(stoneSetWeight({ ...base, handedGram: null, stone3dGram: 3 })).toEqual({ gram: 1.5, source: '3d' })
+  })
+
+  it('chưa cấp đá và không có 3D thì không có số', () => {
     expect(stoneSetWeight({ ...base, handedGram: null })).toBeNull()
   })
 })

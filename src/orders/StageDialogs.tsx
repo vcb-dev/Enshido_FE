@@ -639,6 +639,8 @@ export function KcsReturnDialog({
         ) {
           return 'Có sản phẩm đạt — trọng lượng sản phẩm đạt phải lớn hơn 0'
         }
+        // Vào đá ghi đúng số cân thực tế — vượt mức dự kiến chỉ hỏi lại lúc lưu, không chặn.
+        if (stoneStage) return true
         const room = silverRoomFor(field)
         if (room == null || value === '' || value == null) return true
         return Number(value) <= room + 1e-9
@@ -669,11 +671,15 @@ export function KcsReturnDialog({
       !photoOnly &&
       silverLimit != null &&
       !(await confirmWeights([
-        ratioWarning(back, 'Nhận lại + thu hồi', silverLimit, 'bạc vào khâu', {
-          min: 0.5,
-          max: 1,
-          note: 'hao hụt khâu trên 50%',
-        }),
+        ratioWarning(
+          back,
+          'Nhận lại + thu hồi',
+          silverLimit,
+          stoneStage ? 'BTP dự kiến (bạc vào khâu + đá gắn)' : 'bạc vào khâu',
+          stoneStage && back > silverLimit
+            ? { min: 0.5, max: 1, note: 'nặng hơn dự kiến — kiểm tra lại TL đá đã cấp; vẫn lưu đúng số cân thực tế' }
+            : { min: 0.5, max: 1, note: 'hao hụt khâu trên 50%' },
+        ),
       ]))
     ) {
       return
@@ -778,7 +784,7 @@ export function KcsReturnDialog({
               </Typography>
               <Typography variant="body2">
                 BTP dự kiến (bạc vào khâu + đá gắn):{' '}
-                <b>{silverLimit != null ? formatQty(String(silverLimit)) : '—'}</b> g — cân lại cả cụm, không vượt số này
+                <b>{silverLimit != null ? formatQty(String(silverLimit)) : '—'}</b> g — cân lại cả cụm, ghi đúng số cân thực tế
               </Typography>
             </>
           ) : null}
@@ -951,7 +957,7 @@ export function KcsReturnDialog({
           required
           helperText={
             silverLimit != null
-              ? `Tối đa ${formatQty(String(silverLimit))} g`
+              ? `${stoneStage ? 'Dự kiến' : 'Tối đa'} ${formatQty(String(silverLimit))} g`
               : undefined
           }
           rules={silverRules('returnedSilverWeight')}
