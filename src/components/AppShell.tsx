@@ -54,6 +54,7 @@ import { ScanQrButton } from './ScanQrButton'
 import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
 import { InstallAppButton } from './InstallAppButton'
+import { NotificationBell } from '../notifications/NotificationBell'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
@@ -184,6 +185,7 @@ export function AppShell() {
             {/* Ở thanh trên cùng nên quét được phiếu giấy từ bất kỳ màn nào. */}
             <ScanQrButton compact />
             <InstallAppButton />
+            <NotificationBell />
             <Avatar
               sx={{
                 width: 32,
