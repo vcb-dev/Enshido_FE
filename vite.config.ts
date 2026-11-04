@@ -40,6 +40,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Nhận Web Push + bấm vào thông báo ngoài app (public/push-sw.js).
+        importScripts: ['/push-sw.js'],
         // Gọi API không đi qua service worker: không bao giờ phục vụ dữ liệu cũ mà
         // người dùng tưởng là mới. Phần xem offline nằm ở cache của react-query.
         navigateFallbackDenylist: [/^\/api\//],

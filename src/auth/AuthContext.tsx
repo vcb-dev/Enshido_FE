@@ -110,6 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    // Gỡ máy khỏi tài khoản trước khi mất phiên — người khác đăng nhập máy này không nhận nhầm.
+    const { unlinkPush } = await import('../notifications/push')
+    await unlinkPush().catch(() => undefined)
     await logoutApi()
     clearCachedSession()
     setUser(null)
