@@ -29,7 +29,7 @@ vi.mock('../auth/connectivity', () => ({
 }))
 
 const VARS: SubTicketVars = { orderCode: 'A012', no: 1, ticketCode: 'A012-1' }
-const ORDER = { code: 'A012' } as ProductionOrderDetail
+const ORDER = { code: 'A012', stages: [] } as unknown as ProductionOrderDetail
 /** Tầng API bù phiếu con / NVL cho máy chủ cũ chưa trả các trường này, nên bản vào cache có thêm khoá. */
 const CACHED_ORDER = {
   ...ORDER,
@@ -134,6 +134,23 @@ describe('có mạng', () => {
     expect(client.getQueryData(['production-order', 'A012'])).toEqual(CACHED_ORDER)
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Đã xác nhận phiếu A012-1'))
     expect(toast.info).not.toHaveBeenCalled()
+  })
+
+  it('thợ khắc nhận Khắc: báo đã xong khâu, chuyển sang chờ Đánh bóng', async () => {
+    fetchMock.mockResolvedValue(
+      jsonRes({
+        ...ORDER,
+        stages: [
+          { subTicketId: 't1', subTicketNo: 1, stage: 'ENGRAVING', returnedAt: '2026-11-04T03:00:00Z' },
+        ],
+      }),
+    )
+
+    await fire(client, 'claim').promise
+
+    expect(toast.success).toHaveBeenCalledWith(
+      'Đã nhận Khắc phiếu A012-1 — khâu Khắc tính xong, phiếu chuyển sang chờ Đánh bóng',
+    )
   })
 
   it('thợ xác nhận phiếu mẹ Nguội / Vào đá qua endpoint phiếu mẹ', async () => {

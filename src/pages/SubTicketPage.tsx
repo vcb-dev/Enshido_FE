@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { canReportStageDefect, defectScopeText, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { canReportStageDefect, defectScopeText, completesOnTake, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -265,7 +265,9 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
       // Khắc / Đánh bóng / Xi thợ tự nhận; Nguội / Vào đá thủ kho chỉ định thợ rồi thợ bấm "Xác nhận".
       hint = `Khâu ${STAGE_LABEL[model.pendingStage]} do thủ kho chỉ định thợ — nhờ thủ kho giao lại khâu này.`
     } else if (isWorker) {
-      hint = 'Bấm Nhận là bắt đầu làm ngay — hàng lấy nguyên số QC đã nhận lại ở khâu trước.'
+      hint = completesOnTake(model.pendingStage)
+        ? 'Bấm Nhận là tính xong Khắc luôn — không cần báo xong, phiếu tự chuyển sang chờ Đánh bóng.'
+        : 'Bấm Nhận là bắt đầu làm ngay — hàng lấy nguyên số QC đã nhận lại ở khâu trước.'
       actions.push(
         <Button key="claim" variant="contained" size="large" disabled={busy} loading={sending('claim')} onClick={() => claim.mutate(vars)}>
           Nhận · {STAGE_LABEL[model.pendingStage]}

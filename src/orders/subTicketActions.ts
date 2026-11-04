@@ -33,13 +33,29 @@ import {
   optimisticMyTicketsAction,
   patchMyTicketsAfterSubTicketAction,
 } from './myTicketsCache'
+import { completesOnTake, STAGE_LABEL } from './catalog'
 import { applyProductionOrderDetail } from './orderCache'
 import { scheduleMyTicketsRefresh } from './myTicketsRefresh'
 
 type ActionDef = {
   run: (orderCode: string, no: number | null) => Promise<ProductionOrderDetail>
   queued: (ticketCode: string) => string
-  done: (ticketCode: string) => string
+  done: (ticketCode: string, order: ProductionOrderDetail, no: number | null) => string
+}
+
+/** Lần giao vừa nhận là Khắc thì BE đã tự chốt xong khâu và mở Đánh bóng (`completesOnTake`). */
+function receivedDone(
+  verb: 'nhận' | 'xác nhận',
+  code: string,
+  order: ProductionOrderDetail,
+  no: number | null,
+) {
+  const last = order.stages
+    .filter((entry) => (no == null ? !entry.subTicketId : entry.subTicketNo === no))
+    .at(-1)
+  return last && completesOnTake(last.stage) && last.returnedAt
+    ? `Đã ${verb} ${STAGE_LABEL[last.stage]} phiếu ${code} — khâu Khắc tính xong, phiếu chuyển sang chờ Đánh bóng`
+    : `Đã ${verb} phiếu ${code} — bắt đầu làm`
 }
 
 type TicketActionCtx = {
@@ -53,7 +69,7 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
     run: (code, no) => (no == null ? claimOrderApi(code) : claimSubTicketApi(code, no)),
     queued: (code) =>
       `Đã xếp hàng nhận phiếu ${code} — gửi lên khi có mạng. Thợ khác nhận trước thì sẽ báo lại.`,
-    done: (code) => `Đã nhận phiếu ${code} — bắt đầu làm`,
+    done: (code, order, no) => receivedDone('nhận', code, order, no),
   },
   unclaim: {
     run: (code, no) => (no == null ? unclaimOrderApi(code) : unclaimSubTicketApi(code, no)),
@@ -63,7 +79,7 @@ const ACTIONS: Record<SubTicketAction, ActionDef> = {
   accept: {
     run: (code, no) => (no == null ? acceptOrderApi(code) : acceptSubTicketApi(code, no)),
     queued: (code) => `Đã xếp hàng xác nhận phiếu ${code} — gửi lên khi có mạng`,
-    done: (code) => `Đã xác nhận phiếu ${code} — bắt đầu làm`,
+    done: (code, order, no) => receivedDone('xác nhận', code, order, no),
   },
   submit: {
     run: (code, no) => (no == null ? submitOrderApi(code) : submitSubTicketApi(code, no)),
@@ -121,7 +137,7 @@ export function registerSubTicketActions(queryClient: QueryClient) {
             refetchType: 'none',
           })
           scheduleMyTicketsRefresh(queryClient)
-          toast.success(def.done(vars.ticketCode))
+          toast.success(def.done(vars.ticketCode, order, vars.no))
         },
         onError: (error, vars, ctx) => {
           const snap = ctx as TicketActionCtx | undefined
