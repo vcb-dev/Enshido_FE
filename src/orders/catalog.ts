@@ -354,6 +354,14 @@ export function isSelfTakeStage(stage: string | null | undefined) {
 }
 
 /**
+ * Khắc: thợ nhận là tính xong khâu luôn — không báo xong, QC không nhận lại, phiếu tự mở Đánh
+ * bóng. Khớp `COMPLETE_ON_TAKE_STAGES` phía BE.
+ */
+export function completesOnTake(stage: string | null | undefined) {
+  return stage === 'ENGRAVING'
+}
+
+/**
  * Đơn bỏ khâu Vào đá: không khai TL đá ở khâu 3D (trống hoặc 0). Đơn cũ chỉ khai số viên vẫn tính
  * là có đá; `stoneSkipped` giữ cho đơn thủ kho đã đánh dấu trước đây. Khớp `skipsStone` phía BE.
  */
