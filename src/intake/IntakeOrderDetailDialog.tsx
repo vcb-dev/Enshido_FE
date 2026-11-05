@@ -11,8 +11,9 @@ import {
 } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import type { IntakeOrder } from '../api/intakeOrders'
-import { formatCt } from '../api/inventory'
+import { formatCt, formatQty } from '../api/inventory'
 import { formatIntakeGram } from './intakeDisplay'
+import { intakeShowsWaxQty, intakeWaxEnteredQty } from './intakeActions'
 import { intakeCastingTreeImages, intakeDetailImages, intakeProductOnlyImages } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
 import { IntakeOrderStatusChips } from './IntakeStatusChip'
@@ -148,6 +149,11 @@ export function IntakeOrderDetailDialog({
                 ) : order.hasMold === false ? (
                   <Typography variant="body2">
                     <strong>Khuôn:</strong> Cần vẽ 3D in resin
+                  </Typography>
+                ) : null}
+                {order && intakeShowsWaxQty(order) ? (
+                  <Typography variant="body2">
+                    <strong>Số lượng:</strong> {formatQty(String(intakeWaxEnteredQty(order)))}
                   </Typography>
                 ) : null}
                 {waxWeight ? (

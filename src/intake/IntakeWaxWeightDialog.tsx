@@ -4,6 +4,7 @@ import { useAppForm } from '../components/ui/form/useAppForm'
 import type { IntakeOrder } from '../api/intakeOrders'
 import { formatQty, qtyFromApi } from '../api/inventory'
 import { DialogForm, FormQtyField } from '../components/ui'
+import { intakeShowsWaxQty, intakeWaxEnteredQty } from './intakeActions'
 
 type IntakeWaxWeightDialogProps = {
   order: IntakeOrder | null
@@ -14,12 +15,6 @@ type IntakeWaxWeightDialogProps = {
 
 type Values = { waxWeight: string }
 
-function enteredQtyOf(order: IntakeOrder | null) {
-  if (!order) return 0
-  if (order.requestType === 'BULK') return order.waxReleasedQty || order.qty
-  return order.qty
-}
-
 function valuesOf(order: IntakeOrder | null): Values {
   const wax = order?.productWeightGram
   return { waxWeight: wax != null && wax !== '' ? qtyFromApi(String(wax)) : '' }
@@ -28,7 +23,8 @@ function valuesOf(order: IntakeOrder | null): Values {
 /** Sửa TL sáp các lô đã tách / đã lên đúc — hiện SL + TL cũ, chỉ cho đổi TL. */
 export function IntakeWaxWeightDialog({ order, saving, onClose, onSave }: IntakeWaxWeightDialogProps) {
   const form = useAppForm<Values>({ defaultValues: valuesOf(null) })
-  const enteredQty = enteredQtyOf(order)
+  const showQty = order ? intakeShowsWaxQty(order) : false
+  const enteredQty = order ? intakeWaxEnteredQty(order) : 0
 
   useEffect(() => {
     if (order) form.reset(valuesOf(order))
@@ -49,14 +45,16 @@ export function IntakeWaxWeightDialog({ order, saving, onClose, onSave }: Intake
                 {order.qty ? ` · SL ${formatQty(String(order.qty))}` : null}
               </Typography>
             ) : null}
-            <TextField
-              label="Số đơn SX đã nhập"
-              value={enteredQty > 0 ? formatQty(String(enteredQty)) : ''}
-              size="small"
-              fullWidth
-              disabled
-              helperText="Không đổi số lượng — chỉ sửa trọng lượng sáp"
-            />
+            {showQty ? (
+              <TextField
+                label="Số lượng"
+                value={enteredQty > 0 ? formatQty(String(enteredQty)) : ''}
+                size="small"
+                fullWidth
+                disabled
+                helperText="Không đổi số lượng — chỉ sửa trọng lượng sáp"
+              />
+            ) : null}
             <FormQtyField<Values>
               name="waxWeight"
               label="Trọng lượng sáp (g)"

@@ -19,13 +19,25 @@ export function intakeNeedsCastingTreeSpecs(row: IntakeOrder) {
   return (row.remainingQty ?? row.qty) > 0
 }
 
+/** SL đã nhập lúc in / bơm sáp — SX SLL lấy số đã tách, không thì tổng đơn. */
+export function intakeWaxEnteredQty(row: IntakeOrder) {
+  if (row.requestType === 'BULK') return row.waxReleasedQty || row.qty
+  return row.qty
+}
+
+/** SX SLL hiện SL kèm TL sáp; đơn SL 1 không cần. */
+export function intakeShowsWaxQty(row: IntakeOrder) {
+  return row.requestType === 'BULK' && intakeWaxEnteredQty(row) !== 1
+}
+
 /**
- * Sửa TL sáp khi đã có lô tách / lên đúc (SX SLL: `waxReleasedQty` > 0; đơn thường: đã nằm phiếu
- * đúc). Chưa tách / chưa lên đúc thì nhập lần đầu ở bước in / bơm sáp, không hiện nút sửa.
+ * Đã nhập TL sáp thì sửa được (ghi đè lô đã tách / phiếu đúc nếu có). Chưa nhập thì dùng bước
+ * in / bơm sáp, không hiện nút sửa.
  */
 export function intakeCanEditWaxWeight(row: IntakeOrder) {
   if ((row.waxReleasedQty ?? 0) > 0) return true
-  return Boolean(row.castingSlip)
+  if (row.castingSlip) return true
+  return Boolean(row.productWeightGram)
 }
 
 /** Đơn có khuôn bơm theo luồng cũ (bơm sáp + cây thông một lần), còn chờ thủ kho xác nhận. */
