@@ -764,7 +764,7 @@ export function ProductionOrdersPage() {
   )
 }
 
-/** Bước kế tiếp của đơn, kèm nút sửa TL sáp khi người báo số liệu còn sửa được. */
+/** Bước kế tiếp của đơn, kèm nút sửa TL sáp khi đã có lô tách / lên đúc. */
 function renderIntakeWorkflowAction(order: IntakeOrder, actions: Parameters<typeof renderIntakeWorkflowStep>[1]) {
   const step = renderIntakeWorkflowStep(order, actions)
   const canEdit = intakeCanEditWaxWeight(order) && (order.hasMold ? actions.can.wax : actions.can.model3d)

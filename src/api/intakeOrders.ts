@@ -258,7 +258,7 @@ export function submitIntakeProductSpecsApi(
   })
 }
 
-/** Sửa TL sáp đã báo khi chưa cấy cây thông — TL cây thông chỉ nhập ở màn Cấy cây thông. */
+/** Sửa TL sáp các lô đã tách / đã lên đúc — ghi đè cả phiếu đúc nếu có. */
 export function updateIntakeWaxWeightApi(
   id: string,
   payload: { productWeightGram: number },

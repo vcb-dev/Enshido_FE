@@ -20,12 +20,12 @@ export function intakeNeedsCastingTreeSpecs(row: IntakeOrder) {
 }
 
 /**
- * Sửa TL sáp đã báo khi bước sau chưa dùng tới: đơn còn chờ cấy cây thông. Đơn có khuôn bơm theo
- * luồng cũ (còn chờ thủ kho xác nhận) vẫn sửa được — khớp BE `updateWaxWeight`.
+ * Sửa TL sáp khi đã có lô tách / lên đúc (SX SLL: `waxReleasedQty` > 0; đơn thường: đã nằm phiếu
+ * đúc). Chưa tách / chưa lên đúc thì nhập lần đầu ở bước in / bơm sáp, không hiện nút sửa.
  */
 export function intakeCanEditWaxWeight(row: IntakeOrder) {
-  if (row.castingSlip) return false
-  return row.status === 'WAX_PRINTED' || intakeIsLegacyMoldWax(row)
+  if ((row.waxReleasedQty ?? 0) > 0) return true
+  return Boolean(row.castingSlip)
 }
 
 /** Đơn có khuôn bơm theo luồng cũ (bơm sáp + cây thông một lần), còn chờ thủ kho xác nhận. */
