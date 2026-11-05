@@ -28,6 +28,7 @@ import {
   intakeNeedsProductSpecs,
 } from '../intake/intakeActions'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
+import { canInjectWax } from '../intake/intake3dAccess'
 import { intakeDetailImages, intakeProductionStageColumn } from '../intake/intakeImages'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
@@ -501,6 +502,7 @@ export function ProductionOrdersPage() {
             approve: can(user, Permission.INTAKE_APPROVE),
             model3d: can(user, Permission.PRODUCTION_MODEL3D),
             wax: can(user, Permission.PRODUCTION_WAX),
+            waxInject: canInjectWax(user),
             keeper: isIntakeWarehouseKeeper,
             cast: can(user, Permission.PRODUCTION_CAST),
             qc: can(user, Permission.PRODUCTION_QC),
@@ -787,7 +789,7 @@ function renderIntakeWorkflowStep(
     onIntakeWaxWeight: (row: IntakeOrder) => void
     onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     /** Quyền theo việc của người đang đăng nhập — không có quyền thì chỉ hiện "Chờ …". */
-    can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
+    can: { approve: boolean; model3d: boolean; wax: boolean; waxInject: boolean; keeper: boolean; cast: boolean; qc: boolean }
   },
 ) {
   // Chưa đến lượt người này: nói rõ đang chờ vai trò nào thay vì hiện nút bấm sẽ bị BE từ chối.
@@ -822,9 +824,9 @@ function renderIntakeWorkflowStep(
     )
   }
   if (intakeNeedsProductSpecs(order)) {
-    // Không khuôn = in sáp (thợ 3D); có khuôn = bơm sáp (thợ sáp).
-    if (order.hasMold ? !actions.can.wax : !actions.can.model3d) {
-      return waiting(order.hasMold ? 'thợ sáp' : 'thợ 3D')
+    // Không khuôn = in sáp (thợ 3D); có khuôn = bơm sáp (thợ sáp hoặc thợ đúc).
+    if (order.hasMold ? !actions.can.waxInject : !actions.can.model3d) {
+      return waiting(order.hasMold ? 'thợ sáp / thợ đúc' : 'thợ 3D')
     }
     return (
       <Button
@@ -1013,7 +1015,7 @@ function orderColumns(
     onIntakeWaxWeight: (row: IntakeOrder) => void
     onIntakeCastingSlipIssue: (row: IntakeOrder) => void
     onIntakeView: (row: IntakeOrder) => void
-    can: { approve: boolean; model3d: boolean; wax: boolean; keeper: boolean; cast: boolean; qc: boolean }
+    can: { approve: boolean; model3d: boolean; wax: boolean; waxInject: boolean; keeper: boolean; cast: boolean; qc: boolean }
   },
   filters: {
     search: ReactNode
