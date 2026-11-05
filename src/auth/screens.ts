@@ -9,7 +9,7 @@ import {
 } from './permissions'
 import { WAREHOUSES, warehousePath, type WarehouseCode } from '../warehouses/catalog'
 import {
-  canAccessProductionOrdersPage,
+  isProductionOrdersHome,
   canSeeCastingSlipsPage,
   canUseMyTickets,
   canUseQcTickets,
@@ -116,7 +116,7 @@ export function firstAllowedPath(user: PermissionUser | undefined | null): strin
   if (can(user, Permission.SCREEN_DASHBOARD)) return '/'
   if (canSeeIntakeOrdersMenu(user)) return '/intake-orders'
   if (isIntakeWaxScoped(user) && canSeeWaxTreeMenu(user)) return '/wax-tree'
-  if (canAccessProductionOrdersPage(user)) return '/orders'
+  if (isProductionOrdersHome(user)) return '/orders'
   if (canSeeCastingOrdersMenu(user) || canSeeCastingSlipsPage(user)) return '/casting'
   const firstWarehouse = visibleWarehouses(user)[0]
   if (firstWarehouse) return warehousePath(firstWarehouse)

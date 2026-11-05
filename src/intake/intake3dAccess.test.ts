@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { canAccessPath, homePathForUser } from '../auth/homePath'
 import { permissionUserForForm } from '../auth/staffJobPresets'
 import {
   canAccessProductionOrdersPage,
+  canInjectWax,
   canUseMyTickets,
   canUseQcTickets,
   isIntake3dScoped,
@@ -39,5 +41,20 @@ describe('thợ 3D / sáp kiêm việc khác', () => {
     const user = permissionUserForForm(['worker_3d', 'kcs'], ['screen.qc-tickets'])
     expect(canUseQcTickets(user)).toBe(true)
     expect(canUseMyTickets(user)).toBe(false)
+  })
+})
+
+describe('thợ đúc bơm sáp', () => {
+  it('thợ đúc vào Lệnh SX để bơm sáp, trang chủ vẫn là Lệnh đúc', () => {
+    const user = account('worker_casting')
+    expect(canInjectWax(user)).toBe(true)
+    expect(canAccessProductionOrdersPage(user)).toBe(true)
+    expect(canAccessPath(user, '/orders')).toBe(true)
+    expect(homePathForUser(user)).toBe('/casting')
+  })
+
+  it('thợ sáp vẫn bơm sáp; thợ 3D thì không', () => {
+    expect(canInjectWax(account('worker_wax'))).toBe(true)
+    expect(canInjectWax(account('worker_3d'))).toBe(false)
   })
 })

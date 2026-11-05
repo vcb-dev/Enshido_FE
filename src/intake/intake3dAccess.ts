@@ -70,7 +70,10 @@ export function canUseQcTickets(user: PermissionUser | null | undefined): boolea
   return user.roleCode === 'ADMIN' || can(user, Permission.SCREEN_QC_TICKETS)
 }
 
-export function canAccessProductionOrdersPage(user: PermissionUser | null | undefined): boolean {
+/**
+ * Lệnh sản xuất là trang chủ — trừ thợ đúc chỉ vào để bơm sáp, trang chủ vẫn là Lệnh đúc.
+ */
+export function isProductionOrdersHome(user: PermissionUser | null | undefined): boolean {
   if (!user) return false
   if (user.roleCode === 'ADMIN') return true
   if (isIntakePipelineScoped(user)) return true
@@ -84,6 +87,17 @@ export function canAccessProductionOrdersPage(user: PermissionUser | null | unde
   const roles = [user.roleCode, ...(user.extraRoles ?? [])].filter(Boolean)
   if (roles.includes('USER') && can(user, Permission.SCREEN_DASHBOARD)) return true
   return false
+}
+
+export function canAccessProductionOrdersPage(user: PermissionUser | null | undefined): boolean {
+  if (isProductionOrdersHome(user)) return true
+  // Thợ đúc cũng bơm sáp đơn có khuôn — nút nằm ở Lệnh sản xuất.
+  return can(user, Permission.PRODUCTION_CAST)
+}
+
+/** Bơm sáp đơn có khuôn: thợ sáp hoặc thợ đúc. */
+export function canInjectWax(user: PermissionUser | null | undefined): boolean {
+  return canAny(user, Permission.PRODUCTION_WAX, Permission.PRODUCTION_CAST)
 }
 
 export function canSeeCastingSlipsPage(user: PermissionUser | null | undefined): boolean {
