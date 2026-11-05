@@ -29,6 +29,7 @@ import { QrScannerDialog } from '../components/QrScannerDialog'
 import { RouteSkeleton } from '../components/RouteSkeleton'
 import { ScreenLoadingBar } from '../components/ScreenLoadingBar'
 import { useOpenScannedPath } from '../components/ScanQrButton'
+import { NotificationBell } from '../notifications/NotificationBell'
 import { useWaitingCount } from '../orders/subTicketActions'
 
 const CONTENT_MAX_WIDTH = 1180
@@ -114,6 +115,8 @@ export function WorkerShell() {
             <Box sx={{ display: { xs: 'none', md: 'block' } }}>
               <InstallAppButton />
             </Box>
+            {/* Cả điện thoại lẫn máy tính: xem thông báo và bật thông báo ngoài app ở đây. */}
+            <NotificationBell />
             <ButtonBase
               onClick={(event) => setMenuAnchor(event.currentTarget)}
               aria-label="Tài khoản"
