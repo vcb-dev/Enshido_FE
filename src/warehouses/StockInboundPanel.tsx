@@ -65,6 +65,7 @@ import {
   uniqueFilterOptions,
   upsertMoveList,
 } from './stockFilters'
+import { inPeriod, useWarehousePeriod, vnDayOf } from './warehousePeriod'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 
 /** Cột STT do DataTable tự chèn khi `showIndex`. */
@@ -180,8 +181,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     return map
   }, [stock.data?.items])
 
+  const period = useWarehousePeriod()
   const items = useMemo(() => inbounds.data?.items ?? [], [inbounds.data?.items])
-  const apiTotals = inbounds.data?.totals
   const stockItems = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
   const catalogFilters = useCatalogFilterOptions(profile, lookups.data, btpCatalogs.data, stockItems)
 
@@ -209,6 +210,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   const rows = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
+      if (!inPeriod(vnDayOf(row.receivedAt), period)) return false
       const catalog = row.materialId ? stockById.get(row.materialId) : undefined
       if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
       if (showUnit && params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
@@ -225,7 +227,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       if (params.enteredBy && (row.enteredBy ?? '').trim() !== params.enteredBy) return false
       return true
     })
-  }, [catalogFilterParams, items, params, inboundProfile, showUnit, stockById])
+  }, [catalogFilterParams, items, params, inboundProfile, showUnit, stockById, period])
 
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
@@ -238,7 +240,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         (showUnit && params.unit) ||
         (inboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
-  const totals = filtering ? sumMoveTotals(rows) : apiTotals
+  // Luôn lọc theo kỳ nên tổng cộng từ các dòng đang hiện.
+  const totals = sumMoveTotals(rows)
 
   const inboundKey = ['warehouse-inbounds', warehouseCode] as const
 
@@ -536,7 +539,9 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         rowKey={(row) => row.id}
         loading={inbounds.isLoading}
         errorText={inbounds.error instanceof Error ? inbounds.error.message : undefined}
-        emptyText={filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Chưa có dòng nhập kho.'}
+        emptyText={
+          filtering ? 'Không có dòng nhập khớp bộ lọc.' : 'Không có dòng nhập kho trong kỳ đang chọn.'
+        }
         variant="grid"
         minWidth={tableMinWidth}
         showIndex
