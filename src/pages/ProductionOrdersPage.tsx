@@ -462,12 +462,13 @@ export function ProductionOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const updateWaxWeight = useMutation({
-    mutationFn: ({ id, ...payload }: { id: string; productWeightGram: number }) =>
+    mutationFn: ({ id, ...payload }: { id: string; productWeightGram: number; images: OrderImage[] }) =>
       updateIntakeWaxWeightApi(id, payload),
     onSuccess: (order) => {
       setWaxWeightTarget(null)
       afterIntakeProductSpecsSubmitted(queryClient, order)
-      toast.success(`Đã sửa TL sáp — ${order.code}`)
+      void queryClient.invalidateQueries({ queryKey: ['intake-orders', 'wax-images', order.id] })
+      toast.success(`Đã sửa TL / ảnh sáp — ${order.code}`)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -764,7 +765,7 @@ export function ProductionOrdersPage() {
   )
 }
 
-/** Bước kế tiếp của đơn, kèm nút sửa TL sáp khi đã có lô tách / lên đúc. */
+/** Bước kế tiếp của đơn, kèm nút sửa TL / ảnh sáp khi đã có lô tách / lên đúc. */
 function renderIntakeWorkflowAction(order: IntakeOrder, actions: Parameters<typeof renderIntakeWorkflowStep>[1]) {
   const step = renderIntakeWorkflowStep(order, actions)
   const canEdit = intakeCanEditWaxWeight(order) && (order.hasMold ? actions.can.wax : actions.can.model3d)
@@ -773,7 +774,7 @@ function renderIntakeWorkflowAction(order: IntakeOrder, actions: Parameters<type
     <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
       {step}
       <Button size="small" variant="text" onClick={() => actions.onIntakeWaxWeight(order)} sx={actionTextButtonSx}>
-        Sửa TL sáp
+        Sửa TL / ảnh sáp
       </Button>
     </Stack>
   )
