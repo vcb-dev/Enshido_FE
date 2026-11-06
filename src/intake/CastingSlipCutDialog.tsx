@@ -136,6 +136,21 @@ function RestTargetField({
   )
 }
 
+/**
+ * Phần cây còn lại = TL cây sau đúc − tổng TL phôi, khi đã nhập đủ TL phôi mọi đơn. null = chưa
+ * nhập đủ, cây chưa có TL, hoặc phôi đã vượt cây (ô còn lại tự báo lỗi vượt cây).
+ */
+export function restFromBlanks(
+  treeGram: number,
+  blankWeights: readonly string[],
+): number | null {
+  if (!(treeGram > 0)) return null
+  const grams = blankWeights.map((weight) => gram(weight, false))
+  if (grams.some((value) => value == null)) return null
+  const rest = round4(treeGram - grams.reduce<number>((sum, value) => sum + value!, 0))
+  return rest >= 0 ? rest : null
+}
+
 function toImages(images: OrderImage[]): CastingSlipImage[] {
   return images.map(({ url, publicId, width, height }) => ({
     url,
@@ -206,6 +221,24 @@ export function CastingSlipsCutDialog({
     // Reset only when the selection changes; preserve edits during uploads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slipKey, form])
+
+  // Nhập đủ TL phôi là tự điền phần cây còn lại; thủ kho đã tự gõ ô đó thì không ghi đè.
+  const { dirtyFields } = form.formState
+  useEffect(() => {
+    slips.forEach((slip, index) => {
+      const value = watched?.[index]
+      if (!value) return
+      const name = `slips.${index}.rest` as const
+      if (dirtyFields.slips?.[index]?.rest) return
+      const rest = restFromBlanks(
+        Number(slip.castTreeWeightGram ?? 0),
+        value.lines.map((line) => line.weight),
+      )
+      if (rest != null && String(rest) !== value.rest) {
+        form.setValue(name, String(rest), { shouldValidate: true })
+      }
+    })
+  }, [watched, slips, form, dirtyFields])
 
   const busy = saving || Object.values(uploads).some(Boolean)
 
@@ -359,6 +392,11 @@ export function CastingSlipsCutDialog({
                   <FormQtyField<Values>
                     name={`slips.${slipIndex}.rest`}
                     label="Phần cây còn lại (g)"
+                    helperText={
+                      tree > 0
+                        ? `Tự tính = cây sau đúc ${formatQty(String(tree))} g − tổng TL phôi khi nhập đủ phôi`
+                        : undefined
+                    }
                     required
                     size="small"
                     fullWidth
