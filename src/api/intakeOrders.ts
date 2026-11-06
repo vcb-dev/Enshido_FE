@@ -258,10 +258,15 @@ export function submitIntakeProductSpecsApi(
   })
 }
 
-/** Sửa TL sáp các lô đã tách / đã lên đúc — ghi đè cả phiếu đúc nếu có. */
+/** Ảnh sáp đang có (đơn đã tách lô thì gộp ảnh các lô) — mở form Sửa TL / ảnh sáp. */
+export function getIntakeWaxImagesApi(id: string) {
+  return apiFetch<{ items: OrderImage[] }>(`/intake-orders/${id}/wax-images`)
+}
+
+/** Sửa TL sáp + ảnh sáp các lô đã tách / đã lên đúc — ghi đè cả phiếu đúc nếu có. */
 export function updateIntakeWaxWeightApi(
   id: string,
-  payload: { productWeightGram: number },
+  payload: { productWeightGram: number; images?: OrderImage[] },
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/wax-weight`, {
     method: 'PATCH',
