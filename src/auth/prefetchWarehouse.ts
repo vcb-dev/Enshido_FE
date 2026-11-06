@@ -6,16 +6,21 @@ export function prefetchWarehouseStock(queryClient: QueryClient, codes: string[]
   const unique = Array.from(new Set(codes)).slice(0, 1)
   const materialCodes = unique.filter((code) => code !== THANH_PHAM_WAREHOUSE)
   if (materialCodes.length) {
-    void import('../api/inventory').then(({ getWarehouseStockApi }) => {
-      for (const code of materialCodes) {
-        if (queryClient.getQueryState(['warehouse-stock', code])) continue
-        void queryClient.prefetchQuery({
-          queryKey: ['warehouse-stock', code],
-          queryFn: () => getWarehouseStockApi(code),
-          staleTime: 60_000,
-        })
-      }
-    })
+    void Promise.all([import('../api/inventory'), import('../warehouses/warehousePeriod')]).then(
+      ([{ getWarehouseStockApi }, { getWarehousePeriod }]) => {
+        // Trang Tồn xem theo kỳ đang chọn — kéo đúng key của bảng đó.
+        const period = getWarehousePeriod()
+        for (const code of materialCodes) {
+          const queryKey = ['warehouse-stock', code, 'period', period.from, period.to]
+          if (queryClient.getQueryState(queryKey)) continue
+          void queryClient.prefetchQuery({
+            queryKey,
+            queryFn: () => getWarehouseStockApi(code, { period }),
+            staleTime: 60_000,
+          })
+        }
+      },
+    )
   }
   if (unique.includes(THANH_PHAM_WAREHOUSE)) {
     if (queryClient.getQueryState(['finished-goods-stock'])) return

@@ -107,6 +107,23 @@ export type StockRow = {
   metalKindLabel: string | null
   availability: AvailabilityCode
   availabilityLabel: string
+  /** Chỉ có khi xem Tồn theo kỳ: đầu kỳ / nhập / xuất / cuối kỳ trong khoảng ngày đang chọn. */
+  period?: StockPeriodFigures | null
+}
+
+export type StockPeriodFigures = {
+  openingQty: string
+  openingAmount: string
+  inQty: string
+  inAmount: string
+  outQty: string
+  outAmount: string
+  qty: string
+  amount: string
+  openingGram: string | null
+  inGram: string | null
+  outGram: string | null
+  closingGram: string | null
 }
 
 export type MaterialImage = {
@@ -134,6 +151,7 @@ export type StockTotals = {
 
 export type StockResponse = {
   warehouse: WarehouseNode
+  period?: { from: string; to: string }
   totals: StockTotals
   items: StockRow[]
 }
@@ -142,9 +160,18 @@ export function listWarehousesApi() {
   return apiFetch<WarehouseNode[]>('/warehouses')
 }
 
-export function getWarehouseStockApi(code: string, opts?: { layers?: boolean }) {
-  const query = opts?.layers ? '?layers=1' : ''
-  return apiFetch<StockResponse>(`/warehouses/${code}/stock${query}`)
+export function getWarehouseStockApi(
+  code: string,
+  opts?: { layers?: boolean; period?: { from: string; to: string } },
+) {
+  const params = new URLSearchParams()
+  if (opts?.layers) params.set('layers', '1')
+  if (opts?.period) {
+    params.set('from', opts.period.from)
+    params.set('to', opts.period.to)
+  }
+  const query = params.toString()
+  return apiFetch<StockResponse>(`/warehouses/${code}/stock${query ? `?${query}` : ''}`)
 }
 
 export function formatQty(value: string) {

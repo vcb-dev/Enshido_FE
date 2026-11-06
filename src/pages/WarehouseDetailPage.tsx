@@ -104,6 +104,8 @@ import {
   matchesCatalogFilters,
   uniqueFilterOptions,
 } from '../warehouses/stockFilters'
+import { WarehousePeriodBar } from '../warehouses/WarehousePeriodBar'
+import { useWarehousePeriod } from '../warehouses/warehousePeriod'
 
 const LEGACY_BINS = new Set(['bac', 'da'])
 
@@ -147,6 +149,8 @@ export function WarehouseDetailPage() {
   const stockKey = stockWarehouseCode(warehouse)
   const title = activeSection ? `${activeSection.name} — ${warehouse.shortName}` : warehouse.name
   const subtitle = warehouse.description
+  // Kỳ xem áp cho Tồn / Nhập / Xuất của các kho NVL / BTP — Xuất nháp là phiếu đang mở, không theo kỳ.
+  const showPeriod = warehouse.code !== THANH_PHAM_WAREHOUSE && activeSection?.code !== 'drafts'
 
   return (
     <Stack
@@ -162,6 +166,7 @@ export function WarehouseDetailPage() {
         title={title}
         subtitle={subtitle}
         compactSubtitle
+        actions={showPeriod ? <WarehousePeriodBar /> : undefined}
         breadcrumbs={
           <Breadcrumbs>
             <Link component={RouterLink} to="/warehouses" underline="hover" color="inherit">
@@ -236,9 +241,10 @@ const STOCK_GROUPS = {
   open: { key: 'open', label: 'Tồn đầu kỳ', headSx: groupHead.open },
   in: { key: 'in', label: 'Nhập', headSx: groupHead.in },
   out: { key: 'out', label: 'Xuất', headSx: groupHead.out },
-  stock: { key: 'stock', label: 'Tồn', headSx: groupHead.stock },
+  stock: { key: 'stock', label: 'Tồn cuối kỳ', headSx: groupHead.stock },
   /** Tồn thực = đầu kỳ + nhập − xuất; khả dụng = thực − đá đang giữ chỗ cho phiếu Vào đá. */
-  real: { key: 'real', label: 'Thực tế (khả dụng = thực − giữ chỗ)', headSx: groupHead.real },
+  /** Luôn là số hiện tại, không theo kỳ đang xem. */
+  real: { key: 'real', label: 'Thực tế hiện tại (khả dụng = thực − giữ chỗ)', headSx: groupHead.real },
 } satisfies Record<string, ColumnGroup>
 
 const groupBody = {
@@ -267,16 +273,21 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
   const queryClient = useQueryClient()
   const dialog = useCrudDialog<StockRow>()
   // Tách sẵn callback ổn định để useMemo cột không chạy lại mỗi render.
-  const { openEdit, openView } = dialog
+  const { openEdit: openEditRow, openView: openViewRow } = dialog
   const table = useTableParams({
     pageSize: 8,
     filters: { ...CATALOG_FILTER_DEFAULTS, unit: '', color: '', status: 'ALL' },
   })
   const { params } = table
 
+  const period = useWarehousePeriod()
+  const stockKey = useMemo(
+    () => ['warehouse-stock', warehouseCode, 'period', period.from, period.to] as const,
+    [warehouseCode, period.from, period.to],
+  )
   const stock = useQuery({
-    queryKey: ['warehouse-stock', warehouseCode],
-    queryFn: () => getWarehouseStockApi(warehouseCode),
+    queryKey: stockKey,
+    queryFn: () => getWarehouseStockApi(warehouseCode, { period }),
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   })
@@ -287,7 +298,19 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     gcTime: 60 * 60_000,
   })
 
-  const items = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+  // Dòng gốc giữ số tích luỹ để hộp thoại sửa; bảng hiện số theo kỳ đang chọn.
+  const rawItems = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
+  const rawById = useMemo(() => new Map(rawItems.map((row) => [row.id, row])), [rawItems])
+  const items = useMemo(() => rawItems.map(withPeriodFigures), [rawItems])
+  // Hộp thoại xem / sửa dùng dòng gốc — đầu kỳ trong form là tồn đầu khai báo, không phải đầu kỳ đang xem.
+  const openEdit = useCallback(
+    (row: StockRow) => openEditRow(rawById.get(row.id) ?? row),
+    [openEditRow, rawById],
+  )
+  const openView = useCallback(
+    (row: StockRow) => openViewRow(rawById.get(row.id) ?? row),
+    [openViewRow, rawById],
+  )
   const nameSuggestions = useMemo(
     () => [...new Set(items.map((row) => row.name.trim()).filter(Boolean))],
     [items],
@@ -384,12 +407,12 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
     Boolean(params.search.trim() || params.unit || params.color) ||
     hasActiveCatalogFilters(params) ||
     (profile.showStatus && params.status !== 'ALL')
-  const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
+  // Theo kỳ thì tổng cộng lại từ số trong kỳ (tổng của API là số tích luỹ).
+  const totals = filtered || stock.data?.period ? sumStockTotals(visible) : stock.data?.totals
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
 
-  const stockKey = ['warehouse-stock', warehouseCode] as const
   const save = useMutation({
     mutationFn: async ({ id, payload }: { id?: string; payload: UpdateStockPayload }) =>
       id
@@ -429,6 +452,8 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
         if (!next.some((item) => item.id === row.id)) next.push(row)
         return { ...current, items: next, totals: sumStockTotals(next) }
       })
+      // Số theo kỳ do server tính — sửa đầu kỳ / thêm mã thì tải lại.
+      void queryClient.invalidateQueries({ queryKey: stockKey })
       void queryClient.invalidateQueries({ queryKey: ['warehouse-locations', warehouseCode] })
       if (warehouseCode === 'nvl-chinh') {
         void queryClient.invalidateQueries({ queryKey: ['casting-rest-material-options'] })
@@ -1105,6 +1130,27 @@ function ttLabel(value?: string) {
 /** Mã gram / ct là trọng lượng — ghi kèm đơn vị để không đọc nhầm thành số cái. */
 function stockQtyText(row: StockRow, value: string) {
   return isWeightUnit(row.unit) ? `${formatQty(value)} ${row.unit}` : formatQty(value)
+}
+
+/** Dòng tồn hiện trên bảng: có số theo kỳ thì thay đầu kỳ / nhập / xuất / tồn bằng số đó. */
+function withPeriodFigures(row: StockRow): StockRow {
+  const p = row.period
+  if (!p) return row
+  return {
+    ...row,
+    openingQty: p.openingQty,
+    openingAmount: p.openingAmount,
+    inQty: p.inQty,
+    inAmount: p.inAmount,
+    outQty: p.outQty,
+    outAmount: p.outAmount,
+    qty: p.qty,
+    amount: p.amount,
+    openingGram: p.openingGram,
+    inGram: p.inGram,
+    outGram: p.outGram,
+    closingGram: p.closingGram,
+  }
 }
 
 function sumStockTotals(rows: StockRow[]): StockTotals {

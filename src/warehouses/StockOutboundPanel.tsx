@@ -72,6 +72,7 @@ import {
 } from './stockFilters'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
 import { invalidateNvlWarehouse, NVL_WAREHOUSE_CODE } from '../orders/nvlStock'
+import { inPeriod, useWarehousePeriod, vnDayOf } from './warehousePeriod'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
 
 function canCreateManualOutbound(code: string) {
@@ -209,8 +210,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     return map
   }, [stock.data?.items])
 
+  const period = useWarehousePeriod()
   const items = useMemo(() => outbounds.data?.items ?? [], [outbounds.data?.items])
-  const apiTotals = outbounds.data?.totals
   const stockItems = useMemo(() => stock.data?.items ?? [], [stock.data?.items])
   const catalogFilters = useCatalogFilterOptions(profile, lookups.data, btpCatalogs.data, stockItems)
 
@@ -239,6 +240,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
   const lines = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
+      if (!inPeriod(vnDayOf(row.issuedAt), period)) return false
       const catalog = row.materialId ? stockById.get(row.materialId) : undefined
       if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
       if (showUnit && params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
@@ -258,7 +260,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       }
       return true
     })
-  }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById])
+  }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById, period])
 
   const rows = useMemo(() => groupOutboundRows(lines), [lines])
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
@@ -273,7 +275,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         (showUnit && params.unit) ||
         (outboundProfile.showShapeColor && params.color),
     ) || hasActiveCatalogFilters(catalogFilterParams)
-  const totals = filtering ? sumMoveTotals(lines) : apiTotals
+  // Luôn lọc theo kỳ nên tổng cộng từ các dòng đang hiện.
+  const totals = sumMoveTotals(lines)
 
   const outboundKey = ['warehouse-outbounds', warehouseCode] as const
 
@@ -644,8 +647,8 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
           filtering
             ? 'Không có dòng xuất khớp bộ lọc.'
             : canCreateManualOutbound(warehouseCode)
-              ? `Chưa có dòng xuất kho. Bấm ${profile.outboundLabel} để ghi phiếu.`
-              : 'Chưa có dòng xuất kho.'
+              ? `Không có dòng xuất kho trong kỳ đang chọn. Bấm ${profile.outboundLabel} để ghi phiếu.`
+              : 'Không có dòng xuất kho trong kỳ đang chọn.'
         }
         variant="grid"
         minWidth={1820}
