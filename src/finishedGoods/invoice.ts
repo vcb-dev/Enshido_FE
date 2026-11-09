@@ -1,10 +1,10 @@
-/** Cùng công thức với BE `shipment-weight.ts` — đổi một bên thì đổi cả hai. */
-const BILLED_WEIGHT_RATIO = 0.95
-
-/** TL tính tiền (g) của `qty` chiếc = TL bạc một chiếc (g) × SL × 0,95, làm tròn 2 số. */
+/**
+ * TL tính tiền (g) của `qty` chiếc = TL tính tiền một chiếc × SL, làm tròn 2 số. TL một chiếc do BE
+ * tính sẵn: (TL sau Xi − TL đá) + (TL sau Xi − TL đá) × 0,95 — cùng công thức `shipment-weight.ts`.
+ */
 export function gramOf(gramPerUnit: string | null | undefined, qty: number): string | null {
   if (gramPerUnit == null || !(qty > 0)) return null
-  const value = Number(gramPerUnit) * qty * BILLED_WEIGHT_RATIO
+  const value = Number(gramPerUnit) * qty
   return Number.isFinite(value) ? (Math.round(value * 100) / 100).toString() : null
 }
 

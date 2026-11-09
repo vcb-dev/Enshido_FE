@@ -382,7 +382,7 @@ export function ShipmentFormDialog({
                   }}
                 />
                 {auto ? (
-                  <Tooltip title="(TL sau Xi − TL đá) × 0,95">
+                  <Tooltip title="(TL sau Xi − TL đá) + (TL sau Xi − TL đá) × 0,95">
                     <span>
                       <TextInput label="TL (g)" value={formatGram(auto)} readOnly />
                     </span>
