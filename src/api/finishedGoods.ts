@@ -139,7 +139,7 @@ export type ShipmentLine = {
   imageUrl: string | null
   qty: number
   netWeightPerUnit: string | null
-  /** TL tính tiền (g) = (TL sau Xi − TL đá) × 0,95. */
+  /** TL tính tiền (g) = (TL sau Xi − TL đá) + (TL sau Xi − TL đá) × 0,95. */
   weightGram: string | null
   materialUnitPrice: string | null
   laborAmount: string | null
