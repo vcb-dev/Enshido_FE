@@ -53,6 +53,9 @@ const OrderReferencePage = lazy(() =>
 const ProductionTicketPrintPage = lazy(() =>
   import('./pages/ProductionTicketPrintPage').then((m) => ({ default: m.ProductionTicketPrintPage })),
 )
+const ProductionTicketBatchPrintPage = lazy(() =>
+  import('./pages/ProductionTicketPrintPage').then((m) => ({ default: m.ProductionTicketBatchPrintPage })),
+)
 const MyTicketsPage = lazy(() =>
   import('./pages/MyTicketsPage').then((m) => ({ default: m.MyTicketsPage })),
 )
@@ -83,6 +86,14 @@ export default function App() {
       <Route path="/cau-hinh-gia" element={<LegacyRedirect />} />
       <Route element={<ProtectedRoute />}>
         {/* Phiếu in không nằm trong khung app để trang in chỉ còn nội dung phiếu. */}
+        <Route
+          path="/orders/print-batch"
+          element={
+            <Suspense fallback={<PrintSheetSkeleton />}>
+              <ProductionTicketBatchPrintPage />
+            </Suspense>
+          }
+        />
         <Route
           path="/orders/:code/print"
           element={

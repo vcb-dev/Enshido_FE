@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Button, Stack, Typography } from '@mui/material'
+import PrintIcon from '@mui/icons-material/Print'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -21,6 +22,7 @@ import { formatDateTime } from '../orders/catalog'
 import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipCutDialog, CastingSlipsCutDialog } from '../intake/CastingSlipCutDialog'
 import { CastingCutSelectionDialog } from '../intake/CastingCutSelectionDialog'
+import { CastingCutPrintDialog } from '../intake/CastingCutPrintDialog'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import { applyCastingSlipRejected, applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
@@ -30,7 +32,13 @@ import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { StatusChip } from '../orders/OrderChips'
 import { CastingSlipViewDialog, SlipStatusChip } from './CastingOrdersPage'
 
-import { canCutCastingSlip, getCastingSlipCutBlockedReason, slipJourneyStatuses } from '../casting/castingCuts'
+import {
+  canCutCastingSlip,
+  cutProductionOrderCodes,
+  getCastingSlipCutBlockedReason,
+  productionBatchPrintUrl,
+  slipJourneyStatuses,
+} from '../casting/castingCuts'
 
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
@@ -81,6 +89,8 @@ export function CastingCutsPage() {
   const [selecting, setSelecting] = useState(false)
   const [bulkTargets, setBulkTargets] = useState<CastingSlip[]>([])
   const [cutTarget, setCutTarget] = useState<CastingSlip | null>(null)
+  /** Phiếu vừa cắt xong — hộp mời in phiếu SX ngay. */
+  const [justCut, setJustCut] = useState<CastingSlip[]>([])
   const table = useTableParams({ pageSize: 25, filters: CUT_FILTERS })
   const { params } = table
   const status = 'DONE' as const
@@ -119,7 +129,7 @@ export function CastingCutsPage() {
     onSuccess: (updated) => {
       setCutTarget(null)
       dialog.close()
-      toast.success(`Phiếu ${updated.code}: đã cắt cây thông, ${updated.orders.length} đơn chuyển Chờ nguội`)
+      setJustCut([updated])
       applyCastingSlipUpdate(queryClient, updated)
       scheduleMyTicketsRefresh(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
@@ -132,7 +142,7 @@ export function CastingCutsPage() {
     mutationFn: (items: CutCastingSlipItem[]) => cutCastingSlipsApi(items),
     onSuccess: (updated) => {
       setBulkTargets([])
-      toast.success(`Đã cắt cây thông: ${updated.reduce((sum, slip) => sum + slip.orders.length, 0)} đơn chuyển Chờ nguội`)
+      setJustCut(updated)
       for (const slip of updated) applyCastingSlipUpdate(queryClient, slip)
       scheduleMyTicketsRefresh(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
@@ -197,6 +207,18 @@ export function CastingCutsPage() {
               Lỗi đúc
             </Button>
           </>
+        ) : null}
+        {canConfirm && cutProductionOrderCodes([row]).length ? (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<PrintIcon fontSize="small" />}
+            href={productionBatchPrintUrl(cutProductionOrderCodes([row]))}
+            target="_blank"
+            rel="noopener"
+          >
+            In phiếu SX
+          </Button>
         ) : null}
       </Stack>
     ),
@@ -405,6 +427,7 @@ export function CastingCutsPage() {
         onClose={() => setCutTarget(null)}
         onSave={(payload) => cutTarget && cut.mutate({ slip: cutTarget, payload })}
       />
+      <CastingCutPrintDialog slips={justCut} onClose={() => setJustCut([])} />
     </Stack>
   )
 }

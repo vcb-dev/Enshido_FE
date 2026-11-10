@@ -47,3 +47,16 @@ export function slipJourneyStatuses(slip: CastingSlip): ProductionStatus[] {
   }
   return statuses
 }
+
+/** Mã lệnh SX các đơn đã cắt cây trên những phiếu đúc này (bỏ trùng, giữ thứ tự trên phiếu). */
+export function cutProductionOrderCodes(slips: CastingSlip[]): string[] {
+  const codes = slips.flatMap((slip) =>
+    slip.orders.map((line) => line.productionOrderCode).filter((code): code is string => Boolean(code)),
+  )
+  return [...new Set(codes)]
+}
+
+/** Trang in phiếu tổng nhiều lệnh SX một lượt, mỗi lệnh một trang. */
+export function productionBatchPrintUrl(codes: string[]) {
+  return `/orders/print-batch?codes=${codes.map(encodeURIComponent).join(',')}`
+}

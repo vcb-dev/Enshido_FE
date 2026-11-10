@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Alert, Box, Button, GlobalStyles, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   getProductionOrderApi,
@@ -84,9 +84,7 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
     (ticketNo != null && detail.data != null && !subTicket) ||
     (all && detail.data != null && detail.data.subTickets.length === 0)
   // Đơn BTP lấy hàng đúc sẵn nên in được ngay; Đơn NVL in từ bước Đúc.
-  const canPrint =
-    !missingTicket &&
-    (detail.data?.source === 'BTP' || Boolean(detail.data?.castingSentDate || detail.data?.cutAt))
+  const canPrint = !missingTicket && detail.data != null && orderPrintable(detail.data)
 
   async function print() {
     window.print()
@@ -149,19 +147,7 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
     void Promise.race([loaded, timeout]).then(() => print())
   }, [detail.data, canPrint])
 
-  const printStyles = (
-    <GlobalStyles
-      styles={{
-        '@page': { size: `${paper} landscape`, margin: '6mm' },
-        '@media print': {
-          'html, body, #root': { height: 'auto !important', overflow: 'visible !important', background: '#fff !important' },
-          '.ticket-toolbar': { display: 'none !important' },
-          '.ticket-screen': { padding: '0 !important', background: '#fff !important', height: 'auto !important', overflow: 'visible !important' },
-          '.ticket': { boxShadow: 'none !important', margin: '0 !important', width: 'auto !important', padding: '0 !important' },
-        },
-      }}
-    />
-  )
+  const printStyles = <TicketPrintStyles paper={paper} />
 
   if (detail.isLoading) return <PrintSheetSkeleton />
   if (!detail.data || missingTicket) {
@@ -222,31 +208,213 @@ export function ProductionTicketPrintPage({ all = false }: { all?: boolean }) {
       )}
 
       {(all ? order.subTickets : [subTicket]).map((ticket, index, list) => (
-        <Box
+        <TicketSheet
           key={ticket?.id ?? 'parent'}
-          className="ticket"
-          sx={{
-            width: PAPER_WIDTH[paper],
-            maxWidth: '100%',
-            mx: 'auto',
-            mb: all ? 2 : 0,
-            p: '6mm',
-            bgcolor: '#fff',
-            color: '#000',
-            boxShadow: '0 1px 6px rgba(0,0,0,.2)',
-            fontFamily: '"Times New Roman", Times, serif',
-            // 12,5pt là cỡ lớn nhất phiếu tổng (có cột Lỗi) còn vừa một tờ A4 ngang — to hơn là tràn trang.
-            fontSize: paper === 'A5' ? '8.5pt' : '12.5pt',
-            lineHeight: 1.2,
-            visibility: canPrint ? 'visible' : 'hidden',
-            // Mỗi phiếu con một trang giấy.
-            '@media print': { breakAfter: index === list.length - 1 ? 'auto' : 'page', mb: 0 },
-            '& table': { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', breakInside: 'avoid' },
-            '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
-          }}
+          paper={paper}
+          stacked={all}
+          last={index === list.length - 1}
+          hidden={!canPrint}
         >
           <Ticket order={order} subTicket={ticket} printedBy={user?.fullName || user?.username || ''} />
-        </Box>
+        </TicketSheet>
+      ))}
+    </Box>
+  )
+}
+
+/** Khổ giấy + ẩn thanh công cụ khi in. */
+function TicketPrintStyles({ paper }: { paper: Paper }) {
+  return (
+    <GlobalStyles
+      styles={{
+        '@page': { size: `${paper} landscape`, margin: '6mm' },
+        '@media print': {
+          'html, body, #root': { height: 'auto !important', overflow: 'visible !important', background: '#fff !important' },
+          '.ticket-toolbar': { display: 'none !important' },
+          '.ticket-screen': { padding: '0 !important', background: '#fff !important', height: 'auto !important', overflow: 'visible !important' },
+          '.ticket': { boxShadow: 'none !important', margin: '0 !important', width: 'auto !important', padding: '0 !important' },
+        },
+      }}
+    />
+  )
+}
+
+/** Một tờ phiếu trên màn hình; khi in mỗi tờ sang trang mới (trừ tờ cuối). */
+function TicketSheet({
+  paper,
+  stacked,
+  last,
+  hidden = false,
+  children,
+}: {
+  paper: Paper
+  stacked: boolean
+  last: boolean
+  hidden?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Box
+      className="ticket"
+      sx={{
+        width: PAPER_WIDTH[paper],
+        maxWidth: '100%',
+        mx: 'auto',
+        mb: stacked ? 2 : 0,
+        p: '6mm',
+        bgcolor: '#fff',
+        color: '#000',
+        boxShadow: '0 1px 6px rgba(0,0,0,.2)',
+        fontFamily: '"Times New Roman", Times, serif',
+        // 12,5pt là cỡ lớn nhất phiếu tổng (có cột Lỗi) còn vừa một tờ A4 ngang — to hơn là tràn trang.
+        fontSize: paper === 'A5' ? '8.5pt' : '12.5pt',
+        lineHeight: 1.2,
+        visibility: hidden ? 'hidden' : 'visible',
+        '@media print': { breakAfter: last ? 'auto' : 'page', mb: 0 },
+        '& table': { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', breakInside: 'avoid' },
+        '& th, & td': { border: '0.6pt solid #000', padding: '0.5mm 1.2mm', verticalAlign: 'middle' },
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+/** Đơn đã tới bước in được: đơn BTP in ngay, đơn NVL từ khi báo Đúc / cắt cây thông. */
+function orderPrintable(order: ProductionOrderDetail) {
+  return order.source === 'BTP' || Boolean(order.castingSentDate || order.cutAt)
+}
+
+/** Tối đa số lệnh một lượt in — 25 phiếu đúc × vài đơn là đủ, tránh link dài vô hạn. */
+const BATCH_PRINT_LIMIT = 100
+
+/**
+ * In phiếu tổng (phiếu mẹ) của nhiều lệnh SX một lượt — `/orders/print-batch?codes=A,B`, mỗi
+ * lệnh một trang. Dùng ngay sau khi cắt cây thông: lúc đó chưa chia phiếu con nên phiếu chưa có
+ * mã QR; QR in theo phiếu con khi giao Nguội.
+ */
+export function ProductionTicketBatchPrintPage() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [paper, setPaper] = useState<Paper>('A4')
+  const autoPrinted = useRef(false)
+
+  const codes = useMemo(
+    () =>
+      [
+        ...new Set(
+          (searchParams.get('codes') ?? '')
+            .split(',')
+            .map((code) => code.trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, BATCH_PRINT_LIMIT),
+    [searchParams],
+  )
+
+  const results = useQueries({
+    queries: codes.map((code) => ({
+      queryKey: ['production-order', code],
+      queryFn: () => getProductionOrderApi(code),
+      staleTime: 0,
+    })),
+  })
+  const loading = results.some((result) => result.isLoading)
+  const orders = results.flatMap((result) => (result.data ? [result.data] : []))
+  const printable = orders.filter(orderPrintable)
+  const failed = codes.filter((_, index) => results[index]?.isError)
+  const notReady = orders.filter((order) => !orderPrintable(order)).map((order) => order.code)
+
+  async function print() {
+    window.print()
+    const stamps = await Promise.allSettled(
+      printable.map(async (order) => ({ code: order.code, ...(await markTicketPrintedApi(order.code)) })),
+    )
+    for (const stamp of stamps) {
+      if (stamp.status !== 'fulfilled') continue
+      queryClient.setQueryData<ProductionOrderDetail>(['production-order', stamp.value.code], (prev) =>
+        prev ? { ...prev, lastPrintedAt: stamp.value.lastPrintedAt } : prev,
+      )
+    }
+    void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+  }
+
+  // Tự mở hộp thoại in khi mọi lệnh đã tải xong và ảnh đã sẵn sàng (chờ tối đa 2.5 giây cho ảnh).
+  useEffect(() => {
+    if (loading || !printable.length || autoPrinted.current) return
+    autoPrinted.current = true
+    const images = Array.from(document.querySelectorAll<HTMLImageElement>('.ticket img'))
+    const loaded = Promise.all(
+      images.map((img) =>
+        img.complete ? Promise.resolve() : new Promise((resolve) => img.addEventListener('load', resolve, { once: true })),
+      ),
+    )
+    const timeout = new Promise((resolve) => setTimeout(resolve, 2500))
+    void Promise.race([loaded, timeout]).then(() => print())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, printable.length])
+
+  if (!codes.length) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="error">Chưa chọn lệnh sản xuất nào để in.</Alert>
+      </Box>
+    )
+  }
+  if (loading) return <PrintSheetSkeleton />
+
+  return (
+    <Box className="ticket-screen" sx={{ height: '100dvh', overflow: 'auto', bgcolor: '#e5e8eb', px: 2, pb: 3 }}>
+      <TicketPrintStyles paper={paper} />
+      <Stack
+        className="ticket-toolbar"
+        direction="row"
+        spacing={1}
+        useFlexGap
+        sx={{ py: 1.5, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}
+      >
+        <Button variant="contained" startIcon={<PrintIcon />} disabled={!printable.length} onClick={() => void print()}>
+          In {printable.length} phiếu sản xuất
+        </Button>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={paper}
+          onChange={(_, value: Paper | null) => value && setPaper(value)}
+        >
+          <ToggleButton value="A5">A5 ngang</ToggleButton>
+          <ToggleButton value="A4">A4 ngang</ToggleButton>
+        </ToggleButtonGroup>
+        <Button
+          onClick={() => {
+            window.close()
+            setTimeout(() => navigate('/orders'), 150)
+          }}
+        >
+          Đóng
+        </Button>
+      </Stack>
+
+      <Stack className="ticket-toolbar" spacing={1} sx={{ maxWidth: 720, mx: 'auto', mb: 1.5 }}>
+        {failed.length ? (
+          <Alert severity="error">Không tải được lệnh {failed.join(', ')} — các lệnh khác vẫn in bình thường.</Alert>
+        ) : null}
+        {notReady.length ? (
+          <Alert severity="warning">Lệnh {notReady.join(', ')} chưa cắt cây thông nên không in.</Alert>
+        ) : null}
+        {printable.some((order) => !order.subTickets.length) ? (
+          <Alert severity="info">
+            Đây là phiếu tổng, chưa có mã QR. Phiếu con có QR cho thợ quét sẽ in khi thủ kho giao Nguội.
+          </Alert>
+        ) : null}
+      </Stack>
+
+      {printable.map((order, index) => (
+        <TicketSheet key={order.code} paper={paper} stacked last={index === printable.length - 1}>
+          <Ticket order={order} printedBy={user?.fullName || user?.username || ''} />
+        </TicketSheet>
       ))}
     </Box>
   )
