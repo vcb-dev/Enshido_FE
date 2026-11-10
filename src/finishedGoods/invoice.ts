@@ -1,6 +1,6 @@
 /**
  * TL tính tiền (g) của `qty` chiếc = TL tính tiền một chiếc × SL, làm tròn 2 số. TL một chiếc do BE
- * tính sẵn: (TL sau Xi − TL đá) + (TL sau Xi − TL đá) × 0,95 — cùng công thức `shipment-weight.ts`.
+ * tính sẵn: (TL sau Xi − TL đá) + (TL sau Xi − TL đá) × 0,095 — cùng công thức `shipment-weight.ts`.
  */
 export function gramOf(gramPerUnit: string | null | undefined, qty: number): string | null {
   if (gramPerUnit == null || !(qty > 0)) return null
