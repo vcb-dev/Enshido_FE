@@ -1,4 +1,11 @@
-import { canCutCastingSlip, slipJourneyStatuses, slipOrderStatus } from '../casting/castingCuts'
+import {
+  canCutCastingSlip,
+  cutProductionOrderCodes,
+  productionBatchPrintUrl,
+  slipJourneyStatuses,
+  slipOrderStatus,
+} from '../casting/castingCuts'
+import PrintIcon from '@mui/icons-material/Print'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box,
@@ -942,6 +949,17 @@ export function CastingSlipViewDialog({
         {view?.status === 'CASTING' && (canCast || (view.isServiceCast && canConfirm)) ? (
           <Button variant="contained" onClick={() => onEnterResult(view)}>
             Nhập kết quả đúc
+          </Button>
+        ) : null}
+        {view && canConfirm && variant === 'cut' && cutProductionOrderCodes([view]).length ? (
+          <Button
+            variant="contained"
+            startIcon={<PrintIcon />}
+            href={productionBatchPrintUrl(cutProductionOrderCodes([view]))}
+            target="_blank"
+            rel="noopener"
+          >
+            In phiếu SX ({cutProductionOrderCodes([view]).length} đơn)
           </Button>
         ) : null}
         {view && canConfirm && onCut && canCutCastingSlip(view) ? (

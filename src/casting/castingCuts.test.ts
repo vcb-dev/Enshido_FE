@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CastingSlip } from '../api/castingSlips'
-import { canCutCastingSlip, getCastingSlipCutBlockedReason, hasCastingSlipCutData, slipJourneyStatuses } from './castingCuts'
+import {
+  canCutCastingSlip,
+  cutProductionOrderCodes,
+  getCastingSlipCutBlockedReason,
+  hasCastingSlipCutData,
+  productionBatchPrintUrl,
+  slipJourneyStatuses,
+} from './castingCuts'
 
 function slip(overrides: Partial<CastingSlip> = {}): CastingSlip {
   return {
@@ -45,5 +52,25 @@ describe('điều kiện cắt cây của phiếu cũ', () => {
       ],
     })
     expect(slipJourneyStatuses(cut)).toEqual(['WAIT_FILING', 'FILING'])
+  })
+})
+
+describe('in phiếu SX sau cắt cây', () => {
+  it('lấy mã lệnh SX đã cắt của nhiều phiếu, bỏ trùng và bỏ đơn chưa có lệnh', () => {
+    const slips = [
+      slip({ orders: [
+        { ...slip().orders[0], code: 'DH001', productionOrderCode: 'DH001' },
+        { ...slip().orders[0], code: 'DH002', productionOrderCode: null },
+      ] }),
+      slip({ orders: [
+        { ...slip().orders[0], code: 'DH003', productionOrderCode: 'DH003' },
+        { ...slip().orders[0], code: 'DH001', productionOrderCode: 'DH001' },
+      ] }),
+    ]
+    expect(cutProductionOrderCodes(slips)).toEqual(['DH001', 'DH003'])
+  })
+
+  it('dựng link in nhiều lệnh', () => {
+    expect(productionBatchPrintUrl(['DH001', 'DH 2'])).toBe('/orders/print-batch?codes=DH001,DH%202')
   })
 })
