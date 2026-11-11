@@ -245,7 +245,18 @@ export function LossReportPanel() {
   )
 }
 
-function SumsCells({ row, scrapGram }: { row: LossSums; scrapGram: string | null }) {
+/** Chênh lệch mạt có dấu: "+1,2" trả dư, "−10" thiếu (hao vượt mức). */
+function signedGram(value: string | null) {
+  if (value == null) return '—'
+  const n = Number(Number(value).toFixed(2))
+  if (n === 0) return '0'
+  return `${n > 0 ? '+' : '−'}${g(String(Math.abs(n)))}`
+}
+
+type ScrapDue = { dueGram: string | null; balanceGram: string | null }
+
+function SumsCells({ row, scrapGram, due }: { row: LossSums; scrapGram: string | null; due: ScrapDue | null }) {
+  const balance = due?.balanceGram == null ? null : Number(due.balanceGram)
   return (
     <>
       <TableCell className="num">{row.qty.toLocaleString('vi-VN')}</TableCell>
@@ -258,6 +269,34 @@ function SumsCells({ row, scrapGram }: { row: LossSums; scrapGram: string | null
       <TableCell className="num">{g(row.nvlGram)}</TableCell>
       <TableCell className="num">{scrapGram == null ? '' : g(scrapGram)}</TableCell>
       <TableCell className="num">{g(row.lossGram)}</TableCell>
+      <TableCell className="num">{g(row.allowedGram)}</TableCell>
+      {/* Dòng khâu không có phần mạt (mạt nộp theo thợ, cả tuần) — để trống. */}
+      <TableCell className="num" sx={{ fontWeight: 700 }}>
+        {due ? g(due.dueGram) : ''}
+      </TableCell>
+      <TableCell
+        className="num"
+        sx={{
+          fontWeight: 700,
+          color: balance == null || balance === 0 ? undefined : balance < 0 ? OVERVIEW_COLOR.danger : OK_COLOR,
+        }}
+      >
+        {due ? (
+          <Tooltip
+            title={
+              balance == null
+                ? 'Có khâu chưa đặt mức cho phép'
+                : balance < 0
+                  ? 'Trả thiếu mạt — thợ hao vượt mức cho phép'
+                  : 'Trả đủ / dư mạt — thợ hao trong mức'
+            }
+          >
+            <span>{signedGram(due.balanceGram)}</span>
+          </Tooltip>
+        ) : (
+          ''
+        )}
+      </TableCell>
       <TableCell className="num">{pct(row.limitPercent)}</TableCell>
       <TableCell className="num" sx={{ color: lossColor(row), fontWeight: 700 }}>
         {pct(row.lossPercent)}
@@ -275,8 +314,11 @@ const weekHeaders = (metal: LossMetal) => [
   'Trọng lượng NVL thu hồi',
   'Trọng lượng mạt vụn thu hồi (sau khi cô lại)',
   'Hao hụt',
+  'Thợ được hao',
+  'Phải trả mạt vụn',
+  'Chênh lệch mạt (đã trả − phải trả)',
   'Mức hao hụt cho phép',
-  'Mức hao hụt thực tế',
+  'Mức hao hụt thực tế (trên hàng đạt)',
 ]
 
 /** Một tuần: dòng tổng mỗi thợ (giống bảng Excel), bấm mở xem từng khâu và từng phiếu. */
@@ -307,7 +349,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
   return (
     <Stack spacing={2}>
       <TableContainer sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ ...TABLE_SX, minWidth: 1080 }}>
+        <Table size="small" sx={{ ...TABLE_SX, minWidth: 1360 }}>
           <TableHead>
             <TableRow>
               <TableCell>Thợ</TableCell>
@@ -342,7 +384,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
                         )}
                         {row.workerName}
                       </TableCell>
-                      <SumsCells row={row} scrapGram={row.scrapGram} />
+                      <SumsCells row={row} scrapGram={row.scrapGram} due={row} />
                     </TableRow>
                     {expanded
                       ? row.stages.map((stage) => (
@@ -354,7 +396,7 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
                                   {stage.tickets.toLocaleString('vi-VN')} phiếu
                                 </Typography>
                               </TableCell>
-                              <SumsCells row={stage} scrapGram={null} />
+                              <SumsCells row={stage} scrapGram={null} due={null} />
                             </TableRow>
                             {items
                               .filter((item) => item.stage === stage.stage)
@@ -371,6 +413,12 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
           </TableBody>
         </Table>
       </TableContainer>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+        <b>TL thợ giữ</b> = TL giao − TL trả (hàng đạt + BTP + NVL thu hồi). <b>Thợ được hao</b> = TL hàng
+        trả đạt × mức cho phép của khâu (cộng các khâu). <b>Phải trả mạt vụn</b> = TL thợ giữ − được hao.{' '}
+        <b>Chênh lệch</b> = mạt đã trả − phải trả: <b>âm</b> là thợ hao vượt mức, <b>dương</b> là trả dư.{' '}
+        <b>Mức hao thực tế</b> = (TL thợ giữ − mạt đã trả) ÷ TL hàng đạt. Khâu chưa đặt mức thì không tính được (—).
+      </Typography>
 
       <Box>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
@@ -456,30 +504,36 @@ function ItemRow({ item }: { item: LossItem }) {
       <TableCell className="num">{g(item.nvlGram)}</TableCell>
       <TableCell />
       <TableCell className="num">{g(item.lossGram)}</TableCell>
+      <TableCell className="num">{g(item.allowedGram)}</TableCell>
+      <TableCell />
+      <TableCell />
       <TableCell />
       <TableCell className="num">{pct(item.lossPercent)}</TableCell>
     </TableRow>
   )
 }
 
-/** Gộp cả kỳ của một thợ: cộng các vế rồi tính lại %, mức cho phép bình quân theo TL giao. */
+/** Gộp cả kỳ của một thợ: cộng các vế rồi tính lại %, mức cho phép bình quân theo TL hàng đạt. */
 function periodOf(rows: LossWorkerRow[]) {
   let inGram = 0
+  let productGram = 0
   let returned = 0
-  let limitWeighted = 0
+  let allowed = 0
   let limitKnown = true
   for (const row of rows) {
     inGram += Number(row.inGram)
+    productGram += Number(row.productGram)
     returned += Number(row.returnedGram)
-    if (row.limitPercent != null) limitWeighted += Number(row.inGram) * Number(row.limitPercent)
+    if (row.allowedGram != null) allowed += Number(row.allowedGram)
     // Tuần chỉ có mạt (không giao gì) không ảnh hưởng mức; tuần có khâu chưa đặt mức thì cả kỳ không có mức.
     else if (row.stages.length > 0) limitKnown = false
   }
   const loss = inGram - returned
+  // % trên TL hàng đạt, mức cho phép = được hao / hàng đạt — giống dòng tuần.
   return {
     lossGram: String(loss),
-    lossPercent: inGram > 0 ? ((loss / inGram) * 100).toFixed(2) : null,
-    limitPercent: limitKnown && inGram > 0 ? (limitWeighted / inGram).toFixed(2) : null,
+    lossPercent: productGram > 0 ? ((loss / productGram) * 100).toFixed(2) : null,
+    limitPercent: limitKnown && productGram > 0 ? ((allowed / productGram) * 100).toFixed(2) : null,
   }
 }
 
