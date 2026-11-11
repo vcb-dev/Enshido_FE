@@ -651,7 +651,7 @@ function TicketCard({
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
-        borderColor: due?.tone === 'error' ? 'error.light' : 'divider',
+        borderColor: 'divider',
         transition: 'box-shadow .15s',
         '&:hover': { boxShadow: '0 4px 16px rgba(62,42,14,.08)' },
       }}

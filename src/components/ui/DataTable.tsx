@@ -226,7 +226,7 @@ const GRID_TABLE_SX = {
   borderCollapse: 'separate',
   borderSpacing: 0,
   '& .MuiTableCell-root': {
-    border: '1px solid #cbbda9',
+    border: '1px solid #ded3c3',
     py: 0.75,
     px: 1,
   },
@@ -575,6 +575,9 @@ export function DataTable<T, S = never>({
         flexDirection: 'column',
         minHeight: 0,
         overflow: flowMode ? 'visible' : 'hidden',
+        // Dạng thẻ: mỗi dòng đã là một thẻ có viền — khung ngoài trong suốt để không thành thẻ lồng
+        // thẻ. Giữ viền 1px (trong suốt) nên vị trí nội dung không xê dịch.
+        ...(cardMode ? { borderColor: 'transparent', bgcolor: 'transparent' } : null),
         ...sx,
       }}
     >
@@ -1082,7 +1085,8 @@ function CardList<T, S>({
                       key={column.key}
                       direction="row"
                       spacing={1}
-                      sx={{ justifyContent: 'space-between', alignItems: 'baseline', minWidth: 0 }}
+                      // Canh trên: ô có ảnh / nhiều dòng thì nhãn đứng đầu ô, không tụt xuống đáy ảnh.
+                      sx={{ justifyContent: 'space-between', alignItems: 'flex-start', minWidth: 0 }}
                     >
                       <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                         {cardLabelOf(column)}
