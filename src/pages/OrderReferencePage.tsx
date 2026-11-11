@@ -10,7 +10,7 @@ import { getOrderReferenceApi, type OrderReference } from '../api/productionOrde
 import { formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { STAGE_LABEL } from '../orders/catalog'
+import { otherRequirementsOf, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { dueInfo, FactGrid, MetaItem, SectionCard, TicketThumb } from '../worker/WorkerUi'
 
@@ -172,14 +172,15 @@ function ReferenceView({ order }: { order: OrderReference }) {
             items={[
               { label: 'Số lượng đơn', value: `${order.qty} sp` },
               { label: 'Ngày cần trả', value: order.dueDate ? formatStockedDate(order.dueDate) : null },
-              { label: 'Size', value: order.sizeLabel ?? order.size },
+              { label: 'Size', value: order.sizeLabel },
+              { label: 'Kích thước', value: order.size },
               { label: 'Chất liệu', value: order.mainMaterial },
               { label: 'Màu xi', value: order.platingColor },
               { label: 'Màu đá', value: order.stoneColor },
               { label: 'Loại đá', value: order.stoneTypes.join(', ') },
               { label: 'Số lượng đá', value: order.stoneCount },
               { label: 'Khắc laser', value: order.laserEngraving },
-              { label: 'Yêu cầu khác', value: order.otherRequirements },
+              { label: 'Yêu cầu khác', value: otherRequirementsOf(order) },
             ]}
           />
         </SectionCard>

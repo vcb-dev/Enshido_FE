@@ -45,6 +45,16 @@ export function IntakeOrderDetailDialog({
         ]
           .filter(Boolean)
           .join(' · ')
+  // Thông số in phiếu — ô nào trống thì không hiện.
+  const specs = (
+    [
+      ['Size', order?.sizeLabel],
+      ['Kích thước', order?.size],
+      ['Màu xi', order?.platingColor],
+      ['Loại đá', order?.stoneTypes?.join(', ')],
+      ['Nội dung khắc laser', order?.laserEngraving],
+    ] as Array<[string, string | null | undefined]>
+  ).filter((spec): spec is [string, string] => Boolean(spec[1]?.trim()))
   const detailImages = order ? intakeDetailImages(order.images) : []
   const waxImages = order ? intakeProductOnlyImages(order.images) : []
   const treeImages = order ? intakeCastingTreeImages(order.images) : []
@@ -82,8 +92,15 @@ export function IntakeOrderDetailDialog({
                 Ngày tạo {formatDate(order.createdDate ?? order.createdAt)}
                 {order.dueDate ? ` · Trả ${formatDate(order.dueDate)}` : null}
               </Typography>
+              {specs.map(([label, value]) => (
+                <Typography key={label} variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  <strong>{label}:</strong> {value}
+                </Typography>
+              ))}
               {order.description?.trim() ? (
-                <Typography variant="body2">{order.description}</Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  <strong>Yêu cầu khác:</strong> {order.description}
+                </Typography>
               ) : null}
               {order.model3dUrl?.trim() ? (
                 <Typography variant="body2">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Controller } from 'react-hook-form'
+import { Controller, useWatch } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import { toast } from 'sonner'
 import {
@@ -51,7 +51,13 @@ import { useTableParams } from '../hooks/useTableParams'
 import { INTAKE_STATUSES, INTAKE_STATUS_META } from '../intake/catalog'
 import { IntakeOrderStatusChips } from '../intake/IntakeStatusChip'
 import { ImageUploadField } from '../orders/ImageUploadField'
-import { formatDate, REQUEST_TYPES, REQUEST_TYPE_META } from '../orders/catalog'
+import {
+  formatDate,
+  normalizePlatingColor,
+  platingColorOptions,
+  REQUEST_TYPES,
+  REQUEST_TYPE_META,
+} from '../orders/catalog'
 import { RequestTypeChip } from '../orders/OrderChips'
 type FormValues = {
   status: IntakeOrderStatus
@@ -63,6 +69,11 @@ type FormValues = {
   metalType: OrderMetalType | ''
   placedBy: string
   description: string
+  sizeLabel: string
+  size: string
+  platingColor: string
+  stoneTypes: string
+  laserEngraving: string
   createdDate: string
   dueDate: string
   editReason: string
@@ -127,6 +138,11 @@ const EMPTY: FormValues = {
   metalType: '',
   placedBy: '',
   description: '',
+  sizeLabel: '',
+  size: '',
+  platingColor: '',
+  stoneTypes: '',
+  laserEngraving: '',
   createdDate: todayYmd(),
   dueDate: '',
   editReason: '',
@@ -509,6 +525,11 @@ function IntakeOrderFormDialog({
         metalType: row.metalType ?? '',
         placedBy: row.placedBy,
         description: row.description,
+        sizeLabel: row.sizeLabel ?? '',
+        size: row.size ?? '',
+        platingColor: normalizePlatingColor(row.platingColor),
+        stoneTypes: (row.stoneTypes ?? []).join(', '),
+        laserEngraving: row.laserEngraving ?? '',
         createdDate: row.createdDate,
         dueDate: row.dueDate ?? '',
         editReason: '',
@@ -533,6 +554,15 @@ function IntakeOrderFormDialog({
       metalType: values.metalType || null,
       placedBy: values.placedBy.trim(),
       description: values.description.trim(),
+      sizeLabel: values.sizeLabel.trim() || null,
+      size: values.size.trim() || null,
+      platingColor: normalizePlatingColor(values.platingColor) || null,
+      // Nhiều loại đá ghi cách nhau dấu phẩy — phiếu in nối lại bằng ", ".
+      stoneTypes: values.stoneTypes
+        .split(',')
+        .map((type) => type.trim())
+        .filter(Boolean),
+      laserEngraving: values.laserEngraving.trim() || null,
       createdDate: values.createdDate,
       dueDate: values.dueDate.trim(),
       images: imagesForSave(row, values.detailImages),
@@ -541,6 +571,7 @@ function IntakeOrderFormDialog({
   }
 
   const uploading = uploadingDetail
+  const platingColor = useWatch({ control: form.control, name: 'platingColor' })
 
   return (
     <CrudDialogShell<FormValues>
@@ -628,6 +659,33 @@ function IntakeOrderFormDialog({
           />
           <FormTextField<FormValues> name="trackingCode" label="Mã sản phẩm" clearable />
         </FormRow>
+
+        {/* Các ô này in thẳng lên phiếu sản xuất (Size, Kích thước, Loại đá, Màu xi, Khắc laser). */}
+        <FormRow columns={4}>
+          <FormTextField<FormValues> name="sizeLabel" label="Size" clearable />
+          <FormTextField<FormValues> name="size" label="Kích thước" clearable />
+          <FormSelect<FormValues>
+            name="platingColor"
+            label="Màu xi"
+            placeholder="Chọn màu xi…"
+            clearable
+            options={platingColorOptions(platingColor)}
+          />
+          <FormTextField<FormValues>
+            name="stoneTypes"
+            label="Loại đá"
+            placeholder="Nhiều loại ghi cách dấu phẩy"
+            clearable
+          />
+        </FormRow>
+
+        <FormTextField<FormValues>
+          name="laserEngraving"
+          label="Nội dung khắc laser"
+          multiline
+          minRows={1}
+          maxRows={4}
+        />
 
         <FormTextField<FormValues>
           name="description"

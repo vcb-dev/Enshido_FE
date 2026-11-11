@@ -17,6 +17,7 @@ import { PrintSheetSkeleton } from '../components/ui'
 import { cloudinaryFit } from '../api/uploads'
 import {
   formatDateTime,
+  otherRequirementsOf,
   parentWorkTicketUrl,
   SILVER_LOSS_TONE,
   STAGE_LABEL,
@@ -466,6 +467,7 @@ function Ticket({
     .join(' · ')
   // Mã SX giống cột Mã SX trên danh sách lệnh; mã đơn hàng DH… ghi nhỏ ngay dưới (đơn lên thẳng thì không có).
   const sxCode = order.intakeSxCode || order.code
+  const otherRequirements = otherRequirementsOf(order)
   const orderCode = order.intakeOrderCode?.trim() || null
   // Ảnh lúc lên đơn trước; đơn không có thì ảnh sản phẩm, rồi ảnh 3D. Không lấy ảnh cân / ảnh khâu.
   const pickImages = (kind: string) => order.images.filter((image) => image.kind === kind)
@@ -618,7 +620,7 @@ function Ticket({
           <tr>
             <td style={{ ...center, fontStyle: 'italic', fontWeight: 700 }}>Yêu cầu khác</td>
             <td colSpan={SPAN_3} style={{ whiteSpace: 'pre-wrap' }}>
-              {order.otherRequirements ?? ''}
+              {otherRequirements}
             </td>
           </tr>
 
