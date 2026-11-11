@@ -138,7 +138,7 @@ export function StatRowSkeleton({
       {Array.from({ length: count }, (_, index) => (
         <Box
           key={index}
-          sx={{ border: '1px solid #ded3c3', borderLeft: '4px solid #ded3c3', borderRadius: 1, px: 1.25, py: 1 }}
+          sx={{ border: '1px solid #ded3c3', borderRadius: 1, px: 1.25, py: 1 }}
         >
           <Skeleton variant="text" width="60%" sx={{ fontSize: '0.75rem' }} />
           <Skeleton variant="text" width="45%" sx={{ fontSize: '1rem' }} />

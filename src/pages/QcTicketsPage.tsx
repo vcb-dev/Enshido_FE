@@ -406,7 +406,8 @@ function QcCard({ item, tab, action }: { item: QcTicketItem | QcFinishItem; tab:
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
-        borderColor: entry?.defectReportedAt && tab === 'pending' ? 'error.light' : due?.tone === 'error' ? 'error.light' : 'divider',
+        // Viền đỏ chỉ khi thợ báo lỗi; trễ hạn đã có dòng "Trễ n ngày" đỏ.
+        borderColor: entry?.defectReportedAt && tab === 'pending' ? 'error.light' : 'divider',
         transition: 'box-shadow .15s',
         '&:hover': { boxShadow: '0 4px 16px rgba(62,42,14,.08)' },
       }}

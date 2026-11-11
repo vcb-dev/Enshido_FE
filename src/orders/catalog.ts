@@ -161,11 +161,12 @@ export const SOURCE_HINT: Record<ProductionSource, string> = {
 }
 
 export const REQUEST_TYPE_META: Record<ProductionRequestType, ChipTone> = {
-  SAMPLE: { label: 'Dựng mẫu', bg: '#27ae60', fg: '#ffffff' },
-  RETAIL: { label: 'Đơn khách lẻ', bg: '#2563eb', fg: '#ffffff' },
-  BULK: { label: 'SX SLL', bg: '#c0392b', fg: '#ffffff' },
-  VIDEO: { label: 'Đơn quay video', bg: '#8e44ad', fg: '#ffffff' },
-  MOLD: { label: 'Đơn làm khuôn', bg: '#d68910', fg: '#ffffff' },
+  // Loại đơn là phân loại, không phải trạng thái: nền nhạt chữ đậm cùng màu cho đỡ tranh với chip trạng thái.
+  SAMPLE: { label: 'Dựng mẫu', bg: '#e6f4ea', fg: '#1e6b3a' },
+  RETAIL: { label: 'Đơn khách lẻ', bg: '#e3ecfd', fg: '#1d4ed8' },
+  BULK: { label: 'SX SLL', bg: '#fbe9e7', fg: '#a3291c' },
+  VIDEO: { label: 'Đơn quay video', bg: '#f3e8f8', fg: '#6c3483' },
+  MOLD: { label: 'Đơn làm khuôn', bg: '#fdf0dc', fg: '#8a5a06' },
 }
 
 export const REQUEST_TYPES: ProductionRequestType[] = ['SAMPLE', 'RETAIL', 'BULK', 'VIDEO', 'MOLD']

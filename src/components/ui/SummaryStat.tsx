@@ -11,7 +11,7 @@ export const SUMMARY_TONES: Record<SummaryTone, { bg: string; bar: string }> = {
   neutral: { bg: '#f8f3eb', bar: '#6f6254' },
 }
 
-/** Khung ô số liệu: nền theo tone + vạch màu bên trái. */
+/** Khung ô số liệu: nền nhạt theo tone, viền mảnh đều bốn cạnh. */
 function SummaryBox({
   tone,
   grow,
@@ -28,8 +28,7 @@ function SummaryBox({
         ...(grow ? { flex: 1 } : null),
         minWidth: 0,
         bgcolor: colors.bg,
-        border: '1px solid #cbbda9',
-        borderLeft: `4px solid ${colors.bar}`,
+        border: '1px solid #ded3c3',
         borderRadius: 1,
         px: 1.25,
         py: 1,
