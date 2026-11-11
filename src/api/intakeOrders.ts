@@ -81,6 +81,12 @@ export type IntakeOrder = {
   metalType: OrderMetalType | null
   placedBy: string
   description: string
+  /** Thông số in lên phiếu sản xuất. */
+  sizeLabel?: string | null
+  size?: string | null
+  platingColor?: string | null
+  stoneTypes?: string[]
+  laserEngraving?: string | null
   /** Ghi chú tự do ở cột Ghi chú của Lệnh sản xuất. */
   note?: string | null
   createdDate: string
@@ -124,6 +130,11 @@ export type UpsertIntakeOrderPayload = {
   metalType?: OrderMetalType | null
   placedBy: string
   description: string
+  sizeLabel?: string | null
+  size?: string | null
+  platingColor?: string | null
+  stoneTypes?: string[]
+  laserEngraving?: string | null
   createdDate: string
   /** Bắt buộc từ form tạo đơn — server chặn nếu trống. */
   dueDate: string

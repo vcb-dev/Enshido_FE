@@ -404,3 +404,19 @@ export function defectScopeText(entry: { defectQty?: number | null; returnedQty?
   if (!((entry?.defectQty ?? 0) > 0)) return ''
   return (entry?.returnedQty ?? 0) === 0 ? ' lỗi toàn bộ' : ' lỗi một phần'
 }
+
+/**
+ * "Yêu cầu khác" trên phiếu / màn thợ. Đơn từ màn Tạo đơn ghi ô này vào mô tả đơn; đơn lên thẳng
+ * có ô riêng `otherRequirements`.
+ */
+export function otherRequirementsOf(order: {
+  otherRequirements?: string | null
+  description?: string | null
+  intakeOrderCode?: string | null
+}) {
+  return (
+    order.otherRequirements?.trim() ||
+    (order.intakeOrderCode ? order.description?.trim() : '') ||
+    ''
+  )
+}

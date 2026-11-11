@@ -20,7 +20,7 @@ import {
 import { formatQty, formatStockedDate } from '../api/inventory'
 import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
 import { TicketDetailSkeleton } from '../components/ui'
-import { canReportStageDefect, defectScopeText, completesOnTake, formatDateShort, isSelfTakeStage, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
+import { canReportStageDefect, defectScopeText, completesOnTake, formatDateShort, isSelfTakeStage, otherRequirementsOf, qcReturnLabel, usesReceiptFlow, SILVER_LOSS_TONE, silverLossLevel, STAGE_LABEL } from '../orders/catalog'
 import { StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { MaterialRequestsCard } from '../orders/MaterialRequests'
 import { SubTicketMatrixCard } from '../orders/SubTicketMatrixCard'
@@ -660,12 +660,13 @@ function ProductCard({ order, model }: { order: ProductionOrderDetail; model: Ti
             value: order.dueDate ? formatStockedDate(order.dueDate) : null,
           },
           { label: 'Size', value: order.sizeLabel },
+          { label: 'Kích thước', value: order.size },
           { label: 'Chất liệu', value: order.mainMaterial },
           { label: 'Màu xi', value: order.platingColor },
           { label: 'Loại đá', value: order.stoneTypes.join(', ') },
           { label: 'Số lượng đá', value: order.stoneCount },
           { label: 'Khắc laser', value: order.laserEngraving },
-          { label: 'Yêu cầu khác', value: order.otherRequirements },
+          { label: 'Yêu cầu khác', value: otherRequirementsOf(order) },
           { label: 'Ghi chú phiếu', value: model.note },
         ]}
       />
