@@ -32,8 +32,11 @@ export type LossSums = {
   nvlGram: string
   returnedGram: string
   lossGram: string
+  /** % hao trên TL hàng trả đạt (dòng tổng: đã trừ mạt). */
   lossPercent: string | null
   limitPercent: string | null
+  /** Gram thợ được hao = TL hàng đạt × mức cho phép; chưa đặt mức thì null. */
+  allowedGram: string | null
 }
 
 export type LossWorkerRow = LossSums & {
@@ -44,6 +47,10 @@ export type LossWorkerRow = LossSums & {
   workerName: string
   /** Mạt vụn thợ trả cuối tuần — chỉ trừ ở dòng tổng của thợ. */
   scrapGram: string
+  /** Mạt phải trả = TL thợ giữ − được hao (không âm). */
+  dueGram: string | null
+  /** Mạt đã trả − phải trả: âm = hao vượt mức, dương = trả dư. */
+  balanceGram: string | null
   stages: (LossSums & { stage: LossStage })[]
 }
 
@@ -61,6 +68,7 @@ export type LossItem = {
   nvlGram: string
   lossGram: string
   lossPercent: string | null
+  allowedGram: string | null
 }
 
 export type ScrapReturn = {

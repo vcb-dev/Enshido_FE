@@ -63,8 +63,11 @@ const headers = (report: WeeklyLossReport) => [
   'Trọng lượng NVL thu hồi (g)',
   'Trọng lượng mạt vụn thu hồi (sau khi cô lại) (g)',
   'Hao hụt (g)',
+  'Thợ được hao (g)',
+  'Phải trả mạt vụn (g)',
+  'Chênh lệch mạt (đã trả − phải trả) (g)',
   'Mức hao hụt cho phép (%)',
-  'Mức hao hụt thực tế (%)',
+  'Mức hao hụt thực tế (% trên hàng đạt)',
 ]
 
 function sumsCells(
@@ -78,9 +81,11 @@ function sumsCells(
     lossGram: string
     lossPercent: string | null
     limitPercent: string | null
+    allowedGram: string | null
   },
   scrapGram: string | null,
   bold: boolean,
+  due: { dueGram: string | null; balanceGram: string | null } | null,
 ): XlsxCell[] {
   const gram = bold ? 'boldGram' : 'gram'
   return [
@@ -92,6 +97,9 @@ function sumsCells(
     { value: num(row.nvlGram), style: gram },
     { value: num(scrapGram), style: gram },
     { value: num(row.lossGram), style: gram },
+    { value: num(row.allowedGram), style: gram },
+    { value: due ? num(due.dueGram) : null, style: gram },
+    { value: due ? num(due.balanceGram) : null, style: gram },
     { value: num(row.limitPercent), style: bold ? 'boldPercent' : 'percent' },
     { value: num(row.lossPercent), style: isOver(row) ? 'warn' : bold ? 'boldPercent' : 'percent' },
   ]
@@ -106,16 +114,17 @@ export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
     weekly.push([
       { value: week, style: 'bold' },
       { value: row.workerName, style: 'bold' },
-      ...sumsCells(row, row.scrapGram, true),
+      ...sumsCells(row, row.scrapGram, true, row),
     ])
     for (const stage of row.stages) {
-      // Không có cột Khâu: dòng khâu ghi tên khâu cạnh tên thợ.
-      weekly.push([week, `${row.workerName} · ${LOSS_STAGE_LABEL[stage.stage]}`, ...sumsCells(stage, null, false)])
+      // Không có cột Khâu: dòng khâu ghi tên khâu cạnh tên thợ. Mạt nộp theo thợ nên dòng khâu
+      // chỉ có gram được hao.
+      weekly.push([week, `${row.workerName} · ${LOSS_STAGE_LABEL[stage.stage]}`, ...sumsCells(stage, null, false, null)])
     }
   }
 
   const sheets: XlsxSheet[] = [
-    { name: 'Báo cáo tuần', rows: weekly, widths: [22, 30, 16, 24, 18, 20, 28, 18, 24, 12, 16, 16] },
+    { name: 'Báo cáo tuần', rows: weekly, widths: [22, 30, 16, 24, 18, 20, 28, 18, 24, 12, 14, 16, 16, 16, 16] },
   ]
 
   if (report.weeks.length > 1) {
@@ -167,7 +176,8 @@ export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
       'Trọng lượng bán thành phẩm thu hồi (lưu kho để sử dụng sau) (g)',
       'Trọng lượng NVL thu hồi (g)',
       'Hao hụt (g)',
-      'Mức hao hụt thực tế (%)',
+      'Thợ được hao (g)',
+      'Mức hao hụt thực tế (% trên hàng đạt)',
     ]),
   ]
   for (const item of report.items) {
@@ -184,10 +194,11 @@ export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
       { value: num(item.btpGram), style: 'gram' },
       { value: num(item.nvlGram), style: 'gram' },
       { value: num(item.lossGram), style: 'gram' },
+      { value: num(item.allowedGram), style: 'gram' },
       { value: num(item.lossPercent), style: 'percent' },
     ])
   }
-  sheets.push({ name: 'Chi tiết phiếu', rows: detail, widths: [22, 24, 12, 14, 6, 20, 8, 24, 20, 28, 18, 12, 16] })
+  sheets.push({ name: 'Chi tiết phiếu', rows: detail, widths: [22, 24, 12, 14, 6, 20, 8, 24, 20, 28, 18, 12, 14, 16] })
 
   const scraps: XlsxCell[][] = [header(['Tuần', 'Thợ', 'Trọng lượng mạt vụn thu hồi (sau khi cô lại) (g)', 'Thủ kho nhận', 'Lúc nhận', 'Ghi chú'])]
   for (const scrap of report.scrapReturns) {
@@ -202,10 +213,10 @@ export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
   }
   sheets.push({ name: 'Mạt vụn', rows: scraps, widths: [22, 24, 24, 20, 20, 30] })
 
-  const limits: XlsxCell[][] = [header(['Khâu', 'Mức hao hụt cho phép (%)'])]
+  const limitRows: XlsxCell[][] = [header(['Khâu', 'Mức hao hụt cho phép (%)'])]
   for (const limit of report.limits) {
-    limits.push([LOSS_STAGE_LABEL[limit.stage], { value: num(limit.percent), style: 'percent' }])
+    limitRows.push([LOSS_STAGE_LABEL[limit.stage], { value: num(limit.percent), style: 'percent' }])
   }
-  sheets.push({ name: 'Mức cho phép', rows: limits, widths: [14, 22] })
+  sheets.push({ name: 'Mức cho phép', rows: limitRows, widths: [14, 22] })
   return sheets
 }

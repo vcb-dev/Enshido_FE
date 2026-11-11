@@ -14,6 +14,7 @@ const sums = {
   lossGram: '5',
   lossPercent: '1.33',
   limitPercent: '6',
+  allowedGram: '19.2',
 }
 
 const report: WeeklyLossReport = {
@@ -32,6 +33,8 @@ const report: WeeklyLossReport = {
       workerName: 'Thợ A',
       ...sums,
       scrapGram: '30',
+      dueGram: '15.8',
+      balanceGram: '14.2',
       stages: [{ stage: 'FILING', ...sums, returnedGram: '340', lossGram: '35', lossPercent: '9.33' }],
     },
   ],
@@ -69,11 +72,22 @@ describe('xuất Excel', () => {
       'Mức cho phép',
     ])
     const [header, total, stage] = sheets[0].rows
-    // Không có cột Khâu: 12 cột theo tab BÁO CÁO; dòng khâu ghi tên khâu cạnh tên thợ.
-    expect(header).toHaveLength(12)
+    // Không có cột Khâu: 12 cột theo tab BÁO CÁO + 3 cột mạt; dòng khâu ghi tên khâu cạnh tên thợ.
+    expect(header).toHaveLength(15)
     expect(String(stage[1])).toContain(' · ')
     expect(total[8]).toEqual({ value: 30, style: 'boldGram' })
-    expect(stage[11]).toEqual({ value: 9.33, style: 'warn' })
+    // Được hao / phải trả / chênh lệch lấy nguyên số BE; dòng khâu không có phần mạt.
+    expect(total.slice(10, 13)).toEqual([
+      { value: 19.2, style: 'boldGram' },
+      { value: 15.8, style: 'boldGram' },
+      { value: 14.2, style: 'boldGram' },
+    ])
+    expect(stage.slice(10, 13)).toEqual([
+      { value: 19.2, style: 'gram' },
+      { value: null, style: 'gram' },
+      { value: null, style: 'gram' },
+    ])
+    expect(stage[14]).toEqual({ value: 9.33, style: 'warn' })
     // So sánh: tuần thợ không có việc để trống.
     expect(sheets[1].rows[1].slice(1, 3)).toEqual([null, null])
   })
@@ -95,3 +109,4 @@ describe('xuất Excel', () => {
     expect([...bytes.slice(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04])
   })
 })
+
