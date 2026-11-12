@@ -147,7 +147,10 @@ function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
   // Màn Tạo đơn không hiện lệnh bù — chỉ có ở Lệnh sản xuất, dưới đơn gốc.
   if (order.reworkOfOrderId) return false
   const statusFilter = String(queryKey[3] ?? '')
-  if (statusFilter && statusFilter !== order.status) return false
+  if (statusFilter === 'DELIVERED') {
+    // Lọc "Đã giao" theo trạng thái lệnh SX thật, không theo trạng thái đơn tạo.
+    if (!order.productionStatuses?.some((entry) => entry.status === 'DELIVERED')) return false
+  } else if (statusFilter && statusFilter !== order.status) return false
   const requestType = String(queryKey[6] ?? '')
   if (requestType && requestType !== order.requestType) return false
   // Màn Tạo đơn: [7] tên sản phẩm (chứa), [8] người đặt đơn (đúng tên) — giống lọc ở BE.
