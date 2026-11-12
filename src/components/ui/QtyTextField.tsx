@@ -1,13 +1,15 @@
 import { TextField } from '@mui/material'
 import type { TextFieldProps } from '@mui/material'
 import {
+  caretInQtyFormat,
   formatQtyInput,
   gramReadout,
   isGramLabel,
-  parseQtyInput,
   pasteIntoQty,
-  typedDecimalAsComma,
+  readQtyInput,
+  skipGroupSeparatorOnDelete,
 } from '../../api/inventory'
+import { useFormattedCaret } from './useFormattedCaret'
 
 export type QtyTextFieldProps = Omit<TextFieldProps, 'value' | 'onChange'> & {
   /** Chuỗi số chuẩn (vd. `200000`, `12.5`) — không phải chuỗi đã format hiển thị. */
@@ -16,8 +18,9 @@ export type QtyTextFieldProps = Omit<TextFieldProps, 'value' | 'onChange'> & {
 }
 
 /** Ô gram/số lượng: hiển thị vi-VN (1.250,5), lưu state dạng chuỗi số chuẩn. */
-export function QtyTextField({ value, onChange, slotProps, helperText, ...props }: QtyTextFieldProps) {
+export function QtyTextField({ value, onChange, slotProps, helperText, inputRef, onKeyDown, ...props }: QtyTextFieldProps) {
   const readout = isGramLabel(props.label) ? gramReadout(value) : ''
+  const caret = useFormattedCaret(value)
   return (
     <TextField
       {...props}
@@ -33,11 +36,19 @@ export function QtyTextField({ value, onChange, slotProps, helperText, ...props 
         htmlInput: { inputMode: 'decimal', ...slotProps?.htmlInput },
       }}
       value={formatQtyInput(value)}
+      inputRef={(node: HTMLInputElement | null) => {
+        caret.input.current = node
+        if (typeof inputRef === 'function') inputRef(node)
+        else if (inputRef) (inputRef as { current: HTMLInputElement | null }).current = node
+      }}
+      onKeyDown={(event) => {
+        skipGroupSeparatorOnDelete(event.target as HTMLInputElement, event.key)
+        onKeyDown?.(event)
+      }}
       onChange={(event) => {
-        const next = parseQtyInput(
-          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
-        )
-        onChange(next)
+        const read = readQtyInput(event.target, (event.nativeEvent as InputEvent).data)
+        caret.place((formatted) => caretInQtyFormat(formatted, read.caret))
+        onChange(read.value)
       }}
     />
   )
