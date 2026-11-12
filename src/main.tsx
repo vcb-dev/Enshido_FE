@@ -11,6 +11,7 @@ import { persistOptions } from './auth/offlineCache'
 import { watchConnectivity } from './auth/connectivity'
 import { AuthProvider } from './auth/AuthContext'
 import { registerSubTicketActions } from './orders/subTicketActions'
+import { guardNumberInputs } from './numberInputGuard'
 import { AppProviders } from './theme/AppProviders'
 import App from './App.tsx'
 
@@ -32,6 +33,7 @@ const queryClient = new QueryClient({
 })
 
 watchConnectivity()
+guardNumberInputs()
 registerServiceWorker()
 // Phải đăng ký trước khi khôi phục bản lưu: thao tác treo từ phiên trước dựng lại từ đây.
 registerSubTicketActions(queryClient)

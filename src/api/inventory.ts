@@ -309,15 +309,63 @@ export function gramReadout(canonical: string) {
   return `= ${formatQty(canonical)} g (${formatQty(String(n / 1000))} kg)`
 }
 
+/**
+ * Chuỗi số chuẩn → hiển thị vi-VN trong ô nhập (1.250,5). Chia nhóm nghìn trên chuỗi, không qua
+ * `Number()`: số dài quá 15–16 chữ số đi qua Number sẽ bị làm tròn, gõ xong số tự đổi.
+ */
 export function formatQtyInput(raw: string) {
   if (!raw) return ''
   const hasDot = raw.includes('.')
   const [intS = '0', decS] = raw.split('.')
-  const intN = Number(intS)
-  if (!Number.isFinite(intN)) return raw
-  const intFmt = intN.toLocaleString('vi-VN', { maximumFractionDigits: 0 })
+  if (!/^\d*$/.test(intS)) return raw
+  const intFmt = (intS.replace(/^0+(?=\d)/, '') || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   if (hasDot) return `${intFmt},${decS ?? ''}`
   return intFmt
+}
+
+/** Vị trí con trỏ trong ô số đang gõ, đếm theo chữ số (bỏ qua dấu chấm nghìn). */
+export type QtyCaret = { intDigits: number; decDigits: number | null }
+
+/**
+ * Đọc một lần gõ vào ô số lượng / gram: ra chuỗi số chuẩn và vị trí con trỏ tính theo chữ số,
+ * để sau khi thêm / bớt dấu chấm nghìn đặt con trỏ lại đúng chỗ (không nhảy về cuối).
+ */
+export function readQtyInput(input: HTMLInputElement | HTMLTextAreaElement, typed: string | null) {
+  const text = typedDecimalAsComma(input, typed)
+  let caret = input.selectionStart ?? input.value.length
+  // typedDecimalAsComma bỏ ký tự vừa gõ khi đã có phần thập phân → con trỏ lùi một.
+  if (text.length < input.value.length) caret -= input.value.length - text.length
+  const head = text.slice(0, Math.max(0, caret))
+  const comma = head.lastIndexOf(',')
+  const caretAt: QtyCaret =
+    comma >= 0
+      ? { intDigits: 0, decDigits: (head.slice(comma + 1).match(/\d/g) ?? []).length }
+      : { intDigits: (head.match(/\d/g) ?? []).length, decDigits: null }
+  return { value: parseQtyInput(text), caret: caretAt }
+}
+
+/** Vị trí con trỏ trong chuỗi đã format ứng với `QtyCaret`. */
+export function caretInQtyFormat(formatted: string, caret: QtyCaret) {
+  const comma = formatted.indexOf(',')
+  if (caret.decDigits != null && comma >= 0) return Math.min(formatted.length, comma + 1 + caret.decDigits)
+  const intEnd = comma >= 0 ? comma : formatted.length
+  if (caret.intDigits <= 0) return 0
+  let seen = 0
+  for (let i = 0; i < intEnd; i++) {
+    if (formatted[i] >= '0' && formatted[i] <= '9' && ++seen >= caret.intDigits) return i + 1
+  }
+  return intEnd
+}
+
+/**
+ * Backspace / Delete đứng sát dấu chấm nghìn: dấu chấm tự sinh nên xoá nó không đổi gì (ô như bị kẹt).
+ * Dời con trỏ qua dấu chấm để phím xoá luôn chữ số bên cạnh.
+ */
+export function skipGroupSeparatorOnDelete(input: HTMLInputElement, key: string) {
+  const start = input.selectionStart
+  if (start == null || start !== input.selectionEnd) return
+  if (key === 'Backspace' && start > 0 && input.value[start - 1] === '.') input.setSelectionRange(start - 1, start - 1)
+  if (key === 'Delete' && input.value[start] === '.') input.setSelectionRange(start + 1, start + 1)
 }
 
 export function formatMoney(value: string) {

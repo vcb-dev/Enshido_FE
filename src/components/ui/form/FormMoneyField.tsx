@@ -5,6 +5,7 @@ import {
   caretAfterMoneyFormat,
   formatMoneyInput,
   moneyDigitsFromInput,
+  skipGroupSeparatorOnDelete,
 } from '../../../api/inventory'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
@@ -55,6 +56,10 @@ export function FormMoneyField<T extends FieldValues>({
         const caret = input.selectionStart ?? input.value.length
         digitsBeforeCaret.current = (input.value.slice(0, caret).match(/\d/g) ?? []).length
         onChange(moneyDigitsFromInput(input.value))
+      }}
+      onKeyDown={(event) => {
+        skipGroupSeparatorOnDelete(event.target as HTMLInputElement, event.key)
+        props.onKeyDown?.(event)
       }}
       onBlur={(event) => {
         if (isUserBlur(event, autoFocusAt)) onBlur()

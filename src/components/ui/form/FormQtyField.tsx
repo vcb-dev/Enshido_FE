@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { useController } from 'react-hook-form'
 import type { FieldValues } from 'react-hook-form'
 import {
+  caretInQtyFormat,
   formatQtyInput,
   gramReadout,
   isGramLabel,
-  parseQtyInput,
   pasteIntoQty,
-  typedDecimalAsComma,
+  readQtyInput,
+  skipGroupSeparatorOnDelete,
 } from '../../../api/inventory'
+import { useFormattedCaret } from '../useFormattedCaret'
 import { TextInput } from '../TextInput'
 import type { TextInputProps } from '../TextInput'
 import { isUserBlur, withRequiredRule } from './field'
@@ -40,7 +42,8 @@ export function FormQtyField<T extends FieldValues>({
   const { ref, value, onChange, onBlur, ...rest } = field
   const [autoFocusAt] = useState(() => (props.autoFocus ? Date.now() : null))
   const readout = isGramLabel(props.label) ? gramReadout(String(value ?? '')) : ''
-  const { helperText, ...inputProps } = props
+  const { helperText, onKeyDown, ...inputProps } = props
+  const caret = useFormattedCaret(value)
 
   return (
     <TextInput
@@ -55,16 +58,22 @@ export function FormQtyField<T extends FieldValues>({
         onChange(transform ? transform(next) : next)
       }}
       value={formatQtyInput(String(value ?? ''))}
+      onKeyDown={(event) => {
+        skipGroupSeparatorOnDelete(event.target as HTMLInputElement, event.key)
+        onKeyDown?.(event)
+      }}
       onChange={(event) => {
-        const next = parseQtyInput(
-          typedDecimalAsComma(event.target, (event.nativeEvent as InputEvent).data),
-        )
-        onChange(transform ? transform(next) : next)
+        const read = readQtyInput(event.target, (event.nativeEvent as InputEvent).data)
+        caret.place((formatted) => caretInQtyFormat(formatted, read.caret))
+        onChange(transform ? transform(read.value) : read.value)
       }}
       onBlur={(event) => {
         if (isUserBlur(event, autoFocusAt)) onBlur()
       }}
-      inputRef={ref}
+      inputRef={(node: HTMLInputElement | null) => {
+        caret.input.current = node
+        ref(node)
+      }}
       required={required}
       errorText={fieldState.error?.message}
     />
