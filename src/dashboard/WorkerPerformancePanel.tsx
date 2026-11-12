@@ -10,7 +10,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -20,7 +19,7 @@ import {
   type PerformanceStageKey,
   type PerformanceStatus,
 } from '../api/productionOrders'
-import { AutocompleteInput, ChartLegend, SelectInput, TableSkeleton } from '../components/ui'
+import { AutocompleteInput, ChartLegend, DateField, SelectInput, TableSkeleton } from '../components/ui'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { fmt } from './overviewShared'
 
@@ -133,20 +132,18 @@ export function WorkerPerformancePanel() {
             gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(140px, 1fr))', lg: 'repeat(5, minmax(140px, 1fr))' },
           }}
         >
-          <TextField
+          <DateField
             size="small"
-            type="date"
             label="Từ ngày"
             value={from}
-            onChange={(event) => setFrom(event.target.value)}
+            onChange={setFrom}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: to || undefined } }}
           />
-          <TextField
+          <DateField
             size="small"
-            type="date"
             label="Đến ngày"
             value={to}
-            onChange={(event) => setTo(event.target.value)}
+            onChange={setTo}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: from || undefined } }}
           />
           <SelectInput

@@ -1,6 +1,7 @@
 import { Autocomplete, TextField } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { DateField } from './DateField'
 
 export type ColumnFilterOption = {
   id: string
@@ -101,12 +102,11 @@ export function ColumnHeaderDate({
   onChange: (value: string) => void
 }) {
   return (
-    <TextField
+    <DateField
       size="small"
       hiddenLabel
-      type="date"
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       sx={{
         ...COLUMN_FILTER_SX,
         '& input[type="date"]': { minWidth: 0, fontSize: 12 },

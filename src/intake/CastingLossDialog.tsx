@@ -11,11 +11,11 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { getCastingLossReportApi } from '../api/castingSlips'
+import { DateField } from '../components/ui'
 import { formatQty } from '../api/inventory'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { formatDateTime } from '../orders/catalog'
@@ -53,8 +53,8 @@ export function CastingLossDialog({ open, onClose }: { open: boolean; onClose: (
             Hao hụt = bạc đã dùng − cây thông sau đúc. Chỉ tính phiếu thủ kho đã cắt cây thông, theo ngày cắt cây.
           </Typography>
           <Stack direction="row" spacing={2}>
-            <TextField size="small" type="date" label="Từ ngày" value={from} onChange={(e) => setFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-            <TextField size="small" type="date" label="Đến ngày" value={to} onChange={(e) => setTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <DateField size="small" label="Từ ngày" value={from} onChange={setFrom} />
+            <DateField size="small" label="Đến ngày" value={to} onChange={setTo} />
           </Stack>
           <Table size="small">
             <TableHead>

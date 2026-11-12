@@ -12,7 +12,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -40,7 +39,7 @@ import {
   type LossWorkerRow,
   type WeeklyLossReport,
 } from '../api/lossReports'
-import { confirmDialog, TableSkeleton, TrashIcon } from '../components/ui'
+import { confirmDialog, DateField, TableSkeleton, TrashIcon } from '../components/ui'
 import { LossLimitsDialog } from './LossLimitsDialog'
 import { addDays, buildLossSheets, isOver, todayKey, weekLabel, weekShort, weekStart } from './lossReport'
 import { OVERVIEW_COLOR } from './overviewShared'
@@ -86,7 +85,9 @@ export function LossReportPanel() {
   const thisWeek = weekStart(today)
   const [metal, setMetal] = useState<LossMetal>('SILVER')
   const [mode, setMode] = useState<Mode>('week')
-  const [week, setWeek] = useState(thisWeek)
+  // Ô ngày giữ đúng ngày đã chọn, tuần suy ra từ đó (ép ô về Thứ Hai thì không chọn được ngày khác trong tuần).
+  const [day, setDay] = useState(today)
+  const week = weekStart(day)
   const [compareFrom, setCompareFrom] = useState(addDays(thisWeek, -7 * (COMPARE_WEEKS - 1)))
   const [compareTo, setCompareTo] = useState(thisWeek)
   const [limitsOpen, setLimitsOpen] = useState(false)
@@ -169,22 +170,21 @@ export function LossReportPanel() {
         </ToggleButtonGroup>
         {mode === 'week' ? (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <IconButton size="small" aria-label="Tuần trước" onClick={() => setWeek(addDays(week, -7))}>
+            <IconButton size="small" aria-label="Tuần trước" onClick={() => setDay(addDays(week, -7))}>
               <ChevronLeftIcon />
             </IconButton>
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Tuần có ngày"
-              value={week}
-              onChange={(event) => event.target.value && setWeek(weekStart(event.target.value))}
+              value={day}
+              onChange={(next) => next && setDay(next)}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
             />
             <IconButton
               size="small"
               aria-label="Tuần sau"
               disabled={week >= thisWeek}
-              onClick={() => setWeek(addDays(week, 7))}
+              onClick={() => setDay(addDays(week, 7))}
             >
               <ChevronRightIcon />
             </IconButton>
@@ -194,20 +194,18 @@ export function LossReportPanel() {
           </Stack>
         ) : (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Từ tuần có ngày"
               value={compareFrom}
-              onChange={(event) => setCompareFrom(event.target.value)}
+              onChange={setCompareFrom}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: compareTo || today } }}
             />
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Đến tuần có ngày"
               value={compareTo}
-              onChange={(event) => setCompareTo(event.target.value)}
+              onChange={setCompareTo}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: compareFrom || undefined, max: today } }}
             />
           </Stack>

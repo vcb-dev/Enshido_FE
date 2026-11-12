@@ -1,6 +1,6 @@
-import { Box, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { Box, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import type { OverviewGroup } from '../api/productionOrders'
-import { SelectInput } from '../components/ui'
+import { DateField, SelectInput } from '../components/ui'
 import { todayKey } from './lossReport'
 import {
   GROUP_OPTIONS,
@@ -63,20 +63,18 @@ export function OverviewPeriodBar({
             }}
             sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' } }}
           />
-          <TextField
+          <DateField
             size="small"
-            type="date"
             label="Từ ngày"
             value={value.from}
-            onChange={(event) => setRange(event.target.value, value.to)}
+            onChange={(from) => setRange(from, value.to)}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: value.to } }}
           />
-          <TextField
+          <DateField
             size="small"
-            type="date"
             label="Đến ngày"
             value={value.to}
-            onChange={(event) => setRange(value.from, event.target.value)}
+            onChange={(to) => setRange(value.from, to)}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: value.from, max: today } }}
           />
         </Box>
