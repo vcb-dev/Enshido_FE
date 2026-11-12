@@ -161,6 +161,8 @@ export function listIntakeOrdersApi(params: {
   search?: string
   /** Lọc riêng theo mã đơn hàng (DH…). */
   orderCode?: string
+  /** Trạng thái lệnh SX thật, vd DELIVERED (Đã giao). */
+  productionStatus?: ProductionStatus
   /** Tên sản phẩm chứa chuỗi nhập. */
   productName?: string
   /** Người đặt đơn — đúng tên. */
@@ -177,6 +179,7 @@ export function listIntakeOrdersApi(params: {
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
   if (params.orderCode?.trim()) query.set('orderCode', params.orderCode.trim())
+  if (params.productionStatus) query.set('productionStatus', params.productionStatus)
   if (params.productName?.trim()) query.set('productName', params.productName.trim())
   if (params.placedBy?.trim()) query.set('placedBy', params.placedBy.trim())
   query.set('page', String(params.page))

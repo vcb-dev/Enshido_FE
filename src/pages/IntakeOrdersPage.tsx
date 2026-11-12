@@ -83,6 +83,20 @@ type FormValues = {
 
 const digitsOnly = (value: string) => value.replace(/\D/g, '')
 
+/** Lọc "Đã giao": thủ kho xuất kho giao khách, kế toán đã duyệt phiếu xuất giao đủ (lệnh SX DELIVERED). */
+const DELIVERED_FILTER = 'DELIVERED'
+type IntakeStatusFilter = IntakeOrderStatus | typeof DELIVERED_FILTER | ''
+
+const STATUS_FILTER_OPTIONS = INTAKE_STATUSES.flatMap((status) =>
+  status === 'WAIT_COOLING'
+    ? [
+        // Đơn đã cắt cây hiện trạng thái thật của lệnh SX — lọc chung một nhóm.
+        { id: status, name: 'Đã vào sản xuất' },
+        { id: DELIVERED_FILTER, name: 'Đã giao' },
+      ]
+    : [{ id: status, name: INTAKE_STATUS_META[status].label }],
+)
+
 /** Mọi đơn tạo mới đều là hàng của VCB — ô khách hàng chỉ để xem. */
 const CUSTOMER_NAME = 'VCB'
 
@@ -169,7 +183,7 @@ export function IntakeOrdersPage() {
   const table = useTableParams({
     pageSize: 25,
     filters: {
-      status: '' as IntakeOrderStatus | '',
+      status: '' as IntakeStatusFilter,
       requestType: '' as ProductionRequestType | '',
       search: '',
       productName: '',
@@ -197,7 +211,9 @@ export function IntakeOrdersPage() {
     ],
     queryFn: () =>
       listIntakeOrdersApi({
-        status: params.status,
+        // "Đã giao" là trạng thái lệnh SX thật, không phải trạng thái đơn tạo.
+        status: params.status === DELIVERED_FILTER ? '' : params.status,
+        productionStatus: params.status === DELIVERED_FILTER ? 'DELIVERED' : undefined,
         requestType: params.requestType,
         search: params.search,
         productName: params.productName,
@@ -301,12 +317,8 @@ export function IntakeOrdersPage() {
         filter: (
           <ColumnHeaderFilter
             valueId={params.status}
-            onChange={(status) => table.setFilter({ status: status as IntakeOrderStatus | '' })}
-            options={INTAKE_STATUSES.map((status) => ({
-              id: status,
-              // Đơn đã cắt cây hiện trạng thái thật của lệnh SX — lọc chung một nhóm.
-              name: status === 'WAIT_COOLING' ? 'Đã vào sản xuất' : INTAKE_STATUS_META[status].label,
-            }))}
+            onChange={(status) => table.setFilter({ status: status as IntakeStatusFilter })}
+            options={STATUS_FILTER_OPTIONS}
           />
         ),
         render: (row) => <IntakeOrderStatusChips order={row} />,
@@ -466,7 +478,7 @@ export function IntakeOrdersPage() {
         loading={list.isLoading && !list.data}
         errorText={list.error instanceof Error ? list.error.message : undefined}
         emptyText={
-          params.search || params.status || params.requestType
+          params.search || params.status || params.requestType || params.productName || params.placedBy
             ? 'Không có đơn khớp bộ lọc.'
             : 'Chưa có đơn. Bấm Tạo đơn mới.'
         }
