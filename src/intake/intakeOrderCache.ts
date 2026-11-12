@@ -150,6 +150,11 @@ function catalogListAllows(queryKey: QueryKey, order: IntakeOrder) {
   if (statusFilter && statusFilter !== order.status) return false
   const requestType = String(queryKey[6] ?? '')
   if (requestType && requestType !== order.requestType) return false
+  // Màn Tạo đơn: [7] tên sản phẩm (chứa), [8] người đặt đơn (đúng tên) — giống lọc ở BE.
+  const productName = String(queryKey[7] ?? '').trim().toLowerCase()
+  if (productName && !(order.productName ?? '').toLowerCase().includes(productName)) return false
+  const placedBy = String(queryKey[8] ?? '').trim().toLowerCase()
+  if (placedBy && (order.placedBy ?? '').trim().toLowerCase() !== placedBy) return false
   const search = String(queryKey[4] ?? '').trim().toLowerCase()
   if (!search) return true
   const hay = [order.code, order.sxCode, order.productName, order.description, order.trackingCode]

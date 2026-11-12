@@ -161,6 +161,10 @@ export function listIntakeOrdersApi(params: {
   search?: string
   /** Lọc riêng theo mã đơn hàng (DH…). */
   orderCode?: string
+  /** Tên sản phẩm chứa chuỗi nhập. */
+  productName?: string
+  /** Người đặt đơn — đúng tên. */
+  placedBy?: string
   page: number
   pageSize: number
   sort?: IntakeOrderSort
@@ -173,10 +177,17 @@ export function listIntakeOrdersApi(params: {
   if (params.requestType) query.set('requestType', params.requestType)
   if (params.search?.trim()) query.set('search', params.search.trim())
   if (params.orderCode?.trim()) query.set('orderCode', params.orderCode.trim())
+  if (params.productName?.trim()) query.set('productName', params.productName.trim())
+  if (params.placedBy?.trim()) query.set('placedBy', params.placedBy.trim())
   query.set('page', String(params.page))
   query.set('pageSize', String(params.pageSize))
   setIntakeSort(query, params.sort)
   return apiFetch<IntakeOrderList>(`/intake-orders?${query.toString()}`)
+}
+
+/** Tên người đặt đơn đã từng nhập — cho bộ lọc màn Tạo đơn. */
+export function getIntakePlacedByOptionsApi() {
+  return apiFetch<string[]>('/intake-orders/placed-by-options')
 }
 
 export type IntakePipelineCounts = Partial<Record<IntakeOrderStatus, number>>

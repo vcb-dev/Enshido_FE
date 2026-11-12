@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import {
   createIntakeOrderApi,
   deleteIntakeOrderApi,
+  getIntakePlacedByOptionsApi,
   listIntakeOrdersApi,
   updateIntakeOrderApi,
   ORDER_METAL_TYPES,
@@ -171,6 +172,8 @@ export function IntakeOrdersPage() {
       status: '' as IntakeOrderStatus | '',
       requestType: '' as ProductionRequestType | '',
       search: '',
+      productName: '',
+      placedBy: '',
     },
   })
   const { params } = table
@@ -189,12 +192,16 @@ export function IntakeOrdersPage() {
       params.search,
       sort,
       params.requestType,
+      params.productName,
+      params.placedBy,
     ],
     queryFn: () =>
       listIntakeOrdersApi({
         status: params.status,
         requestType: params.requestType,
         search: params.search,
+        productName: params.productName,
+        placedBy: params.placedBy,
         page: params.page,
         pageSize: params.pageSize,
         sort,
@@ -203,6 +210,14 @@ export function IntakeOrdersPage() {
       }),
     placeholderData: keepPreviousData,
     staleTime: 15_000,
+  })
+
+  // Tài khoản khách không có danh sách người đặt đơn (khoá theo danh sách trắng ở BE).
+  const placedByOptions = useQuery({
+    queryKey: ['intake-orders', 'placed-by-options'],
+    queryFn: getIntakePlacedByOptionsApi,
+    enabled: !customer,
+    staleTime: 5 * 60_000,
   })
 
   useEffect(() => {
@@ -301,6 +316,13 @@ export function IntakeOrdersPage() {
         header: 'Tên sản phẩm',
         width: 160,
         ellipsis: true,
+        filter: (
+          <ColumnHeaderSearch
+            value={params.productName}
+            onChange={(productName) => table.setFilter({ productName })}
+            placeholder="Tìm tên SP…"
+          />
+        ),
         render: (row) => row.productName?.trim() || '—',
       },
       {
@@ -357,6 +379,13 @@ export function IntakeOrdersPage() {
         header: 'Người đặt đơn',
         width: 120,
         ellipsis: true,
+        filter: customer ? undefined : (
+          <ColumnHeaderFilter
+            valueId={params.placedBy}
+            onChange={(placedBy) => table.setFilter({ placedBy })}
+            options={(placedByOptions.data ?? []).map((name) => ({ id: name, name }))}
+          />
+        ),
         render: (row) => row.placedBy,
       },
       {
@@ -409,9 +438,12 @@ export function IntakeOrdersPage() {
       customer,
       dialog.openCreate,
       dialog.openEdit,
+      params.placedBy,
+      params.productName,
       params.requestType,
       params.search,
       params.status,
+      placedByOptions.data,
       table,
     ],
   )
