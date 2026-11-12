@@ -41,7 +41,7 @@ export function isStageWorkerPreset(preset: StaffJobPreset | ''): preset is Stag
 export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'admin', label: 'Admin' },
   { value: 'staff', label: 'Nhân viên' },
-  { value: 'vcb', label: 'VCB' },
+  { value: 'vcb', label: 'Khách hàng' },
   { value: 'worker_3d', label: 'Thợ 3D' },
   { value: 'worker_wax', label: 'Thợ sáp' },
   { value: 'worker_casting', label: 'Thợ đúc' },
