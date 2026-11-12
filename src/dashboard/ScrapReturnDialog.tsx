@@ -61,7 +61,10 @@ export function ScrapReturnDialog({
   const queryClient = useQueryClient()
   const today = todayKey()
   const workers = useQuery({ queryKey: ['loss-reports', 'workers'], queryFn: getScrapWorkersApi, enabled: open })
-  const [week, setWeek] = useState(defaultWeek)
+  // Giữ đúng ngày người dùng chọn trong ô; tuần tính từ ngày đó (không ép ô về Thứ Hai, ép thì chọn ngày
+  // khác trong cùng tuần hoặc gõ tay sẽ bị nhảy ngược lại, như không đổi được).
+  const [day, setDay] = useState(defaultWeek)
+  const week = weekStart(day)
   const [metal, setMetal] = useState(defaultMetal)
   const [goldType, setGoldType] = useState<OrderMetalType | null>(null)
   const [rows, setRows] = useState<Row[]>([newRow()])
@@ -71,7 +74,7 @@ export function ScrapReturnDialog({
 
   useEffect(() => {
     if (!open) return
-    setWeek(defaultWeek)
+    setDay(defaultWeek)
     setMetal(defaultMetal)
     setGoldType(null)
     setRows([newRow()])
@@ -167,8 +170,8 @@ export function ScrapReturnDialog({
             size="small"
             type="date"
             label="Tuần có ngày"
-            value={week}
-            onChange={(event) => event.target.value && setWeek(weekStart(event.target.value))}
+            value={day}
+            onChange={(event) => event.target.value && setDay(event.target.value)}
             helperText={`Tính vào tuần ${weekLabel(week)}`}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
           />
