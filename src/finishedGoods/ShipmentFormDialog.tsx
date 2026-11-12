@@ -41,6 +41,13 @@ type OrderStockInfo = {
   customerCode: string | null
   /** Mã hiện trên màn Tồn: Mã SX của lệnh, hoặc mã sản xuất nhập tay (tồn đầu kỳ). */
   stockCode: string | null
+  /** Mã đơn hàng DH…; null = đơn tạo tay / tồn đầu kỳ. */
+  intakeCode: string | null
+}
+
+/** Nhãn chọn hàng trên phiếu xuất: mã đơn hàng DH…, không có thì Mã SX, cuối cùng là mã lệnh. */
+function pickLabel(info: OrderStockInfo | undefined, orderCode: string) {
+  return info?.intakeCode?.trim() || info?.stockCode || orderCode
 }
 
 type FormValues = {
@@ -197,6 +204,7 @@ export function ShipmentFormDialog({
         qtyUnit: row.qtyUnit,
         customerCode: row.customerCode,
         stockCode: row.sxCode ?? (row.model3dCode?.trim() || null),
+        intakeCode: row.intakeCode,
       })
     }
     for (const line of shipment?.lines ?? []) {
@@ -211,22 +219,24 @@ export function ShipmentFormDialog({
         qtyUnit: current?.qtyUnit ?? null,
         customerCode: current?.customerCode ?? line.customerCode,
         stockCode: current?.stockCode ?? null,
+        intakeCode: current?.intakeCode ?? line.intakeCode,
       })
     }
     return map
   }, [stock, shipment])
 
   // Xuất theo tồn kho thành phẩm: chỉ liệt kê mặt hàng còn tồn (cộng cả hàng
-  // đang nằm trên chính phiếu khi sửa), hiện bằng Mã sản xuất như màn Tồn.
-  // Giá trị lưu vẫn là mã lệnh (A00x) vì tồn và phiếu xuất đều khoá theo lệnh.
+  // đang nằm trên chính phiếu khi sửa), hiện bằng mã đơn hàng DH….
+  // Giá trị lưu vẫn là mã lệnh (A00x) vì tồn và phiếu xuất đều khoá theo lệnh; một đơn hàng
+  // tách nhiều lệnh (lô SX SLL, lệnh bù) thì dòng phụ có mã lệnh để phân biệt.
   const orderOptions = useMemo(() => {
     const items = Array.from(available.entries())
       .filter(([, info]) => info.remaining > 0)
       .map(([orderCode, info]) => ({
         id: orderCode,
-        name: info.stockCode ?? orderCode,
+        name: pickLabel(info, orderCode),
         secondary: [
-          info.stockCode ? orderCode : null,
+          pickLabel(info, orderCode) !== orderCode ? orderCode : null,
           info.description,
           info.sizeLabel ? `size ${info.sizeLabel}` : null,
           `còn ${info.remaining}${info.qtyUnit ? ` ${info.qtyUnit}` : ''}`,
@@ -239,7 +249,7 @@ export function ShipmentFormDialog({
     if (initialOrderCode && !seen.has(initialOrderCode)) {
       items.unshift({
         id: initialOrderCode,
-        name: available.get(initialOrderCode)?.stockCode ?? initialOrderCode,
+        name: pickLabel(available.get(initialOrderCode), initialOrderCode),
         secondary: 'hết tồn',
       })
     }
@@ -359,7 +369,7 @@ export function ShipmentFormDialog({
               >
                 <FormSearchSelect<FormValues>
                   name={`lines.${index}.orderCode`}
-                  label="Mã sản xuất"
+                  label="Mã đơn hàng"
                   options={orderOptions}
                   required
                   placeholder="Chọn hàng trong kho thành phẩm…"
@@ -480,7 +490,7 @@ export function ShipmentFormDialog({
         <Alert severity="info" sx={{ py: 0 }}>
           {incompleteLines.map(({ index, orderCode, missing }) => (
             <div key={index}>
-              Dòng {index + 1} ({orderCode}) còn trống: <b>{missing.map((key) => INVOICE_FIELD_LABELS[key]).join(', ')}</b>
+              Dòng {index + 1} ({pickLabel(available.get(orderCode), orderCode)}) còn trống: <b>{missing.map((key) => INVOICE_FIELD_LABELS[key]).join(', ')}</b>
             </div>
           ))}
           Vẫn lưu được nhưng chưa in được. Khoản không có thì nhập 0.
@@ -489,7 +499,7 @@ export function ShipmentFormDialog({
 
       {overStock.map(([code, qty]) => (
         <Alert key={code} severity="error" sx={{ py: 0 }}>
-          Đơn {code} xuất tổng {qty} nhưng chỉ còn {available.get(code)?.remaining ?? 0} trong kho.
+          Đơn {pickLabel(available.get(code), code)} xuất tổng {qty} nhưng chỉ còn {available.get(code)?.remaining ?? 0} trong kho.
         </Alert>
       ))}
 
