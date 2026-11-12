@@ -28,6 +28,8 @@ export { AutocompleteInput } from './AutocompleteInput'
 export type { AutocompleteInputProps } from './AutocompleteInput'
 
 export { SearchInput } from './SearchInput'
+export { DateField, isCompleteDate } from './DateField'
+export type { DateFieldProps } from './DateField'
 export type { SearchInputProps } from './SearchInput'
 
 export { ColumnHeaderDate, ColumnHeaderFilter, ColumnHeaderSearch } from './ColumnHeaderFilter'

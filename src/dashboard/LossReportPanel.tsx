@@ -12,7 +12,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -40,7 +39,7 @@ import {
   type LossWorkerRow,
   type WeeklyLossReport,
 } from '../api/lossReports'
-import { confirmDialog, TableSkeleton, TrashIcon } from '../components/ui'
+import { confirmDialog, DateField, TableSkeleton, TrashIcon } from '../components/ui'
 import { LossLimitsDialog } from './LossLimitsDialog'
 import { addDays, buildLossSheets, isOver, todayKey, weekLabel, weekShort, weekStart } from './lossReport'
 import { OVERVIEW_COLOR } from './overviewShared'
@@ -174,12 +173,11 @@ export function LossReportPanel() {
             <IconButton size="small" aria-label="Tuần trước" onClick={() => setDay(addDays(week, -7))}>
               <ChevronLeftIcon />
             </IconButton>
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Tuần có ngày"
               value={day}
-              onChange={(event) => event.target.value && setDay(event.target.value)}
+              onChange={(next) => next && setDay(next)}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
             />
             <IconButton
@@ -196,20 +194,18 @@ export function LossReportPanel() {
           </Stack>
         ) : (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Từ tuần có ngày"
               value={compareFrom}
-              onChange={(event) => setCompareFrom(event.target.value)}
+              onChange={setCompareFrom}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: compareTo || today } }}
             />
-            <TextField
+            <DateField
               size="small"
-              type="date"
               label="Đến tuần có ngày"
               value={compareTo}
-              onChange={(event) => setCompareTo(event.target.value)}
+              onChange={setCompareTo}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: compareFrom || undefined, max: today } }}
             />
           </Stack>

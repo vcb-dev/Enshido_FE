@@ -30,7 +30,7 @@ import {
   recoveredMaterialName,
 } from '../api/intakeOrders'
 import { STAGE_LABEL } from '../orders/catalog'
-import { AutocompleteInput, TrashIcon } from '../components/ui'
+import { AutocompleteInput, DateField, TrashIcon } from '../components/ui'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { todayKey, weekLabel, weekStart } from './lossReport'
 
@@ -166,12 +166,11 @@ export function ScrapReturnDialog({
               </ToggleButtonGroup>
             </Box>
           ) : null}
-          <TextField
+          <DateField
             size="small"
-            type="date"
             label="Tuần có ngày"
             value={day}
-            onChange={(event) => event.target.value && setDay(event.target.value)}
+            onChange={(next) => next && setDay(next)}
             helperText={`Tính vào tuần ${weekLabel(week)}`}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
           />

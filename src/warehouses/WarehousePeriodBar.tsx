@@ -1,4 +1,5 @@
-import { Button, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material'
+import { Button, IconButton, Stack, Tooltip, Typography } from '@mui/material'
+import { DateField } from '../components/ui'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import {
@@ -52,26 +53,22 @@ export function WarehousePeriodBar() {
           <ChevronRightIcon />
         </IconButton>
       </Stack>
-      <TextField
+      <DateField
         size="small"
-        type="date"
         label="Từ ngày"
         value={period.from}
-        onChange={(event) => {
-          const from = event.target.value
+        onChange={(from) => {
           if (!from) return
           setWarehousePeriod({ from, to: from > period.to ? from : period.to })
         }}
         slotProps={{ inputLabel: { shrink: true } }}
         sx={{ width: 160 }}
       />
-      <TextField
+      <DateField
         size="small"
-        type="date"
         label="Đến ngày"
         value={period.to}
-        onChange={(event) => {
-          const to = event.target.value
+        onChange={(to) => {
           if (!to) return
           setWarehousePeriod({ from: to < period.from ? to : period.from, to })
         }}
