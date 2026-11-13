@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Box, Button, Chip, Link, Paper, Stack, Typography } from '@mui/material'
+import { Box, Button, Checkbox, Chip, Link, Paper, Stack, Typography } from '@mui/material'
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -140,8 +140,12 @@ export function FinishedGoodsPage({
   )
 }
 
+/** Đơn còn hàng để xuất (tick chọn ở tab Tồn rồi lập một phiếu xuất nhiều dòng). */
+const canShipRow = (row: FinishedGoodsStockRow) => row.remainingQty > 0
+
 function FinishedGoodsStockTable() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const dialog = useCrudDialog<FinishedGoodsStockRow>()
   const table = useTableParams({ pageSize: 8, filters: { status: 'ALL', flowStatus: 'ALL' } })
@@ -220,6 +224,54 @@ function FinishedGoodsStockTable() {
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
   const indexOffset = (page - 1) * params.pageSize
+  const pageRows = useMemo(() => paginate(visible, page, params.pageSize), [visible, page, params.pageSize])
+
+  // Tick nhiều đơn còn hàng → lập một phiếu xuất nhiều dòng (in một hoá đơn). Giữ theo mã lệnh,
+  // đổi trang / lọc vẫn giữ; đơn hết hàng (vd vừa xuất) tự rơi khỏi danh sách chọn.
+  const [selected, setSelected] = useState<string[]>([])
+  const shippable = useMemo(
+    () => new Set(items.filter(canShipRow).map((row) => row.orderCode)),
+    [items],
+  )
+  const picked = useMemo(() => selected.filter((code) => shippable.has(code)), [selected, shippable])
+  const toggle = (code: string) =>
+    setSelected((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]))
+  const pageShippable = pageRows.filter(canShipRow).map((row) => row.orderCode)
+  const pageAllPicked = pageShippable.length > 0 && pageShippable.every((code) => picked.includes(code))
+  const pageSomePicked = pageShippable.some((code) => picked.includes(code))
+  const togglePage = () =>
+    setSelected((prev) =>
+      pageAllPicked
+        ? prev.filter((code) => !pageShippable.includes(code))
+        : [...prev, ...pageShippable.filter((code) => !prev.includes(code))],
+    )
+  const shipPicked = () =>
+    navigate(`/warehouses/thanh-pham/outbound?create=${encodeURIComponent(picked.join(','))}`)
+
+  const selectColumn: Column<FinishedGoodsStockRow> = {
+    key: 'select',
+    width: 44,
+    align: 'center',
+    header: (
+      <Checkbox
+        size="small"
+        checked={pageAllPicked}
+        indeterminate={!pageAllPicked && pageSomePicked}
+        disabled={!pageShippable.length}
+        onChange={togglePage}
+        slotProps={{ input: { 'aria-label': 'Chọn mọi đơn còn hàng trên trang' } }}
+      />
+    ),
+    render: (row) => (
+      <Checkbox
+        size="small"
+        checked={picked.includes(row.orderCode)}
+        disabled={!canShipRow(row)}
+        onChange={() => toggle(row.orderCode)}
+        slotProps={{ input: { 'aria-label': `Chọn ${row.intakeCode ?? row.orderCode} để xuất` } }}
+      />
+    ),
+  }
 
   const columns = useMemo(
     () =>
@@ -270,9 +322,10 @@ function FinishedGoodsStockTable() {
   return (
     <Stack spacing={1.25} sx={{ flex: { md: 1 }, minHeight: { md: 0 }, overflow: { xs: 'visible', md: 'hidden' } }}>
       <DataTable
-        columns={columns}
-        rows={paginate(visible, page, params.pageSize)}
+        columns={canEdit ? [selectColumn, ...columns] : columns}
+        rows={pageRows}
         rowKey={(row) => row.orderCode}
+        isRowSelected={(row) => picked.includes(row.orderCode)}
         loading={stock.isLoading}
         errorText={stock.error instanceof Error ? stock.error.message : undefined}
         emptyText={filtered ? profile.emptyFiltered : profile.emptyText}
@@ -294,6 +347,8 @@ function FinishedGoodsStockTable() {
             index={indexOffset + index + 1}
             onView={() => dialog.openView(row)}
             onEdit={canEdit ? () => dialog.openEdit(row) : undefined}
+            picked={canEdit && canShipRow(row) ? picked.includes(row.orderCode) : undefined}
+            onTogglePick={() => toggle(row.orderCode)}
           />
         )}
         toolbar={
@@ -304,8 +359,18 @@ function FinishedGoodsStockTable() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
+            {canEdit && picked.length ? (
+              <>
+                <Button size="small" onClick={() => setSelected([])}>
+                  Bỏ chọn
+                </Button>
+                <Button variant="contained" onClick={shipPicked}>
+                  Xuất {picked.length} đơn đã chọn
+                </Button>
+              </>
+            ) : null}
             {canEdit ? (
-              <Button variant="contained" onClick={dialog.openCreate}>
+              <Button variant={picked.length ? 'outlined' : 'contained'} onClick={dialog.openCreate}>
                 {profile.createLabel}
               </Button>
             ) : null}
@@ -490,7 +555,7 @@ function FinishedGoodsOutboundTable() {
   const table = useTableParams({ pageSize: 8, filters: { issuedBy: '', receivedBy: '' } })
   const { params } = table
   const dialog = useCrudDialog<OutboundMoveRow>()
-  const [creating, setCreating] = useState<{ orderCode: string | null } | null>(null)
+  const [creating, setCreating] = useState<{ orderCodes: string[] } | null>(null)
   // Lập / sửa phiếu xuất là việc của thủ kho; kế toán chỉ xem và xác nhận ở trang chi tiết.
   const { user } = useAuth()
   const canEdit = can(user, Permission.WAREHOUSE_KEEPER)
@@ -521,7 +586,8 @@ function FinishedGoodsOutboundTable() {
   const createParam = searchParams.get('create')
   useEffect(() => {
     if (!createParam) return
-    setCreating({ orderCode: createParam })
+    // ?create=A1,A2 — nhiều đơn tick ở tab Tồn, mỗi đơn một dòng trên phiếu.
+    setCreating({ orderCodes: createParam.split(',').map((code) => code.trim()).filter(Boolean) })
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -651,7 +717,7 @@ function FinishedGoodsOutboundTable() {
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
             {canEdit ? (
-              <Button variant="contained" onClick={() => setCreating({ orderCode: null })}>
+              <Button variant="contained" onClick={() => setCreating({ orderCodes: [] })}>
                 {profile.outboundLabel}
               </Button>
             ) : null}
@@ -665,7 +731,7 @@ function FinishedGoodsOutboundTable() {
         stock={stockItems}
         customers={lookups.data?.customers ?? []}
         paymentMethods={lookups.data?.paymentMethods ?? []}
-        initialOrderCode={creating?.orderCode}
+        initialOrderCodes={creating?.orderCodes}
         saving={save.isPending || (dialog.open && dialog.kind !== 'create' && editing.isFetching)}
         onClose={() => {
           setCreating(null)
@@ -1096,16 +1162,30 @@ function StockCard({
   index,
   onView,
   onEdit,
+  picked,
+  onTogglePick,
 }: {
   row: FinishedGoodsStockRow
   index: number
   onView: () => void
   onEdit?: () => void
+  /** undefined = không chọn được (không có quyền / hết hàng). */
+  picked?: boolean
+  onTogglePick?: () => void
 }) {
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, minWidth: 0 }}>
+    <Paper variant="outlined" sx={{ p: 1.5, minWidth: 0, ...(picked ? { borderColor: 'primary.main' } : null) }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <Box sx={{ minWidth: 0 }}>
+        {picked !== undefined ? (
+          <Checkbox
+            size="small"
+            checked={picked}
+            onChange={onTogglePick}
+            sx={{ p: 0.25, mt: -0.25 }}
+            slotProps={{ input: { 'aria-label': 'Chọn đơn này để xuất' } }}
+          />
+        ) : null}
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="caption" color="text.secondary">
             #{index}
           </Typography>

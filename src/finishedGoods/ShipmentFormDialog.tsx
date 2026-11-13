@@ -127,7 +127,7 @@ export function ShipmentFormDialog({
   stock,
   customers,
   paymentMethods,
-  initialOrderCode,
+  initialOrderCodes,
   saving,
   onClose,
   onSave,
@@ -138,7 +138,8 @@ export function ShipmentFormDialog({
   stock: FinishedGoodsStockRow[]
   customers: string[]
   paymentMethods: string[]
-  initialOrderCode?: string | null
+  /** Đơn chọn sẵn (mã lệnh) — mỗi đơn một dòng, vd tick nhiều đơn ở tab Tồn rồi bấm Xuất. */
+  initialOrderCodes?: string[]
   saving: boolean
   onClose: () => void
   onSave: (payload: ShipmentPayload) => void
@@ -147,6 +148,8 @@ export function ShipmentFormDialog({
     defaultValues: { shippedAt: '', customerName: '', paymentMethod: '', note: '', lines: [EMPTY_LINE] },
   })
   const lines = useFieldArray({ control: form.control, name: 'lines' })
+  const initialCodesKey = (initialOrderCodes ?? []).map((code) => code.trim()).filter(Boolean).join(',')
+  const initialCodes = useMemo(() => (initialCodesKey ? [...new Set(initialCodesKey.split(','))] : []), [initialCodesKey])
 
   useEffect(() => {
     if (!open) return
@@ -174,21 +177,26 @@ export function ShipmentFormDialog({
             customerName: '',
             paymentMethod: '',
             note: '',
-            lines: [lineFromStock(initialOrderCode, stock)],
+            lines: initialCodes.length
+              ? initialCodes.map((code) => lineFromStock(code, stock))
+              : [{ ...EMPTY_LINE }],
           },
     )
-  }, [open, shipment, initialOrderCode, form])
+  }, [open, shipment, initialCodes, form])
 
+  // Tồn về sau khi mở hộp: điền SL / ghi chú / mã khách cho các dòng chọn sẵn chưa được điền.
   useEffect(() => {
-    if (!open || shipment || !initialOrderCode) return
-    const line = form.getValues('lines.0')
-    if (line.orderCode !== initialOrderCode || line.note) return
-    const filled = lineFromStock(initialOrderCode, stock)
-    if (!filled.note && filled.qty === '1') return
-    form.setValue('lines.0.qty', filled.qty)
-    form.setValue('lines.0.note', filled.note)
-    form.setValue('lines.0.customerCode', filled.customerCode)
-  }, [open, shipment, initialOrderCode, stock, form])
+    if (!open || shipment || !initialCodes.length) return
+    initialCodes.forEach((code, index) => {
+      const line = form.getValues(`lines.${index}`)
+      if (!line || line.orderCode !== code || line.note) return
+      const filled = lineFromStock(code, stock)
+      if (!filled.note && filled.qty === '1') return
+      form.setValue(`lines.${index}.qty`, filled.qty)
+      form.setValue(`lines.${index}.note`, filled.note)
+      form.setValue(`lines.${index}.customerCode`, filled.customerCode)
+    })
+  }, [open, shipment, initialCodes, stock, form])
 
   // Khi sửa, SL của chính phiếu này được cộng lại vào tồn khả dụng.
   const available = useMemo(() => {
@@ -246,15 +254,12 @@ export function ShipmentFormDialog({
       }))
     // Đơn đang chọn sẵn mà hết tồn vẫn phải hiện để không mất nhãn trên ô.
     const seen = new Set(items.map((item) => item.id))
-    if (initialOrderCode && !seen.has(initialOrderCode)) {
-      items.unshift({
-        id: initialOrderCode,
-        name: pickLabel(available.get(initialOrderCode), initialOrderCode),
-        secondary: 'hết tồn',
-      })
+    for (const code of [...initialCodes].reverse()) {
+      if (seen.has(code)) continue
+      items.unshift({ id: code, name: pickLabel(available.get(code), code), secondary: 'hết tồn' })
     }
     return items
-  }, [available, initialOrderCode])
+  }, [available, initialCodes])
 
   function applyOrder(index: number, code: string) {
     const info = available.get(code)
