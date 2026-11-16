@@ -153,7 +153,10 @@ export function AssignReceiptDialog({
           leftWeight: Number(order.cut.leftWeight),
         }
       : null
-  const autoCutBtp = stage === 'FILING' && cutBtp != null
+  const firstStage = order.stages.length === 0
+  /** Đã "Chuyển khâu" bỏ Nguội: khâu đầu tiên của phiếu mẹ nhận thẳng phôi sau đúc như Nguội (khớp BE). */
+  const blankFirst = stage !== '' && stage !== 'FILING' && firstStage && (order.skippedStages ?? []).includes('FILING')
+  const autoCutBtp = (stage === 'FILING' || blankFirst) && cutBtp != null
   const missingCutBtpLink = stage === 'FILING' && Boolean(order.cutAt) && cutBtp == null
   const autoCutQty = Number(handedQty)
   const autoCutWeight =
@@ -169,7 +172,6 @@ export function AssignReceiptDialog({
       ? [order.btp.sku, order.btp.name].filter(Boolean).join(' — ')
       : 'BTP đã cắt gắn với đơn'
     : ''
-  const firstStage = order.stages.length === 0
   /**
    * Vào đá: hàng đạt khâu trước đã nhập kho BTP (BTP đã nguội của đơn) thì hệ thống tự xuất khi
    * thợ nhận hàng — thủ kho chỉ chọn đá, không nhập TL bạc hay chọn lại BTP (khớp BE).
@@ -214,7 +216,9 @@ export function AssignReceiptDialog({
       form={form}
       onSubmit={(values) => {
         if (!values.stage) return
-        const materialLines = autoCutBtp || carryOver ? [] : values.materials
+        // Bỏ Nguội rồi giao Vào đá: phôi tự gắn, thủ kho vẫn chọn đá cấp cho thợ.
+        const materialLines =
+          (autoCutBtp && values.stage !== 'STONE_SETTING') || carryOver ? [] : values.materials
         onSave({
           stage: values.stage,
           craftsmanUserId: values.craftsmanUserId,
@@ -306,7 +310,21 @@ export function AssignReceiptDialog({
             : 'Đã điền TL chia đều — cân lại rồi sửa nếu khác.'}{' '}
           Kho xuất khi thợ bấm “Xác nhận”.
         </Alert>
-      ) : (
+      ) : null}
+      {autoCutBtp && cutBtp && stage === 'STONE_SETTING' ? (
+        <>
+          <StoneEstimateNote order={order} qty={availableQty} />
+          <HandoverMaterialsField
+            form={form}
+            stage={stage}
+            blank={cutBtp}
+            stoneOnly
+            readOnly={saving}
+            onUploadingChange={setUploading}
+          />
+        </>
+      ) : null}
+      {autoCutBtp && cutBtp ? null : (
         <>
           {missingCutBtpLink ? (
             <Alert severity="warning" sx={{ mt: 1 }}>

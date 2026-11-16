@@ -1,5 +1,6 @@
 import { gramToCt } from '../api/inventory'
-import { formatDateTime } from './catalog'
+import type { StageCode } from '../api/productionOrders'
+import { formatDateTime, STAGE_LABEL } from './catalog'
 
 /** Nhãn cho mã thao tác BE ghi (`ACTIVITY` trong activity-log.ts). Mã lạ thì hiện nguyên mã. */
 export const ACTION_LABEL: Record<string, string> = {
@@ -44,6 +45,7 @@ export const ACTION_LABEL: Record<string, string> = {
   STONE_RETURN_EARLY: 'Thợ trả lại túi đá cho thủ kho giữa khâu',
   STONE_SKIP: 'Đánh dấu đơn không có đá',
   STONE_UNSKIP: 'Bỏ đánh dấu không có đá',
+  STAGE_SKIP: 'Chuyển khâu (bỏ qua khâu)',
   MODEL3D_DONE: 'Gắn file 3D',
   WAX_DONE: 'Báo in / bơm sáp xong',
   WAX_EDIT: 'Sửa TL / ảnh sáp',
@@ -107,6 +109,9 @@ const FIELD_LABEL: Record<string, string> = {
   productWeightGram: 'TL sáp (g)',
   waxImageCount: 'Số ảnh sáp',
   castingTreeWeightGram: 'TL cây thông (g)',
+  pendingStage: 'Khâu đang chờ',
+  stage: 'Chuyển sang',
+  skipped: 'Bỏ qua',
 }
 
 /**
@@ -150,8 +155,17 @@ function formatObject(value: unknown) {
 
 /** TL đá trong nhật ký lưu theo g — hiện theo ct cho khớp ô nhập. */
 const CARAT_FIELDS = new Set(['handedStoneWeight', 'stoneWeight'])
+/** Trường lưu mã khâu (FILING…) — hiện tên khâu. */
+const STAGE_FIELDS = new Set(['pendingStage', 'stage', 'skipped'])
+
+function stageName(value: unknown) {
+  return typeof value === 'string' && value in STAGE_LABEL ? STAGE_LABEL[value as StageCode] : formatValue(value)
+}
 
 function fieldValue(key: string, value: unknown) {
+  if (STAGE_FIELDS.has(key)) {
+    return Array.isArray(value) ? (value.length ? value.map(stageName).join(', ') : '—') : stageName(value)
+  }
   if (CARAT_FIELDS.has(key) && value != null && value !== '' && Number.isFinite(Number(value))) {
     return gramToCt(String(value))
   }

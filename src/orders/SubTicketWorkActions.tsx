@@ -14,6 +14,8 @@ import {
   cancelSubTicketPendingApi,
   createReworkApi,
   deleteSubTicketApi,
+  skipSubTicketStagesApi,
+  type SkipStagesPayload,
   updateSubTicketApi,
   type SubTicketPayload,
   unclaimSubTicketApi,
@@ -23,8 +25,9 @@ import {
   type SubTicket,
 } from '../api/productionOrders'
 import { ReworkChildren } from './ReworkChildren'
-import { defectScopeText, productionClosed, STAGE_LABEL, ticketReworks } from './catalog'
+import { defectScopeText, productionClosed, skipsStone, STAGE_LABEL, ticketReworks } from './catalog'
 import { openableStages, SubTicketFormDialog } from './SubTicketDialogs'
+import { skipPlan, SkipStagesDialog } from './SkipStagesDialog'
 import { useOrderMutation } from './useOrderMutation'
 
 /**
@@ -59,6 +62,7 @@ export function SubTicketWorkActions({
   const canKeeper = can(user, Permission.WAREHOUSE_KEEPER) || isAdmin
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [skipOpen, setSkipOpen] = useState(false)
 
   const entries = order.stages.filter((entry) => entry.subTicketId === ticket.id)
   const last = entries.at(-1)
@@ -103,6 +107,20 @@ export function SubTicketWorkActions({
     'Đã tạo phiếu bù — đi lại từ bước sáp',
   )
   const pending = busy || cancel.isPending || unclaim.isPending
+  // Thủ kho / admin chuyển khâu khi phiếu chưa giao hàng cho thợ (rảnh / chờ nhận / đã chỉ định).
+  const skip = useOrderMutation(
+    order.code,
+    (payload: SkipStagesPayload) => skipSubTicketStagesApi(order.code, ticket.no, payload),
+    'Đã chuyển khâu',
+  )
+  const plan = skipPlan({
+    state: ticket.state,
+    pendingStage: ticket.pendingStage,
+    skippedStages: ticket.skippedStages ?? [],
+    lastStage: last?.stage ?? order.stages.filter((entry) => !entry.subTicketId).at(-1)?.stage ?? null,
+    skipStone: skipsStone(order),
+  })
+  const canSkip = canKeeper && active && plan != null
 
 
   return (
@@ -209,6 +227,11 @@ export function SubTicketWorkActions({
             {undoingEntryId === last.id ? 'Đang gỡ…' : 'Gỡ nhận lại'}
           </Button>
         ) : null}
+        {canSkip ? (
+          <Button size="large" variant="outlined" color="inherit" disabled={pending} onClick={() => setSkipOpen(true)}>
+            Chuyển khâu
+          </Button>
+        ) : null}
         {canManage && active && ticket.entryCount === 0 ? (
           <Button size="large" variant="outlined" color="inherit" onClick={() => setEditOpen(true)}>
             Sửa phiếu con
@@ -229,6 +252,16 @@ export function SubTicketWorkActions({
         onClose={() => setEditOpen(false)}
         onExited={() => undefined}
         onSave={(payload) => save.mutate(payload, { onSuccess: () => setEditOpen(false) })}
+      />
+      <SkipStagesDialog
+        open={skipOpen}
+        ticketCode={ticket.code}
+        plan={plan}
+        pendingAssigned={ticket.state !== 'IDLE'}
+        skipStone={skipsStone(order)}
+        saving={skip.isPending}
+        onClose={() => setSkipOpen(false)}
+        onSave={(payload) => skip.mutate(payload, { onSuccess: () => setSkipOpen(false) })}
       />
       <ConfirmDeleteDialog
         open={deleteOpen}
