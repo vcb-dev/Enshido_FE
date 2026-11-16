@@ -91,6 +91,10 @@ export type StockProfile = {
   showRealStock: boolean
   /// Cột TL (g) trên Tồn / Nhập / Xuất — cân thực, không phải trọng lượng định mức.
   showGramQty?: boolean
+  /// Kho chỉ tính theo TL (g) — bỏ hẳn cột SL trên Tồn (kho BTP từ 2026-11-16).
+  weightOnly?: boolean
+  /// Kho có mã cố định, không tạo mã mới từ Tồn (kho BTP chỉ có BTP S925 / S999).
+  fixedMaterials?: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -160,6 +164,8 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showWeight: false,
     showRealStock: false,
     showGramQty: true,
+    weightOnly: true,
+    fixedMaterials: true,
     typeLabel: 'Chất loại',
     noun: 'BTP',
     nameLabel: 'Tên BTP',
@@ -169,7 +175,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     inboundLabel: 'Nhập BTP',
     outboundLabel: 'Xuất BTP',
     searchPlaceholder: 'Tìm tên BTP hoặc mã…',
-    emptyText: 'Chưa có hàng tồn. Bấm Nhập BTP để tạo tên hàng.',
+    emptyText: 'Chưa có hàng tồn. Nhập BTP S925 / S999 ở tab Nhập.',
     emptyFiltered: 'Không có BTP khớp bộ lọc.',
   },
   // Vật tư tiêu hao không có hình dạng / màu / vị trí kệ.

@@ -601,9 +601,12 @@ function StockOnHandTable({ warehouseCode }: { warehouseCode: string }) {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button variant="contained" onClick={dialog.openCreate}>
-              {profile.createLabel}
-            </Button>
+            {/* Kho BTP chỉ có BTP S925 / S999 — nhập thêm ở tab Nhập, không tạo mã mới. */}
+            {profile.fixedMaterials ? null : (
+              <Button variant="contained" onClick={dialog.openCreate}>
+                {profile.createLabel}
+              </Button>
+            )}
           </>
         }
       />
@@ -1111,6 +1114,11 @@ function stockColumns(
     },
   )
 
+  // Kho chỉ tính theo TL (kho BTP): bỏ cột SL — số nằm ở cột TL (g) bên cạnh.
+  if (profile.weightOnly) {
+    const qtyKeys = new Set(['openingQty', 'inQty', 'outQty', 'qty'])
+    return columns.filter((column) => !qtyKeys.has(String(column.key)))
+  }
   return columns
 }
 

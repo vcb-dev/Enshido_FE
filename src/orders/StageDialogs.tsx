@@ -170,7 +170,7 @@ export function AssignReceiptDialog({
   const cutBtpLabel = cutBtp
     ? order.btp?.id === cutBtp.materialId
       ? [order.btp.sku, order.btp.name].filter(Boolean).join(' — ')
-      : 'BTP đã cắt gắn với đơn'
+      : 'phôi của đơn (BTP S925)'
     : ''
   /**
    * Vào đá: hàng đạt khâu trước đã nhập kho BTP (BTP đã nguội của đơn) thì hệ thống tự xuất khi
