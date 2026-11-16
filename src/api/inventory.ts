@@ -698,6 +698,10 @@ export type OutboundRow = {
   materialId: string | null
   /** Mã đơn sản xuất dùng NVL này. */
   productionOrderCode: string | null
+  /** Mã đơn hàng DH… của lệnh (kho BTP nhóm theo mã này). */
+  intakeCode?: string | null
+  /** Mã phiếu A094-2… (hoặc mã lệnh khi đơn một phiếu). */
+  ticketCode?: string | null
   /** Phiếu đúc cấp bạc / hội — phiếu xuất tự tạo lúc cấp vật tư đúc. */
   castingSlipCode?: string | null
   /** Phiếu do lên Đơn BTP tự tạo — chỉ sửa / xoá qua đơn. */
