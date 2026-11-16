@@ -45,6 +45,8 @@ import {
   changeProductionStatusApi,
   type StatusLog,
   cancelOrderPendingApi,
+  skipOrderStagesApi,
+  type SkipStagesPayload,
   deleteProductionOrderApi,
   getProductionOrderApi,
   getProductionOrderLookupsApi,
@@ -94,6 +96,7 @@ import { afterProductionOrderSaved, removeProductionOrderFromLists } from '../or
 import { RequestTypeChip, SourceChip, StatusChip, SubTicketStateChip } from '../orders/OrderChips'
 import { ProductionOrderFormDialog } from '../orders/ProductionOrderFormDialog'
 import { AssignReceiptDialog, CastingDialog } from '../orders/StageDialogs'
+import { skipPlan, SkipStagesDialog } from '../orders/SkipStagesDialog'
 import { SubTicketToolbar } from '../orders/SubTicketToolbar'
 import { SubTicketWorkActions } from '../orders/SubTicketWorkActions'
 import { ReworkChildren } from '../orders/ReworkChildren'
@@ -129,6 +132,7 @@ export function ProductionOrderDetailPage() {
   const [statusDialog, setStatusDialog] = useState(false)
   const [statusPreset, setStatusPreset] = useState<ProductionStatus | null>(null)
   const [parentStageDialog, setParentStageDialog] = useState(false)
+  const [parentSkipDialog, setParentSkipDialog] = useState(false)
   const [parentReceiptDialog, setParentReceiptDialog] = useState(false)
   const [parentReceiptStageOverride, setParentReceiptStageOverride] = useState<StageCode | null>(null)
   const [moreMenu, setMoreMenu] = useState<HTMLElement | null>(null)
@@ -233,6 +237,11 @@ export function ProductionOrderDetailPage() {
     () => cancelOrderPendingApi(code),
     'Đã hủy mở khâu trên phiếu mẹ',
   )
+  const skipParentStages = useOrderMutation(
+    code,
+    (payload: SkipStagesPayload) => skipOrderStagesApi(code, payload),
+    'Đã chuyển khâu trên phiếu mẹ',
+  )
   const remove = useMutation({
     mutationFn: () => deleteProductionOrderApi(code),
     onSuccess: () => {
@@ -276,11 +285,26 @@ export function ProductionOrderDetailPage() {
       ? STAGES
       : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(parentLastEntry.stage))
   // Tự lấy khâu kế tiếp; đơn làm lại bắt đầu từ khâu mặc định, bỏ Vào đá nếu không có đá.
-  const parentNextStage = parentOpenableStages.find((stage) => !(skipsStone(order) && stage === 'STONE_SETTING'))
+  const parentNextStage = parentOpenableStages.find(
+    (stage) =>
+      !(skipsStone(order) && stage === 'STONE_SETTING') &&
+      (parentReworking || !(order.skippedStages ?? []).includes(stage)),
+  )
   const parentDialogStages: StageCode[] = parentNextStage ? [parentNextStage] : []
   // Thủ kho chỉ định thợ (Nguội, Vào đá); Khắc / Đánh bóng / Xi thợ tự nhận nên chỉ mở lại khâu.
   const parentReceiptStages = parentDialogStages.filter((stage) => !isSelfTakeStage(stage))
   const parentReceiptPending = Boolean(parentWork?.receiptPrepared)
+  // Thủ kho / admin chuyển khâu phiếu mẹ khi chưa giao hàng cho thợ (khớp `skipStages` ở BE).
+  const parentSkipPlan =
+    directOnParent && parentWork && !parentReworking && !order.finishedGoods
+      ? skipPlan({
+          state: parentWork.state,
+          pendingStage: parentWork.pendingStage,
+          skippedStages: order.skippedStages ?? [],
+          lastStage: parentLastEntry?.stage ?? null,
+          skipStone: skipsStone(order),
+        })
+      : null
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.
   const isBtp = order.source === 'BTP'
   // Đơn NVL vào Nguội khi đã cắt cây thông (cân phôi); đơn cũ nhập tay đi theo ngày Đúc.
@@ -591,6 +615,17 @@ export function ProductionOrderDetailPage() {
                             </Button>
                           </span>
                         </Tooltip>
+                      ) : null}
+                      {parentSkipPlan && (isKeeper || isAdmin) && castingReady && !locked ? (
+                        <Button
+                          size="large"
+                          variant="outlined"
+                          color="inherit"
+                          disabled={skipParentStages.isPending}
+                          onClick={() => setParentSkipDialog(true)}
+                        >
+                          Chuyển khâu
+                        </Button>
                       ) : null}
                     </Stack>
                   </Stack>
@@ -1052,6 +1087,17 @@ export function ProductionOrderDetailPage() {
                 onSuccess: () => setParentStageDialog(false),
               })
         }
+      />
+
+      <SkipStagesDialog
+        open={parentSkipDialog}
+        ticketCode={order.code}
+        plan={parentSkipPlan}
+        pendingAssigned={parentWork != null && parentWork.state !== 'IDLE'}
+        skipStone={skipsStone(order)}
+        saving={skipParentStages.isPending}
+        onClose={() => setParentSkipDialog(false)}
+        onSave={(payload) => skipParentStages.mutate(payload, { onSuccess: () => setParentSkipDialog(false) })}
       />
 
       <AssignReceiptDialog

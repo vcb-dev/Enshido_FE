@@ -360,8 +360,15 @@ function computeOpenableStages(order: ProductionOrderDetail): OpenableStages {
     const last = lastStageOf(order, ticket)
     lastBy.set(ticket.no, last)
     const next = !last || reworking ? STAGES : STAGES.filter((stage) => STAGES.indexOf(stage) > STAGES.indexOf(last))
-    // Thủ kho đã đánh dấu đơn không có đá: không gợi ý khâu Vào đá.
-    byTicket.set(ticket.no, skipsStone(order) ? next.filter((stage) => stage !== 'STONE_SETTING') : next)
+    // Đơn không có đá: không gợi ý khâu Vào đá. Khâu đã "Chuyển khâu" bỏ qua cũng không gợi ý lại
+    // (trừ khi đơn đang làm lại — chọn khâu nào cũng được).
+    const skippedByTicket = reworking ? [] : (ticket.skippedStages ?? [])
+    byTicket.set(
+      ticket.no,
+      next.filter(
+        (stage) => !(skipsStone(order) && stage === 'STONE_SETTING') && !skippedByTicket.includes(stage),
+      ),
+    )
   }
   const stages = STAGES.filter((stage) => idle.some((ticket) => byTicket.get(ticket.no)?.includes(stage)))
   /** Các khâu phiếu này sẽ bị bỏ qua nếu mở `stage` — rỗng nghĩa là đúng khâu kế tiếp. */
@@ -442,8 +449,14 @@ export function AssignWorkerDialog({
    * Nguội: phôi đơn còn trên kho BTP. Gợi ý TL chia đều theo phôi còn lại; phiếu lấy nốt phôi cuối
    * nhận hết TL còn lại, không sửa được (khớp BE).
    */
+  // Đã "Chuyển khâu" bỏ Nguội: khâu đầu tiên của phiếu nhận thẳng phôi sau đúc như Nguội (khớp BE).
+  const blankFirst =
+    ticket != null && ticket.entryCount === 0 && (ticket.skippedStages ?? []).includes('FILING')
   const blank =
-    stage === 'FILING' && ticket && order.cut?.leftQty != null && order.cut.leftWeight != null
+    (stage === 'FILING' || (stage !== '' && blankFirst)) &&
+    ticket &&
+    order.cut?.leftQty != null &&
+    order.cut.leftWeight != null
       ? (() => {
           const leftQty = Number(order.cut.leftQty)
           const leftWeight = Number(order.cut.leftWeight)

@@ -24,6 +24,14 @@ import {
 } from './ticketRows'
 
 const CELL_BORDER = '1px solid #cbbda9'
+/** Nền cột khâu đã "Chuyển khâu" bỏ qua — xám nhạt, không có số liệu. */
+const SKIPPED_BG = '#f1efec'
+
+/** Khâu đã "Chuyển khâu" bỏ qua của bảng: phiếu con, hoặc phiếu mẹ khi đơn chưa chia. */
+function skippedStagesOf(order: ProductionOrderDetail, subTicket?: SubTicket) {
+  if (subTicket) return subTicket.skippedStages ?? []
+  return order.subTickets.length === 0 ? (order.skippedStages ?? []) : []
+}
 
 /** Nền hai cột kết cục: lỗi đỏ nhạt, hoàn thiện xanh nhạt — nhìn phát biết phiếu kết ở nhánh nào. */
 const TICKET_OUTCOME_BG: Record<TicketOutcome, string> = {
@@ -47,6 +55,8 @@ export function TicketMatrix({
   outcomeActions?: Partial<Record<TicketOutcome, ReactNode>>
 }) {
   const columns = stageColumns(order.stages, subTicket?.id)
+  const skipped = skippedStagesOf(order, subTicket)
+  const isSkipped = (stage: (typeof STAGES)[number]) => !columns[stage].entry && skipped.includes(stage)
   const actions = outcomeActions
     ? TICKET_OUTCOMES.map((outcome) => outcomeActions[outcome]).filter(Boolean)
     : []
@@ -84,6 +94,11 @@ export function TicketMatrix({
                 <TableCell key={stage}>
                   {STAGE_LABEL[stage]}
                   {column.entry && column.entry.attempt > 1 ? ` (lần ${column.entry.attempt})` : ''}
+                  {isSkipped(stage) ? (
+                    <Typography component="span" variant="caption" sx={{ display: 'block', fontWeight: 400 }}>
+                      Bỏ qua (chuyển khâu)
+                    </Typography>
+                  ) : null}
                   {column.tickets ? (
                     <Typography component="span" variant="caption" sx={{ display: 'block', fontWeight: 400 }}>
                       QC nhận {column.tickets.done}/{column.tickets.total} phiếu
@@ -116,6 +131,7 @@ export function TicketMatrix({
                     key={stage}
                     sx={{
                       textAlign: row.numeric ? 'right' : 'left',
+                      ...(isSkipped(stage) ? { bgcolor: SKIPPED_BG } : null),
                       ...(level
                         ? {
                             bgcolor: SILVER_LOSS_TONE[level].bg,
@@ -178,9 +194,15 @@ function StageCards({
   outcomeActions?: Partial<Record<TicketOutcome, ReactNode>>
 }) {
   const done = STAGES.filter((stage) => columns[stage].entry)
+  const skipped = skippedStagesOf(order, subTicket).filter((stage) => !columns[stage].entry)
 
   return (
     <Box sx={{ display: 'grid', gap: 1 }}>
+      {skipped.length > 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          Bỏ qua (chuyển khâu): {skipped.map((stage) => STAGE_LABEL[stage]).join(', ')}
+        </Typography>
+      ) : null}
       {done.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           Chưa giao khâu nào.

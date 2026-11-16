@@ -387,6 +387,8 @@ export type SubTicket = {
   /** Khâu đang chờ nhận hoặc đang làm. */
   activeStage: StageCode | null
   pendingStage: StageCode | null
+  /** Khâu thủ kho / admin đã "Chuyển khâu" bỏ qua trên phiếu này. */
+  skippedStages: StageCode[]
   pendingAt: string | null
   pendingByName: string | null
   /** Nguội: TL phôi thủ kho cân lúc chỉ định, chờ thợ nhận hàng. */
@@ -455,6 +457,8 @@ export type ProductionOrderDetail = Omit<
   stoneSkipped: boolean
   stoneSkippedAt: string | null
   stoneSkippedByName: string | null
+  /** Khâu phiếu mẹ đã "Chuyển khâu" bỏ qua (đơn chưa chia phiếu con). */
+  skippedStages: StageCode[]
   stoneWeight: string | null
   weight: string | null
   hasMold?: boolean | null
@@ -1330,6 +1334,23 @@ export function assignOrderApi(
   payload: HandoverPayload & { stage: StageCode },
 ) {
   return orderFetch(orderPath(code, '/work/assign'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Thủ kho / admin "Chuyển khâu": bỏ qua khâu đang chờ, phiếu sang chờ `stage`. */
+export type SkipStagesPayload = { stage: StageCode; note: string }
+
+export function skipOrderStagesApi(code: string, payload: SkipStagesPayload) {
+  return orderFetch(orderPath(code, '/work/skip-stages'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function skipSubTicketStagesApi(code: string, no: number, payload: SkipStagesPayload) {
+  return orderFetch(ticketPath(code, no, '/skip-stages'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
