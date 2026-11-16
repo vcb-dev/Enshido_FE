@@ -38,8 +38,13 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
     returnedCount: 0,
   }
 
-  it('theo đá thực tế: TL đá cấp − gói thừa, kể cả đơn có TL đá 3D', () => {
-    expect(stoneSetWeight({ ...base, stone3dGram: 3 })).toEqual({ gram: 1.5, source: 'pack' })
+  it('đơn có TL đá 3D: luôn lấy TL đá 3D chia theo số hàng giao, kể cả khi đã cấp đá', () => {
+    expect(stoneSetWeight({ ...base, stone3dGram: 4 })).toEqual({ gram: 2, source: '3d' })
+    expect(stoneSetWeight({ ...base, stone3dGram: 4, returnedPackGram: 5 })).toEqual({ gram: 2, source: '3d' })
+  })
+
+  it('đơn không khai TL đá 3D (trống hoặc 0): TL đá cấp − gói thừa', () => {
+    expect(stoneSetWeight({ ...base, stone3dGram: 0 })).toEqual({ gram: 1.5, source: 'pack' })
     expect(stoneSetWeight(base)).toEqual({ gram: 1.5, source: 'pack' })
     expect(stoneSetWeight({ ...base, returnedPackGram: 5 })).toEqual({ gram: 0, source: 'pack' })
   })
