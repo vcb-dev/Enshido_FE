@@ -483,6 +483,9 @@ export type ProductionOrderDetail = Omit<
     weight: string
     /** Phần cây còn lại về NVL — cùng form cắt cây thông. */
     restWeightGram?: string | null
+    /** Phần còn lại tách theo mã nhập kho: bạc nguyên liệu S925 / bạc thu hồi. */
+    restS925Gram?: string | null
+    restRecoveredGram?: string | null
     restImages?: Array<Pick<OrderImage, 'url' | 'publicId' | 'width' | 'height'>>
     /** Mã phôi trên kho BTP và phần phôi của đơn chưa xuất cho thợ. */
     btpMaterialId: string | null

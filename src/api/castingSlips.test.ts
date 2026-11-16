@@ -6,7 +6,8 @@ const item: CutCastingSlipItem = {
   slipId: 'slip-1',
   blanks: [{ intakeOrderId: 'order-1', qty: 800, weightGram: 800,
     images: [{ url: 'https://example.com/blank.jpg', publicId: 'blank' }] }],
-  restWeightGram: 200,
+  restS925Gram: 150,
+  restRecoveredGram: 50,
   restImages: [{ url: 'https://example.com/rest.jpg', publicId: 'rest' }],
 }
 
@@ -24,7 +25,7 @@ describe('payload cắt cây thông', () => {
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toContain('/casting-slips/slip-1/cut')
     expect(JSON.parse(options.body)).toEqual({
-      blanks: item.blanks, restWeightGram: 200, restImages: item.restImages,
+      blanks: item.blanks, restS925Gram: 150, restRecoveredGram: 50, restImages: item.restImages,
     })
   })
 

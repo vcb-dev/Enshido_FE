@@ -6,17 +6,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  FormControlLabel,
-  FormHelperText,
-  FormLabel,
-  Radio,
-  RadioGroup,
   Stack,
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { useController, useWatch, type Control } from 'react-hook-form'
+import { useWatch } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import {
   listRestMaterialOptionsApi,
@@ -37,13 +31,15 @@ type LineValues = {
   weight: string
   images: OrderImage[]
 }
-/** Phần cây còn lại nhập kho NVL vào: bạc nguyên liệu S925 hay bạc thu hồi. */
-type RestTarget = '' | 'S925' | 'RECOVERED'
 type RestChoice = NonNullable<RestMaterialOptions['choices']>[number]
+/**
+ * Phần cây còn lại chia hai ô nhập kho NVL: bạc nguyên liệu S925 (A00001) và bạc thu hồi (A00189).
+ * Tổng hai ô là phần còn lại của cây.
+ */
 type SlipValues = {
   lines: LineValues[]
-  rest: string
-  restTarget: RestTarget
+  restS925: string
+  restRecovered: string
   restImages: OrderImage[]
 }
 type Values = { slips: SlipValues[] }
@@ -57,6 +53,21 @@ function gram(raw: string, allowZero: boolean) {
 
 function round4(value: number) {
   return Math.round(value * 10000) / 10000
+}
+
+/** Tổng phần cây còn lại của một phiếu = S925 + bạc thu hồi (ô trống / sai tính 0). */
+function restTotal(value: Pick<SlipValues, 'restS925' | 'restRecovered'> | undefined) {
+  if (!value) return 0
+  return round4((gram(value.restS925, true) ?? 0) + (gram(value.restRecovered, true) ?? 0))
+}
+
+/** Tổng phôi + hai phần còn lại không được vượt cây sau đúc (khớp BE). */
+function restOverTree(value: SlipValues, tree: number): true | string {
+  const blankTotal = value.lines.reduce((sum, line) => sum + (gram(line.weight, false) ?? 0), 0)
+  if (tree > 0 && round4(restTotal(value) + blankTotal) > tree) {
+    return `Tổng phôi và phần còn lại vượt cây sau đúc (${formatQty(String(tree))} g)`
+  }
+  return true
 }
 
 function defaultValues(slip: CastingSlip): SlipValues {
@@ -75,65 +86,18 @@ function defaultValues(slip: CastingSlip): SlipValues {
           : '',
       images: [],
     })),
-    rest: '0',
-    restTarget: '',
+    restS925: '0',
+    restRecovered: '0',
     restImages: [],
   }
 }
 
-/** Hai ô tích chọn mã kho NVL nhận phần cây còn lại — bắt buộc chọn khi còn phần cây. */
-function RestTargetField({
-  control,
-  slipIndex,
-  choices,
-  loading,
-  disabled,
-}: {
-  control: Control<Values>
-  slipIndex: number
-  choices: RestChoice[]
-  loading: boolean
-  disabled: boolean
-}) {
-  const { field, fieldState } = useController({
-    name: `slips.${slipIndex}.restTarget`,
-    control,
-    rules: {
-      validate: (value) =>
-        value ? true : 'Chọn nhập phần cây còn lại vào bạc nguyên liệu S925 hay bạc thu hồi',
-    },
-  })
-  return (
-    <FormControl error={Boolean(fieldState.error)} disabled={disabled}>
-      <FormLabel sx={{ fontSize: '0.8rem' }}>Nhập kho NVL phần còn lại vào</FormLabel>
-      <RadioGroup
-        value={field.value}
-        onChange={(event) => field.onChange(event.target.value as RestTarget)}
-        onBlur={field.onBlur}
-      >
-        {choices.map((choice) => (
-          <FormControlLabel
-            key={choice.key}
-            value={choice.key}
-            disabled={disabled || !choice.material}
-            control={<Radio size="small" />}
-            label={
-              <span>
-                {choice.label}
-                <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  {choice.material
-                    ? [choice.material.sku, choice.material.name].filter(Boolean).join(' · ')
-                    : `Kho NVL chưa có mã ${choice.sku}`}
-                </Typography>
-              </span>
-            }
-          />
-        ))}
-      </RadioGroup>
-      {loading ? <FormHelperText>Đang tải mã NVL…</FormHelperText> : null}
-      {fieldState.error ? <FormHelperText>{fieldState.error.message}</FormHelperText> : null}
-    </FormControl>
-  )
+/** Mã kho NVL của một ô phần còn lại, vd "A00189 · Bạc thu hồi"; chưa có mã thì báo. */
+function choiceHint(choice: RestChoice | undefined, loading: boolean) {
+  if (!choice) return loading ? 'Đang tải mã NVL…' : undefined
+  return choice.material
+    ? `Nhập kho ${[choice.material.sku, choice.material.name].filter(Boolean).join(' · ')}`
+    : `Kho NVL chưa có mã ${choice.sku} — tạo mã trước khi nhập phần này`
 }
 
 /**
@@ -178,8 +142,8 @@ export function CastingSlipCutDialog({
       saving={saving}
       onClose={onClose}
       onSave={([item]) => {
-        const { blanks, restWeightGram, restMaterialId, restImages } = item
-        onSave({ blanks, restWeightGram, restMaterialId, restImages })
+        const { blanks, restS925Gram, restRecoveredGram, restImages } = item
+        onSave({ blanks, restS925Gram, restRecoveredGram, restImages })
       }}
     />
   )
@@ -212,8 +176,10 @@ export function CastingSlipsCutDialog({
     enabled: slips.length > 0,
   })
   const restChoices = restMaterials.data?.choices ?? []
-  const restMaterialOf = (target: RestTarget) =>
-    restChoices.find((choice) => choice.key === target)?.material?.id ?? null
+  const s925Choice = restChoices.find((choice) => choice.key === 'S925')
+  const recoveredChoice = restChoices.find((choice) => choice.key === 'RECOVERED')
+  // Đã tải xong mà kho chưa có mã bạc thu hồi thì khoá ô đó (BE cũng chặn).
+  const recoveredMissing = Boolean(recoveredChoice && !recoveredChoice.material)
 
   useEffect(() => {
     form.reset({ slips: slips.map(defaultValues) })
@@ -222,20 +188,23 @@ export function CastingSlipsCutDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slipKey, form])
 
-  // Nhập đủ TL phôi là tự điền phần cây còn lại; thủ kho đã tự gõ ô đó thì không ghi đè.
+  // Nhập đủ TL phôi là tự điền ô S925 = phần cây còn lại − bạc thu hồi; thủ kho đã tự gõ ô S925
+  // thì không ghi đè.
   const { dirtyFields } = form.formState
   useEffect(() => {
     slips.forEach((slip, index) => {
       const value = watched?.[index]
       if (!value) return
-      const name = `slips.${index}.rest` as const
-      if (dirtyFields.slips?.[index]?.rest) return
+      const name = `slips.${index}.restS925` as const
+      if (dirtyFields.slips?.[index]?.restS925) return
       const rest = restFromBlanks(
         Number(slip.castTreeWeightGram ?? 0),
         value.lines.map((line) => line.weight),
       )
-      if (rest != null && String(rest) !== value.rest) {
-        form.setValue(name, String(rest), { shouldValidate: true })
+      const recovered = gram(value.restRecovered, true) ?? 0
+      const s925 = rest != null ? round4(rest - recovered) : null
+      if (s925 != null && s925 >= 0 && String(s925) !== value.restS925) {
+        form.setValue(name, String(s925), { shouldValidate: true })
       }
     })
   }, [watched, slips, form, dirtyFields])
@@ -258,8 +227,9 @@ export function CastingSlipsCutDialog({
         onSubmit={(values) => {
           const items: CutCastingSlipItem[] = []
           for (const [index, value] of values.slips.entries()) {
-            const restGram = gram(value.rest, true)
-            if (restGram == null) return
+            const s925Gram = gram(value.restS925, true)
+            const recoveredGram = gram(value.restRecovered, true)
+            if (s925Gram == null || recoveredGram == null) return
             const blanks = value.lines.map((line) => ({
               intakeOrderId: line.intakeOrderId,
               qty: Number(line.qty),
@@ -275,13 +245,12 @@ export function CastingSlipsCutDialog({
               )
             )
               return
-            const restMaterialId = restGram > 0 ? restMaterialOf(value.restTarget) : null
-            if (restGram > 0 && !restMaterialId) return
+            if (recoveredGram > 0 && recoveredMissing) return
             items.push({
               slipId: slips[index].id,
               blanks,
-              restWeightGram: restGram,
-              restMaterialId,
+              restS925Gram: s925Gram,
+              restRecoveredGram: recoveredGram,
               restImages: toImages(value.restImages),
             })
           }
@@ -388,49 +357,54 @@ export function CastingSlipsCutDialog({
                     />
                   </Stack>
                 ))}
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Phần cây còn lại nhập kho NVL
+                  {restTotal(watched?.[slipIndex]) > 0
+                    ? ` · tổng ${formatQty(String(restTotal(watched?.[slipIndex])))} g`
+                    : ''}
+                </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                   <FormQtyField<Values>
-                    name={`slips.${slipIndex}.rest`}
-                    label="Phần cây còn lại (g)"
+                    name={`slips.${slipIndex}.restS925`}
+                    label="Bạc nguyên liệu S925 (g)"
                     helperText={
-                      tree > 0
-                        ? `Tự tính = cây sau đúc ${formatQty(String(tree))} g − tổng TL phôi khi nhập đủ phôi`
-                        : undefined
+                      choiceHint(s925Choice, restMaterials.isLoading) ??
+                      (tree > 0 ? 'Tự tính = cây sau đúc − tổng phôi − bạc thu hồi' : undefined)
                     }
                     required
                     size="small"
                     fullWidth
                     disabled={busy}
                     rules={{
+                      validate: (value, values) =>
+                        gram(String(value ?? ''), true) == null
+                          ? 'Nhập bạc nguyên liệu S925 (g), không có thì nhập 0'
+                          : restOverTree(values.slips[slipIndex], tree),
+                    }}
+                  />
+                  <FormQtyField<Values>
+                    name={`slips.${slipIndex}.restRecovered`}
+                    label="Bạc thu hồi (g)"
+                    helperText={choiceHint(recoveredChoice, restMaterials.isLoading)}
+                    required
+                    size="small"
+                    fullWidth
+                    disabled={busy || recoveredMissing}
+                    rules={{
                       validate: (value, values) => {
-                        const restGram = gram(String(value ?? ''), true)
-                        if (restGram == null) return 'Nhập phần cây còn lại (g)'
-                        const blankTotal = values.slips[slipIndex].lines.reduce(
-                          (sum, line) => sum + (gram(line.weight, false) ?? 0),
-                          0,
-                        )
-                        if (tree > 0 && round4(restGram + blankTotal) > tree) {
-                          return `Tổng phôi và phần còn lại vượt cây sau đúc (${formatQty(String(tree))} g)`
-                        }
-                        return true
+                        const recovered = gram(String(value ?? ''), true)
+                        if (recovered == null) return 'Nhập bạc thu hồi (g), không có thì nhập 0'
+                        if (recovered > 0 && recoveredMissing) return 'Kho NVL chưa có mã bạc thu hồi'
+                        return restOverTree(values.slips[slipIndex], tree)
                       },
                     }}
                   />
                 </Stack>
-                {Number(watched?.[slipIndex]?.rest) > 0 ? (
-                  <RestTargetField
-                    control={form.control}
-                    slipIndex={slipIndex}
-                    choices={restChoices}
-                    loading={restMaterials.isLoading}
-                    disabled={busy}
-                  />
-                ) : null}
                 <FormImageField<Values>
                   name={`slips.${slipIndex}.restImages`}
                   label="Ảnh cân phần cây còn lại"
                   kind="CASTING_TREE"
-                  required={Number(watched?.[slipIndex]?.rest) > 0}
+                  required={restTotal(watched?.[slipIndex]) > 0}
                   requiredMessage="Chụp ảnh cân phần cây còn lại"
                   onUploadingChange={(uploading) =>
                     setUploading(`${slip.id}:rest`, uploading)

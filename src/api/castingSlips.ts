@@ -73,7 +73,11 @@ export type CastingSlip = {
   submittedByName: string | null
   confirmedAt: string | null
   confirmedByName: string | null
+  /** Tổng phần cây còn lại = S925 + bạc thu hồi. */
   restWeightGram: string | null
+  /** Phần còn lại nhập bạc nguyên liệu S925 / bạc thu hồi (phiếu cắt trước 16/11 tách theo mã đã chọn). */
+  restS925Gram?: string | null
+  restRecoveredGram?: string | null
   cutLossGram: string | null
   restImages: CastingSlipImage[]
   rejectedAt: string | null
@@ -111,8 +115,10 @@ export type ConfirmCastingSlipPayload = {
     weightGram: number
     images: CastingSlipImage[]
   }>
-  restWeightGram: number
-  restMaterialId?: string | null
+  /** Phần cây còn lại nhập bạc nguyên liệu S925 (A00001), g. */
+  restS925Gram: number
+  /** Phần cây còn lại nhập bạc thu hồi (A00189), g. */
+  restRecoveredGram: number
   restImages: CastingSlipImage[]
 }
 
@@ -315,8 +321,8 @@ export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload
     method: 'POST',
     body: JSON.stringify({
       blanks: payload.blanks,
-      restWeightGram: payload.restWeightGram,
-      restMaterialId: payload.restMaterialId,
+      restS925Gram: payload.restS925Gram,
+      restRecoveredGram: payload.restRecoveredGram,
       restImages: payload.restImages,
     }),
   })
@@ -325,7 +331,7 @@ export function cutCastingSlipApi(id: string, payload: ConfirmCastingSlipPayload
 /** Mã NVL (gram, kho NVL chính): nhận phần cây còn lại khi cắt cây, xuất bạc / hội / vàng khi cấp vật tư đúc. */
 export type RestMaterialOptions = {
   defaultName: string
-  /** Hai mã kho NVL thủ kho tích chọn khi nhập phần cây còn lại (null = mã chưa có trong kho). */
+  /** Hai mã kho NVL nhận phần cây còn lại, mỗi mã một ô nhập (null = mã chưa có trong kho). */
   choices?: {
     key: 'S925' | 'RECOVERED'
     label: string

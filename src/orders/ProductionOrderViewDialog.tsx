@@ -16,7 +16,7 @@ import {
   type ProductionOrderRow,
 } from '../api/productionOrders'
 import { formatCt, formatStockedDate } from '../api/inventory'
-import { formatIntakeGram } from '../intake/intakeDisplay'
+import { formatCutRest, formatIntakeGram } from '../intake/intakeDisplay'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { formatDateShort, STATUS_META } from './catalog'
 import { RequestTypeChip, StatusChip } from './OrderChips'
@@ -272,7 +272,7 @@ function CutStageSection({
       )}
       <Typography variant="body2">
         <strong>Phần cây còn lại:</strong>{' '}
-        {formatIntakeGram(order?.cut?.restWeightGram) ?? '—'}
+        {(order?.cut ? formatCutRest(order.cut) : null) ?? '—'}
       </Typography>
       {restImages.length ? (
         <IntakeImageThumbs label="Ảnh cân phần cây còn lại" images={restImages} />

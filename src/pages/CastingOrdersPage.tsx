@@ -63,6 +63,7 @@ import { CastingSlipCreateDialog } from '../intake/CastingSlipCreateDialog'
 import { CastingSlipEditDialog, canEditCastingSlip } from '../intake/CastingSlipEditDialog'
 import { SLIP_STATUS_META, SlipStatusChip } from '../intake/CastingSlipStatusChip'
 import { CastingSlipConfirmDialog, serviceCastPriceLines } from '../intake/CastingSlipConfirmDialog'
+import { formatCutRest } from '../intake/intakeDisplay'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
 import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
@@ -703,9 +704,7 @@ export function CastingSlipCutFields({ slip }: { slip: CastingSlip }) {
       <Stack spacing={0.75}>
         <Typography variant="body2">
           <strong>Phần cây còn lại:</strong>{' '}
-          {slip.restWeightGram != null && slip.restWeightGram !== ''
-            ? `${formatGram(slip.restWeightGram)} g`
-            : '—'}
+          {formatCutRest(slip) ?? '—'}
         </Typography>
         {slip.restImages.length ? (
           <IntakeImageThumbs
