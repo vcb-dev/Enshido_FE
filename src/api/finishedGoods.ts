@@ -39,10 +39,13 @@ export type FinishedGoodsStockRow = {
   requestType: ProductionRequestType
   qtyUnit: string | null
   sizeLabel: string | null
+  /** Trọng lượng một thành phẩm (g) — nhập tay trên Tồn. */
   weight?: string | null
   mainMaterial: string | null
   platingColor: string | null
   imageUrl: string | null
+  /** Ảnh thành phẩm (ảnh sản phẩm của lệnh) — thành phẩm nhập tay sửa được ở form Tồn. */
+  images?: Array<{ url: string; publicId: string; width: number | null; height: number | null }>
   /** NVL cấu thành thành phẩm — nhiều mã xếp chồng trên bảng Tồn. */
   bomLines: FinishedGoodsNvlOption[]
   openingQty: string
@@ -265,6 +268,10 @@ export type UpsertReceiptPayload = {
   sizeLabel?: string
   qtyUnit?: string
   model3dCode?: string
+  /** Trọng lượng một thành phẩm (g) — chỉ thành phẩm nhập tay trên Tồn. */
+  weightGram?: string
+  /** Ảnh thành phẩm — chỉ thành phẩm nhập tay trên Tồn; gửi là thay cả bộ. */
+  images?: Array<{ url: string; publicId: string; width?: number | null; height?: number | null }>
   editReason?: string
 }
 

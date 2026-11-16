@@ -49,6 +49,7 @@ import { ReceiveFormDialog } from '../finishedGoods/ReceiveFormDialog'
 import { ReceiveStockDialog } from '../finishedGoods/ReceiveStockDialog'
 import { FinishedGoodsStockDialog } from '../finishedGoods/StockFormDialog'
 import { StockFigureGrid } from '../warehouses/StockFigureGrid'
+import { ImageLightbox, ZoomThumb, type LightboxImage } from '../components/ImageLightbox'
 import { THANH_PHAM_WAREHOUSE, stockProfile, warehouseByCode, type WarehouseSectionCode } from '../warehouses/catalog'
 import { headerTotal, uniqueFilterOptions } from '../warehouses/stockFilters'
 
@@ -148,6 +149,16 @@ function FinishedGoodsStockTable() {
   const navigate = useNavigate()
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
   const dialog = useCrudDialog<FinishedGoodsStockRow>()
+  /** Ảnh thành phẩm đang xem lớn (bấm ô Ảnh trên bảng Tồn). */
+  const [viewingImages, setViewingImages] = useState<{ images: LightboxImage[]; index: number } | null>(null)
+  const openImages = (row: FinishedGoodsStockRow) => {
+    const urls = row.images?.length ? row.images.map((image) => image.url) : row.imageUrl ? [row.imageUrl] : []
+    if (!urls.length) return
+    setViewingImages({
+      images: urls.map((url, index) => ({ id: `${row.id}-${index}`, url, caption: row.description })),
+      index: 0,
+    })
+  }
   const table = useTableParams({ pageSize: 8, filters: { status: 'ALL', flowStatus: 'ALL' } })
   const { params } = table
   // Thêm / sửa thành phẩm là việc của thủ kho — khớp quyền phía BE.
@@ -293,8 +304,11 @@ function FinishedGoodsStockTable() {
         {
           onView: dialog.openView,
           onEdit: canEdit ? dialog.openEdit : undefined,
+          onViewImages: openImages,
         },
       ),
+    // openImages chỉ gọi setState — không cần đưa vào deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, statusFilterOptions, table, totals],
   )
 
@@ -330,7 +344,7 @@ function FinishedGoodsStockTable() {
         errorText={stock.error instanceof Error ? stock.error.message : undefined}
         emptyText={filtered ? profile.emptyFiltered : profile.emptyText}
         variant="grid"
-        minWidth={2520}
+        minWidth={2700}
         cardBreakpoint="md"
         showIndex
         indexOffset={indexOffset}
@@ -385,6 +399,13 @@ function FinishedGoodsStockTable() {
         saving={save.isPending}
         onClose={dialog.close}
         onSaved={(payload) => save.mutate({ id: dialog.row?.id, payload })}
+      />
+      <ImageLightbox
+        images={viewingImages?.images ?? []}
+        index={viewingImages?.index ?? null}
+        title="Ảnh thành phẩm"
+        onIndexChange={(index) => setViewingImages((current) => (current ? { ...current, index } : current))}
+        onClose={() => setViewingImages(null)}
       />
     </Stack>
   )
@@ -894,7 +915,7 @@ function createdFinishedGoodsStockRow(payload: UpsertReceiptPayload): FinishedGo
     sizeLabel: payload.sizeLabel ?? null,
     mainMaterial: payload.mainMaterial ?? null,
     platingColor: payload.platingColor || null,
-    imageUrl: null,
+    ...payloadMedia(payload),
     bomLines: [],
     isOpening: true,
     openingQty: String(receivedQty),
@@ -942,6 +963,26 @@ function addFinishedGoodsInboundQty(
   }
 }
 
+/** Ảnh + trọng lượng thành phẩm nhập tay lấy từ form — để bảng Tồn hiện ngay, không chờ tải lại. */
+function payloadMedia(
+  payload: UpsertReceiptPayload,
+  row?: FinishedGoodsStockRow,
+): Pick<FinishedGoodsStockRow, 'weight' | 'images' | 'imageUrl'> {
+  const images = payload.images
+    ? payload.images.map((image) => ({
+        url: image.url,
+        publicId: image.publicId,
+        width: image.width ?? null,
+        height: image.height ?? null,
+      }))
+    : (row?.images ?? [])
+  return {
+    weight: payload.weightGram !== undefined ? payload.weightGram || null : (row?.weight ?? null),
+    images,
+    imageUrl: payload.images ? (images[0]?.url ?? null) : (row?.imageUrl ?? null),
+  }
+}
+
 function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertReceiptPayload): FinishedGoodsStockRow {
   const receivedQty = payload.qty
   const remainingQty = receivedQty - row.shippedQty
@@ -956,6 +997,7 @@ function patchFinishedGoodsStockRow(row: FinishedGoodsStockRow, payload: UpsertR
     model3dCode:
       payload.model3dCode !== undefined ? payload.model3dCode.trim() || null : row.model3dCode,
     qtyUnit: payload.qtyUnit ?? row.qtyUnit,
+    ...payloadMedia(payload, row),
     receivedAt: payload.receivedAt,
     receivedQty,
     remainingQty,
@@ -1009,6 +1051,7 @@ function stockColumns(
   actions: {
     onView: (row: FinishedGoodsStockRow) => void
     onEdit?: (row: FinishedGoodsStockRow) => void
+    onViewImages: (row: FinishedGoodsStockRow) => void
   },
 ): Column<FinishedGoodsStockRow>[] {
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
@@ -1043,6 +1086,31 @@ function stockColumns(
       cellSx: { minWidth: 220 },
       filter: filters.name,
       render: (row) => row.description,
+    },
+    {
+      key: 'image',
+      header: 'Ảnh',
+      width: 72,
+      render: (row) => {
+        const url = row.images?.[0]?.url ?? row.imageUrl
+        if (!url) return '—'
+        return (
+          <ZoomThumb
+            url={url}
+            size={44}
+            label={`Xem ảnh ${row.description}`}
+            more={Math.max((row.images?.length ?? 1) - 1, 0)}
+            onClick={() => actions.onViewImages(row)}
+            sx={{ borderRadius: 0.5 }}
+          />
+        )
+      },
+    },
+    {
+      key: 'weight',
+      header: 'Trọng lượng',
+      cellSx: { whiteSpace: 'nowrap', textAlign: 'right' },
+      render: (row) => (row.weight != null && row.weight !== '' ? `${formatQty(row.weight)} g` : '—'),
     },
     {
       key: 'openingQty',
