@@ -5,6 +5,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
+  Radio,
+  RadioGroup,
   Stack,
   Table,
   TableBody,
@@ -14,9 +19,15 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useWatch } from 'react-hook-form'
+import { Controller, useWatch, type Control } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
-import type { CastingSlip, CastingSlipOrderLine, CastingSlipResultPayload } from '../api/castingSlips'
+import {
+  BTP_METAL_LABEL,
+  type BtpMetal,
+  type CastingSlip,
+  type CastingSlipOrderLine,
+  type CastingSlipResultPayload,
+} from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
 import { DialogForm, FormMoneyField, FormQtyField } from '../components/ui'
@@ -36,6 +47,8 @@ type Props = {
 
 type Values = {
   tree: string
+  /** Mã kho BTP nhận TL cây sau đúc. */
+  treeMetal: BtpMetal
   silver: string
   plaster: string
   servicePrices: Record<string, string>
@@ -45,6 +58,7 @@ type Values = {
 function emptyValues(slip: SlipForResult | null): Values {
   return {
     tree: '',
+    treeMetal: 'S925',
     silver: '',
     plaster: '',
     servicePrices: Object.fromEntries((slip?.orders ?? []).map((line) => [line.intakeOrderId, ''])),
@@ -109,6 +123,7 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
         onSubmit={(values) =>
           onSave({
             castTreeWeightGram: gram(values.tree, false)!,
+            treeBtpMetal: values.treeMetal,
             silverUsedGram: gram(values.silver, true)!,
             ...(isServiceCast
               ? {
@@ -150,6 +165,7 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
               fullWidth
               disabled={busy}
             />
+            <TreeMetalField control={form.control} disabled={busy} />
             <FormQtyField<Values>
               name="silver"
               label="Bạc đã dùng (g)"
@@ -253,5 +269,25 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
         </DialogActions>
       </DialogForm>
     </Dialog>
+  )
+}
+
+/** TL cây sau đúc nhập kho BTP vào BTP S925 (mặc định) hay BTP S999. */
+function TreeMetalField({ control, disabled }: { control: Control<Values>; disabled: boolean }) {
+  return (
+    <Controller
+      control={control}
+      name="treeMetal"
+      render={({ field }) => (
+        <FormControl disabled={disabled}>
+          <FormLabel sx={{ fontSize: '0.8rem' }}>Nhập TL cây vào kho BTP</FormLabel>
+          <RadioGroup row value={field.value} onChange={(event) => field.onChange(event.target.value as BtpMetal)}>
+            {(Object.keys(BTP_METAL_LABEL) as BtpMetal[]).map((metal) => (
+              <FormControlLabel key={metal} value={metal} control={<Radio size="small" />} label={BTP_METAL_LABEL[metal]} />
+            ))}
+          </RadioGroup>
+        </FormControl>
+      )}
+    />
   )
 }
