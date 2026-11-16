@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -19,10 +19,12 @@ import {
   type UpsertReceiptPayload,
 } from '../api/finishedGoods'
 import { formatMoney, formatQty, moneyDigitsFromApi } from '../api/inventory'
+import type { OrderImage } from '../api/productionOrders'
 import {
   FormEditReasonBlock,
   Form,
   FormMoneyField,
+  FormQtyField,
   FormRow,
   FormSelect,
   FormTextField,
@@ -34,6 +36,8 @@ import { finishedGoodsQtyUnitOptions, stockProfile, THANH_PHAM_WAREHOUSE } from 
 import { validateStockName } from '../warehouses/stockName'
 import { platingColorOptions } from '../orders/catalog'
 import { FormFgMaterialSelect, isSilverFgMaterial } from './FgMaterialSelect'
+import { FormImageField } from '../orders/FormImageField'
+import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 
 type FormValues = {
   model3dCode: string
@@ -44,6 +48,9 @@ type FormValues = {
   platingColor: string
   stockUnitPrice: string
   openingQty: string
+  /** Trọng lượng một thành phẩm (g). */
+  weight: string
+  images: OrderImage[]
   editReason: string
 }
 
@@ -56,6 +63,8 @@ const EMPTY: FormValues = {
   platingColor: '',
   stockUnitPrice: '',
   openingQty: '0',
+  weight: '',
+  images: [],
   editReason: '',
 }
 
@@ -70,6 +79,8 @@ function formValuesFromRow(row: FinishedGoodsStockRow | null): FormValues {
     platingColor: row.platingColor ?? '',
     stockUnitPrice: moneyDigitsFromApi(row.unitCost),
     openingQty: row.openingQty || '0',
+    weight: row.weight ?? '',
+    images: (row.images ?? []).map((image) => ({ ...image, kind: 'PRODUCT' as const })),
     editReason: '',
   }
 }
@@ -150,6 +161,9 @@ function StockForm({
   const platingColor = useWatch({ control: form.control, name: 'platingColor' })
   const showPlating = isSilverFgMaterial(mainMaterial)
   const model3dReadOnly = Boolean(row && !row.isOpening)
+  // Ảnh + trọng lượng nhập tay chỉ cho thành phẩm tạo trên Tồn — hàng từ lệnh SX giữ ảnh / TL của lệnh.
+  const manualEntry = !row || row.isOpening
+  const [uploading, setUploading] = useState(false)
 
   const inQty = row?.inQty ?? '0'
   const inAmount = row?.inAmount ?? '0'
@@ -183,6 +197,17 @@ function StockForm({
       receivedAt: row ? row.receivedAt.slice(0, 10) : todayYmd(),
       sizeLabel: values.sizeLabel.trim() || undefined,
       qtyUnit: values.qtyUnit.trim() || undefined,
+      ...(manualEntry
+        ? {
+            weightGram: values.weight.trim() || undefined,
+            images: values.images.map(({ url, publicId, width, height }) => ({
+              url,
+              publicId,
+              width,
+              height,
+            })),
+          }
+        : {}),
       editReason: values.editReason.trim() || undefined,
     })
   }
@@ -267,7 +292,34 @@ function StockForm({
                 htmlInput: { inputMode: 'numeric', style: { textAlign: 'right' } },
               }}
             />
+            {manualEntry ? (
+              <FormQtyField<FormValues>
+                name="weight"
+                label="Trọng lượng (g)"
+                helperText="Trọng lượng một thành phẩm"
+                required={!row}
+                readOnly={readOnly}
+                rules={{
+                  validate: (value) => {
+                    const raw = String(value ?? '').trim()
+                    if (!raw) return row ? true : 'Nhập trọng lượng thành phẩm (g)'
+                    return Number(raw) > 0 || 'Trọng lượng phải lớn hơn 0'
+                  },
+                }}
+              />
+            ) : null}
           </FormRow>
+          {manualEntry ? (
+            <FormImageField<FormValues>
+              name="images"
+              label="Ảnh thành phẩm"
+              kind="PRODUCT"
+              required={!row}
+              requiredMessage="Chụp ít nhất một ảnh thành phẩm"
+              onUploadingChange={setUploading}
+              readOnly={readOnly || saving}
+            />
+          ) : null}
 
           <StockFigureGrid
             values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
@@ -304,7 +356,13 @@ function StockForm({
               <Button onClick={onClose} disabled={saving}>
                 Hủy
               </Button>
-            <Button type="submit" variant="contained" loading={saving} loadingPosition="start">
+            <Button
+              type="submit"
+              variant="contained"
+              loading={saving}
+              loadingPosition="start"
+              disabled={uploading}
+            >
                 {row ? 'Lưu' : profile.createLabel}
               </Button>
             </>
@@ -348,6 +406,10 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
             ) : null}
             <Fact label="Đơn giá tồn" value={formatMoney(row.unitCost)} />
             <Fact
+              label="Trọng lượng"
+              value={row.weight != null && row.weight !== '' ? `${formatQty(row.weight)} g` : null}
+            />
+            <Fact
               label="Trạng thái kho"
               value={<Chip size="small" variant="outlined" color={flow.color} label={flow.label} />}
             />
@@ -363,6 +425,15 @@ function StockView({ row, onClose }: { row: FinishedGoodsStockRow; onClose: () =
             />
           </Box>
         </Paper>
+
+        {row.images?.length ? (
+          <Paper variant="outlined" sx={{ p: 1.75 }}>
+            <IntakeImageThumbs
+              label="Ảnh thành phẩm"
+              images={row.images.map((image) => ({ ...image, kind: 'PRODUCT' as const }))}
+            />
+          </Paper>
+        ) : null}
 
         <Paper variant="outlined" sx={{ p: 1.75 }}>
           <SectionTitle>Số liệu tồn</SectionTitle>
