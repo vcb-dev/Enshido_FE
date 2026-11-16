@@ -109,20 +109,21 @@ export function stageSources(stage: StageCode | null | undefined): StockSource[]
 }
 
 /**
- * Kho thợ được xin thêm: Nguội xin phôi BTP, Vào đá chỉ xin đá (kho NVL chính) — BTP đã nguội
- * xuất lúc giao khâu nên không xin lại.
+ * Kho thợ được xin thêm (2026-11-16, khớp BE): Nguội xin phôi BTP hoặc NVL kho chính (bạc, NVL
+ * khác — không xin đá); Vào đá xin mọi mã kho NVL chính (đá, bạc…) — BTP đã nguội xuất lúc giao
+ * khâu nên không xin lại.
  */
 function requestSources(stage: StageCode | null | undefined): StockSource[] {
-  if (stage === 'FILING') return ['BTP']
+  if (stage === 'FILING') return ['NVL', 'BTP']
   if (stage === 'STONE_SETTING') return ['NVL']
   return []
 }
 
-/** Tên thứ được xin theo khâu — nhãn nút / hộp xin thêm. */
-function requestNoun(stage: StageCode | null | undefined) {
-  if (stage === 'STONE_SETTING') return 'đá'
-  if (stage === 'FILING') return 'BTP'
-  return 'NVL'
+/** Nơi lấy hàng khi thợ xin thêm — dòng chú thích trong hộp xin. */
+function requestSourcesNote(stage: StageCode | null | undefined) {
+  if (stage === 'FILING') return ' Khâu Nguội lấy ở kho NVL chính (bạc, NVL khác) hoặc kho BTP (phôi).'
+  if (stage === 'STONE_SETTING') return ' Khâu Vào đá lấy ở kho NVL chính (đá, bạc, NVL khác).'
+  return ''
 }
 
 /** Khâu có xuất kho cho thợ (và thợ được xin thêm) hay không. */
@@ -196,7 +197,7 @@ export function TicketMaterialsCell({ materials }: { materials: TicketMaterials 
 type RequestValues = { materialId: string; qty: string; weight: string; note: string }
 const EMPTY_REQUEST: RequestValues = { materialId: '', qty: '', weight: '', note: '' }
 
-type StockPick = { id: string; unit: string; item: CatalogPickerItem }
+type StockPick = { id: string; unit: string; stone: boolean; item: CatalogPickerItem }
 
 /** Thợ đang làm khâu xin xuất thêm một mã NVL (bạc, đá…) — kho cân rồi mới xuất. */
 export function MaterialRequestDialog({
@@ -219,8 +220,9 @@ export function MaterialRequestDialog({
 
   const stageLabel = stage ? STAGE_LABEL[stage] : null
   const sources = requestSources(stage)
-  const noun = requestNoun(stage)
-  const stoneOnly = stage === 'STONE_SETTING'
+  const noun = 'NVL'
+  // Đá chỉ xin ở Vào đá (khâu đá gắn và QC đếm lại) — khâu khác không hiện mã đá.
+  const allowStone = stage === 'STONE_SETTING'
   const nvlOptions = useQuery({
     queryKey: ['nvl-options'],
     queryFn: () => listNvlOptionsApi(),
@@ -239,9 +241,11 @@ export function MaterialRequestDialog({
       warehouse: string,
       item: { id: string; sku: string | null; name: string; unit: string; qty: string } & Partial<StockSnapshot>,
       images: Array<{ url: string }>,
+      stone = false,
     ): StockPick => ({
       id: item.id,
       unit: item.unit,
+      stone,
       item: {
         id: item.id,
         label: materialLabel(item),
@@ -251,18 +255,18 @@ export function MaterialRequestDialog({
     })
     return [
       ...(sources.includes('NVL') ? (nvlOptions.data ?? []) : [])
-        // Vào đá chỉ xin đá: bỏ các mã bạc / NVL khác của kho NVL chính.
-        .filter((item) => !stoneOnly || suggestKindOf(item.unit, item.metalKind) === 'STONE')
-        .map((item) => pick('Kho NVL chính', item, item.images)),
+        .map((item) => ({ item, stone: suggestKindOf(item.unit, item.metalKind) === 'STONE' }))
+        .filter(({ stone }) => allowStone || !stone)
+        .map(({ item, stone }) => pick('Kho NVL chính', item, item.images, stone)),
       ...(sources.includes('BTP') ? (btpOptions.data ?? []) : []).map((item) => pick('Kho BTP', item, item.images)),
     ]
-  }, [nvlOptions.data, btpOptions.data, sources.join(), stoneOnly])
+  }, [nvlOptions.data, btpOptions.data, sources.join(), allowStone])
   const pickerItems = useMemo(() => picks.map((pick) => pick.item), [picks])
   const selected = picks.find((pick) => pick.id === materialId)
-  // Đá (Vào đá): mã ct / g chỉ nhập TL; mã viên nhập cả số viên lẫn TL. Khâu Nguội xin BTP theo số lượng.
-  const stoneUnit = stoneOnly ? stoneUnitKind(selected?.unit) : null
+  // Đá: mã ct / g chỉ nhập TL; mã viên nhập cả số viên lẫn TL. Bạc / BTP / NVL khác theo số lượng của mã.
+  const stoneUnit = selected?.stone ? stoneUnitKind(selected.unit) : null
   const weightOnly = stoneUnit === 'weight'
-  const needsWeight = stoneOnly
+  const needsWeight = Boolean(selected?.stone)
   const needsQty = !weightOnly
 
   useEffect(() => {
@@ -292,7 +296,7 @@ export function MaterialRequestDialog({
       onExited={() => undefined}
     >
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Xin thêm {noun} cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}.{sourcesNote(stage)}
+        Xin thêm {noun} cho khâu {stageLabel ? <b>{stageLabel}</b> : 'đang làm'}.{requestSourcesNote(stage)}
       </Typography>
       <Controller
         control={form.control}
@@ -635,7 +639,7 @@ export function MaterialRequestsCard({
   const create = useOrderMutation(
     code,
     (payload: MaterialRequestPayload) => requestMaterialApi(code, ticketNo, payload),
-    `Đã gửi yêu cầu xuất ${requestNoun(openEntry?.stage)}`,
+    'Đã gửi yêu cầu xuất NVL',
   )
   const cancel = useOrderMutation(code, (id: string) => cancelMaterialRequestApi(id), 'Đã huỷ yêu cầu')
   const issue = useOrderMutation(
@@ -683,7 +687,7 @@ export function MaterialRequestsCard({
           ) : null}
           {canRequest ? (
             <Button size="small" variant="contained" onClick={() => setRequesting(true)}>
-              Xin xuất {requestNoun(openEntry?.stage)}
+              Xin xuất NVL
             </Button>
           ) : null}
         </Stack>
