@@ -32,12 +32,12 @@ export const STONE_SET_SOURCE_LABEL: Record<StoneSetSource, string> = {
 }
 
 /**
- * TL đá gắn lên BTP ở khâu Vào đá (g) — theo đá thực tế (2026-11-04), khớp thứ tự BE dùng khi QC
- * nhận lại:
- * 1. Mọi gói cấp đều cân: TL đá đã cấp − TL gói thừa QC cân;
- * 2. Dòng cấp cũ đếm viên: chia TL đã cấp theo số viên gắn / số viên đã cấp;
- * 3. Có TL đá đã cấp: nguyên TL đó;
- * 4. Khâu chưa cấp đá nào mà đơn có TL đá 3D: chia theo số hàng giao.
+ * TL đá gắn lên BTP ở khâu Vào đá (g) — khớp thứ tự BE dùng khi QC nhận lại:
+ * 1. Đơn có TL đá 3D (> 0): TL đá 3D chia theo số hàng giao (2026-11-16, người dùng chốt: mốc hao
+ *    hụt Vào đá = bạc vào khâu + TL đá 3D);
+ * 2. Đơn không khai TL đá 3D mà mọi gói cấp đều cân: TL đá đã cấp − TL gói thừa QC cân;
+ * 3. Dòng cấp cũ đếm viên: chia TL đã cấp theo số viên gắn / số viên đã cấp;
+ * 4. Có TL đá đã cấp: nguyên TL đó.
  * Trả null khi không có số nào để tính.
  */
 export function stoneSetWeight(input: {
@@ -57,11 +57,10 @@ export function stoneSetWeight(input: {
   returnedCount: number
 }): { gram: number; source: StoneSetSource } | null {
   const round = (value: number) => Math.round(value * 10_000) / 10_000
-  if (input.handedGram == null) {
-    return input.stone3dGram != null && input.orderQty > 0
-      ? { gram: round((input.stone3dGram * input.handedQty) / input.orderQty), source: '3d' }
-      : null
+  if (input.stone3dGram != null && input.stone3dGram > 0 && input.orderQty > 0) {
+    return { gram: round((input.stone3dGram * input.handedQty) / input.orderQty), source: '3d' }
   }
+  if (input.handedGram == null) return null
   if (input.allWeighed) {
     return { gram: round(Math.max(input.handedGram - input.returnedPackGram, 0)), source: 'pack' }
   }
