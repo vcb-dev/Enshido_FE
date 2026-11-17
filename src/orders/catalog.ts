@@ -93,6 +93,16 @@ export const STAGE_LABEL: Record<StageCode, string> = {
 }
 
 /**
+ * Câu báo sau khi thủ kho xác nhận sau QC, khớp BE (2026-11-17): Nguội nhập hàng đạt vào kho BTP;
+ * từ Vào đá trở đi hàng đạt không nhập kho, chỉ chuyển sang khâu sau.
+ */
+export function keeperConfirmNote(stage: StageCode) {
+  const good =
+    stage === 'FILING' ? 'hàng đạt nhập kho BTP' : 'hàng đạt chuyển sang khâu sau (không nhập kho BTP)'
+  return `${good}, hàng lỗi và nguyên liệu thừa nhập kho NVL`
+}
+
+/**
  * Lệnh bù của một phiếu (phiếu con `ticketNo`, null = phiếu mẹ), gồm cả lệnh bù tiếp cho lệnh bù
  * lại lỗi. Bản chi tiết cũ chưa có `reworkChain` thì chỉ có lệnh bù trực tiếp.
  */

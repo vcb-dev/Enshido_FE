@@ -5,7 +5,15 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { confirmStageApi, createReworkApi, type ProductionOrderDetail, type StageEntry } from '../api/productionOrders'
-import { defectScopeText, isReceiptStage, productionClosed, skipsStone, STAGE_LABEL, ticketReworks } from './catalog'
+import {
+  defectScopeText,
+  isReceiptStage,
+  keeperConfirmNote,
+  productionClosed,
+  skipsStone,
+  STAGE_LABEL,
+  ticketReworks,
+} from './catalog'
 import { invalidateBtpStock } from './btpStock'
 import { invalidateNvlStock } from './nvlStock'
 import { KeeperConfirmDialog } from './KeeperConfirmDialog'
@@ -35,7 +43,7 @@ export function TicketQcActions({ order, ticketNo = null, busy = false }: {
   const confirm = useOrderMutation(
     order.code,
     (entry: StageEntry) => confirmStageApi(order.code, entry.id),
-    'Đã xác nhận — hàng đạt nhập kho BTP, hàng lỗi và nguyên liệu thừa nhập kho NVL',
+    (entry: StageEntry) => `Đã xác nhận — ${keeperConfirmNote(entry.stage)}`,
   )
   const rework = useOrderMutation(
     order.code,

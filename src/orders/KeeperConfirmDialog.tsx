@@ -28,8 +28,9 @@ type Line = { label: string; qty: string; weight: string; warehouse: string; sho
 /**
  * Thủ kho kiểm tra và xác nhận mọi kết quả QC ở Nguội / Vào đá, cả phiếu mẹ / con.
  * Vào đá còn nhận lại túi đá thừa (mô tả luồng bước 13–15, 18). Bấm xác nhận là hệ thống
- * nhập kho: hàng đạt → kho BTP, hàng lỗi + nguyên liệu thừa → kho NVL; khâu Vào
- * đá còn xuất kho đá đã dùng theo từng mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
+ * nhập kho: hàng lỗi + nguyên liệu thừa → kho NVL; hàng đạt Nguội → kho BTP, hàng đạt Vào đá không
+ * nhập kho (từ 2026-11-17, chỉ chuyển sang khâu sau); khâu Vào đá còn xuất kho đá đã dùng theo từng
+ * mã (SL cấp × (TL gói cấp − TL gói thừa) / TL gói cấp).
  */
 export function KeeperConfirmDialog({
   entry,
@@ -61,7 +62,8 @@ export function KeeperConfirmDialog({
           label: 'Hàng đạt',
           qty: `${goodQty} sp`,
           weight: formatQty(entry.returnedSilverWeight ?? '0'),
-          warehouse: 'Kho BTP',
+          // Từ Vào đá trở đi hàng đạt không nhập lại kho BTP — chuyển tay sang khâu sau.
+          warehouse: stoneStage ? 'Chuyển sang khâu sau (không nhập kho)' : 'Kho BTP',
           show: goodQty > 0,
         },
         {
