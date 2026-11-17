@@ -62,7 +62,7 @@ const EMPTY: FormValues = {
   mainMaterial: '',
   platingColor: '',
   stockUnitPrice: '',
-  openingQty: '0',
+  openingQty: '',
   weight: '',
   images: [],
   editReason: '',
@@ -294,6 +294,24 @@ function StockForm({
             />
             {manualEntry ? (
               <FormQtyField<FormValues>
+                name="openingQty"
+                label="Số lượng"
+                helperText={row ? 'Số lượng tồn đầu kỳ' : 'Số lượng nhập vào kho'}
+                required={!row}
+                readOnly={readOnly}
+                rules={{
+                  validate: (value) => {
+                    const raw = String(value ?? '').trim()
+                    const n = Number(raw || 0)
+                    if (!Number.isInteger(n) || n < 0) return 'Số lượng phải là số nguyên'
+                    if (row) return true
+                    return n > 0 || 'Nhập số lượng thành phẩm'
+                  },
+                }}
+              />
+            ) : null}
+            {manualEntry ? (
+              <FormQtyField<FormValues>
                 name="weight"
                 label="Trọng lượng (g)"
                 helperText="Trọng lượng một thành phẩm"
@@ -321,17 +339,10 @@ function StockForm({
             />
           ) : null}
 
+          {/* SL tồn đầu kỳ nhập ở ô Số lượng phía trên — bảng chỉ để xem. */}
           <StockFigureGrid
             values={{ openingQty, openingAmount, inQty, inAmount, outQty, outAmount, qty, amount }}
             notes
-            editableOpeningQty={
-              readOnly || (row != null && !row.isOpening)
-                ? undefined
-                : {
-                    value: openingQty,
-                    onChange: (value) => form.setValue('openingQty', value),
-                  }
-            }
           />
           <Typography variant="body2" sx={{ color: '#1e8449', fontWeight: 600, px: 0.25 }}>
             Tồn: SL {formatQty(qty)} · TT {formatMoney(amount)}
