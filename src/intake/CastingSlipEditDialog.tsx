@@ -57,7 +57,7 @@ type Values = {
   grams: Record<MetalKey, string>
   materials: Record<MetalKey, string>
   tree: string
-  /** Mã kho BTP nhận TL cây sau đúc — đổi được trước khi cắt cây. */
+  /** Mã kho BTP nhận phôi lúc cắt cây — đổi được trước khi cắt cây. */
   treeMetal: BtpMetal
   silver: string
   plaster: string
@@ -113,8 +113,8 @@ export function canEditCastingSlip(slip: Pick<CastingSlip, 'status'>, isAdmin: b
 
 /**
  * Sửa phiếu đúc chưa đúc xong, cùng bố cục với phiếu xem chi tiết. Thợ đúc: trước khi thợ nhận phiếu.
- * Vật tư cấp: sau khi cấp (hoàn kho rồi trừ lại). Kết quả: khi chờ thủ kho xác nhận (đổi TL cây thì
- * nhập lại Kho BTP).
+ * Vật tư cấp: sau khi cấp (hoàn kho rồi trừ lại). Kết quả: khi chờ thủ kho xác nhận (cây sau đúc
+ * không nhập kho — chỉ cắt cây mới nhập phôi vào Kho BTP).
  */
 export function CastingSlipEditDialog({
   slip,
@@ -452,12 +452,12 @@ export function CastingSlipEditDialog({
                   </Box>
                   <FormSelect<Values>
                     name="treeMetal"
-                    label="Nhập TL cây vào kho BTP"
+                    label="Phôi nhập kho BTP (lúc cắt cây)"
                     options={(Object.keys(BTP_METAL_LABEL) as BtpMetal[]).map((metal) => ({
                       value: metal,
                       label: BTP_METAL_LABEL[metal],
                     }))}
-                    helperText={isCut ? 'Đã cắt cây thông — không đổi mã BTP nhận cây được' : undefined}
+                    helperText={isCut ? 'Đã cắt cây thông — không đổi mã BTP nhận phôi được' : undefined}
                     disabled={busy || isCut}
                     size="small"
                   />
@@ -488,8 +488,7 @@ export function CastingSlipEditDialog({
                   <Typography variant="body2" color="text.secondary">
                     Bạc giao chưa dùng (trả kho):{' '}
                     <strong>{leftover != null ? `${formatQty(String(leftover))} g` : '—'}</strong> · Hao hụt đúc:{' '}
-                    <strong>{castLoss != null ? `${formatQty(String(castLoss))} g` : '—'}</strong>. Đổi TL cây thông thì
-                    phiếu nhập Kho BTP sau đúc được nhập lại theo số mới.
+                    <strong>{castLoss != null ? `${formatQty(String(castLoss))} g` : '—'}</strong>.
                   </Typography>
                 </Stack>
               ) : null}
