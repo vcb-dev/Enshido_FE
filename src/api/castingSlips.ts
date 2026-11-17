@@ -325,11 +325,33 @@ export function submitCastingSlipResultApi(id: string, payload: CastingSlipResul
   })
 }
 
-export function confirmCastingSlipApi(id: string) {
+/** Thủ kho xác nhận Đúc xong; `plasterMaterialId` = mã thạch cao kho NVL tiêu hao để xuất phần đã dùng. */
+export function confirmCastingSlipApi(id: string, payload: { plasterMaterialId?: string } = {}) {
   return apiFetch<CastingSlip>(`/casting-slips/${id}/confirm`, {
     method: 'POST',
-    body: '{}',
+    body: JSON.stringify(payload),
   })
+}
+
+/** Mã thạch cao (kho NVL tiêu hao, gram / kg) kèm tồn — thủ kho chọn lúc xác nhận Đúc xong. */
+export type PlasterMaterialOptions = {
+  /** Mã "Thạch cao" (D00208) nếu có. */
+  defaultId: string | null
+  items: {
+    id: string
+    sku: string | null
+    name: string
+    unit: string
+    /** Thợ nhập gram — mã kg thì 1 đơn vị = 1000 g. */
+    gramsPerUnit: number
+    onHandQty?: string
+    heldQty?: string
+    availableQty?: string
+  }[]
+}
+
+export function listPlasterMaterialOptionsApi() {
+  return apiFetch<PlasterMaterialOptions>('/casting-slips/plaster-material-options')
 }
 
 /** Cắt cây thông sau Đúc xong — chia phôi, sinh lệnh SX Chờ nguội. */

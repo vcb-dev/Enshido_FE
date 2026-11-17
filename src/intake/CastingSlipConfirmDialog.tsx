@@ -1,5 +1,18 @@
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material'
-import type { CastingSlip } from '../api/castingSlips'
+import { useEffect, useState } from 'react'
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
+import { listPlasterMaterialOptionsApi, type CastingSlip } from '../api/castingSlips'
 import { formatMoney, formatQty } from '../api/inventory'
 import { formatDateTime } from '../orders/catalog'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
@@ -40,7 +53,10 @@ function ServiceCastPriceSummary({ slip }: { slip: Pick<CastingSlip, 'orders' | 
   )
 }
 
-/** Thủ kho xem lại đúng số liệu thợ đúc vừa nhập — không nhập lại, không cắt cây thông. */
+/**
+ * Thủ kho xem lại đúng số liệu thợ đúc vừa nhập — không nhập lại, không cắt cây thông. Có thạch cao
+ * thì chọn mã kho NVL tiêu hao để hệ thống xuất phần đã dùng; thiếu tồn thì không xác nhận được.
+ */
 export function CastingSlipConfirmDialog({
   slip,
   saving,
@@ -50,8 +66,30 @@ export function CastingSlipConfirmDialog({
   slip: CastingSlip | null
   saving: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: (payload: { plasterMaterialId?: string }) => void
 }) {
+  const plasterGram = slip && !slip.isServiceCast ? Number(slip.plasterUsedGram ?? 0) : 0
+  const needsPlaster = plasterGram > 0
+  const plasterOptions = useQuery({
+    queryKey: ['casting-plaster-material-options'],
+    queryFn: listPlasterMaterialOptionsApi,
+    enabled: Boolean(slip) && needsPlaster,
+    staleTime: 10_000,
+  })
+  const [plasterId, setPlasterId] = useState('')
+  useEffect(() => {
+    if (!slip) setPlasterId('')
+  }, [slip])
+  useEffect(() => {
+    if (!plasterId && plasterOptions.data?.defaultId) setPlasterId(plasterOptions.data.defaultId)
+  }, [plasterId, plasterOptions.data?.defaultId])
+  const plaster = plasterOptions.data?.items.find((item) => item.id === plasterId) ?? null
+  const plasterQty = plaster ? plasterGram / plaster.gramsPerUnit : null
+  const plasterAvailable = plaster ? Number(plaster.availableQty ?? plaster.onHandQty ?? 0) : null
+  const plasterShort =
+    plaster != null && plasterQty != null && plasterAvailable != null && plasterAvailable + 1e-9 < plasterQty
+  const blocked = needsPlaster && (!plaster || plasterShort)
+
   const resultThumbs = (slip?.resultImages ?? []).map((image, index) => ({
     kind: 'CASTING_TREE' as const,
     url: image.url,
@@ -88,6 +126,44 @@ export function CastingSlipConfirmDialog({
                 Thạch cao đã dùng: <strong>{gram(slip.plasterUsedGram)}</strong>
               </Typography>
             )}
+            {needsPlaster ? (
+              <Stack spacing={0.75}>
+                <TextField
+                  select
+                  size="small"
+                  label="Mã thạch cao xuất kho (kho NVL tiêu hao)"
+                  value={plaster ? plasterId : ''}
+                  onChange={(event) => setPlasterId(event.target.value)}
+                  disabled={saving || plasterOptions.isLoading}
+                  helperText={
+                    plasterOptions.isLoading
+                      ? 'Đang tải mã thạch cao…'
+                      : plaster && plasterQty != null
+                        ? `Xuất ${formatQty(String(plasterQty))} ${plaster.unit} · còn ${formatQty(String(plasterAvailable ?? 0))} ${plaster.unit}`
+                        : 'Chọn mã để hệ thống xuất thạch cao đã dùng'
+                  }
+                >
+                  {(plasterOptions.data?.items ?? []).map((item) => (
+                    <MenuItem key={item.id} value={item.id}>
+                      {[item.sku, item.name].filter(Boolean).join(' — ')} · còn{' '}
+                      {formatQty(item.availableQty ?? item.onHandQty ?? '0')} {item.unit}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {plasterOptions.data && plasterOptions.data.items.length === 0 ? (
+                  <Alert severity="error" sx={{ py: 0.25 }}>
+                    Kho NVL tiêu hao chưa có mã thạch cao (đơn vị gram / kg) — tạo mã trước khi xác nhận.
+                  </Alert>
+                ) : null}
+                {plasterShort && plaster ? (
+                  <Alert severity="error" sx={{ py: 0.25 }}>
+                    Không đủ thạch cao: cần {formatQty(String(plasterQty))} {plaster.unit}, kho chỉ còn{' '}
+                    {formatQty(String(plasterAvailable ?? 0))} {plaster.unit}. Nhập thêm thạch cao vào kho NVL
+                    tiêu hao rồi xác nhận.
+                  </Alert>
+                ) : null}
+              </Stack>
+            ) : null}
             {slip.leftoverGram != null ? (
               <Typography variant="body2">
                 Bạc giao chưa dùng (trả kho): <strong>{gram(slip.leftoverGram)}</strong>
@@ -111,7 +187,11 @@ export function CastingSlipConfirmDialog({
         <Button onClick={onClose} disabled={saving}>
           Hủy
         </Button>
-        <Button variant="contained" disabled={saving || !slip} onClick={onConfirm}>
+        <Button
+          variant="contained"
+          disabled={saving || !slip || blocked}
+          onClick={() => onConfirm(needsPlaster && plaster ? { plasterMaterialId: plaster.id } : {})}
+        >
           {saving ? 'Đang xác nhận…' : 'Xác nhận'}
         </Button>
       </DialogActions>
