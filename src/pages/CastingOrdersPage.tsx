@@ -42,7 +42,6 @@ import {
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
   type CastingSlipResultPayload,
-  BTP_METAL_LABEL,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
@@ -911,7 +910,7 @@ export function CastingSlipViewDialog({
                 </Typography>
                 <Typography variant="body2">
                   TL cây thông (trả): <strong>{formatGram(view.castTreeWeightGram)} g</strong>
-                  {' '}→ {BTP_METAL_LABEL[view.treeBtpMetal ?? 'S925']} · Bạc đã dùng:{' '}
+                  {' '}· Bạc đã dùng:{' '}
                   <strong>{formatGram(view.silverUsedGram)} g</strong>
                   {view.isServiceCast ? (
                     <>

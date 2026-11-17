@@ -111,8 +111,11 @@ export type CastingSlipStatus =
 
 export type CastingSlipResultPayload = {
   castTreeWeightGram: number
-  /** Phôi cắt từ cây nhập kho BTP vào BTP S925 hay BTP S999 (nhập lúc cắt cây). */
-  treeBtpMetal: BtpMetal
+  /**
+   * Phôi cắt từ cây nhập kho BTP vào BTP S925 hay BTP S999 (nhập lúc cắt cây). Form không còn hỏi
+   * (2026-11-17, chưa từng dùng S999) — bỏ trống thì BE lấy BTP S925.
+   */
+  treeBtpMetal?: BtpMetal
   silverUsedGram: number
   plasterUsedGram?: number
   serviceUnitPrice?: number
