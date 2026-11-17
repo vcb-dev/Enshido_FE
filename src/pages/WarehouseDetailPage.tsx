@@ -719,7 +719,7 @@ function StockCard({
           </Stack>
         </Box>
         <Box sx={{ flexShrink: 0 }}>
-          <RowActions onView={onView} onEdit={onEdit} />
+          <RowActions onView={onView} onEdit={profile.fixedMaterials ? undefined : onEdit} />
         </Box>
       </Stack>
 
@@ -1110,7 +1110,13 @@ function stockColumns(
       card: 'actions',
       header: 'Hành động',
       align: 'center',
-      render: (row) => <RowActions onView={() => actions.onView(row)} onEdit={() => actions.onEdit(row)} />,
+      // Kho mã cố định (BTP) chỉ xem — tồn đổi qua Nhập / Xuất, không sửa tay đầu kỳ / đơn giá.
+      render: (row) => (
+        <RowActions
+          onView={() => actions.onView(row)}
+          onEdit={profile.fixedMaterials ? undefined : () => actions.onEdit(row)}
+        />
+      ),
     },
   )
 
