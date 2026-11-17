@@ -23,8 +23,6 @@ import {
   getCastingSlipApi,
   listCastWorkersApi,
   listRestMaterialOptionsApi,
-  BTP_METAL_LABEL,
-  type BtpMetal,
   type CastCastWorkerOption,
   type CastingSlip,
   type UpdateCastingSlipPayload,
@@ -57,8 +55,6 @@ type Values = {
   grams: Record<MetalKey, string>
   materials: Record<MetalKey, string>
   tree: string
-  /** Mã kho BTP nhận phôi lúc cắt cây — đổi được trước khi cắt cây. */
-  treeMetal: BtpMetal
   silver: string
   plaster: string
   servicePrices: Record<string, string>
@@ -93,7 +89,6 @@ function valuesOf(slip: CastingSlip | null): Values {
       string
     >,
     tree: gramText(slip?.castTreeWeightGram),
-    treeMetal: slip?.treeBtpMetal ?? 'S925',
     silver: gramText(slip?.silverUsedGram),
     plaster: gramText(slip?.plasterUsedGram),
     servicePrices: Object.fromEntries(
@@ -205,7 +200,6 @@ export function CastingSlipEditDialog({
     }
     if (canResult) {
       if (values.tree !== initial.tree) payload.castTreeWeightGram = num(values.tree)!
-      if (values.treeMetal !== initial.treeMetal) payload.treeBtpMetal = values.treeMetal
       if (values.silver !== initial.silver) payload.silverUsedGram = num(values.silver)!
       if (!isService && values.plaster !== initial.plaster) payload.plasterUsedGram = num(values.plaster)!
       if (
@@ -450,17 +444,6 @@ export function CastingSlipEditDialog({
                       />
                     )}
                   </Box>
-                  <FormSelect<Values>
-                    name="treeMetal"
-                    label="Phôi nhập kho BTP (lúc cắt cây)"
-                    options={(Object.keys(BTP_METAL_LABEL) as BtpMetal[]).map((metal) => ({
-                      value: metal,
-                      label: BTP_METAL_LABEL[metal],
-                    }))}
-                    helperText={isCut ? 'Đã cắt cây thông — không đổi mã BTP nhận phôi được' : undefined}
-                    disabled={busy || isCut}
-                    size="small"
-                  />
                   {isService ? (
                     <Box
                       sx={{
