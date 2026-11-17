@@ -17,8 +17,9 @@ import {
 import type { StageEntry } from '../api/productionOrders'
 import { formatCt, formatQty } from '../api/inventory'
 import { isGoldMetal, type OrderMetalType, recoveredMaterialName } from '../api/intakeOrders'
-import { defectScopeText, formatDateShort, STAGE_LABEL } from './catalog'
+import { defectScopeText, formatDateShort, SILVER_LOSS_LIMITS, STAGE_LABEL } from './catalog'
 import { stoneReturnPreview } from './stoneReturn'
+import { stoneConfirmCheck } from './stoneConfirmCheck'
 import { KcsImages } from './KcsImages'
 
 const NUM = { textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const
@@ -92,6 +93,8 @@ export function KeeperConfirmDialog({
   const visible = lines.filter((line) => line.show)
   const defectLabel = defectScopeText(entry)
   const stoneUsed = entry && entry.stonesIn != null ? entry.stonesIn - (entry.returnedStoneCount ?? 0) : null
+  // Đối chiếu TL sau Vào đá với đá thực tế (gói cấp − gói thừa) — lộ ra gói thừa ghi sai / cân sai.
+  const stoneCheck = stoneConfirmCheck(entry)
 
   return (
     <Dialog open={entry != null} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
@@ -230,6 +233,28 @@ export function KeeperConfirmDialog({
                   {entry.stoneLoss != null && entry.stoneLoss > 0 ? `, mất ${entry.stoneLoss}` : ''}).
                 </Typography>
               </Stack>
+            ) : null}
+
+            {stoneCheck?.issue ? (
+              <Alert severity={stoneCheck.issue === 'gain' ? 'error' : 'warning'} sx={{ py: 0.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {stoneCheck.issue === 'gain'
+                    ? 'Hàng nhận lại nặng hơn bạc + đá thực tế — kiểm tra cân lại'
+                    : `Hao theo đá thực tế ${formatQty(String(stoneCheck.percent))}% — vượt mức ${SILVER_LOSS_LIMITS.warn}%`}
+                </Typography>
+                <Typography variant="body2">
+                  Bạc vào khâu {formatQty(String(stoneCheck.silverIn))} g + đá thực tế{' '}
+                  {formatQty(String(stoneCheck.stoneUsed))} g ({formatCt(String(stoneCheck.stoneUsed))} = cấp{' '}
+                  {formatCt(String(stoneCheck.stoneIssued))} − gói thừa {formatCt(String(stoneCheck.stoneLeft))}) − TL QC
+                  cân ra {formatQty(String(stoneCheck.out))} g = <b>{formatQty(String(stoneCheck.loss))} g</b>.
+                </Typography>
+                <Typography variant="body2">
+                  {stoneCheck.issue === 'gain'
+                    ? 'Gói đá thừa ghi nhiều hơn thực tế hoặc QC cân sai.'
+                    : 'Có thể gói đá thừa chưa cân / ghi thiếu — đá xuất kho NVL sẽ nhiều hơn thực tế.'}{' '}
+                  Nhờ QC cân lại gói thừa và hàng trước khi xác nhận.
+                </Typography>
+              </Alert>
             ) : null}
 
             {goodQty === 0 ? (
