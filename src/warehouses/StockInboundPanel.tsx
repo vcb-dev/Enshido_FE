@@ -67,6 +67,7 @@ import {
 } from './stockFilters'
 import { inPeriod, useWarehousePeriod, vnDayOf } from './warehousePeriod'
 import { useCatalogFilterOptions } from './useCatalogFilterOptions'
+import { BTP_WAREHOUSE_CODE } from '../orders/btpStock'
 
 /** Cột STT do DataTable tự chèn khi `showIndex`. */
 const INDEX_COL_WIDTH = 44
@@ -207,12 +208,16 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       .map((name) => ({ id: name, name }))
   }, [locationSlots.data?.items, stock.data?.items])
 
+  // Kho BTP chỉ còn BTP S925 / S999 — bỏ cột tên, ghi chú rộng đứng cạnh mã (giống tab Xuất).
+  const isBtp = warehouseCode === BTP_WAREHOUSE_CODE
   const rows = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
       if (!inPeriod(vnDayOf(row.receivedAt), period)) return false
       const catalog = row.materialId ? stockById.get(row.materialId) : undefined
-      if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
+      // Kho BTP: ô tìm nằm trên cột Ghi chú, tìm theo ghi chú.
+      const searchText = isBtp ? (row.note ?? '') : row.name
+      if (nameQuery && !searchText.toLocaleLowerCase('vi').includes(nameQuery)) return false
       if (showUnit && params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
       if (
         inboundProfile.showShapeColor &&
@@ -227,7 +232,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
       if (params.enteredBy && (row.enteredBy ?? '').trim() !== params.enteredBy) return false
       return true
     })
-  }, [catalogFilterParams, items, params, inboundProfile, showUnit, stockById, period])
+  }, [catalogFilterParams, isBtp, items, params, inboundProfile, showUnit, stockById, period])
 
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
@@ -310,6 +315,23 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   const columns = useMemo(() => {
     const stockOf = (row: InboundRow) =>
       row.materialId ? stockById.get(row.materialId) : undefined
+    const noteColumn = {
+      key: 'note',
+      header: 'Ghi chú',
+      width: 120,
+      ellipsis: true,
+      render: (row: InboundRow) => row.note ?? '—',
+    }
+    // Kho BTP: tên luôn là "BTP S925" nên bỏ cột tên; ghi chú (phôi / BTP đã nguội… của đơn nào)
+    // đứng cạnh mã, rộng và xuống dòng, kèm ô tìm.
+    const wideNoteColumn = {
+      ...noteColumn,
+      card: 'title' as const,
+      width: 460,
+      ellipsis: false,
+      cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
+      filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} placeholder="Tìm ghi chú…" />,
+    }
     return [
       {
         key: 'receivedAt',
@@ -330,15 +352,19 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
           ? { valueId: params.color, options: catalogFilters.colorOptions, onChange: (id) => table.setFilter({ color: id }) }
           : undefined,
       }),
-      {
-        key: 'name',
-        card: 'title' as const,
-        header: profile.nameLabel,
-        // Tên đá dài hơn bề ngang cột nên cho xuống dòng, cắt bớt thì không đọc được đủ tên.
-        cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
-        sortable: true,
-        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
-      },
+      ...(isBtp
+        ? [wideNoteColumn]
+        : [
+            {
+              key: 'name',
+              card: 'title' as const,
+              header: profile.nameLabel,
+              // Tên đá dài hơn bề ngang cột nên cho xuống dòng, cắt bớt thì không đọc được đủ tên.
+              cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
+              sortable: true,
+              filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+            },
+          ]),
       ...(showUnit
         ? [
             {
@@ -421,13 +447,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
             }
           : undefined,
       }),
-      {
-        key: 'note',
-        header: 'Ghi chú',
-        width: 120,
-        ellipsis: true,
-        render: (row: InboundRow) => row.note ?? '—',
-      },
+      ...(isBtp ? [] : [noteColumn]),
       {
         key: 'enteredBy',
         header: 'Người nhập',
@@ -489,6 +509,7 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
   }, [
     catalogFilters,
     enteredByOptions,
+    isBtp,
     locationOptions,
     openEdit,
     openView,
