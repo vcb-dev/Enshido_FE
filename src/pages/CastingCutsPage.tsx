@@ -113,8 +113,12 @@ export function CastingCutsPage() {
   })
 
   const confirm = useMutation({
-    mutationFn: (slip: CastingSlip) => confirmCastingSlipApi(slip.id),
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: { plasterMaterialId?: string } }) =>
+      confirmCastingSlipApi(slip.id, payload),
     onSuccess: (updated) => {
+      // Thạch cao vừa xuất khỏi kho NVL tiêu hao.
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', 'nvl-tieu-hao'] })
+      void queryClient.invalidateQueries({ queryKey: ['casting-plaster-material-options'] })
       setConfirmTarget(null)
       dialog.close()
       toast.success(`Phiếu ${updated.code}: đã xác nhận — Đúc xong`)
@@ -162,7 +166,7 @@ export function CastingCutsPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const confirmingId = confirm.isPending ? confirm.variables?.id : null
+  const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
   const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
 
   const askRejectCast = useCallback(
@@ -405,7 +409,7 @@ export function CastingCutsPage() {
         slip={confirmTarget}
         saving={confirm.isPending}
         onClose={() => setConfirmTarget(null)}
-        onConfirm={() => confirmTarget && confirm.mutate(confirmTarget)}
+        onConfirm={(payload) => confirmTarget && confirm.mutate({ slip: confirmTarget, payload })}
       />
       <CastingSlipsCutDialog
         slips={bulkTargets}

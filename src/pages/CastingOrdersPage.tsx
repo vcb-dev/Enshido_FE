@@ -259,8 +259,9 @@ export function CastingOrdersPage() {
   })
   // Thủ kho xác nhận số liệu thợ vừa nhập → Đúc xong. Cắt cây thông là bước sau.
   const confirm = useMutation({
-    mutationFn: (slip: CastingSlip) => confirmCastingSlipApi(slip.id),
-    onMutate: (slip) => {
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: { plasterMaterialId?: string } }) =>
+      confirmCastingSlipApi(slip.id, payload),
+    onMutate: ({ slip }) => {
       setConfirmTarget(null)
       applyCastingSlipUpdate(queryClient, {
         ...slip,
@@ -270,8 +271,11 @@ export function CastingOrdersPage() {
     },
     onSuccess: (updated) => {
       afterSlipUpdated(updated, `Phiếu ${updated.code}: đã xác nhận — Đúc xong`)
+      // Thạch cao vừa xuất khỏi kho NVL tiêu hao.
+      void queryClient.invalidateQueries({ queryKey: ['warehouse-stock', 'nvl-tieu-hao'] })
+      void queryClient.invalidateQueries({ queryKey: ['casting-plaster-material-options'] })
     },
-    onError: (error: Error, slip) => {
+    onError: (error: Error, { slip }) => {
       applyCastingSlipUpdate(queryClient, slip)
       toast.error(error.message)
     },
@@ -317,7 +321,7 @@ export function CastingOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const confirmingId = confirm.isPending ? confirm.variables?.id : null
+  const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
   const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
   const askRejectCast = useCallback(
     (slip: CastingSlip) => {
@@ -621,7 +625,7 @@ export function CastingOrdersPage() {
         slip={confirmTarget}
         saving={confirm.isPending}
         onClose={() => setConfirmTarget(null)}
-        onConfirm={() => confirmTarget && confirm.mutate(confirmTarget)}
+        onConfirm={(payload) => confirmTarget && confirm.mutate({ slip: confirmTarget, payload })}
       />
       <CastingSlipIssueDialog
         slip={issueTarget}
