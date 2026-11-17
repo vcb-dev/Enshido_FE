@@ -290,9 +290,9 @@ function orderPrintable(order: ProductionOrderDetail) {
 const BATCH_PRINT_LIMIT = 100
 
 /**
- * In phiếu tổng (phiếu mẹ) của nhiều lệnh SX một lượt — `/orders/print-batch?codes=A,B`, mỗi
- * lệnh một trang. Dùng ngay sau khi cắt cây thông: lúc đó chưa chia phiếu con nên phiếu chưa có
- * mã QR; QR in theo phiếu con khi giao Nguội.
+ * In phiếu sản xuất của nhiều lệnh SX một lượt — `/orders/print-batch?codes=A,B` (màn Cắt cây
+ * thông / phiếu đúc). Mỗi lệnh in phiếu tổng, lệnh đã chia phiếu con thì in tiếp từng phiếu con
+ * (có mã QR cho thợ quét) — mỗi phiếu một trang.
  */
 export function ProductionTicketBatchPrintPage() {
   const [searchParams] = useSearchParams()
@@ -327,6 +327,12 @@ export function ProductionTicketBatchPrintPage() {
   const printable = orders.filter(orderPrintable)
   const failed = codes.filter((_, index) => results[index]?.isError)
   const notReady = orders.filter((order) => !orderPrintable(order)).map((order) => order.code)
+  // Phiếu tổng rồi tới các phiếu con của lệnh đó.
+  const sheets = printable.flatMap((order) => [
+    { key: order.code, order, subTicket: undefined as SubTicket | undefined },
+    ...order.subTickets.map((ticket) => ({ key: `${order.code}-${ticket.no}`, order, subTicket: ticket })),
+  ])
+  const subTicketCount = sheets.length - printable.length
 
   async function print() {
     window.print()
@@ -337,6 +343,29 @@ export function ProductionTicketBatchPrintPage() {
       if (stamp.status !== 'fulfilled') continue
       queryClient.setQueryData<ProductionOrderDetail>(['production-order', stamp.value.code], (prev) =>
         prev ? { ...prev, lastPrintedAt: stamp.value.lastPrintedAt } : prev,
+      )
+    }
+    // Ghi nhận lần in của từng phiếu con đã in kèm.
+    const subStamps = await Promise.allSettled(
+      sheets
+        .filter((sheet) => sheet.subTicket)
+        .map(async ({ order, subTicket }) => ({
+          code: order.code,
+          no: subTicket!.no,
+          lastPrintedAt: (await markSubTicketPrintedApi(order.code, subTicket!.no)).lastPrintedAt,
+        })),
+    )
+    for (const stamp of subStamps) {
+      if (stamp.status !== 'fulfilled') continue
+      queryClient.setQueryData<ProductionOrderDetail>(['production-order', stamp.value.code], (prev) =>
+        prev
+          ? {
+              ...prev,
+              subTickets: prev.subTickets.map((ticket) =>
+                ticket.no === stamp.value.no ? { ...ticket, lastPrintedAt: stamp.value.lastPrintedAt } : ticket,
+              ),
+            }
+          : prev,
       )
     }
     void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
@@ -378,6 +407,7 @@ export function ProductionTicketBatchPrintPage() {
       >
         <Button variant="contained" startIcon={<PrintIcon />} disabled={!printable.length} onClick={() => void print()}>
           In {printable.length} phiếu sản xuất
+          {subTicketCount ? ` + ${subTicketCount} phiếu con` : ''}
         </Button>
         <ToggleButtonGroup
           size="small"
@@ -412,9 +442,9 @@ export function ProductionTicketBatchPrintPage() {
         ) : null}
       </Stack>
 
-      {printable.map((order, index) => (
-        <TicketSheet key={order.code} paper={paper} stacked last={index === printable.length - 1}>
-          <Ticket order={order} printedBy={user?.fullName || user?.username || ''} />
+      {sheets.map(({ key, order, subTicket }, index) => (
+        <TicketSheet key={key} paper={paper} stacked last={index === sheets.length - 1}>
+          <Ticket order={order} subTicket={subTicket} printedBy={user?.fullName || user?.username || ''} />
         </TicketSheet>
       ))}
     </Box>
