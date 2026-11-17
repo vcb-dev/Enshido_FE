@@ -79,6 +79,7 @@ import {
   formatDateTime,
   isInStage,
   isSelfTakeStage,
+  keeperConfirmNote,
   skipsStone,
   MANUAL_STATUSES,
   parentWorkTicketUrl,
@@ -213,7 +214,7 @@ export function ProductionOrderDetailPage() {
   const confirmStage = useOrderMutation(
     code,
     (entry: StageEntry) => confirmStageApi(code, entry.id),
-    'Thủ kho đã xác nhận — hàng đạt nhập kho BTP, hàng lỗi + nguyên liệu thừa nhập kho NVL',
+    (entry: StageEntry) => `Thủ kho đã xác nhận — ${keeperConfirmNote(entry.stage)}`,
   )
   const undoReturn = useOrderMutation(code, (entry: StageEntry) => undoReturnApi(code, entry.id), 'Đã gỡ nhận lại')
   const status = useOrderMutation(

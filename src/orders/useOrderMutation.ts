@@ -9,12 +9,13 @@ import { scheduleProductionStatusCountsRefresh } from './productionStatusCountsR
 export function useOrderMutation<V>(
   code: string,
   fn: (vars: V) => Promise<ProductionOrderDetail>,
-  success: string,
+  /** Thông báo khi xong — truyền hàm khi câu chữ tuỳ theo biến (vd. khâu được xác nhận). */
+  success: string | ((vars: V) => string),
 ) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: (order) => {
+    onSuccess: (order, vars) => {
       seedProductionOrder(queryClient, order)
       void queryClient.invalidateQueries({
         queryKey: ['production-order-costing', code],
@@ -26,7 +27,7 @@ export function useOrderMutation<V>(
       })
       scheduleMyTicketsRefresh(queryClient)
       scheduleProductionStatusCountsRefresh(queryClient)
-      toast.success(success)
+      toast.success(typeof success === 'function' ? success(vars) : success)
     },
     onError: (error: Error) => toast.error(error.message),
   })
