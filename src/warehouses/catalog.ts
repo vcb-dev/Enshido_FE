@@ -93,7 +93,8 @@ export type StockProfile = {
   showGramQty?: boolean
   /// Kho chỉ tính theo TL (g) — bỏ hẳn cột SL trên Tồn (kho BTP từ 2026-11-16).
   weightOnly?: boolean
-  /// Kho có mã cố định, không tạo mã mới từ Tồn (kho BTP chỉ có BTP S925 / S999).
+  /// Kho có mã cố định, không tạo hay sửa mã từ Tồn (kho BTP chỉ có BTP S925 / S999) — tồn chỉ đổi
+  /// qua tab Nhập / Xuất.
   fixedMaterials?: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
@@ -149,15 +150,17 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showRealStock: false,
     showGramQty: true,
   },
+  // Kho BTP chỉ còn BTP S925 / S999 tính theo gram: tên đã ghi chất liệu, không còn danh mục /
+  // phân loại / màu xi / màu đá / size để hiện hay lọc.
   'btp-cho-vao-da': {
     showSku: true,
     showLocation: false,
     showShapeColor: false,
     showType: false,
-    showBodyMetal: true,
-    showProductKind: true,
-    showBtpCategory: true,
-    showProductInfo: true,
+    showBodyMetal: false,
+    showProductKind: false,
+    showBtpCategory: false,
+    showProductInfo: false,
     showNvlCategory: false,
     showStatus: false,
     showSize: false,
