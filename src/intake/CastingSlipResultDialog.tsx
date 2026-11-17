@@ -47,7 +47,7 @@ type Props = {
 
 type Values = {
   tree: string
-  /** Mã kho BTP nhận TL cây sau đúc. */
+  /** Mã kho BTP nhận phôi lúc cắt cây (cây sau đúc không nhập kho). */
   treeMetal: BtpMetal
   silver: string
   plaster: string
@@ -272,7 +272,7 @@ export function CastingSlipResultDialog({ slip, saving, onClose, onSave }: Props
   )
 }
 
-/** TL cây sau đúc nhập kho BTP vào BTP S925 (mặc định) hay BTP S999. */
+/** Phôi cắt từ cây này nhập kho BTP vào BTP S925 (mặc định) hay BTP S999 — nhập lúc cắt cây. */
 function TreeMetalField({ control, disabled }: { control: Control<Values>; disabled: boolean }) {
   return (
     <Controller
@@ -280,7 +280,7 @@ function TreeMetalField({ control, disabled }: { control: Control<Values>; disab
       name="treeMetal"
       render={({ field }) => (
         <FormControl disabled={disabled}>
-          <FormLabel sx={{ fontSize: '0.8rem' }}>Nhập TL cây vào kho BTP</FormLabel>
+          <FormLabel sx={{ fontSize: '0.8rem' }}>Phôi nhập kho BTP (lúc cắt cây)</FormLabel>
           <RadioGroup row value={field.value} onChange={(event) => field.onChange(event.target.value as BtpMetal)}>
             {(Object.keys(BTP_METAL_LABEL) as BtpMetal[]).map((metal) => (
               <FormControlLabel key={metal} value={metal} control={<Radio size="small" />} label={BTP_METAL_LABEL[metal]} />

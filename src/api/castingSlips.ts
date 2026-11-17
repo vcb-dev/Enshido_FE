@@ -1,7 +1,7 @@
 import { apiFetch } from './auth'
 import type { OrderImage } from './productionOrders'
 
-/** Hai mã của kho BTP (2026-11-16): BTP S925 cho mọi luồng, S999 khi chọn cho TL cây sau đúc. */
+/** Hai mã của kho BTP (2026-11-16): BTP S925 cho mọi luồng, S999 khi chọn cho phôi cắt từ cây đúc. */
 export type BtpMetal = 'S925' | 'S999'
 
 export const BTP_METAL_LABEL: Record<BtpMetal, string> = {
@@ -74,7 +74,7 @@ export type CastingSlip = {
   isServiceCast: boolean
   /** Bước 9: TL cây thông sau đúc, bạc và thạch cao đã dùng (g). */
   castTreeWeightGram: string | null
-  /** Mã kho BTP nhận TL cây sau đúc; phiếu cũ để trống = BTP S925. */
+  /** Mã kho BTP nhận phôi lúc cắt cây; phiếu cũ để trống = BTP S925. */
   treeBtpMetal?: BtpMetal | null
   silverUsedGram: string | null
   plasterUsedGram: string | null
@@ -111,7 +111,7 @@ export type CastingSlipStatus =
 
 export type CastingSlipResultPayload = {
   castTreeWeightGram: number
-  /** TL cây sau đúc nhập kho BTP vào BTP S925 hay BTP S999. */
+  /** Phôi cắt từ cây nhập kho BTP vào BTP S925 hay BTP S999 (nhập lúc cắt cây). */
   treeBtpMetal: BtpMetal
   silverUsedGram: number
   plasterUsedGram?: number
