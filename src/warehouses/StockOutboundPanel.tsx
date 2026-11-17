@@ -244,7 +244,9 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
     return items.filter((row) => {
       if (!inPeriod(vnDayOf(row.issuedAt), period)) return false
       const catalog = row.materialId ? stockById.get(row.materialId) : undefined
-      if (nameQuery && !row.name.toLocaleLowerCase('vi').includes(nameQuery)) return false
+      // Kho BTP bỏ cột tên (luôn là BTP S925) — ô tìm nằm trên cột Ghi chú, tìm theo ghi chú.
+      const searchText = byIntake ? (row.note ?? '') : row.name
+      if (nameQuery && !searchText.toLocaleLowerCase('vi').includes(nameQuery)) return false
       if (showUnit && params.unit && row.unit !== params.unit && row.unitId !== params.unit) return false
       if (
         outboundProfile.showShapeColor &&
@@ -262,7 +264,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
       }
       return true
     })
-  }, [catalogFilterParams, items, outboundProfile, params, showUnit, stockById, period])
+  }, [byIntake, catalogFilterParams, items, outboundProfile, params, showUnit, stockById, period])
 
   const rows = useMemo(() => groupOutboundRows(lines, byIntake), [lines, byIntake])
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
@@ -385,6 +387,24 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
         }
       />
     )
+    const noteColumn = {
+      key: 'note',
+      header: 'Ghi chú',
+      width: 108,
+      ellipsis: true,
+      className: 'note-cell',
+      render: (row: OutboundGroup) => (row.grouped ? null : (row.note ?? '—')),
+      renderSub: (line: OutboundRow) => line.note ?? '—',
+    } satisfies Column<OutboundGroup, OutboundRow>
+    // Kho BTP: tên luôn là "BTP S925" nên bỏ cột tên; ghi chú (phiếu nào, khâu nào) đứng cạnh mã,
+    // rộng và xuống dòng, kèm ô tìm.
+    const wideNoteColumn = {
+      ...noteColumn,
+      width: 460,
+      ellipsis: false,
+      cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
+      filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} placeholder="Tìm ghi chú…" />,
+    } satisfies Column<OutboundGroup, OutboundRow>
     return [
       {
         key: 'productionOrderCode',
@@ -438,18 +458,22 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
             : undefined,
         }),
       ),
-      {
-        key: 'name',
-        header: profile.nameLabel,
-        // Tên đá dài tới ~50 ký tự nên để rộng và cho xuống dòng thay vì cắt bớt.
-        width: 460,
-        sortable: true,
-        className: 'name-cell',
-        cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
-        filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
-        render: (row: OutboundGroup) => (row.grouped ? null : row.name),
-        renderSub: (line) => line.name,
-      },
+      ...(byIntake
+        ? [wideNoteColumn]
+        : [
+            {
+              key: 'name',
+              header: profile.nameLabel,
+              // Tên đá dài tới ~50 ký tự nên để rộng và cho xuống dòng thay vì cắt bớt.
+              width: 460,
+              sortable: true,
+              className: 'name-cell',
+              cellSx: { whiteSpace: 'normal', wordBreak: 'break-word' } as const,
+              filter: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} />,
+              render: (row: OutboundGroup) => (row.grouped ? null : row.name),
+              renderSub: (line: OutboundRow) => line.name,
+            } satisfies Column<OutboundGroup, OutboundRow>,
+          ]),
       ...(showUnit
         ? [
             {
@@ -544,15 +568,7 @@ export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string })
             : undefined,
         }),
       ),
-      {
-        key: 'note',
-        header: 'Ghi chú',
-        width: 108,
-        ellipsis: true,
-        className: 'note-cell',
-        render: (row: OutboundGroup) => (row.grouped ? null : (row.note ?? '—')),
-        renderSub: (line) => line.note ?? '—',
-      },
+      ...(byIntake ? [] : [noteColumn]),
       {
         key: 'issuedBy',
         card: 'meta' as const,
