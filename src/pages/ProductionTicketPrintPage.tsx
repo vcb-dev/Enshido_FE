@@ -479,8 +479,12 @@ function Ticket({
   const splitNote = subTicket
     ? `Phiếu con của đơn ${order.code} (${order.qty} sp)`
     : order.subTickets.length
-      ? `Phiếu con: ${order.subTickets.map((ticket) => `${ticket.code} (${ticket.qty} sp)`).join(', ')}`
+      ? `Phiếu con: ${order.subTickets
+          .map((ticket) => `${ticket.code} (${ticket.qty} sp${ticket.note?.trim() ? ` · ${ticket.note.trim()}` : ''})`)
+          .join(', ')}`
       : ''
+  // Ghi chú thủ kho gõ lúc chia phiếu con (vd "size 5") — in đậm để thợ thấy ngay phiếu này làm gì.
+  const ticketNote = subTicket?.note?.trim() ?? ''
   const issuedNote = [
     materials.lines
       .map(
@@ -630,7 +634,15 @@ function Ticket({
           <tr>
             {/* Bỏ ô "Bạc xuất thêm (g)" theo mẫu phiếu giấy; dòng ghi chú phiếu con / vật tư giữ, kéo hết bề ngang. */}
             <td colSpan={SPAN_3 + 1} style={{ fontSize: '0.9em' }}>
-              {[splitNote, issuedNote].filter(Boolean).join(' — ')}
+              {splitNote}
+              {ticketNote ? (
+                <>
+                  {' · '}
+                  <strong style={{ fontSize: '1.15em' }}>Ghi chú: {ticketNote}</strong>
+                </>
+              ) : null}
+              {splitNote && issuedNote ? ' — ' : ''}
+              {issuedNote}
             </td>
           </tr>
           <tr>
