@@ -54,6 +54,8 @@ export const ACTION_LABEL: Record<string, string> = {
   TICKET_OUTCOME: 'Chốt kết cục phiếu con',
   TICKET_CLEAR_OUTCOME: 'Gỡ kết cục phiếu con',
   TICKET_PRINT: 'In phiếu con',
+  TICKET_REWORK: 'Tạo phiếu bù',
+  CAST_DEFECT_REWORK: 'Lỗi đúc một phần · tạo lệnh bù',
 }
 
 /** Nhãn tiếng Việt cho các trường hay gặp trong giá trị trước / sau. */
