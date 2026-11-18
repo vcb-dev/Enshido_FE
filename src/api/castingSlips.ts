@@ -27,6 +27,12 @@ export type CastingSlipOrderLine = {
   blankWeightGram?: string | null
   /** Ảnh cân phôi lúc cắt cây thông. */
   blankImages?: CastingSlipImage[]
+  /** Lỗi đúc một phần: số sp hỏng tách sang lệnh bù (đi lại từ bước sáp). */
+  defectQty?: number | null
+  defectNote?: string | null
+  /** Lệnh bù cho số sp lỗi đúc (mã A… / mã SX). */
+  reworkOrderCode?: string | null
+  reworkSxCode?: string | null
   /** TL sáp (cây thông) của đơn lúc lên phiếu (g). */
   waxWeightGram: string
   /** Đúc dịch vụ: đơn giá dịch vụ (đ) của đúng đơn này. */
@@ -128,6 +134,9 @@ export type ConfirmCastingSlipPayload = {
     intakeOrderId: string
     qty: number
     weightGram: number
+    /** Số sp đúc hỏng — BE tạo lệnh bù đi lại từ bước sáp, SL đơn gốc giảm tương ứng. */
+    defectQty?: number
+    defectNote?: string
     images: CastingSlipImage[]
   }>
   /** Phần cây còn lại nhập bạc nguyên liệu S925 (A00001), g. */

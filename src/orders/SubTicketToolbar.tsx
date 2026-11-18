@@ -49,7 +49,10 @@ export function SubTicketToolbar({
   // chia thật rồi tách phần lỗi ra, kẻo đọc như còn hàng chưa chia.
   const splitQty = tickets.reduce((sum, ticket) => sum + ticket.qty, 0)
   const defectQty = Math.max(0, splitQty - order.subTicketTotals.qty)
-  const reworkedQty = (order.reworks ?? []).reduce((sum, item) => sum + item.qty, 0)
+  // Chỉ lệnh bù cho hàng lỗi ở khâu (gắn lần QC nhận lại) — lệnh bù lỗi đúc tách trước khi chia.
+  const reworkedQty = (order.reworks ?? [])
+    .filter((item) => item.entryId != null)
+    .reduce((sum, item) => sum + item.qty, 0)
   const defectNote = defectQty
     ? ` · ${defectQty} sp lỗi — ${
         reworkedQty >= defectQty

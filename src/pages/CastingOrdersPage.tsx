@@ -689,6 +689,15 @@ export function CastingSlipCutFields({ slip }: { slip: CastingSlip }) {
             <Typography variant="body2">
               <strong>Số phôi:</strong> {line.blankQty ?? '—'}
             </Typography>
+            {line.defectQty ? (
+              <Typography variant="body2" color="error">
+                <strong>Lỗi đúc:</strong> {line.defectQty} sp
+                {line.reworkOrderCode
+                  ? ` — lệnh bù ${line.reworkSxCode ?? line.reworkOrderCode} đi lại từ bước sáp`
+                  : ''}
+                {line.defectNote ? ` · ${line.defectNote}` : ''}
+              </Typography>
+            ) : null}
             <Typography variant="body2">
               <strong>Trọng lượng phôi:</strong>{' '}
               {line.blankWeightGram != null && line.blankWeightGram !== ''

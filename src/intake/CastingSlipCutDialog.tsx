@@ -22,13 +22,16 @@ import {
 } from '../api/castingSlips'
 import type { OrderImage } from '../api/productionOrders'
 import { formatQty } from '../api/inventory'
-import { DialogForm, FormQtyField } from '../components/ui'
+import { DialogForm, FormQtyField, FormTextField } from '../components/ui'
 import { FormImageField } from '../orders/FormImageField'
 
 type LineValues = {
   intakeOrderId: string
   qty: string
   weight: string
+  /** Số sp đúc hỏng — trống = 0. Lưu xong BE tạo lệnh bù đi lại từ bước sáp. */
+  defectQty: string
+  defectNote: string
   images: OrderImage[]
 }
 type RestChoice = NonNullable<RestMaterialOptions['choices']>[number]
@@ -49,6 +52,14 @@ function gram(raw: string, allowZero: boolean) {
   if (!Number.isFinite(value) || value < 0 || (!allowZero && value <= 0))
     return null
   return value
+}
+
+/** SL lỗi đúc: trống = 0, số nguyên ≥ 0; sai thì null. */
+export function defectCount(raw: string | undefined) {
+  const text = (raw ?? '').trim()
+  if (!text) return 0
+  const value = Number(text)
+  return Number.isInteger(value) && value >= 0 ? value : null
 }
 
 function round4(value: number) {
@@ -80,6 +91,8 @@ function defaultValues(slip: CastingSlip): SlipValues {
     lines: slip.orders.map((line) => ({
       intakeOrderId: line.intakeOrderId,
       qty: String(line.qty),
+      defectQty: '',
+      defectNote: '',
       weight:
         tree > 0 && waxTotal > 0
           ? String(round4((tree * Number(line.waxWeightGram ?? 0)) / waxTotal))
@@ -209,6 +222,25 @@ export function CastingSlipsCutDialog({
     })
   }, [watched, slips, form, dirtyFields])
 
+  // Nhập SL lỗi đúc là tự trừ vào Số phôi đạt (= SL đơn − lỗi); thủ kho đã tự gõ Số phôi thì
+  // không ghi đè.
+  useEffect(() => {
+    slips.forEach((slip, slipIndex) => {
+      const value = watched?.[slipIndex]
+      if (!value) return
+      slip.orders.forEach((order, index) => {
+        const line = value.lines[index]
+        if (!line || dirtyFields.slips?.[slipIndex]?.lines?.[index]?.qty) return
+        const defect = defectCount(line.defectQty)
+        if (defect == null || defect >= order.qty) return
+        const qty = String(order.qty - defect)
+        if (qty !== line.qty) {
+          form.setValue(`slips.${slipIndex}.lines.${index}.qty`, qty, { shouldValidate: true })
+        }
+      })
+    })
+  }, [watched, slips, form, dirtyFields])
+
   const busy = saving || Object.values(uploads).some(Boolean)
 
   return (
@@ -230,19 +262,25 @@ export function CastingSlipsCutDialog({
             const s925Gram = gram(value.restS925, true)
             const recoveredGram = gram(value.restRecovered, true)
             if (s925Gram == null || recoveredGram == null) return
-            const blanks = value.lines.map((line) => ({
-              intakeOrderId: line.intakeOrderId,
-              qty: Number(line.qty),
-              weightGram: gram(line.weight, false)!,
-              images: toImages(line.images),
-            }))
+            const blanks = value.lines.map((line) => {
+              const defectQty = defectCount(line.defectQty)
+              const note = line.defectNote.trim()
+              return {
+                intakeOrderId: line.intakeOrderId,
+                qty: Number(line.qty),
+                weightGram: gram(line.weight, false)!,
+                ...(defectQty ? { defectQty, ...(note ? { defectNote: note } : {}) } : {}),
+                images: toImages(line.images),
+              }
+            })
             if (
               blanks.some(
                 (line) =>
                   !Number.isInteger(line.qty) ||
                   line.qty <= 0 ||
                   line.weightGram == null,
-              )
+              ) ||
+              value.lines.some((line) => defectCount(line.defectQty) == null)
             )
               return
             if (recoveredGram > 0 && recoveredMissing) return
@@ -281,82 +319,128 @@ export function CastingSlipsCutDialog({
                   . Nhập phôi từng đơn rồi phần cây còn lại về kho NVL. Sau bước
                   này đơn sang Chờ nguội.
                 </Typography>
-                {slip.orders.map((order, index) => (
-                  <Stack
-                    key={order.intakeOrderId}
-                    spacing={1}
-                    sx={{
-                      p: 1.5,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Typography variant="subtitle2">
-                      {order.code}
-                      {order.productName
-                        ? ` · ${order.productName}`
-                        : ''} · {order.qty} sản phẩm
-                    </Typography>
-                    <input
-                      type="hidden"
-                      {...form.register(
-                        `slips.${slipIndex}.lines.${index}.intakeOrderId`,
-                      )}
-                    />
+                <Typography variant="body2" color="text.secondary">
+                  Có sản phẩm đúc hỏng thì nhập <strong>SL lỗi đúc</strong>: hệ thống tạo lệnh bù
+                  đi lại từ bước sáp, đơn gốc chỉ đi tiếp với số phôi đạt. Sản phẩm hỏng cân vào
+                  phần cây còn lại.
+                </Typography>
+                {slip.orders.map((order, index) => {
+                  const defect = defectCount(watched?.[slipIndex]?.lines[index]?.defectQty)
+                  return (
                     <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1.5}
+                      key={order.intakeOrderId}
+                      spacing={1}
+                      sx={{
+                        p: 1.5,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
                     >
-                      <FormQtyField<Values>
-                        name={`slips.${slipIndex}.lines.${index}.qty`}
-                        label="Số phôi"
-                        required
-                        size="small"
-                        fullWidth
-                        disabled={busy}
-                        rules={{
-                          validate: (value) => {
-                            const qty = Number(value)
-                            return Number.isInteger(qty) &&
-                              qty > 0 &&
-                              qty <= order.qty
-                              ? true
-                              : `Nhập số phôi nguyên từ 1 đến ${order.qty}`
-                          },
-                        }}
+                      <Typography variant="subtitle2">
+                        {order.code}
+                        {order.productName
+                          ? ` · ${order.productName}`
+                          : ''} · {order.qty} sản phẩm
+                      </Typography>
+                      <input
+                        type="hidden"
+                        {...form.register(
+                          `slips.${slipIndex}.lines.${index}.intakeOrderId`,
+                        )}
                       />
-                      <FormQtyField<Values>
-                        name={`slips.${slipIndex}.lines.${index}.weight`}
-                        label="Trọng lượng phôi (g)"
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1.5}
+                      >
+                        <FormQtyField<Values>
+                          name={`slips.${slipIndex}.lines.${index}.qty`}
+                          label="Số phôi đạt"
+                          required
+                          size="small"
+                          fullWidth
+                          disabled={busy}
+                          rules={{
+                            validate: (value, values) => {
+                              const qty = Number(value)
+                              const max =
+                                order.qty -
+                                (defectCount(
+                                  values.slips[slipIndex]?.lines[index]?.defectQty,
+                                ) ?? 0)
+                              return Number.isInteger(qty) && qty > 0 && qty <= max
+                                ? true
+                                : max < order.qty
+                                  ? `Số phôi đạt + SL lỗi đúc tối đa ${order.qty} — nhập từ 1 đến ${max}`
+                                  : `Nhập số phôi nguyên từ 1 đến ${order.qty}`
+                            },
+                          }}
+                        />
+                        <FormQtyField<Values>
+                          name={`slips.${slipIndex}.lines.${index}.defectQty`}
+                          label="SL lỗi đúc"
+                          size="small"
+                          fullWidth
+                          disabled={busy}
+                          rules={{
+                            deps: [`slips.${slipIndex}.lines.${index}.qty`],
+                            validate: (value) => {
+                              const count = defectCount(String(value ?? ''))
+                              return count != null && count < order.qty
+                                ? true
+                                : `Nhập số nguyên từ 0 đến ${order.qty - 1} (hỏng cả đơn thì báo Lỗi đúc cả phiếu)`
+                            },
+                          }}
+                        />
+                        <FormQtyField<Values>
+                          name={`slips.${slipIndex}.lines.${index}.weight`}
+                          label="Trọng lượng phôi (g)"
+                          required
+                          size="small"
+                          fullWidth
+                          disabled={busy}
+                          rules={{
+                            validate: (value) =>
+                              gram(String(value ?? ''), false) == null
+                                ? 'Nhập trọng lượng phôi (g)'
+                                : true,
+                          }}
+                        />
+                      </Stack>
+                      {defect ? (
+                        <>
+                          <FormTextField<Values>
+                            name={`slips.${slipIndex}.lines.${index}.defectNote`}
+                            label="Lý do lỗi đúc"
+                            placeholder="Rỗ khí, thiếu kim loại…"
+                            size="small"
+                            fullWidth
+                            disabled={busy}
+                            rules={{ maxLength: { value: 500, message: 'Tối đa 500 ký tự' } }}
+                          />
+                          <Typography variant="body2" color="error">
+                            Lưu xong tạo lệnh bù {defect} sp cho {order.code}, đi lại từ bước sáp.
+                            Đơn gốc còn {order.qty - defect} sp.
+                          </Typography>
+                        </>
+                      ) : null}
+                      <FormImageField<Values>
+                        name={`slips.${slipIndex}.lines.${index}.images`}
+                        label="Ảnh cân phôi"
+                        kind="CASTING_TREE"
                         required
-                        size="small"
-                        fullWidth
-                        disabled={busy}
-                        rules={{
-                          validate: (value) =>
-                            gram(String(value ?? ''), false) == null
-                              ? 'Nhập trọng lượng phôi (g)'
-                              : true,
-                        }}
+                        requiredMessage="Chụp ảnh cân phôi"
+                        onUploadingChange={(uploading) =>
+                          setUploading(
+                            `${slip.id}:${order.intakeOrderId}`,
+                            uploading,
+                          )
+                        }
+                        readOnly={saving}
                       />
                     </Stack>
-                    <FormImageField<Values>
-                      name={`slips.${slipIndex}.lines.${index}.images`}
-                      label="Ảnh cân phôi"
-                      kind="CASTING_TREE"
-                      required
-                      requiredMessage="Chụp ảnh cân phôi"
-                      onUploadingChange={(uploading) =>
-                        setUploading(
-                          `${slip.id}:${order.intakeOrderId}`,
-                          uploading,
-                        )
-                      }
-                      readOnly={saving}
-                    />
-                  </Stack>
-                ))}
+                  )
+                })}
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   Phần cây còn lại nhập kho NVL
                   {restTotal(watched?.[slipIndex]) > 0
