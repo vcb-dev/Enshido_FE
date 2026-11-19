@@ -1047,6 +1047,7 @@ export function ProductionOrderDetailPage() {
         entry={keeperTarget}
         skipsStone={skipsStone(order)}
         metalType={order.metalType}
+        stone3dWeight={order.stoneWeight}
         ticketCode={
           order.subTickets.find((ticket) => ticket.no === keeperTarget?.subTicketNo)?.code ?? order.code
         }

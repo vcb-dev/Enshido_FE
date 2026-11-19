@@ -70,3 +70,27 @@ export function stoneSetWeight(input: {
   }
   return { gram: round(input.handedGram), source: 'handed' }
 }
+
+/** Mốc TL đá 3D lệch đá thực tế quá tỉ lệ này thì báo — thường do khai TL đá 3D sai (theo 1 sp, nhầm ct/g). */
+export const STONE_3D_TOLERANCE = 0.3
+
+/**
+ * So mốc TL đá 3D (đã chia theo SL giao) với đá thực tế gắn lên (TL gói cấp − gói thừa). Lệch quá
+ * `STONE_3D_TOLERANCE` thì trả về số liệu để cảnh báo: hao hụt Vào đá lấy mốc 3D nên khai sai là
+ * hao ra âm / ảo (vd. DH087: 3D 0,0644 g cho 10 sp, đá cấp thật 5,2 g → hao −8,84% thay vì 8,78%).
+ * Trả null khi không lệch hoặc thiếu số.
+ */
+export function stone3dMismatch(stone3dGram: number | null, actualGram: number | null) {
+  if (stone3dGram == null || actualGram == null || !(stone3dGram > 0) || !(actualGram > 0)) return null
+  const diff = stone3dGram - actualGram
+  const ratio = diff / actualGram
+  if (Math.abs(ratio) <= STONE_3D_TOLERANCE + 1e-9) return null
+  const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits
+  return {
+    stone3dGram: round(stone3dGram, 4),
+    actualGram: round(actualGram, 4),
+    /** Âm = 3D nhẹ hơn thực tế. */
+    diffGram: round(diff, 4),
+    diffPercent: round(ratio * 100, 1),
+  }
+}

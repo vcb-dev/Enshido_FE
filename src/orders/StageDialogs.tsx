@@ -1,5 +1,6 @@
 import { confirmWeights, ratioWarning } from './weightSanity'
-import { STONE_SET_SOURCE_LABEL, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
+import { STONE_SET_SOURCE_LABEL, stone3dMismatch, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
+import { Stone3dMismatchAlert } from './Stone3dMismatchAlert'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useWatch } from 'react-hook-form'
@@ -571,6 +572,8 @@ export function KcsReturnDialog({
       Number(entry?.stoneReturnedEarlyWeight ?? 0)
     : 0
   const legacyReturnedCount = useWatch({ control: form.control, name: 'legacyReturnedCount' })
+  /** Tổng TL gói đá thừa QC đang nhập (g) — ô nhập theo ct. */
+  const returnedPackGram = returnedStones.reduce((sum, line) => sum + Number(line.weight || 0), 0) / CT_PER_GRAM
   /**
    * TL đá gắn lên BTP — cùng cách BE tính lúc QC lưu (ưu tiên TL đá 3D chia theo SL giao, rồi TL
    * đá cấp − gói thừa). QC cân cả cụm bạc + đá nên mốc so là bạc vào khâu + TL đá gắn.
@@ -584,7 +587,7 @@ export function KcsReturnDialog({
           handedGram:
             entry.handedStoneWeight != null || entry.issuedStoneWeight != null ? stoneHandedWeight : null,
           allWeighed: entry.stoneLines.length > 0 && legacyStones.length === 0,
-          returnedPackGram: returnedStones.reduce((sum, line) => sum + Number(line.weight || 0), 0) / CT_PER_GRAM,
+          returnedPackGram,
           stonesHanded:
             entry.handedStoneCount != null || entry.issuedStoneCount > 0
               ? Math.max(
@@ -596,6 +599,13 @@ export function KcsReturnDialog({
         })
       : null
   const stone = stoneSet?.gram ?? 0
+  /** Đá thực tế gắn lên (g) = TL gói đang giữ − gói thừa QC nhập; có dòng cấp cũ không cân gói thì bỏ. */
+  const stoneActualGram =
+    weighedStones.length > 0 && legacyStones.length === 0
+      ? Math.max(0, weighedStones.reduce((sum, line) => sum + Number(line.weight), 0) - returnedPackGram)
+      : null
+  /** Mốc hao lấy TL đá 3D mà lệch xa đá thực tế → thường là khai TL đá 3D sai, hao ra âm / ảo. */
+  const stone3dWarning = stoneSet?.source === '3d' ? stone3dMismatch(stoneSet.gram, stoneActualGram) : null
   /** Bạc vào khâu = TL giao + bạc thợ xin xuất thêm — mốc tính hao hụt, khớp BE. */
   const silverInText = entry?.silverIn ?? entry?.handedSilverWeight ?? null
   const issuedMetal = Number(entry?.issuedMetalWeight ?? 0)
@@ -804,6 +814,7 @@ export function KcsReturnDialog({
                 BTP dự kiến (bạc vào khâu + đá gắn):{' '}
                 <b>{silverLimit != null ? formatQty(String(silverLimit)) : '—'}</b> g — cân lại cả cụm, ghi đúng số cân thực tế
               </Typography>
+              {stone3dWarning ? <Stone3dMismatchAlert mismatch={stone3dWarning} /> : null}
             </>
           ) : null}
         </Box>

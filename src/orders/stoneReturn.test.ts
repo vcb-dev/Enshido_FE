@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stoneReturnPreview, stoneSetWeight } from './stoneReturn'
+import { stone3dMismatch, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
 
 describe('stoneReturnPreview — đá thừa theo cân gói', () => {
   it('quy viên thừa và SL xuất theo tỷ lệ TL', () => {
@@ -61,5 +61,32 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
 
   it('chưa cấp đá và không có 3D thì không có số', () => {
     expect(stoneSetWeight({ ...base, handedGram: null })).toBeNull()
+  })
+})
+
+describe('stone3dMismatch — TL đá 3D lệch đá thực tế', () => {
+  it('DH087: 3D 0,0644 g cho 10 sp, đá cấp thật 5,2 g → cảnh báo', () => {
+    expect(stone3dMismatch(0.0644, 5.2)).toEqual({
+      stone3dGram: 0.0644,
+      actualGram: 5.2,
+      diffGram: -5.1356,
+      diffPercent: -98.8,
+    })
+  })
+
+  it('3D nặng hơn thực tế quá 30% cũng báo', () => {
+    expect(stone3dMismatch(3, 2)?.diffPercent).toBe(50)
+  })
+
+  it('lệch trong 30% thì không báo', () => {
+    expect(stone3dMismatch(1.3, 1)).toBeNull()
+    expect(stone3dMismatch(0.7, 1)).toBeNull()
+  })
+
+  it('thiếu số thì bỏ qua', () => {
+    expect(stone3dMismatch(null, 5)).toBeNull()
+    expect(stone3dMismatch(0, 5)).toBeNull()
+    expect(stone3dMismatch(1, null)).toBeNull()
+    expect(stone3dMismatch(1, 0)).toBeNull()
   })
 })
