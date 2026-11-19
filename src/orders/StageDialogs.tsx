@@ -596,6 +596,7 @@ export function KcsReturnDialog({
                 )
               : null,
           returnedCount: Number(legacyReturnedCount || 0),
+          earlyReturnedGram: Number(entry.stoneReturnedEarlyWeight ?? 0),
         })
       : null
   const stone = stoneSet?.gram ?? 0
