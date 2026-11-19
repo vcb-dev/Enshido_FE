@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stoneReturnPreview, stoneSetWeight } from './stoneReturn'
+import { stone3dMismatch, stoneReturnPreview, stoneSetWeight } from './stoneReturn'
 
 describe('stoneReturnPreview — đá thừa theo cân gói', () => {
   it('quy viên thừa và SL xuất theo tỷ lệ TL', () => {
@@ -40,13 +40,25 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
 
   it('đơn có TL đá 3D: luôn lấy TL đá 3D chia theo số hàng giao, kể cả khi đã cấp đá', () => {
     expect(stoneSetWeight({ ...base, stone3dGram: 4 })).toEqual({ gram: 2, source: '3d' })
-    expect(stoneSetWeight({ ...base, stone3dGram: 4, returnedPackGram: 5 })).toEqual({ gram: 2, source: '3d' })
+    expect(stoneSetWeight({ ...base, stone3dGram: 4, returnedPackGram: 1.5 })).toEqual({ gram: 2, source: '3d' })
+  })
+
+  it('thợ trả lại hết đá (gói thừa = toàn bộ đá đang giữ) → 0, không lấy TL đá 3D', () => {
+    // Hàng lỗi chưa vào đá: cấp 10 ct = 2 g, gói thừa 10 ct — trước đây vẫn tính 2,85 ct theo 3D.
+    expect(stoneSetWeight({ ...base, stone3dGram: 4, returnedPackGram: 2 })).toEqual({ gram: 0, source: 'none' })
+    expect(stoneSetWeight({ ...base, returnedPackGram: 2 })).toEqual({ gram: 0, source: 'none' })
+  })
+
+  it('thợ trả hết túi giữa khâu → 0, không lấy TL đá 3D', () => {
+    expect(
+      stoneSetWeight({ ...base, stone3dGram: 4, handedGram: 0, returnedPackGram: 0, earlyReturnedGram: 2 }),
+    ).toEqual({ gram: 0, source: 'none' })
   })
 
   it('đơn không khai TL đá 3D (trống hoặc 0): TL đá cấp − gói thừa', () => {
     expect(stoneSetWeight({ ...base, stone3dGram: 0 })).toEqual({ gram: 1.5, source: 'pack' })
     expect(stoneSetWeight(base)).toEqual({ gram: 1.5, source: 'pack' })
-    expect(stoneSetWeight({ ...base, returnedPackGram: 5 })).toEqual({ gram: 0, source: 'pack' })
+    expect(stoneSetWeight({ ...base, returnedPackGram: 5 })).toEqual({ gram: 0, source: 'none' })
   })
 
   it('dòng cấp cũ đếm viên: chia theo số viên gắn', () => {
@@ -61,5 +73,32 @@ describe('stoneSetWeight — TL đá gắn khâu Vào đá', () => {
 
   it('chưa cấp đá và không có 3D thì không có số', () => {
     expect(stoneSetWeight({ ...base, handedGram: null })).toBeNull()
+  })
+})
+
+describe('stone3dMismatch — TL đá 3D lệch đá thực tế', () => {
+  it('DH087: 3D 0,0644 g cho 10 sp, đá cấp thật 5,2 g → cảnh báo', () => {
+    expect(stone3dMismatch(0.0644, 5.2)).toEqual({
+      stone3dGram: 0.0644,
+      actualGram: 5.2,
+      diffGram: -5.1356,
+      diffPercent: -98.8,
+    })
+  })
+
+  it('3D nặng hơn thực tế quá 30% cũng báo', () => {
+    expect(stone3dMismatch(3, 2)?.diffPercent).toBe(50)
+  })
+
+  it('lệch trong 30% thì không báo', () => {
+    expect(stone3dMismatch(1.3, 1)).toBeNull()
+    expect(stone3dMismatch(0.7, 1)).toBeNull()
+  })
+
+  it('thiếu số thì bỏ qua', () => {
+    expect(stone3dMismatch(null, 5)).toBeNull()
+    expect(stone3dMismatch(0, 5)).toBeNull()
+    expect(stone3dMismatch(1, null)).toBeNull()
+    expect(stone3dMismatch(1, 0)).toBeNull()
   })
 })

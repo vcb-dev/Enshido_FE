@@ -22,9 +22,10 @@ export function stoneReturnPreview(line: Pick<StoneLine, 'qty' | 'stoneCount' | 
 }
 
 /** Nguồn của TL đá gắn — hiện kèm số để QC biết hệ thống lấy từ đâu. */
-export type StoneSetSource = '3d' | 'pack' | 'count' | 'handed'
+export type StoneSetSource = 'none' | '3d' | 'pack' | 'count' | 'handed'
 
 export const STONE_SET_SOURCE_LABEL: Record<StoneSetSource, string> = {
+  none: 'thợ trả lại hết đá — không tính đá',
   '3d': 'theo TL đá 3D',
   pack: 'TL đá cấp − gói thừa',
   count: 'chia theo số viên gắn',
@@ -33,6 +34,9 @@ export const STONE_SET_SOURCE_LABEL: Record<StoneSetSource, string> = {
 
 /**
  * TL đá gắn lên BTP ở khâu Vào đá (g) — khớp thứ tự BE dùng khi QC nhận lại:
+ * 0. Thợ không gắn viên đá nào — gói thừa QC cân bằng toàn bộ đá đang giữ, hoặc đã trả hết túi
+ *    giữa khâu: 0, không lấy TL đá 3D (2026-11-19, người dùng chốt — hàng lỗi chưa vào đá trả đủ
+ *    10 ct vẫn bị hao 0,57 g theo đá 3D);
  * 1. Đơn có TL đá 3D (> 0): TL đá 3D chia theo số hàng giao (2026-11-16, người dùng chốt: mốc hao
  *    hụt Vào đá = bạc vào khâu + TL đá 3D);
  * 2. Đơn không khai TL đá 3D mà mọi gói cấp đều cân: TL đá đã cấp − TL gói thừa QC cân;
@@ -55,8 +59,19 @@ export function stoneSetWeight(input: {
   stonesHanded: number | null
   /** Số viên thợ trả lại (dòng cấp cũ đếm viên). */
   returnedCount: number
+  /** Tổng TL túi thợ trả giữa khâu (g). */
+  earlyReturnedGram?: number
 }): { gram: number; source: StoneSetSource } | null {
   const round = (value: number) => Math.round(value * 10_000) / 10_000
+  const handed = input.handedGram
+  if (
+    handed != null &&
+    (input.allWeighed && handed > 0
+      ? handed - input.returnedPackGram <= 1e-9
+      : handed <= 0 && (input.earlyReturnedGram ?? 0) > 0)
+  ) {
+    return { gram: 0, source: 'none' }
+  }
   if (input.stone3dGram != null && input.stone3dGram > 0 && input.orderQty > 0) {
     return { gram: round((input.stone3dGram * input.handedQty) / input.orderQty), source: '3d' }
   }
@@ -69,4 +84,28 @@ export function stoneSetWeight(input: {
     return { gram: round((input.handedGram * set) / input.stonesHanded), source: 'count' }
   }
   return { gram: round(input.handedGram), source: 'handed' }
+}
+
+/** Mốc TL đá 3D lệch đá thực tế quá tỉ lệ này thì báo — thường do khai TL đá 3D sai (theo 1 sp, nhầm ct/g). */
+export const STONE_3D_TOLERANCE = 0.3
+
+/**
+ * So mốc TL đá 3D (đã chia theo SL giao) với đá thực tế gắn lên (TL gói cấp − gói thừa). Lệch quá
+ * `STONE_3D_TOLERANCE` thì trả về số liệu để cảnh báo: hao hụt Vào đá lấy mốc 3D nên khai sai là
+ * hao ra âm / ảo (vd. DH087: 3D 0,0644 g cho 10 sp, đá cấp thật 5,2 g → hao −8,84% thay vì 8,78%).
+ * Trả null khi không lệch hoặc thiếu số.
+ */
+export function stone3dMismatch(stone3dGram: number | null, actualGram: number | null) {
+  if (stone3dGram == null || actualGram == null || !(stone3dGram > 0) || !(actualGram > 0)) return null
+  const diff = stone3dGram - actualGram
+  const ratio = diff / actualGram
+  if (Math.abs(ratio) <= STONE_3D_TOLERANCE + 1e-9) return null
+  const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits
+  return {
+    stone3dGram: round(stone3dGram, 4),
+    actualGram: round(actualGram, 4),
+    /** Âm = 3D nhẹ hơn thực tế. */
+    diffGram: round(diff, 4),
+    diffPercent: round(ratio * 100, 1),
+  }
 }

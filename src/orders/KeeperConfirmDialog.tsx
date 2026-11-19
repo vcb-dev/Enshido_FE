@@ -18,7 +18,8 @@ import type { StageEntry } from '../api/productionOrders'
 import { formatCt, formatQty } from '../api/inventory'
 import { isGoldMetal, type OrderMetalType, recoveredMaterialName } from '../api/intakeOrders'
 import { defectScopeText, formatDateShort, SILVER_LOSS_LIMITS, STAGE_LABEL } from './catalog'
-import { stoneReturnPreview } from './stoneReturn'
+import { stone3dMismatch, stoneReturnPreview } from './stoneReturn'
+import { Stone3dMismatchAlert } from './Stone3dMismatchAlert'
 import { stoneConfirmCheck } from './stoneConfirmCheck'
 import { KcsImages } from './KcsImages'
 
@@ -38,6 +39,7 @@ export function KeeperConfirmDialog({
   ticketCode,
   skipsStone = false,
   metalType,
+  stone3dWeight = null,
   saving,
   onClose,
   onConfirm,
@@ -48,6 +50,8 @@ export function KeeperConfirmDialog({
   skipsStone?: boolean
   /** Kim loại của đơn — đơn vàng nhập thu hồi vào mã vàng đúng tuổi. */
   metalType: OrderMetalType | null | undefined
+  /** Tổng TL đá 3D của đơn (g) — có thì mốc hao Vào đá (`entry.stoneWeight`) lấy theo 3D. */
+  stone3dWeight?: string | null
   saving: boolean
   onClose: () => void
   onConfirm: (entry: StageEntry) => void
@@ -95,6 +99,11 @@ export function KeeperConfirmDialog({
   const stoneUsed = entry && entry.stonesIn != null ? entry.stonesIn - (entry.returnedStoneCount ?? 0) : null
   // Đối chiếu TL sau Vào đá với đá thực tế (gói cấp − gói thừa) — lộ ra gói thừa ghi sai / cân sai.
   const stoneCheck = stoneConfirmCheck(entry)
+  // Mốc hao lấy TL đá 3D mà lệch xa đá thực tế → hao hụt dòng trên ra âm / ảo (vd. DH087 A094-3).
+  const stone3dWarning =
+    stoneStage && Number(stone3dWeight ?? 0) > 0 && entry?.stoneWeight != null
+      ? stone3dMismatch(Number(entry.stoneWeight), stoneCheck?.stoneUsed ?? null)
+      : null
 
   return (
     <Dialog open={entry != null} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
@@ -234,6 +243,8 @@ export function KeeperConfirmDialog({
                 </Typography>
               </Stack>
             ) : null}
+
+            {stone3dWarning ? <Stone3dMismatchAlert mismatch={stone3dWarning} /> : null}
 
             {stoneCheck?.issue ? (
               <Alert severity={stoneCheck.issue === 'gain' ? 'error' : 'warning'} sx={{ py: 0.5 }}>
