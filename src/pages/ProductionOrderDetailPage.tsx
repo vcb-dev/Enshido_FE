@@ -867,6 +867,21 @@ export function ProductionOrderDetailPage() {
                               <Typography variant="caption" sx={{ fontWeight: 700 }}>
                                 {selectedTicket.code}
                               </Typography>
+                              {/* Ghi chú nhập ở "Sửa phiếu con" — hiện ngay dưới QR để người xem biết phiếu ghi gì. */}
+                              {selectedTicket.note?.trim() ? (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{
+                                    maxWidth: 200,
+                                    textAlign: 'center',
+                                    whiteSpace: 'pre-wrap',
+                                    overflowWrap: 'anywhere',
+                                  }}
+                                >
+                                  Ghi chú: {selectedTicket.note.trim()}
+                                </Typography>
+                              ) : null}
                             </Stack>
                           </Stack>
                           <Box sx={{ mb: 1.25 }}>
