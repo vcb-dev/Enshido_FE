@@ -59,10 +59,11 @@ export function StoneSpecsFields({ disabled, qty }: { disabled?: boolean; qty?: 
               </>
             ) : null}
           </Alert>
-          <Stack direction="row" spacing={1.5}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <FormTextField<StoneSpecs>
               name="stoneCount3d"
-              label="Số viên đá / 1 sp"
+              label="Số viên đá của 1 sản phẩm"
+              helperText="Đếm trên 1 chiếc, không nhân SL"
               transform={(next) => next.replace(/[^\d]/g, '')}
               size="small"
               fullWidth
@@ -71,12 +72,12 @@ export function StoneSpecsFields({ disabled, qty }: { disabled?: boolean; qty?: 
             />
             <FormQtyField<StoneSpecs>
               name="stoneWeight3dCt"
-              label="TL đá / 1 sp (ct)"
+              label="TL đá của 1 sản phẩm (ct)"
               required
               rules={{
                 validate: (value) => (Number(ctToGram(String(value))) > 0 ? true : 'Nhập TL đá lớn hơn 0'),
               }}
-              helperText="Theo file 3D của 1 chiếc"
+              helperText="1 chiếc trên đơn — không nhập tổng cả đơn"
               size="small"
               fullWidth
               disabled={disabled}
@@ -84,7 +85,7 @@ export function StoneSpecsFields({ disabled, qty }: { disabled?: boolean; qty?: 
           </Stack>
           {totalParts.length ? (
             <Typography variant="body2" color="text.secondary">
-              Cả đơn: <b>{totalParts.join(' · ')}</b>
+              Cả đơn (hệ thống tự nhân): <b>{totalParts.join(' · ')}</b>
             </Typography>
           ) : null}
         </>
