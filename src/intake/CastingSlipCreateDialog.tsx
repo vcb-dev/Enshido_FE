@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  Box,
   Button,
   Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -17,6 +19,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useController, useWatch } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import {
@@ -32,6 +36,10 @@ import { silverEstimateFromWax } from './castingEstimate'
 import { formatQty } from '../api/inventory'
 import { useIsMobile } from '../hooks/useBreakpoint'
 import { formatDateShort } from '../orders/catalog'
+import { ImageLightbox, ZoomThumb } from '../components/ImageLightbox'
+import { countPickedTrees, groupCandidatesByTree, type CastingTreeGroup } from './castingTreeGroups'
+
+const TREE_THUMB = 40
 
 type Values = {
   picked: CastingSlipCandidate[]
@@ -48,7 +56,8 @@ function emptyValues(): Values {
 }
 
 /**
- * Bước 7: thủ kho lọc các đơn đã có sáp (E), gom vào một lần đúc, nhập bạc + hội cấp theo
+ * Bước 7: thủ kho chọn cối (cây thông đã cấy ở bước Cấy cây thông) — tích cối là chọn đủ các đơn
+ * trên cây (BE gom theo ảnh cây chụp chung lúc cấy). Đơn không có ảnh cây hiện riêng từng đơn. Gom vào một lần đúc, nhập bạc + hội cấp theo
  * định mức. Lưu xong phiếu ở Chờ cấp vật tư; cấp xong các đơn sang Chờ đúc (F).
  */
 export function CastingSlipCreateDialog({
@@ -68,6 +77,8 @@ export function CastingSlipCreateDialog({
   const fullScreen = useIsMobile()
   // Ô lọc danh sách đơn — không phải dữ liệu của phiếu nên không nằm trong form.
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [viewingTree, setViewingTree] = useState<CastingTreeGroup | null>(null)
   const form = useAppForm<Values>({ defaultValues: emptyValues() })
   const pickedField = useController({
     control: form.control,
@@ -92,21 +103,26 @@ export function CastingSlipCreateDialog({
   useEffect(() => {
     if (!open) return
     setSearch('')
+    setExpanded(new Set())
+    setViewingTree(null)
     form.reset(emptyValues())
   }, [open, form])
 
-  // Tích sẵn đơn được mở từ dòng Lệnh sản xuất khi danh sách tải về.
+  const rows = useMemo(() => candidates.data ?? [], [candidates.data])
+  const groups = useMemo(() => groupCandidatesByTree(rows), [rows])
+
+  // Tích sẵn cả cối chứa đơn được mở từ dòng Lệnh sản xuất khi danh sách tải về.
   useEffect(() => {
     if (!open || !preselectId || !candidates.data) return
-    const row = candidates.data.find(
-      (item) => item.id === preselectId || (item.orderIds ?? []).includes(preselectId),
+    const group = groupCandidatesByTree(candidates.data).find((item) =>
+      item.rows.some((row) => row.id === preselectId || (row.orderIds ?? []).includes(preselectId)),
     )
-    if (!row) return
+    if (!group) return
     const current = form.getValues('picked')
-    if (!current.some((item) => item.id === row.id)) form.setValue('picked', [...current, row])
+    const missing = group.rows.filter((row) => !current.some((item) => item.id === row.id))
+    if (missing.length) form.setValue('picked', [...current, ...missing])
   }, [open, preselectId, candidates.data, form])
 
-  const rows = candidates.data ?? []
   const [picked, assignedUserId, isServiceCast] = useWatch({
     control: form.control,
     name: ['picked', 'assignedUserId', 'isServiceCast'],
@@ -122,15 +138,27 @@ export function CastingSlipCreateDialog({
   const estimate = silverEstimateFromWax(waxTotal)
   const gramText = (value: number) => (value > 0 ? String(value) : null)
   const allVisibleChecked = rows.length > 0 && rows.every((row) => selected.has(row.id))
+  const pickedTrees = countPickedTrees(picked)
   const formError = pickedField.fieldState.error?.message ?? form.formState.errors.root?.message
 
   function setPicked(next: CastingSlipCandidate[]) {
     pickedField.field.onChange(next)
   }
 
-  function toggle(row: CastingSlipCandidate, checked: boolean) {
-    const rest = picked.filter((item) => item.id !== row.id)
-    setPicked(checked ? [...rest, row] : rest)
+  /** Cả cối đúc chung một lần — tích / bỏ cối là tích / bỏ mọi đơn trên cây. */
+  function toggleGroup(group: CastingTreeGroup, checked: boolean) {
+    const ids = new Set(group.rows.map((row) => row.id))
+    const rest = picked.filter((item) => !ids.has(item.id))
+    setPicked(checked ? [...rest, ...group.rows] : rest)
+  }
+
+  function toggleExpanded(key: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   function toggleAll(checked: boolean) {
@@ -177,11 +205,15 @@ export function CastingSlipCreateDialog({
       <DialogForm form={form} onSubmit={submit}>
         <DialogContent
           dividers
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', minHeight: 0, flex: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', minHeight: 0, flex: 1 }}
         >
-          <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
+          {/* Dòng cối cao hai dòng chữ — giữ khung danh sách đủ thấy vài cối, phần dưới cuộn theo dialog. */}
+          <Stack spacing={1} sx={{ flex: 1, minHeight: { xs: 420, sm: 320 } }}>
             <Typography variant="subtitle2" sx={{ flexShrink: 0 }}>
-              Lọc đơn đã nhập TL cây thông / đã có sáp
+              Chọn cối đã cấy cây thông
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, mt: '0 !important' }}>
+              Tích một cối là chọn đủ các đơn trên cây đó — cả cối đúc chung một lần. Bấm mũi tên để xem từng đơn.
             </Typography>
             <SearchInput
               value={search}
@@ -200,11 +232,12 @@ export function CastingSlipCreateDialog({
                         indeterminate={!allVisibleChecked && rows.some((row) => selected.has(row.id))}
                         onChange={(event) => toggleAll(event.target.checked)}
                         disabled={!rows.length}
+                        slotProps={{ input: { 'aria-label': 'Chọn tất cả cối' } }}
                       />
                     </TableCell>
-                    <TableCell sx={{ bgcolor: 'background.paper' }}>Mã đơn</TableCell>
-                    <TableCell sx={{ bgcolor: 'background.paper' }}>Mã SP</TableCell>
-                    <TableCell sx={{ bgcolor: 'background.paper' }}>Sản phẩm</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Cối</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Ảnh cây</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>Đơn trong cối</TableCell>
                     <TableCell align="right" sx={{ bgcolor: 'background.paper' }}>
                       SL
                     </TableCell>
@@ -215,30 +248,137 @@ export function CastingSlipCreateDialog({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      hover
-                      onClick={() => toggle(row, !selected.has(row.id))}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <TableCell padding="checkbox">
-                        <Checkbox size="small" checked={selected.has(row.id)} />
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>{row.code}</TableCell>
-                      <TableCell>{row.trackingCode ?? '—'}</TableCell>
-                      <TableCell>{row.productName || '—'}</TableCell>
-                      <TableCell align="right">{row.qty}</TableCell>
-                      <TableCell align="right">
-                        {row.waxWeightGram ? formatQty(row.waxWeightGram) : '—'}
-                      </TableCell>
-                      <TableCell>{row.dueDate ? formatDateShort(row.dueDate) : '—'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {!rows.length ? (
+                  {groups.map((group) => {
+                    const checkedCount = group.rows.filter((row) => selected.has(row.id)).length
+                    const checked = checkedCount === group.rows.length
+                    const isOpen = expanded.has(group.key)
+                    const single = !group.tree
+                    const first = group.rows[0]
+                    return (
+                      <Fragment key={group.key}>
+                        <TableRow
+                          hover
+                          selected={checked}
+                          onClick={() => toggleGroup(group, !checked)}
+                          sx={{ cursor: 'pointer', '& > td': isOpen ? { borderBottom: 0 } : undefined }}
+                        >
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              size="small"
+                              checked={checked}
+                              indeterminate={checkedCount > 0 && !checked}
+                              slotProps={{
+                                input: {
+                                  'aria-label': group.tree ? `Chọn cối ${group.tree.no}` : `Chọn đơn ${first?.code}`,
+                                },
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                            {group.tree ? (
+                              <>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                  Cối {group.tree.no}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {group.rows.length} đơn · cấy {formatDateShort(group.tree.graftedAt)}
+                                </Typography>
+                              </>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                Chưa có ảnh cây
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell onClick={(event) => event.stopPropagation()}>
+                            {group.tree ? (
+                              <ZoomThumb
+                                url={group.tree.imageUrl}
+                                size={TREE_THUMB}
+                                label={`Xem ảnh cây cối ${group.tree.no}`}
+                                onClick={() => setViewingTree(group)}
+                              />
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                —
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {single && first ? (
+                              <Typography variant="body2">
+                                <Box component="span" sx={{ fontWeight: 700 }}>
+                                  {first.code}
+                                </Box>
+                                {' · '}
+                                {first.productName || '—'}
+                              </Typography>
+                            ) : (
+                              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                                <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                                  {group.rows.map((row) => row.code).join(', ')}
+                                </Typography>
+                                <IconButton
+                                  size="small"
+                                  aria-label={isOpen ? 'Ẩn đơn trong cối' : 'Xem đơn trong cối'}
+                                  aria-expanded={isOpen}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    toggleExpanded(group.key)
+                                  }}
+                                >
+                                  {isOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                </IconButton>
+                              </Stack>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">{group.qty}</TableCell>
+                          <TableCell align="right">
+                            {group.waxGram > 0 ? formatQty(String(group.waxGram)) : '—'}
+                          </TableCell>
+                          <TableCell>{group.dueDate ? formatDateShort(group.dueDate) : '—'}</TableCell>
+                        </TableRow>
+                        {isOpen
+                          ? group.rows.map((row, index) => (
+                              <TableRow
+                                key={row.id}
+                                sx={{
+                                  bgcolor: 'action.hover',
+                                  '& > td': {
+                                    py: 0.5,
+                                    borderBottom: index === group.rows.length - 1 ? undefined : 0,
+                                  },
+                                }}
+                              >
+                                <TableCell padding="checkbox" />
+                                <TableCell colSpan={2} sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                                  {row.sxCode}
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    <Box component="span" sx={{ fontWeight: 700 }}>
+                                      {row.code}
+                                    </Box>
+                                    {row.trackingCode ? ` · ${row.trackingCode}` : ''}
+                                    {' · '}
+                                    {row.productName || '—'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">{row.qty}</TableCell>
+                                <TableCell align="right">
+                                  {row.waxWeightGram ? formatQty(row.waxWeightGram) : '—'}
+                                </TableCell>
+                                <TableCell>{row.dueDate ? formatDateShort(row.dueDate) : '—'}</TableCell>
+                              </TableRow>
+                            ))
+                          : null}
+                      </Fragment>
+                    )
+                  })}
+                  {!groups.length ? (
                     <TableRow>
                       <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary', py: 2 }}>
-                        {candidates.isFetching ? 'Đang tải…' : 'Không có đơn nào đã có sáp chờ đúc'}
+                        {candidates.isFetching ? 'Đang tải…' : 'Không có cối nào đã cấy chờ đúc'}
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -246,8 +386,8 @@ export function CastingSlipCreateDialog({
               </Table>
             </TableContainer>
             <Typography variant="body2" sx={{ flexShrink: 0 }}>
-              Đã chọn <strong>{picked.length}</strong> đơn · Trọng lượng sáp (cây thông) giao:{' '}
-              <strong>{formatQty(String(waxTotal))} g</strong>
+              Đã chọn <strong>{pickedTrees}</strong> cối · <strong>{picked.length}</strong> đơn · Trọng lượng sáp
+              (cây thông) giao: <strong>{formatQty(String(waxTotal))} g</strong>
             </Typography>
           </Stack>
 
@@ -302,6 +442,15 @@ export function CastingSlipCreateDialog({
           </Button>
         </DialogActions>
       </DialogForm>
+      {viewingTree?.tree ? (
+        <ImageLightbox
+          images={[{ id: viewingTree.key, url: viewingTree.tree.imageUrl }]}
+          index={0}
+          title={`Ảnh cây thông — cối ${viewingTree.tree.no}`}
+          onIndexChange={() => undefined}
+          onClose={() => setViewingTree(null)}
+        />
+      ) : null}
     </Dialog>
   )
 }

@@ -166,6 +166,15 @@ export type CastingSlipCandidate = {
   dueDate: string | null
   hasMold: boolean | null
   waxWeightGram: string | null
+  /** Cối (cây thông) đơn đã cấy vào — gom theo ảnh cây chung. Đơn không có ảnh cây thì null. */
+  castingTree: CastingTreeInfo | null
+}
+
+export type CastingTreeInfo = {
+  /** Số cối trong danh sách chờ đúc, theo thứ tự cấy: Cối 1, Cối 2… */
+  no: number
+  imageUrl: string
+  graftedAt: string
 }
 
 export type CastCastWorkerOption = {
