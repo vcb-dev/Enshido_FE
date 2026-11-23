@@ -316,11 +316,6 @@ export function warehouseByCode(code: string) {
   return WAREHOUSES.find((w) => w.code === code)
 }
 
-export function warehouseSectionByCode(code?: string) {
-  if (!code) return undefined
-  return WAREHOUSE_SECTIONS.find((s) => s.code === code)
-}
-
 export function stockWarehouseCode(warehouse: WarehouseDef) {
   return warehouse.code
 }

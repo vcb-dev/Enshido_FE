@@ -1,20 +1,5 @@
-import type { IntakeOrderStatus } from '../api/intakeOrders'
 import { can, canAny, Permission, type PermissionUser } from '../auth/permissions'
 import { canConfirmIntakeWarehouse } from './intakeWarehouseAccess'
-
-/** Thợ 3D chỉ thấy các công đoạn này trên Lệnh sản xuất. */
-export const INTAKE_3D_VISIBLE_STATUSES: IntakeOrderStatus[] = [
-  'PENDING_APPROVAL',
-  'APPROVED',
-  'READY_FOR_PRODUCTION',
-  'WAX_PRINTED',
-]
-
-export const INTAKE_WAX_VISIBLE_STATUSES: IntakeOrderStatus[] = [
-  'READY_FOR_PRODUCTION',
-  'WAX_PRINTED',
-  'PENDING_WAREHOUSE_CONFIRMATION',
-]
 
 /**
  * Kiêm việc khác ngoài 3D / sáp (thợ khâu, thợ đúc, thủ kho, QC, kế toán): không còn bị giới hạn

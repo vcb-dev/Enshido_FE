@@ -145,12 +145,3 @@ export function replaceMoveId<
   const items = current.items.map((item) => (item.id === targetId ? row : item))
   return { ...current, items, totals: sumMoveTotals(items) }
 }
-
-export function removeMoveList<
-  T extends { id: string; qty: string | null; amount: string },
-  L extends { items: T[]; totals: { qty: string; amount: string } },
->(current: L | undefined, id: string): L | undefined {
-  if (!current) return current
-  const items = current.items.filter((item) => item.id !== id)
-  return { ...current, items, totals: sumMoveTotals(items) }
-}

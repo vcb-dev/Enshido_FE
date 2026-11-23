@@ -199,10 +199,6 @@ export function getIntakePlacedByOptionsApi() {
 
 export type IntakePipelineCounts = Partial<Record<IntakeOrderStatus, number>>
 
-export function getIntakePipelineCountsApi() {
-  return apiFetch<IntakePipelineCounts>('/intake-orders/pipeline-counts')
-}
-
 export type IntakePipelineLists = Partial<Record<IntakeOrderStatus, IntakeOrderList>>
 
 export function getIntakePipelineListsApi(params: {
@@ -299,34 +295,6 @@ export function updateIntakeWaxWeightApi(
   })
 }
 
-export function confirmIntakeWarehouseApi(id: string, checkedWeightGram?: number) {
-  return apiFetch<IntakeOrder>(`/intake-orders/${id}/confirm-warehouse`, {
-    method: 'POST',
-    body: JSON.stringify(checkedWeightGram != null ? { checkedWeightGram } : {}),
-  })
-}
-
-/** Bước 4: in sáp nhiều đơn một lần — ảnh cả khay + cân nặng từng đơn. */
-export function waxPrintBatchApi(payload: {
-  items: { id: string; productWeightGram: number; produceQty?: number }[]
-  images: OrderImage[]
-}) {
-  return apiFetch<{ items: IntakeOrder[] }>('/intake-orders/wax-print', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function submitIntakeCastingTreeSpecsApi(
-  id: string,
-  payload: { castingTreeWeightGram: number; images: OrderImage[] },
-) {
-  return apiFetch<IntakeOrder>(`/intake-orders/${id}/casting-tree-specs`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
 /** Bước 5: cấy nhiều đơn cùng một cây thông. */
 export function submitIntakeCastingTreeBatchApi(payload: {
   orderIds: string[]
@@ -335,17 +303,6 @@ export function submitIntakeCastingTreeBatchApi(payload: {
   images: OrderImage[]
 }) {
   return apiFetch<{ items: IntakeOrder[] }>('/intake-orders/casting-tree-batch', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Bước 4: một lượt in sáp nhiều đơn — ảnh cả khay + cân nặng từng đơn. */
-export function submitIntakeWaxPrintBatchApi(payload: {
-  items: { id: string; productWeightGram: number; produceQty?: number }[]
-  images: OrderImage[]
-}) {
-  return apiFetch<{ count: number }>('/intake-orders/wax-print-batch', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

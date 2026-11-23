@@ -312,24 +312,6 @@ export function formatDateShort(value: string | null | undefined, empty = '—')
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** ISO → giá trị cho `<input type="datetime-local">` theo giờ máy. */
-export function toDateTimeInput(value: string | null | undefined) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`
-}
-
-/** Giá trị `datetime-local` (giờ máy) → ISO gửi lên API. */
-export function fromDateTimeInput(value: string) {
-  if (!value) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
-}
-
 /** Link QR trên phiếu thợ: mở thẳng khung Sản xuất để thợ / QC cập nhật khâu ngay. */
 export function orderTicketUrl(code: string) {
   return `${window.location.origin}/orders/${code}?tab=production`

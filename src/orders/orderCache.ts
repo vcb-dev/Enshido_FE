@@ -76,10 +76,6 @@ export function seedProductionOrder(queryClient: QueryClient, order: ProductionO
   }
 }
 
-export function refreshProductionOrderLists(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['production-orders'], refetchType: 'none' })
-}
-
 /** Mọi thao tác role trả về chi tiết đơn — vá list + cache chi tiết tức thì. */
 export function applyProductionOrderDetail(
   queryClient: QueryClient,

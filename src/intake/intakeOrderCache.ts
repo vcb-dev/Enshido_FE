@@ -430,12 +430,6 @@ export function mergeIntakeQueueItems(
   })
 }
 
-/** Đánh dấu stale nhẹ — ưu tiên patch tức thì qua moveIntakeOrderInCaches. */
-export function markIntakeOrdersStale(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ['intake-orders'], refetchType: 'none' })
-  refreshIntakeTabCounts(queryClient)
-}
-
 export function afterIntakeApproved(queryClient: QueryClient, order: IntakeOrder) {
   moveIntakeOrderInCaches(queryClient, order)
 }
@@ -456,14 +450,6 @@ export function afterIntakeProductSpecsSubmitted(queryClient: QueryClient, order
     queryKey: ['intake-orders', 'wax-tree-candidates'],
     refetchType: 'active',
   })
-}
-
-export function afterIntakeWarehouseConfirmed(queryClient: QueryClient, order: IntakeOrder) {
-  moveIntakeOrderInCaches(queryClient, order)
-}
-
-export function afterIntakeCastingTreeUpdated(queryClient: QueryClient, order: IntakeOrder) {
-  moveIntakeOrderInCaches(queryClient, order)
 }
 
 export function afterIntakeBatchUpdated(queryClient: QueryClient, orders: IntakeOrder[]) {

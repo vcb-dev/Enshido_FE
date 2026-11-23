@@ -45,12 +45,6 @@ export type PermissionCode = (typeof Permission)[keyof typeof Permission]
 
 export const ALL_PERMISSIONS: PermissionCode[] = Object.values(Permission)
 
-export const ROLE_LABELS: Record<RoleCode, string> = {
-  ADMIN: 'Admin',
-  USER: 'Nhân viên',
-  WORKER: 'Thợ',
-}
-
 const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   ADMIN: ALL_PERMISSIONS,
   USER: [],

@@ -4,11 +4,6 @@ import type { OrderImage } from './productionOrders'
 /** Hai mã của kho BTP (2026-11-16): BTP S925 cho mọi luồng, S999 khi chọn cho phôi cắt từ cây đúc. */
 export type BtpMetal = 'S925' | 'S999'
 
-export const BTP_METAL_LABEL: Record<BtpMetal, string> = {
-  S925: 'BTP S925',
-  S999: 'BTP S999',
-}
-
 export type CastingSlipImage = Pick<OrderImage, 'url' | 'publicId' | 'width' | 'height'>
 
 export type CastingSlipOrderLine = {
@@ -291,41 +286,6 @@ export function updateCastingSlipApi(id: string, payload: UpdateCastingSlipPaylo
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
-}
-
-export function deleteCastingSlipApi(id: string) {
-  return apiFetch<{ success: true }>(`/casting-slips/${id}`, { method: 'DELETE' })
-}
-
-export type CastingLossReport = {
-  workers: {
-    workerUserId: string | null
-    workerName: string
-    slipCount: number
-    issuedGram: string
-    usedGram: string
-    castTreeGram: string
-    lossGram: string
-    lossPercent: string | null
-  }[]
-  slips: {
-    id: string
-    code: string
-    confirmedAt: string | null
-    workerName: string | null
-    issuedGram: string
-    leftoverGram: string | null
-    castLossGram: string | null
-    castLossPercent: string | null
-  }[]
-}
-
-/** Hao hụt đúc theo thợ đúc — phiếu đã xác nhận Đúc xong, lọc theo ngày xác nhận. */
-export function getCastingLossReportApi(params: { from?: string; to?: string }) {
-  const query = new URLSearchParams()
-  if (params.from) query.set('from', params.from)
-  if (params.to) query.set('to', params.to)
-  return apiFetch<CastingLossReport>(`/casting-slips/loss-by-worker?${query.toString()}`)
 }
 
 export function markCastingSlipPrintedApi(id: string) {

@@ -40,11 +40,6 @@ export function intakeCanEditWaxWeight(row: IntakeOrder) {
   return Boolean(row.productWeightGram)
 }
 
-/** Đơn có khuôn bơm theo luồng cũ (bơm sáp + cây thông một lần), còn chờ thủ kho xác nhận. */
-export function intakeIsLegacyMoldWax(row: IntakeOrder) {
-  return row.hasMold === true && row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
-}
-
 /** Đã nhập TL cây thông / đã có sáp — lên phiếu đúc trên màn Lệnh đúc. */
 export function intakeNeedsCastingSlip(row: IntakeOrder) {
   return row.status === 'WAX_CONFIRMED' || row.status === 'PENDING_WAREHOUSE_CONFIRMATION'
