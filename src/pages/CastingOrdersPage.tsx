@@ -27,6 +27,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from 'sonner'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  canPrintCastingSlip,
   confirmCastingSlipApi,
   getCastingSlipApi,
   rejectCastingSlipApi,
@@ -211,11 +212,10 @@ export function CastingOrdersPage() {
     mutationFn: (payload: CreateCastingSlipPayload) => createCastingSlipApi(payload),
     onSuccess: (slip) => {
       toast.success(
-        `Đã lên phiếu đúc ${slip.code} (${slip.orders.length} đơn) — in phiếu, cấp vật tư rồi chụp ảnh`,
+        `Đã lên phiếu đúc ${slip.code} (${slip.orders.length} đơn) — cân vật tư, bấm Cấp vật tư nhập thực xuất rồi in phiếu`,
       )
       closeCreate()
       applyCastingSlipCreated(queryClient, slip)
-      window.open(`/casting/${slip.code}/print`, '_blank')
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -256,6 +256,8 @@ export function CastingOrdersPage() {
           : `Phiếu ${updated.code}: đã cấp vật tư — ${updated.orders.length} đơn sang Chờ đúc`,
       )
       applyCastingSlipUpdate(queryClient, updated)
+      // Đã nhập thực xuất trong hệ thống — giờ mới in phiếu đúc.
+      window.open(`/casting/${updated.code}/print`, '_blank')
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -338,7 +340,7 @@ export function CastingOrdersPage() {
         <Button size="small" variant="outlined" onClick={() => dialog.openView(row)}>
           Xem chi tiết
         </Button>
-        {canConfirm ? (
+        {canConfirm && canPrintCastingSlip(row) ? (
           <Button
             size="small"
             variant="outlined"
@@ -968,7 +970,7 @@ export function CastingSlipViewDialog({
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button onClick={onClose}>Đóng</Button>
-        {view && canConfirm && variant !== 'cut' ? (
+        {view && canConfirm && variant !== 'cut' && canPrintCastingSlip(view) ? (
           <Button variant="outlined" href={`/casting/${view.code}/print`} target="_blank">
             {view.lastPrintedAt ? 'In lại phiếu' : 'In phiếu'}
           </Button>

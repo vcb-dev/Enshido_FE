@@ -110,6 +110,14 @@ export type CastingSlipStatus =
   | 'DONE'
   | 'CAST_FAILED'
 
+/**
+ * Phiếu đúc chỉ in sau khi thủ kho đã nhập trọng lượng thực xuất ở bước Cấp vật tư — số trên giấy
+ * khớp số trong hệ thống. Phiếu còn Chờ cấp vật tư thì chưa in.
+ */
+export function canPrintCastingSlip(slip: { status: CastingSlipStatus }) {
+  return slip.status !== 'PENDING_ISSUE'
+}
+
 export type CastingSlipResultPayload = {
   castTreeWeightGram: number
   /**

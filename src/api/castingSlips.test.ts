@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cutCastingSlipApi, cutCastingSlipsApi, type CutCastingSlipItem } from './castingSlips'
+import {
+  canPrintCastingSlip,
+  cutCastingSlipApi,
+  cutCastingSlipsApi,
+  type CastingSlipStatus,
+  type CutCastingSlipItem,
+} from './castingSlips'
 
 const fetchMock = vi.fn()
 const item: CutCastingSlipItem = {
@@ -34,5 +40,16 @@ describe('payload cắt cây thông', () => {
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toContain('/casting-slips/cut-many')
     expect(JSON.parse(options.body)).toEqual({ items: [item] })
+  })
+})
+
+describe('in phiếu đúc sau khi nhập thực xuất', () => {
+  it('phiếu Chờ cấp vật tư chưa in được', () => {
+    expect(canPrintCastingSlip({ status: 'PENDING_ISSUE' })).toBe(false)
+  })
+
+  it('đã cấp vật tư (đã nhập thực xuất) trở đi thì in được', () => {
+    const statuses: CastingSlipStatus[] = ['WAIT_CASTING', 'CASTING', 'PENDING_CONFIRMATION', 'DONE', 'CAST_FAILED']
+    for (const status of statuses) expect(canPrintCastingSlip({ status })).toBe(true)
   })
 })

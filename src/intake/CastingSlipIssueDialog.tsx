@@ -87,8 +87,9 @@ const emptyValues = (): Values => ({
 })
 
 /**
- * Bước 7b: phiếu đã in — thủ kho nhập thực xuất (để trống = lấy ước tính), chọn mã NVL xuất cho từng
- * dòng, chụp ảnh, Lưu → Chờ đúc. Bạc / hội / vàng trừ khỏi kho NVL chính ngay lúc Lưu.
+ * Bước 7b: thủ kho cân vật tư, nhập thực xuất (để trống = lấy ước tính), chọn mã NVL xuất cho từng
+ * dòng, chụp ảnh, "Lưu và in phiếu" → Chờ đúc rồi mở phiếu in. Bạc / hội / vàng trừ khỏi kho NVL chính
+ * ngay lúc lưu. Phiếu chỉ in sau bước này để số trên giấy khớp số trong hệ thống.
  */
 export function CastingSlipIssueDialog({
   slip,
@@ -219,8 +220,8 @@ export function CastingSlipIssueDialog({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Nhập trọng lượng thực xuất. Để trống rồi xác nhận thì lấy trọng lượng ước tính. Ước tính vàng hiện khi
-              chọn mã NVL vàng 10k / 14k / 18k / 24k.
+              Cân vật tư rồi nhập trọng lượng thực xuất — lưu xong mới in phiếu đúc, số trên phiếu khớp số trong hệ
+              thống. Để trống thì lấy trọng lượng ước tính. Ước tính vàng hiện khi chọn mã NVL vàng 10k / 14k / 18k / 24k.
             </Typography>
             <CastingSlipMetalFormTable<Values>
               issueNames={{ s999: 's999', hoi: 'hoi', s925: 's925', gold: 'gold' }}
@@ -302,10 +303,10 @@ export function CastingSlipIssueDialog({
             </Box>
             <FormImageField<Values>
               name="images"
-              label="Ảnh phiếu đúc và vật tư"
+              label="Ảnh vật tư cấp đúc (lúc cân)"
               kind="CASTING_TREE"
               required
-              requiredMessage="Chụp ảnh phiếu đúc và vật tư kèm theo"
+              requiredMessage="Chụp ảnh vật tư cấp đúc (lúc cân)"
               onUploadingChange={setUploading}
               readOnly={saving}
             />
@@ -316,7 +317,7 @@ export function CastingSlipIssueDialog({
             Hủy
           </Button>
           <Button type="submit" variant="contained" disabled={busy || !slip || hasStockShortfall}>
-            {saving ? 'Đang lưu…' : 'Lưu'}
+            {saving ? 'Đang lưu…' : 'Lưu và in phiếu'}
           </Button>
         </DialogActions>
       </DialogForm>
