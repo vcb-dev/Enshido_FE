@@ -4,7 +4,7 @@ import type { stone3dMismatch } from './stoneReturn'
 
 /**
  * Cảnh báo mốc TL đá 3D lệch đá thực tế — hao hụt Vào đá lấy TL đá 3D làm mốc nên khai sai
- * (theo 1 sp thay vì cả đơn, nhầm ct/g, thiếu loại đá) là hao ra âm / ảo. Dùng ở QC cân lại và
+ * (nhầm ct/g, thiếu loại đá; đơn cũ khai tổng theo 1 sp) là hao ra âm / ảo. Dùng ở QC cân lại và
  * thủ kho xác nhận Vào đá.
  */
 export function Stone3dMismatchAlert({ mismatch }: { mismatch: NonNullable<ReturnType<typeof stone3dMismatch>> }) {
@@ -23,7 +23,7 @@ export function Stone3dMismatchAlert({ mismatch }: { mismatch: NonNullable<Retur
         {lighter
           ? 'TL đá 3D nhẹ hơn đá gắn thật — hao hụt khâu sẽ bị thấp đi, có thể ra âm.'
           : 'TL đá 3D nặng hơn đá gắn thật — hao hụt khâu sẽ bị đội lên.'}{' '}
-        Kiểm tra lại Tổng TL đá 3D của đơn (cả đơn, đơn vị ct) và gói đá thừa trước khi lưu.
+        Kiểm tra lại TL đá 3D của đơn (form File 3D nhập theo 1 sp, đơn vị ct) và gói đá thừa trước khi lưu.
       </Typography>
     </Alert>
   )

@@ -11,8 +11,8 @@ import {
 } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import type { IntakeOrder } from '../api/intakeOrders'
-import { formatCt, formatQty } from '../api/inventory'
-import { formatIntakeGram } from './intakeDisplay'
+import { formatQty } from '../api/inventory'
+import { formatIntakeGram, formatStone3d } from './intakeDisplay'
 import { intakeShowsWaxQty, intakeWaxEnteredQty } from './intakeActions'
 import { intakeCastingTreeImages, intakeDetailImages, intakeProductOnlyImages } from './intakeImages'
 import { IntakeImageThumbs } from './IntakeImageThumbs'
@@ -35,16 +35,8 @@ export function IntakeOrderDetailDialog({
   const waxWeight = order ? formatIntakeGram(order.productWeightGram) : null
   const treeWeight = order ? formatIntakeGram(order.castingTreeWeightGram) : null
   const checkedWeight = order ? formatIntakeGram(order.waxCheckedWeightGram) : null
-  const stoneLine = !order
-    ? ''
-    : order.stoneCount3d === 0
-      ? 'Không có đá — bỏ khâu Vào đá'
-      : [
-          order.stoneCount3d != null ? `${order.stoneCount3d} viên` : null,
-          order.stoneWeight3dGram ? formatCt(order.stoneWeight3dGram) : null,
-        ]
-          .filter(Boolean)
-          .join(' · ')
+  const stone3d = order ? formatStone3d(order) : null
+  const stoneLine = !stone3d ? '' : stone3d === 'Không có đá' ? 'Không có đá — bỏ khâu Vào đá' : stone3d
   // Thông số in phiếu — ô nào trống thì không hiện.
   const specs = (
     [

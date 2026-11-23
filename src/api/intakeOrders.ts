@@ -1,3 +1,4 @@
+import type { StoneSpecsPayload } from '../intake/StoneSpecsFields'
 import { apiFetch } from './auth'
 import type { OrderImage, ProductionRequestType, ProductionStatus } from './productionOrders'
 
@@ -98,6 +99,9 @@ export type IntakeOrder = {
   /** Đá theo file 3D (cả đơn); 0 viên = không có đá. */
   stoneCount3d?: number | null
   stoneWeight3dGram?: string | null
+  /** Đá theo file 3D của 1 sản phẩm = cả đơn ÷ SL (form 3D nhập theo 1 sp). */
+  stoneCount3dPerPiece?: number | null
+  stoneWeight3dPerPieceGram?: string | null
   castingTreeWeightGram: string | null
   /** Bước 5–6: TL thủ kho cân kiểm (nếu nhập); không có thì dùng số thợ báo. */
   waxCheckedWeightGram: string | null
@@ -257,9 +261,7 @@ export function attachIntakeModel3dApi(
   payload: {
     model3dUrl: string
     images: OrderImage[]
-    stoneCount3d?: number | null
-    stoneWeight3dGram?: number | null
-  },
+  } & StoneSpecsPayload,
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/model-3d`, {
     method: 'POST',
@@ -273,9 +275,7 @@ export function submitIntakeProductSpecsApi(
     productWeightGram: number
     produceQty?: number
     images: OrderImage[]
-    stoneCount3d?: number | null
-    stoneWeight3dGram?: number | null
-  },
+  } & StoneSpecsPayload,
 ) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/product-specs`, {
     method: 'POST',
