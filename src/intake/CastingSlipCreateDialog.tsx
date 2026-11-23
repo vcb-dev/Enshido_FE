@@ -428,7 +428,8 @@ export function CastingSlipCreateDialog({
             estimateTotalGram={gramText(estimate.total)}
           />
           <Typography variant="caption" color="text.secondary">
-            Lưu và in phiếu trước. Thủ kho nhập trọng lượng thực xuất lúc cấp vật tư — để trống thì lấy số ước tính.
+            Lưu phiếu xong, thủ kho cân vật tư và nhập trọng lượng thực xuất ở bước Cấp vật tư rồi mới in phiếu — để
+            trống thì lấy số ước tính.
           </Typography>
 
           {formError ? <Alert severity="error">{formError}</Alert> : null}
@@ -438,7 +439,7 @@ export function CastingSlipCreateDialog({
             Hủy
           </Button>
           <Button type="submit" variant="contained" disabled={busy || (!isServiceCast && !assignedUserId)}>
-            {saving ? 'Đang lưu…' : `Lưu và in phiếu (${picked.length} đơn)`}
+            {saving ? 'Đang lưu…' : `Lưu phiếu (${picked.length} đơn)`}
           </Button>
         </DialogActions>
       </DialogForm>

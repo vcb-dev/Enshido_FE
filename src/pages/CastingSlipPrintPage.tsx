@@ -5,7 +5,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { getCastingSlipByCodeApi, markCastingSlipPrintedApi, type CastingSlip } from '../api/castingSlips'
+import {
+  canPrintCastingSlip,
+  getCastingSlipByCodeApi,
+  markCastingSlipPrintedApi,
+  type CastingSlip,
+} from '../api/castingSlips'
 import { formatQty } from '../api/inventory'
 import { PrintSheetSkeleton } from '../components/ui'
 import { formatDateTime } from '../orders/catalog'
@@ -17,7 +22,8 @@ const HEADER_BG = '#fff2cc'
 const TITLE_RED = '#e0403a'
 
 /**
- * In phiếu đúc (`/casting/:code/print`, bước 7). Thủ kho in kèm vật tư giao thợ đúc; QR mở
+ * In phiếu đúc (`/casting/:code/print`, bước 7) — chỉ sau khi đã nhập thực xuất ở bước Cấp vật tư.
+ * Thủ kho in kèm vật tư giao thợ đúc; QR mở
  * `/casting/:code` để thợ đúc quét nhận (bước 8).
  */
 export function CastingSlipPrintPage() {
@@ -46,7 +52,7 @@ export function CastingSlipPrintPage() {
   }
 
   useEffect(() => {
-    if (!detail.data || autoPrinted.current) return
+    if (!detail.data || !canPrintCastingSlip(detail.data) || autoPrinted.current) return
     autoPrinted.current = true
     const timer = setTimeout(() => void print(), 400)
     return () => clearTimeout(timer)
@@ -63,6 +69,22 @@ export function CastingSlipPrintPage() {
     )
   }
   const slip = detail.data
+  if (!canPrintCastingSlip(slip)) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert
+          severity="warning"
+          action={
+            <Button color="inherit" size="small" onClick={() => navigate('/casting')}>
+              Về Lệnh đúc
+            </Button>
+          }
+        >
+          Phiếu {slip.code} chưa cấp vật tư — cân vật tư, bấm Cấp vật tư nhập trọng lượng thực xuất rồi mới in phiếu.
+        </Alert>
+      </Box>
+    )
+  }
 
   return (
     <Box className="ticket-screen" sx={{ height: '100dvh', overflow: 'auto', bgcolor: '#e5e8eb', px: 2, pb: 3 }}>
