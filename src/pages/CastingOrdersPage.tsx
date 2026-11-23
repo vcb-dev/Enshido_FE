@@ -42,6 +42,7 @@ import {
   type CreateCastingSlipPayload,
   type CastingSlipStatus,
   type CastingSlipResultPayload,
+  type RejectCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
@@ -66,6 +67,7 @@ import { CastingSlipConfirmDialog, serviceCastPriceLines } from '../intake/Casti
 import { formatCutRest } from '../intake/intakeDisplay'
 import { CastingSlipIssueDialog } from '../intake/CastingSlipIssueDialog'
 import { CastingSlipResultDialog } from '../intake/CastingSlipResultDialog'
+import { CastingSlipRejectDialog } from '../intake/CastingSlipRejectDialog'
 import { CastingSlipMetalTable } from '../intake/CastingSlipMetalTable'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { StatusChip } from '../orders/OrderChips'
@@ -280,13 +282,13 @@ export function CastingOrdersPage() {
       toast.error(error.message)
     },
   })
+  const [rejectTarget, setRejectTarget] = useState<CastingSlip | null>(null)
   const rejectCast = useMutation({
-    mutationFn: (slip: CastingSlip) => rejectCastingSlipApi(slip.id),
-    onSuccess: (redo, failedSlip) => {
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: RejectCastingSlipPayload }) =>
+      rejectCastingSlipApi(slip.id, payload),
+    onSuccess: (redo, { slip: failedSlip }) => {
       toast.success(
-        failedSlip.isServiceCast
-          ? `Đã báo lỗi đúc — phiếu làm lại ${redo.code} (đúc dịch vụ). Thủ kho nhập kết quả mới trên Lệnh đúc.`
-          : `Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc). Thợ nhận phiếu và nhập kết quả mới.`,
+        `Đã báo lỗi đúc, cây hỏng nhập kho NVL — phiếu làm lại ${redo.code} chờ cấp vật tư${failedSlip.isServiceCast ? ' (đúc dịch vụ)' : ''}.`,
       )
       applyCastingSlipRejected(
         queryClient,
@@ -294,7 +296,9 @@ export function CastingOrdersPage() {
         redo,
       )
       invalidateBtpStock(queryClient)
+      invalidateNvlStock(queryClient)
       scheduleMyTicketsRefresh(queryClient)
+      setRejectTarget(null)
       closeView()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -322,21 +326,8 @@ export function CastingOrdersPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
-  const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
-  const askRejectCast = useCallback(
-    (slip: CastingSlip) => {
-      const orders = slip.orders.map((line) => line.code).join(', ')
-      if (
-        !window.confirm(
-          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc để thợ làm lại.`,
-        )
-      ) {
-        return
-      }
-      rejectCast.mutate(slip)
-    },
-    [rejectCast.mutate],
-  )
+  const rejectingId = rejectCast.isPending ? rejectCast.variables?.slip.id : null
+  const askRejectCast = useCallback((slip: CastingSlip) => setRejectTarget(slip), [])
   const canConfirm = canConfirmIntakeWarehouse(user)
   const canCast = can(user, Permission.PRODUCTION_CAST)
   const isAdmin = user?.roleCode === 'ADMIN' || Boolean(user?.extraRoles?.includes('ADMIN'))
@@ -608,6 +599,12 @@ export function CastingOrdersPage() {
         onEnterResult={setResultTarget}
         onClose={closeView}
       />
+      <CastingSlipRejectDialog
+        slip={rejectTarget}
+        saving={rejectCast.isPending}
+        onClose={() => setRejectTarget(null)}
+        onSave={(payload) => rejectTarget && rejectCast.mutate({ slip: rejectTarget, payload })}
+      />
       <CastingSlipResultDialog
         slip={resultTarget}
         saving={submitResult.isPending}
@@ -661,6 +658,23 @@ function hasCutData(slip: CastingSlip) {
 
 /** Các trường đúng form cắt cây thông: số phôi, TL phôi, ảnh cân phôi, phần cây còn lại, ảnh cây còn lại. */
 export function CastingSlipCutFields({ slip }: { slip: CastingSlip }) {
+  // Phiếu lỗi đúc (từ 2026-11-23): cây hỏng thủ kho cân nhập về NVL lúc báo lỗi, không có phôi.
+  if (slip.status === 'CAST_FAILED') {
+    if (slip.restWeightGram == null) return null
+    return (
+      <Stack spacing={0.75}>
+        <Typography variant="body2">
+          <strong>Cây đúc lỗi nhập kho NVL:</strong> {formatCutRest(slip) ?? '—'}
+        </Typography>
+        {slip.restImages.length ? (
+          <IntakeImageThumbs
+            label="Ảnh cân cây đúc lỗi"
+            images={slipImageThumbs(slip.restImages, 'CASTING_TREE')}
+          />
+        ) : null}
+      </Stack>
+    )
+  }
   if (!hasCutData(slip)) {
     return (
       <Typography variant="body2" color="text.secondary">

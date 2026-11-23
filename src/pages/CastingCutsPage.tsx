@@ -12,6 +12,7 @@ import {
   rejectCastingSlipApi,
   type CastingSlip,
   type ConfirmCastingSlipPayload,
+  type RejectCastingSlipPayload,
 } from '../api/castingSlips'
 import { useAuth } from '../auth/AuthContext'
 import { formatQty } from '../api/inventory'
@@ -23,6 +24,7 @@ import { CastingSlipConfirmDialog } from '../intake/CastingSlipConfirmDialog'
 import { CastingSlipCutDialog, CastingSlipsCutDialog } from '../intake/CastingSlipCutDialog'
 import { CastingCutSelectionDialog } from '../intake/CastingCutSelectionDialog'
 import { CastingCutPrintDialog } from '../intake/CastingCutPrintDialog'
+import { CastingSlipRejectDialog } from '../intake/CastingSlipRejectDialog'
 import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import { applyCastingSlipRejected, applyCastingSlipUpdate } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
@@ -155,34 +157,27 @@ export function CastingCutsPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const [rejectTarget, setRejectTarget] = useState<CastingSlip | null>(null)
   const rejectCast = useMutation({
-    mutationFn: (slip: CastingSlip) => rejectCastingSlipApi(slip.id),
-    onSuccess: (redo, failedSlip) => {
-      toast.success(`Đã báo lỗi đúc — phiếu làm lại ${redo.code} (Chờ đúc).`)
+    mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: RejectCastingSlipPayload }) =>
+      rejectCastingSlipApi(slip.id, payload),
+    onSuccess: (redo, { slip: failedSlip }) => {
+      toast.success(
+        `Đã báo lỗi đúc, cây hỏng nhập kho NVL — phiếu làm lại ${redo.code} chờ cấp vật tư.`,
+      )
       applyCastingSlipRejected(queryClient, { ...failedSlip, status: 'CAST_FAILED' }, redo)
       invalidateBtpStock(queryClient)
+      invalidateNvlWarehouse(queryClient)
       scheduleMyTicketsRefresh(queryClient)
+      setRejectTarget(null)
       dialog.close()
     },
     onError: (error: Error) => toast.error(error.message),
   })
   const confirmingId = confirm.isPending ? confirm.variables?.slip.id : null
-  const rejectingId = rejectCast.isPending ? rejectCast.variables?.id : null
+  const rejectingId = rejectCast.isPending ? rejectCast.variables?.slip.id : null
 
-  const askRejectCast = useCallback(
-    (slip: CastingSlip) => {
-      const orders = slip.orders.map((line) => line.code).join(', ')
-      if (
-        !window.confirm(
-          `Báo lỗi đúc phiếu ${slip.code} (${orders})?\n\nHệ thống tạo phiếu mới cùng số liệu, đơn về Chờ đúc để thợ làm lại.`,
-        )
-      ) {
-        return
-      }
-      rejectCast.mutate(slip)
-    },
-    [rejectCast.mutate],
-  )
+  const askRejectCast = useCallback((slip: CastingSlip) => setRejectTarget(slip), [])
 
   const renderActions = useCallback(
     (row: CastingSlip) => (
@@ -430,6 +425,12 @@ export function CastingCutsPage() {
         saving={cut.isPending}
         onClose={() => setCutTarget(null)}
         onSave={(payload) => cutTarget && cut.mutate({ slip: cutTarget, payload })}
+      />
+      <CastingSlipRejectDialog
+        slip={rejectTarget}
+        saving={rejectCast.isPending}
+        onClose={() => setRejectTarget(null)}
+        onSave={(payload) => rejectTarget && rejectCast.mutate({ slip: rejectTarget, payload })}
       />
       <CastingCutPrintDialog slips={justCut} onClose={() => setJustCut([])} />
     </Stack>
