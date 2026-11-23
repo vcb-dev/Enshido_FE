@@ -106,7 +106,7 @@ function defaultValues(slip: CastingSlip): SlipValues {
 }
 
 /** Mã kho NVL của một ô phần còn lại, vd "A00189 · Bạc thu hồi"; chưa có mã thì báo. */
-function choiceHint(choice: RestChoice | undefined, loading: boolean) {
+export function choiceHint(choice: RestChoice | undefined, loading: boolean) {
   if (!choice) return loading ? 'Đang tải mã NVL…' : undefined
   return choice.material
     ? `Nhập kho ${[choice.material.sku, choice.material.name].filter(Boolean).join(' · ')}`
@@ -128,7 +128,7 @@ export function restFromBlanks(
   return rest >= 0 ? rest : null
 }
 
-function toImages(images: OrderImage[]): CastingSlipImage[] {
+export function toImages(images: OrderImage[]): CastingSlipImage[] {
   return images.map(({ url, publicId, width, height }) => ({
     url,
     publicId,

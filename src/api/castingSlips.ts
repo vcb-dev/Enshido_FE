@@ -410,9 +410,19 @@ export function listRestMaterialOptionsApi() {
   return apiFetch<RestMaterialOptions>('/casting-slips/rest-material-options')
 }
 
-/** Thủ kho báo lỗi đúc — trả về phiếu làm lại (Chờ đúc). */
-export function rejectCastingSlipApi(id: string) {
-  return apiFetch<CastingSlip>(`/casting-slips/${id}/reject-cast`, { method: 'POST', body: '{}' })
+/** Cây đúc lỗi cân nhập về kho NVL — hai mã như phần cây còn lại lúc cắt cây. */
+export type RejectCastingSlipPayload = {
+  restS925Gram: number
+  restRecoveredGram: number
+  restImages: CastingSlipImage[]
+}
+
+/** Thủ kho báo lỗi đúc — cây hỏng về NVL, trả về phiếu làm lại (Chờ cấp vật tư). */
+export function rejectCastingSlipApi(id: string, payload: RejectCastingSlipPayload) {
+  return apiFetch<CastingSlip>(`/casting-slips/${id}/reject-cast`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export type CutCastingSlipItem = ConfirmCastingSlipPayload & { slipId: string }
