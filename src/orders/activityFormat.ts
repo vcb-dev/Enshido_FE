@@ -2,62 +2,6 @@ import { gramToCt } from '../api/inventory'
 import type { StageCode } from '../api/productionOrders'
 import { formatDateTime, STAGE_LABEL } from './catalog'
 
-/** Nhãn cho mã thao tác BE ghi (`ACTIVITY` trong activity-log.ts). Mã lạ thì hiện nguyên mã. */
-export const ACTION_LABEL: Record<string, string> = {
-  ORDER_CREATE: 'Lên đơn',
-  ORDER_UPDATE: 'Sửa đơn',
-  ORDER_DELETE: 'Xoá đơn',
-  ORDER_STATUS: 'Đổi trạng thái',
-  ORDER_CASTING: 'Báo Đúc / Đúc về',
-  ORDER_CUT: 'Cắt cây thông · nhận phôi',
-  ORDER_UNDO_CUT: 'Xoá phiếu cắt cây (luồng cũ)',
-  ORDER_FINISH: 'Hoàn thiện đơn',
-  ORDER_UNDO_FINISH: 'Gỡ hoàn thiện',
-  ORDER_PRINT: 'In phiếu mẹ',
-  ORDER_NOTE: 'Sửa ghi chú',
-  COST_ADD: 'Thêm chi phí',
-  COST_UPDATE: 'Sửa chi phí',
-  COST_DELETE: 'Xoá chi phí',
-  STAGE_OPEN: 'Chỉ định thợ',
-  STAGE_CANCEL_OPEN: 'Huỷ mở khâu',
-  STAGE_CLAIM: 'Thợ nhận phiếu (luồng cũ)',
-  STAGE_UNCLAIM: 'Gỡ lượt nhận',
-  STAGE_HANDOVER: 'Giao khâu cho thợ',
-  STAGE_HANDOVER_EDIT: 'Sửa thông tin giao',
-  STAGE_SUBMIT: 'Thợ báo làm xong',
-  STAGE_UNSUBMIT: 'Gỡ báo làm xong',
-  STAGE_RETURN: 'QC nhận lại',
-  STAGE_UNDO_RETURN: 'Gỡ QC nhận lại',
-  STAGE_DEFECT: 'Báo lỗi khâu',
-  STAGE_CLEAR_DEFECT: 'Bỏ báo lỗi khâu',
-  STAGE_CONFIRM: 'Xác nhận nhập kho',
-  STAGE_LABOR: 'Sửa tiền công khâu',
-  TICKET_SPLIT: 'Chia phiếu con',
-  TICKET_CREATE: 'Thêm phiếu con',
-  TICKET_UPDATE: 'Sửa phiếu con',
-  TICKET_DELETE: 'Xoá phiếu con',
-  TICKET_CLEAR_SPLIT: 'Huỷ chia phiếu con',
-  /** Luồng cũ đã bỏ — nhật ký cũ vẫn còn dòng này. */
-  TICKET_TOP_UP: 'Cấp thêm (luồng cũ)',
-  MATERIAL_REQUEST: 'Thợ xin xuất NVL',
-  MATERIAL_CANCEL: 'Thợ huỷ yêu cầu xuất',
-  MATERIAL_ISSUE: 'Xuất NVL cho thợ',
-  STONE_RETURN_EARLY: 'Thợ trả lại túi đá cho thủ kho giữa khâu',
-  STONE_SKIP: 'Đánh dấu đơn không có đá',
-  STONE_UNSKIP: 'Bỏ đánh dấu không có đá',
-  STAGE_SKIP: 'Chuyển khâu (bỏ qua khâu)',
-  MODEL3D_DONE: 'Gắn file 3D',
-  WAX_DONE: 'Báo in / bơm sáp xong',
-  WAX_EDIT: 'Sửa TL / ảnh sáp',
-  WAX_TREE_DONE: 'Gắn cây sáp',
-  MATERIAL_REJECT: 'Không xuất NVL',
-  TICKET_OUTCOME: 'Chốt kết cục phiếu con',
-  TICKET_CLEAR_OUTCOME: 'Gỡ kết cục phiếu con',
-  TICKET_PRINT: 'In phiếu con',
-  TICKET_REWORK: 'Tạo phiếu bù',
-  CAST_DEFECT_REWORK: 'Lỗi đúc một phần · tạo lệnh bù',
-}
-
 /** Nhãn tiếng Việt cho các trường hay gặp trong giá trị trước / sau. */
 const FIELD_LABEL: Record<string, string> = {
   status: 'Trạng thái',
@@ -114,31 +58,6 @@ const FIELD_LABEL: Record<string, string> = {
   pendingStage: 'Khâu đang chờ',
   stage: 'Chuyển sang',
   skipped: 'Bỏ qua',
-}
-
-/**
- * Trước / sau → các dòng hiển thị. Có cả hai (sửa) thì chỉ hiện trường đổi dạng "cũ → mới";
- * chỉ có trước (xoá / gỡ) hoặc chỉ có sau (tạo mới) thì liệt kê các trường có giá trị. Mảng
- * (vd chia nhiều phiếu con) hiện gọn từng phần tử.
- */
-export function describeChanges(before: unknown, after: unknown): string[] {
-  if (Array.isArray(after) || Array.isArray(before)) {
-    const list = (Array.isArray(after) ? after : before) as unknown[]
-    return list.map((item) => formatObject(item))
-  }
-  const b = asRecord(before)
-  const a = asRecord(after)
-  const hasBefore = Object.keys(b).length > 0
-  const hasAfter = Object.keys(a).length > 0
-  if (hasBefore && hasAfter) {
-    return Object.keys(a)
-      .filter((key) => JSON.stringify(b[key] ?? null) !== JSON.stringify(a[key] ?? null))
-      .map((key) => `${FIELD_LABEL[key] ?? key}: ${fieldValue(key, b[key])} → ${fieldValue(key, a[key])}`)
-  }
-  const only = hasAfter ? a : b
-  return Object.entries(only)
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => `${FIELD_LABEL[key] ?? key}: ${fieldValue(key, value)}`)
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

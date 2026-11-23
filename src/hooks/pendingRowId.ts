@@ -42,13 +42,3 @@ export async function resolveRowId(id: string) {
   if (!slot) throw new Error('Dòng này chưa lưu xong.')
   return slot.promise
 }
-
-/** Xóa: nếu dòng còn id tạm thì đợi POST xong rồi xóa bằng UUID thật. */
-export async function deleteWhenReady(id: string, remove: (id: string) => Promise<unknown>) {
-  if (!isTempId(id)) return remove(id)
-  try {
-    return await remove(await resolveRowId(id))
-  } catch {
-    return { success: true }
-  }
-}

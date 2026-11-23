@@ -252,11 +252,6 @@ export function listFinishedGoodsOrderOptionsApi(search = '') {
   return apiFetch<{ items: FinishedGoodsOrderOption[] }>(`${BASE}/order-options${query}`)
 }
 
-export function listFinishedGoodsNvlOptionsApi(search = '') {
-  const query = search ? `?search=${encodeURIComponent(search)}` : ''
-  return apiFetch<{ items: FinishedGoodsNvlOption[] }>(`${BASE}/nvl-options${query}`)
-}
-
 export type UpsertReceiptPayload = {
   orderCode?: string
   description?: string
@@ -294,12 +289,6 @@ export function receiveFinishedGoodsReceiptApi(id: string, qty?: number) {
   return apiFetch<{ success: boolean }>(`${BASE}/receipts/${encodeURIComponent(id)}/receive`, {
     method: 'POST',
     body: JSON.stringify(qty != null ? { qty } : {}),
-  })
-}
-
-export function deleteFinishedGoodsReceiptApi(id: string) {
-  return apiFetch<{ success: boolean }>(`${BASE}/receipts/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
   })
 }
 

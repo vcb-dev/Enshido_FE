@@ -15,9 +15,6 @@ export type StoneSpecsPayload = {
   stoneWeight3dPerPieceGram?: number | null
 }
 
-/** Mặc định tích "Đơn có đá" để người nhập thấy ngay hai ô số viên / TL đá. */
-export const EMPTY_STONE_SPECS: StoneSpecs = { hasStone: true, stoneCount3d: '', stoneWeight3dCt: '' }
-
 function round4(value: number) {
   return Math.round(value * 10000) / 10000
 }

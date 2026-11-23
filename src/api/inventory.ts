@@ -156,10 +156,6 @@ export type StockResponse = {
   items: StockRow[]
 }
 
-export function listWarehousesApi() {
-  return apiFetch<WarehouseNode[]>('/warehouses')
-}
-
 export function getWarehouseStockApi(
   code: string,
   opts?: { layers?: boolean; period?: { from: string; to: string } },
@@ -415,11 +411,6 @@ export function caretAfterMoneyFormat(formatted: string, digitsBefore: number) {
   return formatted.length
 }
 
-function parseYmd(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return null
-  return new Date(year, month - 1, day)
-}
 
 export function formatStockedDate(value: string | null | undefined) {
   if (!value) return '—'
@@ -445,32 +436,6 @@ export function formatInboundDateTime(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-/** Thời gian tồn tính từ ngày nhập đầu (hoặc ngày tạo NVL nếu chưa nhập). */
-export function formatStockAge(value: string | null | undefined, now = new Date()) {
-  const start = value ? parseYmd(value) : null
-  if (!start) return { label: '—', since: '' }
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  let years = today.getFullYear() - start.getFullYear()
-  let months = today.getMonth() - start.getMonth()
-  let days = today.getDate() - start.getDate()
-  if (days < 0) {
-    months -= 1
-    days += new Date(today.getFullYear(), today.getMonth(), 0).getDate()
-  }
-  if (months < 0) {
-    years -= 1
-    months += 12
-  }
-  const parts: string[] = []
-  if (years) parts.push(`${years} năm`)
-  if (months) parts.push(`${months} tháng`)
-  if (!years && !months && days === 0) {
-    return { label: 'Hôm nay', since: formatStockedDate(value) }
-  }
-  if (days || parts.length === 0) parts.push(`${days} ngày`)
-  return { label: parts.join(' '), since: formatStockedDate(value) }
 }
 
 export function stockStatusFromQty(qty: string) {
@@ -504,12 +469,6 @@ export function stockSummary(item: Partial<StockSnapshot> & { qty: string; unit:
   if (Number(item.heldQty) > 0) parts.push(`giữ chỗ ${formatQty(item.heldQty ?? '0')}`)
   if (item.ledgerMismatch) parts.push(`sổ ghi ${formatQty(item.qty)} — cần kiểm kê`)
   return parts.join(' · ')
-}
-
-export function isQtyBalanced(row: Pick<StockRow, 'openingQty' | 'inQty' | 'outQty' | 'qty'>) {
-  const left = Number(row.openingQty) + Number(row.inQty)
-  const right = Number(row.outQty) + Number(row.qty)
-  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) < 1e-6
 }
 
 export type UpdateStockPayload = {
@@ -668,12 +627,6 @@ export function updateWarehouseInboundApi(
   })
 }
 
-export function deleteWarehouseInboundApi(code: string, inboundId: string) {
-  return apiFetch<{ success: boolean }>(`/warehouses/${code}/inbounds/${inboundId}`, {
-    method: 'DELETE',
-  })
-}
-
 export type OutboundRow = {
   id: string
   stt: number
@@ -798,11 +751,5 @@ export function updateWarehouseOutboundApi(
   return apiFetch<OutboundRow>(`/warehouses/${code}/outbounds/${outboundId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
-  })
-}
-
-export function deleteWarehouseOutboundApi(code: string, outboundId: string) {
-  return apiFetch<{ success: boolean }>(`/warehouses/${code}/outbounds/${outboundId}`, {
-    method: 'DELETE',
   })
 }

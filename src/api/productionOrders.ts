@@ -586,11 +586,6 @@ export type ProductionOrderListParams = {
   includeCounts?: boolean
 }
 
-export type ProductionOrderCountFilters = Pick<
-  ProductionOrderListParams,
-  'requestType' | 'source' | 'search' | 'receivedDate' | 'dueDate'
->
-
 export type UpsertProductionOrderPayload = {
   source: ProductionSource
   btpMaterialId?: string | null
@@ -879,8 +874,6 @@ export type OrderCosting = {
   warnings: string[]
 }
 
-export type OrderCostPayload = { name: string; amount: string; note?: string; editReason?: string }
-
 const BASE = '/production-orders'
 
 function orderPath(code: string, suffix = '') {
@@ -962,16 +955,6 @@ export async function listProductionOrdersApi(params: ProductionOrderListParams)
   return { ...res, items: res.items.map(fillOrderRow) }
 }
 
-export function getProductionOrderStatusCountsApi(params: ProductionOrderCountFilters) {
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '') query.set(key, String(value))
-  }
-  return apiFetch<{ statusCounts: Record<ProductionStatus | 'ALL', number> }>(
-    `${BASE}/status-counts?${query.toString()}`,
-  )
-}
-
 export function getProductionOrderLookupsApi() {
   return apiFetch<ProductionOrderLookups>(`${BASE}/lookups`)
 }
@@ -1018,31 +1001,6 @@ export function getSubTicketOrderApi(ticketCode: string) {
 
 export function getProductionOrderApi(code: string) {
   return orderFetch(orderPath(code))
-}
-
-/** Một dòng nhật ký thao tác trên đơn / phiếu con / khâu. `action` là mã, nhãn ở FE. */
-export type ProductionActivity = {
-  id: string
-  subTicketNo: number | null
-  stage: StageCode | null
-  action: string
-  actorName: string
-  before: unknown
-  after: unknown
-  note: string | null
-  createdAt: string
-}
-
-export function listOrderActivityApi(code: string) {
-  return apiFetch<ProductionActivity[]>(orderPath(code, '/activity'))
-}
-
-export function createProductionOrderApi(payload: UpsertProductionOrderPayload) {
-  return orderFetch(BASE, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(25_000),
-  })
 }
 
 export function updateProductionOrderApi(code: string, payload: UpsertProductionOrderPayload) {
@@ -1257,37 +1215,6 @@ export function listNvlOptionsApi(search = '') {
 
 export function getOrderCostingApi(code: string) {
   return apiFetch<OrderCosting>(orderPath(code, '/costing'))
-}
-
-export function addOrderCostApi(code: string, payload: OrderCostPayload) {
-  return apiFetch<{ success: boolean }>(orderPath(code, '/costs'), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-export function updateOrderCostApi(code: string, costId: string, payload: OrderCostPayload) {
-  return apiFetch<{ success: boolean }>(orderPath(code, `/costs/${costId}`), {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Sửa tiền công một khâu ngay ở phần chi phí (khâu đã được QC nhận lại). */
-export function updateStageLaborApi(
-  code: string,
-  stageId: string,
-  laborCost: string | null,
-  editReason?: string,
-) {
-  return apiFetch<{ success: boolean }>(orderPath(code, `/stages/${stageId}/labor`), {
-    method: 'PATCH',
-    body: JSON.stringify({ laborCost, editReason }),
-  })
-}
-
-export function deleteOrderCostApi(code: string, costId: string) {
-  return apiFetch<{ success: boolean }>(orderPath(code, `/costs/${costId}`), { method: 'DELETE' })
 }
 
 function ticketPath(code: string, no: number, suffix = '') {

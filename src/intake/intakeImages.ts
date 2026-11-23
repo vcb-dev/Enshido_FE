@@ -17,41 +17,9 @@ export function intakeCastingTreeImages(images: OrderImage[]) {
   return images.filter((image) => image.kind === 'CASTING_TREE')
 }
 
-/** @deprecated Dùng intakeProductOnlyImages / intakeCastingTreeImages. */
-export function intakeProductImages(images: OrderImage[]) {
-  return images.filter(
-    (image) => image.kind === 'PRODUCT' || image.kind === 'CASTING_TREE',
-  )
-}
-
-export type IntakeImageStageSection = {
-  /** Trạng thái công đoạn lúc tải ảnh. */
-  status: IntakeOrderStatus
-  title: string
-  images: OrderImage[]
-}
-
-/** Thứ tự công đoạn trên luồng đơn tạo (theo trạng thái). */
-const INTAKE_IMAGE_STAGES: Array<{
-  status: IntakeOrderStatus
-  pick: (images: OrderImage[]) => OrderImage[]
-}> = [
-  { status: 'PENDING_APPROVAL', pick: intakeDetailImages },
-  { status: 'READY_FOR_PRODUCTION', pick: intakeProductOnlyImages },
-  { status: 'WAX_PRINTED', pick: intakeCastingTreeImages },
-]
 
 function stageLabel(status: IntakeOrderStatus) {
   return INTAKE_STATUS_META[status].label
-}
-
-/** Nhóm ảnh theo công đoạn (trạng thái) — dialog Xem chi tiết. */
-export function intakeImageStageSections(row: IntakeOrder): IntakeImageStageSection[] {
-  return INTAKE_IMAGE_STAGES.map(({ status, pick }) => ({
-    status,
-    title: stageLabel(status),
-    images: pick(row.images),
-  })).filter((section) => section.images.length > 0)
 }
 
 /**

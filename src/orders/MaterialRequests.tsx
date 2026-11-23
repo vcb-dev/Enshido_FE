@@ -156,42 +156,6 @@ function LossText({ loss, percent, unit }: { loss: string | number | null; perce
   )
 }
 
-/** Ô gọn ở bảng phiếu con: đã xuất thêm bao nhiêu, còn yêu cầu chờ, hao hụt cả phiếu. */
-export function TicketMaterialsCell({ materials }: { materials: TicketMaterials }) {
-  const metal = Number(materials.issuedMetalWeight)
-  const empty = !metal && !materials.issuedStoneCount && !materials.pendingCount && materials.silverLoss == null
-  if (empty) return <>—</>
-  return (
-    <Stack spacing={0.25}>
-      {metal || materials.issuedStoneCount ? (
-        <Typography variant="caption" sx={{ display: 'block' }}>
-          {[
-            metal ? `${formatQty(materials.issuedMetalWeight)} g bạc` : null,
-            materials.issuedStoneCount ? `${materials.issuedStoneCount} viên đá` : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </Typography>
-      ) : null}
-      {materials.silverLoss != null ? (
-        <Typography variant="caption" sx={{ display: 'block' }}>
-          hao hụt <LossText loss={materials.silverLoss} percent={materials.silverLossPercent} unit="g" />
-        </Typography>
-      ) : null}
-      {materials.stoneLoss ? (
-        <Typography variant="caption" sx={{ display: 'block' }}>
-          mất <LossText loss={materials.stoneLoss} percent={materials.stoneLossPercent} unit="viên đá" />
-        </Typography>
-      ) : null}
-      {materials.pendingCount ? (
-        <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 600 }}>
-          {materials.pendingCount} yêu cầu chờ xuất
-        </Typography>
-      ) : null}
-    </Stack>
-  )
-}
-
 // ---------------------------------------------------------------- Thợ xin xuất
 
 type RequestValues = { materialId: string; qty: string; weight: string; note: string }
@@ -981,13 +945,6 @@ function suggestKindOf(unit: string, metalKind: string | null | undefined): Mate
 /** TL gửi API (g) của một dòng giao: dòng đá nhập theo ct. */
 export function handoverLineGram(line: Pick<HandoverMaterialLine, 'kind' | 'weight'>) {
   return (line.kind === 'STONE' ? ctToGram(line.weight) : line.weight) || null
-}
-
-/** Tổng gram bạc / kim loại của các dòng — cộng vào TL hàng để ra bạc vào khâu. */
-export function handoverMetalWeight(lines: readonly HandoverMaterialLine[]) {
-  return lines
-    .filter((line) => line.kind === 'METAL')
-    .reduce((sum, line) => sum + (Number(line.weight) || 0), 0)
 }
 
 /**
