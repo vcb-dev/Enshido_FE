@@ -5,7 +5,13 @@ import type { IntakeOrder } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
 import { DialogForm, FormTextField } from '../components/ui'
 import { FormImageField } from '../orders/FormImageField'
-import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
+import {
+  StoneSpecsFields,
+  stoneSpecsOf,
+  stoneSpecsPayload,
+  type StoneSpecs,
+  type StoneSpecsPayload,
+} from './StoneSpecsFields'
 
 type IntakeModel3dDialogProps = {
   order: IntakeOrder | null
@@ -14,9 +20,7 @@ type IntakeModel3dDialogProps = {
   onSave: (payload: {
     model3dUrl: string
     images: OrderImage[]
-    stoneCount3d: number | null
-    stoneWeight3dGram: number | null
-  }) => void
+  } & StoneSpecsPayload) => void
 }
 
 type Values = StoneSpecs & { model3dUrl: string; images: OrderImage[] }
@@ -72,7 +76,7 @@ export function IntakeModel3dDialog({ order, saving, onClose, onSave }: IntakeMo
               onUploadingChange={setUploading}
               readOnly={saving}
             />
-            <StoneSpecsFields disabled={saving} />
+            <StoneSpecsFields disabled={saving} qty={order?.qty} />
           </Stack>
         </DialogContent>
         <DialogActions>

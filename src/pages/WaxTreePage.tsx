@@ -8,13 +8,12 @@ import {
   submitIntakeCastingTreeBatchApi,
   type IntakeOrder,
 } from '../api/intakeOrders'
-import { formatCt } from '../api/inventory'
 import { useAuth } from '../auth/AuthContext'
 import { can, Permission } from '../auth/permissions'
 import { ColumnHeaderSearch, DataTable, PageHeader, type Column } from '../components/ui'
 import { LIVE_REFRESH_MS, liveRefresh } from '../hooks/liveRefresh'
 import { useTableParams } from '../hooks/useTableParams'
-import { formatIntakeGram } from '../intake/intakeDisplay'
+import { formatIntakeGram, formatStone3d } from '../intake/intakeDisplay'
 import { intakeCastingTreeImages } from '../intake/intakeImages'
 import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
@@ -28,12 +27,9 @@ import type { OrderImage } from '../api/productionOrders'
 const cellLeft = { textAlign: 'left', paddingLeft: '10px' } as const
 
 function stoneLabel(row: IntakeOrder) {
-  if (row.stoneCount3d === 0) return 'Không đá'
-  const count = row.stoneCount3d != null ? `${row.stoneCount3d} viên` : null
-  const weight =
-    row.stoneWeight3dGram != null && row.stoneWeight3dGram !== '' ? formatCt(row.stoneWeight3dGram) : null
-  if (!count && !weight) return '—'
-  return [count, weight].filter(Boolean).join(' · ')
+  const label = formatStone3d(row)
+  if (label === 'Không có đá') return 'Không đá'
+  return label ?? '—'
 }
 
 /**

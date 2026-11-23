@@ -19,6 +19,7 @@ import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
 import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
 import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
 import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
+import type { StoneSpecsPayload } from '../intake/StoneSpecsFields'
 import { IntakeWaxWeightDialog } from '../intake/IntakeWaxWeightDialog'
 import {
   intakeCanEditWaxWeight,
@@ -395,9 +396,7 @@ export function ProductionOrdersPage() {
       id: string
       model3dUrl: string
       images: OrderImage[]
-      stoneCount3d: number | null
-      stoneWeight3dGram: number | null
-    }) => attachIntakeModel3dApi(id, payload),
+    } & StoneSpecsPayload) => attachIntakeModel3dApi(id, payload),
     onSuccess: (order) => {
       setModel3dTarget(null)
       afterIntakeModel3dAttached(queryClient, order)
@@ -433,22 +432,20 @@ export function ProductionOrdersPage() {
       productWeightGram,
       produceQty,
       images,
-      stoneCount3d,
-      stoneWeight3dGram,
+      stoneCount3dPerPiece,
+      stoneWeight3dPerPieceGram,
     }: {
       id: string
       productWeightGram: number
       produceQty?: number
       images: IntakeOrder['images']
-      stoneCount3d?: number | null
-      stoneWeight3dGram?: number | null
-    }) =>
+    } & StoneSpecsPayload) =>
       submitIntakeProductSpecsApi(id, {
         productWeightGram,
         produceQty,
         images,
-        stoneCount3d,
-        stoneWeight3dGram,
+        stoneCount3dPerPiece,
+        stoneWeight3dPerPieceGram,
       }),
     onSuccess: (order) => {
       setProductSpecsTarget(null)

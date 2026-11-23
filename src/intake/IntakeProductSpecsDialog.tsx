@@ -6,7 +6,13 @@ import type { OrderImage } from '../api/productionOrders'
 import { formatQty, qtyFromApi } from '../api/inventory'
 import { DialogForm, FormQtyField, FormTextField } from '../components/ui'
 import { FormImageField } from '../orders/FormImageField'
-import { StoneSpecsFields, stoneSpecsOf, stoneSpecsPayload, type StoneSpecs } from './StoneSpecsFields'
+import {
+  StoneSpecsFields,
+  stoneSpecsOf,
+  stoneSpecsPayload,
+  type StoneSpecs,
+  type StoneSpecsPayload,
+} from './StoneSpecsFields'
 
 type IntakeProductSpecsDialogProps = {
   order: IntakeOrder | null
@@ -16,9 +22,7 @@ type IntakeProductSpecsDialogProps = {
     productWeightGram: number
     produceQty?: number
     images: OrderImage[]
-    stoneCount3d?: number | null
-    stoneWeight3dGram?: number | null
-  }) => void
+  } & StoneSpecsPayload) => void
 }
 
 type Values = StoneSpecs & {
@@ -127,7 +131,7 @@ export function IntakeProductSpecsDialog({
               fullWidth
               disabled={saving || uploading}
             />
-            {order?.hasMold ? <StoneSpecsFields disabled={saving || uploading} /> : null}
+            {order?.hasMold ? <StoneSpecsFields disabled={saving || uploading} qty={order?.qty} /> : null}
             <FormImageField<Values>
               name="images"
               label={order?.hasMold ? 'Ảnh sáp' : 'Ảnh sản phẩm / sáp'}
