@@ -444,7 +444,7 @@ function TicketDetail({ order, model }: { order: ProductionOrderDetail; model: T
                 state={model.state}
                 stage={usesReceiptFlow(model.pendingStage, model.no, model.receiptPrepared) ? model.pendingStage : null}
               />
-              {workerOnly ? null : <StatusChip status={order.status} />}
+              {workerOnly ? null : <StatusChip status={order.status} platingSkipped={order.platingSkipped} />}
               {/* Trạng thái bên cạnh vẫn là cái máy chủ đang giữ — chip này chỉ nói thao tác
                   của thợ chưa lên tới nơi, không phải là đã nhận / đã xong. */}
               {queued ? <Chip size="small" color="warning" label={queuedLabel(queued)} sx={{ borderRadius: 1 }} /> : null}

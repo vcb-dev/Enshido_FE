@@ -168,7 +168,7 @@ function HeaderBlock({ order }: { order: ProductionOrderRow | ProductionOrderDet
         <strong>Tên SP:</strong> {order.productName?.trim() || '—'}
       </Typography>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <StatusChip status={order.status} />
+        <StatusChip status={order.status} platingSkipped={order.platingSkipped} />
         <RequestTypeChip type={order.requestType} />
         <Typography variant="body2" color="text.secondary">
           SL {order.qty}

@@ -5,17 +5,20 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
   approveIntakeOrderApi,
+  approveSkipIntakeOrderApi,
   attachIntakeModel3dApi,
   rejectIntakeOrderApi,
   submitIntakeProductSpecsApi,
   updateIntakeWaxWeightApi,
   getIntakePipelineListsApi,
   listIntakeOrdersApi,
+  type ApproveSkipPayload,
   type IntakeOrder,
   type IntakeOrderSort,
   type IntakeOrderStatus,
 } from '../api/intakeOrders'
 import { ApproveIntakeDialog } from '../intake/ApproveIntakeDialog'
+import { ApproveSkipIntakeDialog } from '../intake/ApproveSkipIntakeDialog'
 import { RejectIntakeDialog } from '../intake/RejectIntakeDialog'
 import { IntakeModel3dDialog } from '../intake/IntakeModel3dDialog'
 import { IntakeProductSpecsDialog } from '../intake/IntakeProductSpecsDialog'
@@ -35,6 +38,7 @@ import { IntakeImageThumbs } from '../intake/IntakeImageThumbs'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
 import {
   afterIntakeApproved,
+  afterIntakeApprovedWithSkip,
   afterIntakeModel3dAttached,
   afterIntakeProductSpecsSubmitted,
   afterIntakeRejected,
@@ -68,6 +72,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTableParams } from '../hooks/useTableParams'
 import {
   formatDateTime,
+  productionStatusLabel,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
   STATUS_META,
@@ -89,6 +94,9 @@ type ProductionListChild = SubTicketSummary | ReworkChild
 type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
   | { kind: 'order'; row: ProductionOrderRow }
+
+/** Nút Duyệt / Chuyển khâu của đơn chờ duyệt — cùng bề rộng 112 với các nút khác trong cột. */
+const approveButtonSx = { minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5 }
 
 const actionTextButtonSx = {
   minWidth: 0,
@@ -146,6 +154,7 @@ export function ProductionOrdersPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const [approveTarget, setApproveTarget] = useState<IntakeOrder | null>(null)
+  const [approveSkipTarget, setApproveSkipTarget] = useState<IntakeOrder | null>(null)
   const [rejectTarget, setRejectTarget] = useState<IntakeOrder | null>(null)
   const [model3dTarget, setModel3dTarget] = useState<IntakeOrder | null>(null)
   const [productSpecsTarget, setProductSpecsTarget] = useState<IntakeOrder | null>(null)
@@ -388,6 +397,21 @@ export function ProductionOrdersPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const approveSkipIntake = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: ApproveSkipPayload }) => approveSkipIntakeOrderApi(id, payload),
+    onSuccess: (order, { payload }) => {
+      setApproveSkipTarget(null)
+      afterIntakeApprovedWithSkip(queryClient, order, payload.target !== 'WAX')
+      toast.success(
+        payload.target === 'WAX'
+          ? `Đã duyệt đơn ${order.code}, bỏ dựng 3D`
+          : payload.target === 'FINISHED'
+            ? `Đã duyệt đơn ${order.code} — chờ thủ kho nhập kho thành phẩm`
+            : `Đã duyệt đơn ${order.code} — chuyển vào Lệnh SX`,
+      )
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   const attachModel3d = useMutation({
     mutationFn: ({
       id,
@@ -490,6 +514,7 @@ export function ProductionOrdersPage() {
           },
           onNoteEdit: setNoteTarget,
           onIntakeApprove: (row) => setApproveTarget(row),
+          onIntakeApproveSkip: (row) => setApproveSkipTarget(row),
           onIntakeReject: (row) => setRejectTarget(row),
           onIntakeUpdate: (row) => setModel3dTarget(row),
           onIntakeProductSpecs: (row) => setProductSpecsTarget(row),
@@ -705,6 +730,15 @@ export function ProductionOrdersPage() {
           void approveIntake.mutateAsync({ id: approveTarget.id, hasMold })
         }}
       />
+      <ApproveSkipIntakeDialog
+        order={approveSkipTarget}
+        saving={approveSkipIntake.isPending}
+        onClose={() => setApproveSkipTarget(null)}
+        onConfirm={(payload) => {
+          if (!approveSkipTarget) return
+          void approveSkipIntake.mutateAsync({ id: approveSkipTarget.id, payload })
+        }}
+      />
       <OrderNoteDialog
         target={noteTarget}
         saving={saveNote.isPending}
@@ -781,6 +815,7 @@ function renderIntakeWorkflowStep(
   order: IntakeOrder,
   actions: {
     onIntakeApprove: (row: IntakeOrder) => void
+    onIntakeApproveSkip: (row: IntakeOrder) => void
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
     onIntakeProductSpecs: (row: IntakeOrder) => void
@@ -803,11 +838,21 @@ function renderIntakeWorkflowStep(
   if (order.status === 'PENDING_APPROVAL') {
     if (!actions.can.approve) return waiting('thủ kho duyệt')
     return (
-      <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
+      // Cùng bề rộng với các nút khác trong cột; Duyệt là thao tác chính, Từ chối chỉ là chữ như "Xem chi tiết".
+      <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+        <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)} sx={approveButtonSx}>
           Duyệt
         </Button>
-        <Button size="small" variant="outlined" color="error" onClick={() => actions.onIntakeReject(order)}>
+        <Button size="small" variant="outlined" onClick={() => actions.onIntakeApproveSkip(order)} sx={approveButtonSx}>
+          Chuyển khâu
+        </Button>
+        <Button
+          size="small"
+          variant="text"
+          color="error"
+          onClick={() => actions.onIntakeReject(order)}
+          sx={actionTextButtonSx}
+        >
           Từ chối
         </Button>
       </Stack>
@@ -1007,6 +1052,7 @@ function orderColumns(
     onView: (row: ProductionOrderRow) => void
     onNoteEdit: (target: OrderNoteTarget) => void
     onIntakeApprove: (row: IntakeOrder) => void
+    onIntakeApproveSkip: (row: IntakeOrder) => void
     onIntakeReject: (row: IntakeOrder) => void
     onIntakeUpdate: (row: IntakeOrder) => void
     onIntakeProductSpecs: (row: IntakeOrder) => void
@@ -1406,12 +1452,12 @@ function sliceMergedPage(
 }
 
 /** Danh sách chỉ hiện trạng thái sản xuất; các bước thao tác nằm trong chi tiết lệnh. */
-function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
-  return <StatusChip status={subTicketListStatus(sub)} />
+function SubTicketStatus({ sub, platingSkipped }: { sub: SubTicketSummary; platingSkipped?: boolean }) {
+  return <StatusChip status={subTicketListStatus(sub)} platingSkipped={platingSkipped} />
 }
 
 function OrderStatus({ row }: { row: ProductionOrderRow }) {
-  if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} />
+  if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} platingSkipped={row.platingSkipped} />
   if (row.subTickets.length > 1) {
     const counts = new Map<ProductionStatus, number>()
     for (const ticket of row.subTickets) {
@@ -1425,14 +1471,14 @@ function OrderStatus({ row }: { row: ProductionOrderRow }) {
             <StatusChip
               key={status}
               status={status}
-              label={`${STATUS_META[status].label} · ${count}`}
+              label={`${productionStatusLabel(status, row.platingSkipped)} · ${count}`}
             />
           ))}
         </Stack>
       )
     }
   }
-  return <StatusChip status={row.status} />
+  return <StatusChip status={row.status} platingSkipped={row.platingSkipped} />
 }
 
 function subTicketListStatus(sub: SubTicketSummary): ProductionStatus {

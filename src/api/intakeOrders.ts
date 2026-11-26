@@ -66,6 +66,8 @@ export type IntakeOrder = {
   status: IntakeOrderStatus
   /** Đã cắt cây: trạng thái thật trên lệnh sản xuất, đơn chia phiếu thì đếm theo phiếu con. */
   productionStatuses?: Array<{ status: ProductionStatus; count: number }> | null
+  /** Đã cắt cây và nhập kho thành phẩm không qua Xi — U hiện "Chờ nhập kho TP". */
+  platingSkipped?: boolean
   requestType: ProductionRequestType
   productName: string
   qty: number
@@ -240,6 +242,30 @@ export function deleteIntakeOrderApi(id: string) {
 
 export function approveIntakeOrderApi(id: string, payload: { hasMold: boolean }) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/**
+ * Khâu đích khi duyệt kèm "Chuyển khâu" (2026-11-26): `WAX` = bỏ dựng 3D; khâu sản xuất /
+ * `FINISHED` = bỏ cả 3D → sáp → đúc → cắt cây, hàng lấy từ kho BTP. Khớp `APPROVE_SKIP_TARGETS` ở BE.
+ */
+export type ApproveSkipTarget = 'WAX' | 'FILING' | 'STONE_SETTING' | 'ENGRAVING' | 'POLISHING' | 'PLATING' | 'FINISHED'
+
+export type ApproveSkipPayload = {
+  hasMold: boolean
+  target: ApproveSkipTarget
+  note: string
+  /** Bỏ đúc: mã BTP lấy hàng + TL (g) cả đơn. */
+  btpMetal?: 'S925' | 'S999'
+  btpWeightGram?: number
+  stoneCount3dPerPiece?: number | null
+  stoneWeight3dPerPieceGram?: number | null
+}
+
+export function approveSkipIntakeOrderApi(id: string, payload: ApproveSkipPayload) {
+  return apiFetch<IntakeOrder>(`/intake-orders/${id}/approve-skip`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

@@ -67,6 +67,8 @@ export type ProductionOrderRow = {
   id: string
   code: string
   status: ProductionStatus
+  /** Nhập kho thành phẩm không qua Xi — trạng thái U hiện "Chờ nhập kho TP". */
+  platingSkipped?: boolean
   source: ProductionSource
   /** Mã BTP của Đơn BTP. */
   btpSku: string | null
@@ -459,6 +461,8 @@ export type ProductionOrderDetail = Omit<
   stoneSkippedByName: string | null
   /** Khâu phiếu mẹ đã "Chuyển khâu" bỏ qua (đơn chưa chia phiếu con). */
   skippedStages: StageCode[]
+  /** Nhập kho thành phẩm không qua Xi — trạng thái U hiện "Chờ nhập kho TP". */
+  platingSkipped?: boolean
   stoneWeight: string | null
   weight: string | null
   hasMold?: boolean | null
@@ -1269,8 +1273,11 @@ export function assignOrderApi(
   })
 }
 
-/** Thủ kho / admin "Chuyển khâu": bỏ qua khâu đang chờ, phiếu sang chờ `stage`. */
-export type SkipStagesPayload = { stage: StageCode; note: string }
+/**
+ * Thủ kho / admin "Chuyển khâu": bỏ qua khâu đang chờ, phiếu sang chờ `stage`; `FINISHED` = bỏ
+ * hết khâu còn lại kể cả Xi, nhập thẳng kho thành phẩm.
+ */
+export type SkipStagesPayload = { stage: StageCode | 'FINISHED'; note: string }
 
 export function skipOrderStagesApi(code: string, payload: SkipStagesPayload) {
   return orderFetch(orderPath(code, '/work/skip-stages'), {

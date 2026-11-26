@@ -4,7 +4,7 @@ import { useWatch } from 'react-hook-form'
 import { useAppForm } from '../components/ui/form/useAppForm'
 import type { SkipStagesPayload, StageCode, SubTicketState } from '../api/productionOrders'
 import { CrudDialogShell, FormRow, FormSelect, FormTextField } from '../components/ui'
-import { isSelfTakeStage, STAGE_LABEL, STAGES } from './catalog'
+import { isSelfTakeStage, skipTargetLabel, STAGE_LABEL, STAGES, type SkipTargetCode } from './catalog'
 
 /** Phiếu chuyển khâu được khi chưa giao hàng cho thợ: rảnh, chờ thợ nhận, hoặc đã chỉ định nhưng thợ chưa nhận. */
 const SKIPPABLE_STATES: SubTicketState[] = ['IDLE', 'WAITING', 'CLAIMED']
@@ -12,8 +12,8 @@ const SKIPPABLE_STATES: SubTicketState[] = ['IDLE', 'WAITING', 'CLAIMED']
 export type SkipPlan = {
   /** Khâu phiếu đang chờ — khâu đầu tiên bị bỏ qua. */
   from: StageCode
-  /** Các khâu chuyển tới được (sau `from`). */
-  targets: StageCode[]
+  /** Các khâu chuyển tới được (sau `from`), và nhập thẳng kho thành phẩm khi phiếu đã giao khâu. */
+  targets: SkipTargetCode[]
 }
 
 /**
@@ -27,6 +27,11 @@ export function skipPlan(input: {
   /** Khâu gần nhất đã giao của phiếu (phiếu con chưa làm khâu nào thì lấy của phiếu mẹ). */
   lastStage: StageCode | null
   skipStone: boolean
+  /**
+   * Phiếu đã có lượt khâu của chính nó — mới nhập thẳng kho thành phẩm được (chưa giao khâu nào
+   * thì hàng còn trong kho BTP). Khớp `skipStages` ở BE.
+   */
+  hasOwnEntries?: boolean
 }): SkipPlan | null {
   if (!SKIPPABLE_STATES.includes(input.state)) return null
   const allowed = (stage: StageCode) => !(input.skipStone && stage === 'STONE_SETTING')
@@ -36,18 +41,18 @@ export function skipPlan(input: {
     STAGES.slice(after).find((stage) => allowed(stage) && !input.skippedStages.includes(stage)) ??
     null
   if (!from) return null
-  const targets = STAGES.slice(STAGES.indexOf(from) + 1).filter(allowed)
+  const targets: SkipTargetCode[] = STAGES.slice(STAGES.indexOf(from) + 1).filter(allowed)
+  if (input.hasOwnEntries) targets.push('FINISHED')
   return targets.length > 0 ? { from, targets } : null
 }
 
 /** Các khâu sẽ bị bỏ qua khi chuyển từ `from` sang `target`. */
-function skippedBetween(from: StageCode, target: StageCode, skipStone: boolean) {
-  return STAGES.slice(STAGES.indexOf(from), STAGES.indexOf(target)).filter(
-    (stage) => !(skipStone && stage === 'STONE_SETTING'),
-  )
+function skippedBetween(from: StageCode, target: SkipTargetCode, skipStone: boolean) {
+  const end = target === 'FINISHED' ? STAGES.length : STAGES.indexOf(target)
+  return STAGES.slice(STAGES.indexOf(from), end).filter((stage) => !(skipStone && stage === 'STONE_SETTING'))
 }
 
-type Values = { stage: StageCode | ''; note: string }
+type Values = { stage: SkipTargetCode | ''; note: string }
 
 /**
  * Thủ kho / admin "Chuyển khâu": phiếu đang chờ khâu nào thì bỏ qua từ khâu đó tới trước khâu
@@ -106,7 +111,7 @@ export function SkipStagesDialog({
           name="stage"
           label="Chuyển sang khâu"
           required
-          options={(plan?.targets ?? []).map((value) => ({ value, label: STAGE_LABEL[value] }))}
+          options={(plan?.targets ?? []).map((value) => ({ value, label: skipTargetLabel(value) }))}
         />
       </FormRow>
       <FormTextField<Values>
@@ -122,9 +127,11 @@ export function SkipStagesDialog({
         <Alert severity="warning">
           Bỏ qua khâu <b>{skipped.map((item) => STAGE_LABEL[item]).join(', ')}</b> — không giao thợ, không tính
           hao hụt.{' '}
-          {isSelfTakeStage(stage)
-            ? `Khâu ${STAGE_LABEL[stage]} mở luôn cho thợ tự nhận.`
-            : `Sau đó thủ kho chỉ định thợ ${STAGE_LABEL[stage]}.`}
+          {stage === 'FINISHED'
+            ? 'Phiếu chốt Hoàn thiện với số hàng đang có và sinh phiếu nhập kho thành phẩm chờ thủ kho nhận.'
+            : isSelfTakeStage(stage)
+              ? `Khâu ${STAGE_LABEL[stage]} mở luôn cho thợ tự nhận.`
+              : `Sau đó thủ kho chỉ định thợ ${STAGE_LABEL[stage]}.`}
           {skipped.includes('FILING') ? ' Phôi sau đúc xuất thẳng cho khâu đầu tiên khi thợ nhận hàng.' : ''}
           {pendingAssigned ? ' Lượt chỉ định thợ đang chờ nhận (và đá đã giữ chỗ) sẽ được huỷ.' : ''}
         </Alert>

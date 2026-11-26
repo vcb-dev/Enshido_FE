@@ -434,6 +434,20 @@ export function afterIntakeApproved(queryClient: QueryClient, order: IntakeOrder
   moveIntakeOrderInCaches(queryClient, order)
 }
 
+/**
+ * Duyệt kèm "Chuyển khâu" bỏ cả đúc: đơn vào thẳng Lệnh SX (đã có `cutAt`) — rời các danh sách đơn
+ * tạo, danh sách lệnh SX tải lại. Chỉ bỏ 3D thì đơn vẫn ở luồng tạo đơn như duyệt thường.
+ */
+export function afterIntakeApprovedWithSkip(queryClient: QueryClient, order: IntakeOrder, toProduction: boolean) {
+  if (!toProduction) {
+    moveIntakeOrderInCaches(queryClient, order)
+    return
+  }
+  removeIntakeOrderFromCaches(queryClient, order.id)
+  void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+  notifyWorkflowChanged('production')
+}
+
 export function afterIntakeRejected(queryClient: QueryClient, order: IntakeOrder) {
   removeIntakeOrderFromCaches(queryClient, order.id)
   notifyWorkflowChanged('intake')

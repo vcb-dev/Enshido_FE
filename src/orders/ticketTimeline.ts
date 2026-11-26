@@ -1,5 +1,5 @@
 import type { ProductionStatus, StageCode, StageEntry, StatusLog, SubTicket } from '../api/productionOrders'
-import { isSelfTakeStage, STAGE_LABEL, STATUS_META } from './catalog'
+import { isSelfTakeStage, productionStatusLabel, STAGE_LABEL } from './catalog'
 
 /** Một dòng trên quy trình của phiếu con. */
 export type TicketTimelineRow = {
@@ -77,7 +77,16 @@ export function ticketTimeline(
     at: string | null,
     by: string | null,
     note?: string | null,
-  ) => rows.push({ key, status: value, label: STATUS_META[value].label, at, by, note })
+  ) =>
+    rows.push({
+      key,
+      status: value,
+      // Phiếu "Chuyển khâu" nhập kho thành phẩm không qua Xi: U là chờ nhập kho, không phải đã xi.
+      label: productionStatusLabel(value, ticket.skippedStages?.includes('PLATING')),
+      at,
+      by,
+      note,
+    })
   const step = (key: string, label: string, at: string | null, by: string | null, note?: string | null) =>
     rows.push({ key, status: null, label, at, by, note })
 
