@@ -93,6 +93,16 @@ export const STAGE_LABEL: Record<StageCode, string> = {
 }
 
 /**
+ * Khâu đích "Chuyển khâu" sau Xi (2026-11-26): bỏ hết các khâu còn lại kể cả Xi, hàng nhập thẳng
+ * kho thành phẩm. Khớp `FINISHED_TARGET` ở BE.
+ */
+export type SkipTargetCode = StageCode | 'FINISHED'
+
+export function skipTargetLabel(target: SkipTargetCode) {
+  return target === 'FINISHED' ? 'Nhập kho thành phẩm' : STAGE_LABEL[target]
+}
+
+/**
  * Câu báo sau khi thủ kho xác nhận sau QC, khớp BE (2026-11-17): Nguội nhập hàng đạt vào kho BTP;
  * từ Vào đá trở đi hàng đạt không nhập kho, chỉ chuyển sang khâu sau.
  */

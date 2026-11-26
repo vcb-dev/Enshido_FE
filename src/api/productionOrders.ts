@@ -1269,8 +1269,11 @@ export function assignOrderApi(
   })
 }
 
-/** Thủ kho / admin "Chuyển khâu": bỏ qua khâu đang chờ, phiếu sang chờ `stage`. */
-export type SkipStagesPayload = { stage: StageCode; note: string }
+/**
+ * Thủ kho / admin "Chuyển khâu": bỏ qua khâu đang chờ, phiếu sang chờ `stage`; `FINISHED` = bỏ
+ * hết khâu còn lại kể cả Xi, nhập thẳng kho thành phẩm.
+ */
+export type SkipStagesPayload = { stage: StageCode | 'FINISHED'; note: string }
 
 export function skipOrderStagesApi(code: string, payload: SkipStagesPayload) {
   return orderFetch(orderPath(code, '/work/skip-stages'), {

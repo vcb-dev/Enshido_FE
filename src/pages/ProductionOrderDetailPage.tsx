@@ -304,6 +304,7 @@ export function ProductionOrderDetailPage() {
           skippedStages: order.skippedStages ?? [],
           lastStage: parentLastEntry?.stage ?? null,
           skipStone: skipsStone(order),
+          hasOwnEntries: parentLastEntry != null,
         })
       : null
   // Đơn BTP lấy hàng đúc sẵn: không qua Đúc, giao khâu và in phiếu ngay.

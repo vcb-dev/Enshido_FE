@@ -245,6 +245,30 @@ export function approveIntakeOrderApi(id: string, payload: { hasMold: boolean })
   })
 }
 
+/**
+ * Khâu đích khi duyệt kèm "Chuyển khâu" (2026-11-26): `WAX` = bỏ dựng 3D; khâu sản xuất /
+ * `FINISHED` = bỏ cả 3D → sáp → đúc → cắt cây, hàng lấy từ kho BTP. Khớp `APPROVE_SKIP_TARGETS` ở BE.
+ */
+export type ApproveSkipTarget = 'WAX' | 'FILING' | 'STONE_SETTING' | 'ENGRAVING' | 'POLISHING' | 'PLATING' | 'FINISHED'
+
+export type ApproveSkipPayload = {
+  hasMold: boolean
+  target: ApproveSkipTarget
+  note: string
+  /** Bỏ đúc: mã BTP lấy hàng + TL (g) cả đơn. */
+  btpMetal?: 'S925' | 'S999'
+  btpWeightGram?: number
+  stoneCount3dPerPiece?: number | null
+  stoneWeight3dPerPieceGram?: number | null
+}
+
+export function approveSkipIntakeOrderApi(id: string, payload: ApproveSkipPayload) {
+  return apiFetch<IntakeOrder>(`/intake-orders/${id}/approve-skip`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function rejectIntakeOrderApi(id: string, payload: { reason?: string }) {
   return apiFetch<IntakeOrder>(`/intake-orders/${id}/reject`, {
     method: 'POST',

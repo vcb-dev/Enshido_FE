@@ -119,6 +119,7 @@ export function SubTicketWorkActions({
     skippedStages: ticket.skippedStages ?? [],
     lastStage: last?.stage ?? order.stages.filter((entry) => !entry.subTicketId).at(-1)?.stage ?? null,
     skipStone: skipsStone(order),
+    hasOwnEntries: last != null,
   })
   const canSkip = canKeeper && active && plan != null
 

@@ -28,4 +28,20 @@ describe('skipPlan — Chuyển khâu', () => {
     }
     expect(skipPlan({ ...base, state: 'WAITING', pendingStage: 'PLATING', lastStage: 'POLISHING' })).toBeNull()
   })
+
+  it('phiếu đã giao khâu thì chọn thêm được nhập thẳng kho thành phẩm, kể cả đang chờ Xi', () => {
+    expect(skipPlan({ ...base, state: 'IDLE', lastStage: 'FILING', hasOwnEntries: true })?.targets).toEqual([
+      'ENGRAVING',
+      'POLISHING',
+      'PLATING',
+      'FINISHED',
+    ])
+    expect(
+      skipPlan({ ...base, state: 'WAITING', pendingStage: 'PLATING', lastStage: 'POLISHING', hasOwnEntries: true }),
+    ).toEqual({ from: 'PLATING', targets: ['FINISHED'] })
+  })
+
+  it('phiếu chưa giao khâu nào thì không nhập thẳng thành phẩm', () => {
+    expect(skipPlan({ ...base, state: 'IDLE' })?.targets).not.toContain('FINISHED')
+  })
 })
