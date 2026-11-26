@@ -54,7 +54,7 @@ import { MaterialField } from './MaterialField'
 import { lineIsStone, matchStockMaterial, type StockMaterialOption } from './MaterialNameField'
 import type { SearchSelectOption } from './SearchSelect'
 import { catalogColumnsAfterAmount, catalogColumnsBeforeName } from './catalogMoveColumns'
-import { CONSUMABLE_CATEGORIES, consumableCategoryIdOf, stockProfile, withFallback } from './catalog'
+import { CONSUMABLE_CATEGORIES, consumableCategoryIdOf, stockProfile, unitsForProfile, withFallback } from './catalog'
 import {
   CATALOG_FILTER_DEFAULTS,
   hasActiveCatalogFilters,
@@ -156,7 +156,8 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
     enabled: profile.showLocation,
   })
 
-  const units = useMemo(() => lookups.data?.units ?? [], [lookups.data?.units])
+  // Kho dụng cụ chỉ chọn cái / bộ — lọc ngay nguồn đơn vị nên dòng mới mặc định đơn vị đầu danh sách.
+  const units = useMemo(() => unitsForProfile(profile, lookups.data?.units ?? []), [profile, lookups.data?.units])
   const suppliers = useMemo(() => lookups.data?.suppliers ?? [], [lookups.data?.suppliers])
   const materials: StockMaterialOption[] = useMemo(
     () =>
@@ -463,28 +464,33 @@ export function StockInboundPanel({ warehouseCode }: { warehouseCode: string }) 
         ),
         render: (row: InboundRow) => row.enteredBy ?? '—',
       },
-      {
-        key: 'supplierSku',
-        header: 'Mã hàng NCC',
-        width: 100,
-        ellipsis: true,
-        render: (row: InboundRow) => row.supplierSku ?? '—',
-      },
-      {
-        key: 'supplierName',
-        card: 'meta' as const,
-        header: 'NCC',
-        width: 92,
-        ellipsis: true,
-        filter: (
-          <ColumnHeaderFilter
-            valueId={params.supplierId}
-            options={supplierOptions}
-            onChange={(id) => table.setFilter({ supplierId: id })}
-          />
-        ),
-        render: (row: InboundRow) => row.supplierName ?? '—',
-      },
+      // Kho dụng cụ không ghi NCC.
+      ...(profile.hideSupplier
+        ? []
+        : [
+            {
+              key: 'supplierSku',
+              header: 'Mã hàng NCC',
+              width: 100,
+              ellipsis: true,
+              render: (row: InboundRow) => row.supplierSku ?? '—',
+            },
+            {
+              key: 'supplierName',
+              card: 'meta' as const,
+              header: 'NCC',
+              width: 92,
+              ellipsis: true,
+              filter: (
+                <ColumnHeaderFilter
+                  valueId={params.supplierId}
+                  options={supplierOptions}
+                  onChange={(id) => table.setFilter({ supplierId: id })}
+                />
+              ),
+              render: (row: InboundRow) => row.supplierName ?? '—',
+            },
+          ]),
       {
         key: 'actions',
         card: 'actions' as const,
@@ -1011,22 +1017,24 @@ function InboundDialog({
         })}
       </Stack>
 
-      <FormRow>
-        <FormSearchSelect<InboundFormValues>
-          name="supplierId"
-          label="NCC"
-          options={supplierOptions}
-          allowClear
-          readOnly={readOnly}
-          displayValue={row?.supplierName ?? undefined}
-          placeholder="Tìm NCC…"
-        />
-        <FormTextField<InboundFormValues>
-          name="supplierSku"
-          label="Mã hàng NCC"
-          readOnly={readOnly}
-        />
-      </FormRow>
+      {profile.hideSupplier ? null : (
+        <FormRow>
+          <FormSearchSelect<InboundFormValues>
+            name="supplierId"
+            label="NCC"
+            options={supplierOptions}
+            allowClear
+            readOnly={readOnly}
+            displayValue={row?.supplierName ?? undefined}
+            placeholder="Tìm NCC…"
+          />
+          <FormTextField<InboundFormValues>
+            name="supplierSku"
+            label="Mã hàng NCC"
+            readOnly={readOnly}
+          />
+        </FormRow>
+      )}
 
       <FormTextField<InboundFormValues>
         name="note"

@@ -81,7 +81,6 @@ import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
 import { ToolOutboundPanel } from '../warehouses/tools/ToolOutboundPanel'
-import { ToolMovesPanel } from '../warehouses/tools/ToolMovesPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
@@ -95,6 +94,7 @@ import {
   materialTypesFor,
   stockProfile,
   stockWarehouseCode,
+  unitsForProfile,
   warehouseByCode,
   warehousePath,
   withFallback,
@@ -119,8 +119,8 @@ export function WarehouseDetailPage() {
     section?: string
   }>()
 
-  // Tab Theo thợ cũ của kho dụng cụ đã gộp vào tab Xuất.
-  if (code === 'dung-cu' && bin === 'holders') {
+  // Tab Theo thợ / Phiếu dụng cụ cũ của kho dụng cụ đã gộp vào tab Xuất.
+  if (code === 'dung-cu' && (bin === 'holders' || bin === 'tool-moves')) {
     return <Navigate to="/warehouses/dung-cu/outbound" replace />
   }
 
@@ -225,8 +225,6 @@ export function WarehouseDetailPage() {
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'drafts' ? (
         <StockDraftPanel warehouseCode={stockKey} />
-      ) : activeSection?.code === 'tool-moves' ? (
-        <ToolMovesPanel />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}
@@ -1537,7 +1535,7 @@ function StockEditDialog({
   }, [selectedLocations, locationSlots.data?.items])
 
   const shapeOptions: SearchSelectOption[] = lookups.data?.shapes ?? []
-  const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
+  const unitOptions: SearchSelectOption[] = unitsForProfile(profile, lookups.data?.units ?? [])
   const flatTypeOptions: SearchSelectOption[] = typeOptions
 
   const readOnly = kind === 'view'
@@ -1834,7 +1832,7 @@ function StockItemFields({
             }}
           />
           <FormRow columns={3}>
-            {profile.showBtpCategory ? (
+            {profile.hideCategory ? null : profile.showBtpCategory ? (
               <FormSearchSelect<StockDialogValues>
                 name={`items.${index}.bodyMetalId`}
                 label="Chất liệu"

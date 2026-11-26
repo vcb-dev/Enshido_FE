@@ -5,7 +5,9 @@ const BASE = '/tools'
 /** Loại phiếu dụng cụ — chỉ thủ kho ghi. */
 export type ToolMoveKind = 'ISSUE' | 'RETURN' | 'TRANSFER' | 'WORN' | 'DAMAGED' | 'LOST'
 
-export const TOOL_MOVE_KINDS: ToolMoveKind[] = ['ISSUE', 'RETURN', 'TRANSFER', 'WORN', 'DAMAGED', 'LOST']
+/** Loại phiếu thủ kho / QC ghi được trên màn: xuất cho thợ, chuyển thợ, hỏng. Trả / hao mòn / mất đã bỏ
+ * khỏi màn (BE vẫn hiểu để đọc phiếu cũ nếu có). */
+export const TOOL_MOVE_KINDS: ToolMoveKind[] = ['ISSUE', 'TRANSFER', 'DAMAGED']
 
 export const TOOL_MOVE_LABEL: Record<ToolMoveKind, string> = {
   ISSUE: 'Xuất cho thợ',
@@ -120,8 +122,10 @@ export function getToolSummaryApi(period: Period) {
   return apiFetch<ToolSummaryRow[]>(`${BASE}/summary?${periodQuery(period)}`)
 }
 
-export function getToolMovesApi(period: Period) {
-  return apiFetch<ToolMoveRow[]>(`${BASE}/moves?${periodQuery(period)}`)
+/** Phiếu dụng cụ trong kỳ — truyền `workerId` để lấy phiếu của một thợ (thợ giao hoặc thợ nhận). */
+export function getToolMovesApi(period: Period, workerId?: string) {
+  const worker = workerId ? `&workerId=${workerId}` : ''
+  return apiFetch<ToolMoveRow[]>(`${BASE}/moves?${periodQuery(period)}${worker}`)
 }
 
 export function createToolMoveApi(payload: CreateToolMovePayload) {
