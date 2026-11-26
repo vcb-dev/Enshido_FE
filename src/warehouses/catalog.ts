@@ -2,10 +2,10 @@ export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 't
 
 export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
-/** Kho dụng cụ — tab Xuất là xuất cho thợ (theo dõi từng thợ đang giữ), thêm tab Phiếu dụng cụ. */
+/** Kho dụng cụ — tab Xuất là xuất cho thợ (theo dõi từng thợ đang giữ + lịch sử phiếu của thợ). */
 export const TOOL_WAREHOUSE = 'dung-cu' as const
 
-export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts' | 'tool-moves'
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -26,8 +26,6 @@ export const WAREHOUSE_SECTIONS: Array<{
   { code: 'outbound', name: 'Xuất' },
   /** Phiếu xuất nháp — đá cấp cho khâu Vào đá, chưa trừ tồn. */
   { code: 'drafts', name: 'Xuất nháp', only: ['nvl-chinh'] },
-  /** Kho dụng cụ: lịch sử phiếu xuất / trả / chuyển / hao mòn / hỏng / mất. */
-  { code: 'tool-moves', name: 'Phiếu dụng cụ', only: ['dung-cu'] },
 ]
 
 /** Các mục của một kho (Xuất nháp chỉ có ở kho NVL chính). */

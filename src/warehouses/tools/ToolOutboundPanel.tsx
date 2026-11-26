@@ -13,6 +13,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { canAny, Permission } from '../../auth/permissions'
 import { DataTable, PanelSummaryCard, SearchInput, type Column } from '../../components/ui'
 import { useWarehousePeriod } from '../warehousePeriod'
+import { ToolHistoryDialog } from './ToolHistoryDialog'
 import { ToolMoveDialog, type ToolMoveDraft } from './ToolMoveDialog'
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
@@ -44,7 +45,8 @@ const sumAmount = (rows: ToolSummaryRow[], pick: (row: ToolSummaryRow) => ToolFi
 /**
  * Tab Xuất của kho dụng cụ — luồng xuất duy nhất: dụng cụ ra khỏi kho là xuất cho một thợ, nên tab
  * này theo dõi luôn từng thợ. Mỗi thợ một dòng: đang giữ (hiện tại) và xuất / chuyển / trả / hao mòn /
- * hỏng / mất trong kỳ. Xổ dòng thợ để xem từng dụng cụ đang giữ và ghi trả / báo cho món đó.
+ * hỏng / mất trong kỳ. Xổ dòng thợ để xem từng dụng cụ đang giữ và ghi trả / báo cho món đó; nút
+ * Lịch sử mở các phiếu của thợ trong kỳ (huỷ phiếu ghi nhầm ở đó).
  */
 export function ToolOutboundPanel() {
   const { user } = useAuth()
@@ -54,6 +56,7 @@ export function ToolOutboundPanel() {
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState<ToolMoveDraft>({ kind: 'ISSUE' })
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [historyOf, setHistoryOf] = useState<{ id: string; name: string } | null>(null)
   const openDraft = (next: ToolMoveDraft) => {
     setDraft(next)
     setDialogOpen(true)
@@ -191,29 +194,33 @@ export function ToolOutboundPanel() {
         cellSx: numCell,
         render: (row) => <FigureCell figure={row.lost} tone="error" />,
       },
-      ...(canWrite
-        ? [
-            {
-              key: 'actions',
-              header: '',
-              width: 120,
-              card: 'actions' as const,
-              render: (row: ToolSummaryRow) => (
-                <Button size="small" onClick={() => openDraft({ kind: 'ISSUE', toWorkerId: row.workerId })}>
-                  Xuất thêm
-                </Button>
-              ),
-              renderSub: (item: ToolHolding) => (
-                <Button
-                  size="small"
-                  onClick={() => openDraft({ kind: 'RETURN', fromWorkerId: item.workerId, materialId: item.materialId })}
-                >
-                  Trả / báo
-                </Button>
-              ),
-            },
-          ]
-        : []),
+      {
+        key: 'actions',
+        header: '',
+        width: canWrite ? 190 : 100,
+        card: 'actions',
+        render: (row) => (
+          <Stack direction="row" spacing={0.5}>
+            <Button size="small" onClick={() => setHistoryOf({ id: row.workerId, name: row.workerName })}>
+              Lịch sử
+            </Button>
+            {canWrite ? (
+              <Button size="small" onClick={() => openDraft({ kind: 'ISSUE', toWorkerId: row.workerId })}>
+                Xuất thêm
+              </Button>
+            ) : null}
+          </Stack>
+        ),
+        renderSub: (item) =>
+          canWrite ? (
+            <Button
+              size="small"
+              onClick={() => openDraft({ kind: 'RETURN', fromWorkerId: item.workerId, materialId: item.materialId })}
+            >
+              Trả / báo
+            </Button>
+          ) : null,
+      },
     ],
     [canWrite],
   )
@@ -265,6 +272,7 @@ export function ToolOutboundPanel() {
         }
       />
       {canWrite ? <ToolMoveDialog open={dialogOpen} onClose={() => setDialogOpen(false)} draft={draft} /> : null}
+      <ToolHistoryDialog worker={historyOf} period={period} canWrite={canWrite} onClose={() => setHistoryOf(null)} />
     </Stack>
   )
 }

@@ -81,7 +81,6 @@ import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
 import { ToolOutboundPanel } from '../warehouses/tools/ToolOutboundPanel'
-import { ToolMovesPanel } from '../warehouses/tools/ToolMovesPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
@@ -119,8 +118,8 @@ export function WarehouseDetailPage() {
     section?: string
   }>()
 
-  // Tab Theo thợ cũ của kho dụng cụ đã gộp vào tab Xuất.
-  if (code === 'dung-cu' && bin === 'holders') {
+  // Tab Theo thợ / Phiếu dụng cụ cũ của kho dụng cụ đã gộp vào tab Xuất.
+  if (code === 'dung-cu' && (bin === 'holders' || bin === 'tool-moves')) {
     return <Navigate to="/warehouses/dung-cu/outbound" replace />
   }
 
@@ -225,8 +224,6 @@ export function WarehouseDetailPage() {
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'drafts' ? (
         <StockDraftPanel warehouseCode={stockKey} />
-      ) : activeSection?.code === 'tool-moves' ? (
-        <ToolMovesPanel />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}
