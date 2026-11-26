@@ -94,6 +94,7 @@ import {
   materialTypesFor,
   stockProfile,
   stockWarehouseCode,
+  unitsForProfile,
   warehouseByCode,
   warehousePath,
   withFallback,
@@ -1534,7 +1535,7 @@ function StockEditDialog({
   }, [selectedLocations, locationSlots.data?.items])
 
   const shapeOptions: SearchSelectOption[] = lookups.data?.shapes ?? []
-  const unitOptions: SearchSelectOption[] = lookups.data?.units ?? []
+  const unitOptions: SearchSelectOption[] = unitsForProfile(profile, lookups.data?.units ?? [])
   const flatTypeOptions: SearchSelectOption[] = typeOptions
 
   const readOnly = kind === 'view'
@@ -1831,7 +1832,7 @@ function StockItemFields({
             }}
           />
           <FormRow columns={3}>
-            {profile.showBtpCategory ? (
+            {profile.hideCategory ? null : profile.showBtpCategory ? (
               <FormSearchSelect<StockDialogValues>
                 name={`items.${index}.bodyMetalId`}
                 label="Chất liệu"

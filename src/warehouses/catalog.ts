@@ -106,6 +106,12 @@ export type StockProfile = {
   /// Kho có mã cố định, không tạo hay sửa mã từ Tồn (kho BTP chỉ có BTP S925 / S999) — tồn chỉ đổi
   /// qua tab Nhập / Xuất.
   fixedMaterials?: boolean
+  /// Bỏ ô Danh mục ở form Thêm / sửa mã trên Tồn (kho dụng cụ).
+  hideCategory?: boolean
+  /// Chỉ cho chọn các đơn vị này (so theo tên, không phân biệt hoa thường) ở Thêm mã / Nhập. Bỏ trống = mọi đơn vị.
+  unitNames?: string[]
+  /// Bỏ NCC + Mã hàng NCC ở form và bảng Nhập (kho dụng cụ).
+  hideSupplier?: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -225,6 +231,9 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     showSize: false,
     showWeight: false,
     showRealStock: false,
+    hideCategory: true,
+    unitNames: ['cái', 'bộ'],
+    hideSupplier: true,
     typeLabel: 'Chất loại',
     noun: 'dụng cụ',
     nameLabel: 'Tên dụng cụ',
@@ -267,6 +276,13 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
 
 export function stockProfile(code: string): StockProfile {
   return STOCK_PROFILES[code] ?? DEFAULT_STOCK_PROFILE
+}
+
+/** Đơn vị được chọn ở kho này (theo `unitNames` của profile), giữ thứ tự khai báo. */
+export function unitsForProfile<T extends { name: string }>(profile: StockProfile, units: T[]): T[] {
+  if (!profile.unitNames) return units
+  const allowed = profile.unitNames.map((name) => name.trim().toLowerCase())
+  return allowed.flatMap((name) => units.filter((unit) => unit.name.trim().toLowerCase() === name))
 }
 
 /** Đơn vị tính kho thành phẩm. Dòng cũ gram/viên vẫn hiện nếu đang lưu. */
