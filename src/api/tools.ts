@@ -5,7 +5,9 @@ const BASE = '/tools'
 /** Loại phiếu dụng cụ — chỉ thủ kho ghi. */
 export type ToolMoveKind = 'ISSUE' | 'RETURN' | 'TRANSFER' | 'WORN' | 'DAMAGED' | 'LOST'
 
-export const TOOL_MOVE_KINDS: ToolMoveKind[] = ['ISSUE', 'RETURN', 'TRANSFER', 'WORN', 'DAMAGED', 'LOST']
+/** Loại phiếu thủ kho / QC ghi được trên màn: xuất cho thợ, chuyển thợ, hỏng. Trả / hao mòn / mất đã bỏ
+ * khỏi màn (BE vẫn hiểu để đọc phiếu cũ nếu có). */
+export const TOOL_MOVE_KINDS: ToolMoveKind[] = ['ISSUE', 'TRANSFER', 'DAMAGED']
 
 export const TOOL_MOVE_LABEL: Record<ToolMoveKind, string> = {
   ISSUE: 'Xuất cho thợ',

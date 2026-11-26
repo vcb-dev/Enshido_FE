@@ -59,7 +59,7 @@ export function MyToolsDialog({ open, onClose }: { open: boolean; onClose: () =>
           </Stack>
         )}
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-          Trả lại, báo hao mòn, hỏng hoặc mất: mang dụng cụ tới thủ kho để ghi phiếu.
+          Chuyển cho thợ khác hoặc báo hỏng: mang dụng cụ tới thủ kho để ghi phiếu.
         </Typography>
       </DialogContent>
       <DialogActions>

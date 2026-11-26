@@ -40,9 +40,8 @@ const KIND_COLOR: Record<ToolMoveKind, 'primary' | 'success' | 'info' | 'default
 type KindFilter = ToolMoveKind | 'ALL'
 
 /**
- * Lịch sử phiếu dụng cụ của một thợ trong kỳ đang xem (mở từ dòng thợ ở tab Xuất): xuất / trả /
- * chuyển / hao mòn / hỏng / mất. Thủ kho / QC huỷ phiếu ghi nhầm — hệ thống đảo lại tồn thợ và phiếu
- * nhập / xuất kho đi kèm.
+ * Lịch sử phiếu dụng cụ của một thợ trong kỳ đang xem (mở từ dòng thợ ở tab Xuất): xuất / chuyển /
+ * hỏng. Thủ kho / QC huỷ phiếu ghi nhầm — hệ thống đảo lại tồn thợ và phiếu xuất kho đi kèm.
  */
 export function ToolHistoryDialog({
   worker,
