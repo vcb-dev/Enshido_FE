@@ -43,7 +43,7 @@ export type DirectoryUser = {
   fullName: string
 }
 
-export type ClassificationCode = 'RAW_MATERIAL' | 'CONSUMABLE' | 'SEMI_FINISHED'
+export type ClassificationCode = 'RAW_MATERIAL' | 'CONSUMABLE' | 'SEMI_FINISHED' | 'TOOL'
 
 export type StockRow = {
   id: string

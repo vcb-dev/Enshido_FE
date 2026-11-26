@@ -1,8 +1,11 @@
-export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 'thanh-pham'
+export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 'thanh-pham' | 'dung-cu'
 
 export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
-export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts'
+/** Kho dụng cụ — tab Xuất là xuất cho thợ (theo dõi từng thợ đang giữ), thêm tab Phiếu dụng cụ. */
+export const TOOL_WAREHOUSE = 'dung-cu' as const
+
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts' | 'tool-moves'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -23,6 +26,8 @@ export const WAREHOUSE_SECTIONS: Array<{
   { code: 'outbound', name: 'Xuất' },
   /** Phiếu xuất nháp — đá cấp cho khâu Vào đá, chưa trừ tồn. */
   { code: 'drafts', name: 'Xuất nháp', only: ['nvl-chinh'] },
+  /** Kho dụng cụ: lịch sử phiếu xuất / trả / chuyển / hao mòn / hỏng / mất. */
+  { code: 'tool-moves', name: 'Phiếu dụng cụ', only: ['dung-cu'] },
 ]
 
 /** Các mục của một kho (Xuất nháp chỉ có ở kho NVL chính). */
@@ -64,6 +69,13 @@ export const WAREHOUSES: WarehouseDef[] = [
     name: 'Kho thành phẩm',
     shortName: 'Kho thành phẩm',
     description: 'Nhập khi QC nhận lại khâu Ngoại Quan. Xuất hàng cho khách.',
+    sections: true,
+  },
+  {
+    code: 'dung-cu',
+    name: 'Kho dụng cụ',
+    shortName: 'Kho dụng cụ',
+    description: 'Nhập, xuất, tồn dụng cụ và dụng cụ từng thợ đang giữ.',
     sections: true,
   },
 ]
@@ -199,6 +211,33 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     typeLabel: 'Danh mục',
     typeCodes: CONSUMABLE_TYPE_CODES,
     ...NVL_COPY,
+  },
+  // Dụng cụ: không hình dạng / màu / vị trí / size / TL — xuất cho thợ ở tab Xuất.
+  'dung-cu': {
+    showSku: true,
+    showLocation: false,
+    showShapeColor: false,
+    showType: false,
+    showBodyMetal: false,
+    showProductKind: false,
+    showBtpCategory: false,
+    showProductInfo: false,
+    showNvlCategory: false,
+    showStatus: true,
+    showSize: false,
+    showWeight: false,
+    showRealStock: false,
+    typeLabel: 'Chất loại',
+    noun: 'dụng cụ',
+    nameLabel: 'Tên dụng cụ',
+    skuLabel: 'Mã dụng cụ',
+    categoryLabel: 'Danh mục',
+    createLabel: 'Thêm dụng cụ',
+    inboundLabel: 'Nhập dụng cụ',
+    outboundLabel: 'Xuất dụng cụ',
+    searchPlaceholder: 'Tìm tên dụng cụ hoặc mã…',
+    emptyText: 'Chưa có dụng cụ. Bấm Thêm dụng cụ để tạo mã.',
+    emptyFiltered: 'Không có dụng cụ khớp bộ lọc.',
   },
   'thanh-pham': {
     showSku: true,

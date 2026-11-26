@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
+import BuildIcon from '@mui/icons-material/BuildOutlined'
 import CloudOffIcon from '@mui/icons-material/CloudOff'
 import LogoutIcon from '@mui/icons-material/Logout'
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner'
@@ -31,6 +32,7 @@ import { ScreenLoadingBar } from '../components/ScreenLoadingBar'
 import { useOpenScannedPath } from '../components/ScanQrButton'
 import { NotificationBell } from '../notifications/NotificationBell'
 import { useWaitingCount } from '../orders/subTicketActions'
+import { MyToolsDialog } from './MyToolsDialog'
 
 const CONTENT_MAX_WIDTH = 1180
 
@@ -54,6 +56,7 @@ export function WorkerShell() {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   async function onLogout() {
     setLoggingOut(true)
@@ -232,6 +235,17 @@ export function WorkerShell() {
           </Typography>
         </Box>
         <Divider />
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null)
+            setToolsOpen(true)
+          }}
+        >
+          <ListItemIcon>
+            <BuildIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Dụng cụ đang giữ</ListItemText>
+        </MenuItem>
         <MenuItem onClick={() => void onLogout()} disabled={loggingOut}>
           <ListItemIcon>
             <LogoutIcon fontSize="small" />
@@ -259,7 +273,19 @@ export function WorkerShell() {
           </Box>
         </Stack>
         <Divider />
-        <Box sx={{ p: 2 }}>
+        <Stack spacing={1.25} sx={{ p: 2 }}>
+          <Button
+            fullWidth
+            size="large"
+            variant="outlined"
+            startIcon={<BuildIcon />}
+            onClick={() => {
+              setAccountOpen(false)
+              setToolsOpen(true)
+            }}
+          >
+            Dụng cụ đang giữ
+          </Button>
           <Button
             fullWidth
             size="large"
@@ -271,8 +297,10 @@ export function WorkerShell() {
           >
             Đăng xuất
           </Button>
-        </Box>
+        </Stack>
       </Drawer>
+
+      <MyToolsDialog open={toolsOpen} onClose={() => setToolsOpen(false)} />
 
       <QrScannerDialog
         open={scanning}
