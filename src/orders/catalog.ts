@@ -98,6 +98,16 @@ export const STAGE_LABEL: Record<StageCode, string> = {
  */
 export type SkipTargetCode = StageCode | 'FINISHED'
 
+/**
+ * Trạng thái U của đơn "Chuyển khâu" nhập kho thành phẩm không qua Xi: vẫn chờ thủ kho nhận như
+ * sau Xi, chỉ đổi nhãn (BE trả `platingSkipped`).
+ */
+export const PLATING_SKIPPED_LABEL = 'Chờ nhập kho TP'
+
+export function productionStatusLabel(status: ProductionStatus, platingSkipped?: boolean) {
+  return status === 'PLATED' && platingSkipped ? PLATING_SKIPPED_LABEL : STATUS_META[status].label
+}
+
 export function skipTargetLabel(target: SkipTargetCode) {
   return target === 'FINISHED' ? 'Nhập kho thành phẩm' : STAGE_LABEL[target]
 }

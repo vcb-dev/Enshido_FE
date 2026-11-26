@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { productionStatusLabel } from './catalog'
 import { skipPlan } from './SkipStagesDialog'
 
 const base = { pendingStage: null, skippedStages: [], lastStage: null, skipStone: false } as const
@@ -43,5 +44,13 @@ describe('skipPlan — Chuyển khâu', () => {
 
   it('phiếu chưa giao khâu nào thì không nhập thẳng thành phẩm', () => {
     expect(skipPlan({ ...base, state: 'IDLE' })?.targets).not.toContain('FINISHED')
+  })
+})
+
+describe('productionStatusLabel — đơn bỏ Xi', () => {
+  it('U của đơn bỏ Xi hiện Chờ nhập kho TP, đơn qua Xi giữ Đã xi xong', () => {
+    expect(productionStatusLabel('PLATED', true)).toBe('Chờ nhập kho TP')
+    expect(productionStatusLabel('PLATED', false)).toBe('Đã xi xong')
+    expect(productionStatusLabel('FINISHING', true)).toBe('Sản xuất xong')
   })
 })

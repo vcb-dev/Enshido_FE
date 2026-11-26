@@ -72,6 +72,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTableParams } from '../hooks/useTableParams'
 import {
   formatDateTime,
+  productionStatusLabel,
   REQUEST_TYPES,
   REQUEST_TYPE_META,
   STATUS_META,
@@ -1441,12 +1442,12 @@ function sliceMergedPage(
 }
 
 /** Danh sách chỉ hiện trạng thái sản xuất; các bước thao tác nằm trong chi tiết lệnh. */
-function SubTicketStatus({ sub }: { sub: SubTicketSummary }) {
-  return <StatusChip status={subTicketListStatus(sub)} />
+function SubTicketStatus({ sub, platingSkipped }: { sub: SubTicketSummary; platingSkipped?: boolean }) {
+  return <StatusChip status={subTicketListStatus(sub)} platingSkipped={platingSkipped} />
 }
 
 function OrderStatus({ row }: { row: ProductionOrderRow }) {
-  if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} />
+  if (row.subTickets.length === 1) return <SubTicketStatus sub={row.subTickets[0]} platingSkipped={row.platingSkipped} />
   if (row.subTickets.length > 1) {
     const counts = new Map<ProductionStatus, number>()
     for (const ticket of row.subTickets) {
@@ -1460,14 +1461,14 @@ function OrderStatus({ row }: { row: ProductionOrderRow }) {
             <StatusChip
               key={status}
               status={status}
-              label={`${STATUS_META[status].label} · ${count}`}
+              label={`${productionStatusLabel(status, row.platingSkipped)} · ${count}`}
             />
           ))}
         </Stack>
       )
     }
   }
-  return <StatusChip status={row.status} />
+  return <StatusChip status={row.status} platingSkipped={row.platingSkipped} />
 }
 
 function subTicketListStatus(sub: SubTicketSummary): ProductionStatus {

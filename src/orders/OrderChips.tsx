@@ -5,22 +5,32 @@ import type {
   ProductionStatus,
   SubTicketState,
 } from '../api/productionOrders'
-import { REQUEST_TYPE_META, SOURCE_META, STATUS_META, SUB_TICKET_STATE_META, subTicketStateLabel } from './catalog'
+import {
+  productionStatusLabel,
+  REQUEST_TYPE_META,
+  SOURCE_META,
+  STATUS_META,
+  SUB_TICKET_STATE_META,
+  subTicketStateLabel,
+} from './catalog'
 
 export function StatusChip({
   status,
   size = 'small',
   label,
+  platingSkipped,
 }: {
   status: ProductionStatus
   size?: 'small' | 'medium'
   label?: string
+  /** Đơn nhập kho thành phẩm không qua Xi — U hiện "Chờ nhập kho TP". */
+  platingSkipped?: boolean
 }) {
   const meta = STATUS_META[status]
   return (
     <Chip
       size={size}
-      label={label ?? meta.label}
+      label={label ?? productionStatusLabel(status, platingSkipped)}
       sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 600 }}
     />
   )

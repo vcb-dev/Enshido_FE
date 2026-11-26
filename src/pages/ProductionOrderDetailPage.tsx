@@ -84,6 +84,7 @@ import {
   MANUAL_STATUSES,
   parentWorkTicketUrl,
   productionClosed,
+  productionStatusLabel,
   subTicketUrl,
   SILVER_LOSS_LIMITS,
   STAGE_LABEL,
@@ -340,7 +341,7 @@ export function ProductionOrderDetailPage() {
         title={intakeOrderCode ? `Đơn hàng ${intakeOrderCode}` : `Lệnh ${headerCode}`}
         titleAdornment={
           <Stack direction="row" spacing={0.75}>
-            <StatusChip status={order.status} size="medium" />
+            <StatusChip status={order.status} size="medium" platingSkipped={order.platingSkipped} />
             <SourceChip source={order.source} size="medium" />
             <RequestTypeChip type={order.requestType} size="medium" />
           </Stack>
@@ -447,9 +448,14 @@ export function ProductionOrderDetailPage() {
         <Alert severity="info">
           Đơn chưa có phôi sau đúc — thủ kho cắt cây thông (cân phôi) để chuyển sang Nguội.
         </Alert>
-      ) : order.lastPrintedAt == null ? (
+      ) : order.lastPrintedAt == null && isInStage(order.status) ? (
         <Alert severity="info">
-          {isBtp ? 'Đơn BTP chưa in phiếu cho thợ.' : 'Đơn đã sẵn sàng vào Nguội nhưng chưa in phiếu cho thợ.'}
+          {/* Đơn "Chuyển khâu" bỏ Nguội có thể đang chờ khâu sau; đã ra khỏi các khâu thì không nhắc in. */}
+          {isBtp
+            ? 'Đơn BTP chưa in phiếu cho thợ.'
+            : order.status === 'WAIT_FILING'
+              ? 'Đơn đã sẵn sàng vào Nguội nhưng chưa in phiếu cho thợ.'
+              : 'Đơn đang ở các khâu nhưng chưa in phiếu cho thợ.'}
         </Alert>
       ) : ticketStale ? (
         <Alert severity="warning">
@@ -754,7 +760,7 @@ export function ProductionOrderDetailPage() {
                                 {ticket.activeStage
                                   ? STAGE_LABEL[ticket.activeStage]
                                   : ticket.outcome || ticket.entryCount > 0
-                                    ? STATUS_META[ticket.status].label
+                                    ? productionStatusLabel(ticket.status, ticket.skippedStages?.includes('PLATING'))
                                     : 'Chưa có khâu'}
                               </Typography>
                             </Stack>
@@ -1340,7 +1346,7 @@ function StatusTimeline({
   const toRow = (log: StatusLog): TicketTimelineRow => ({
     key: log.id,
     status: log.toStatus,
-    label: STATUS_META[log.toStatus].label,
+    label: productionStatusLabel(log.toStatus, order.platingSkipped),
     at: log.changedAt,
     by: log.changedBy,
     note: log.note,
@@ -1443,7 +1449,7 @@ function StatusTimeline({
           <TableRow key={status} sx={{ opacity: 0.45 }}>
             <TableCell sx={{ whiteSpace: 'nowrap' }}>
               <StatusDot status={status} />
-              {STATUS_META[status].label}
+              {productionStatusLabel(status, order.platingSkipped)}
             </TableCell>
             <TableCell>—</TableCell>
             <TableCell />
@@ -1612,7 +1618,7 @@ function OverviewSummary({ order }: { order: ProductionOrderDetail }) {
           items={[
             {
               label: 'Đang ở đâu',
-              value: stages.length ? stages.map((stage) => STAGE_LABEL[stage]).join(', ') : STATUS_META[order.status].label,
+              value: stages.length ? stages.map((stage) => STAGE_LABEL[stage]).join(', ') : productionStatusLabel(order.status, order.platingSkipped),
             },
             {
               label: tickets.length ? 'Đang có trên phiếu' : 'Tổng đơn',

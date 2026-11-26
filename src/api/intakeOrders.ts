@@ -66,6 +66,8 @@ export type IntakeOrder = {
   status: IntakeOrderStatus
   /** Đã cắt cây: trạng thái thật trên lệnh sản xuất, đơn chia phiếu thì đếm theo phiếu con. */
   productionStatuses?: Array<{ status: ProductionStatus; count: number }> | null
+  /** Đã cắt cây và nhập kho thành phẩm không qua Xi — U hiện "Chờ nhập kho TP". */
+  platingSkipped?: boolean
   requestType: ProductionRequestType
   productName: string
   qty: number
