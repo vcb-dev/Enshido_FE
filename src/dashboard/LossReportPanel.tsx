@@ -11,6 +11,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   ToggleButton,
   ToggleButtonGroup,
@@ -61,6 +62,7 @@ import { downloadXlsx } from './xlsx'
 type Mode = 'week' | 'compare'
 
 const COMPARE_WEEKS = 8
+const SCRAP_PAGE_SIZE = 10
 const STAGE_OPTIONS = (Object.keys(LOSS_STAGE_LABEL) as LossStage[]).map((stage) => ({
   value: stage,
   label: LOSS_STAGE_LABEL[stage],
@@ -445,6 +447,10 @@ function WeekTable({
       return next
     })
   const scraps = data.scrapReturns
+  const [scrapPage, setScrapPage] = useState(0)
+  // Đổi tuần / bộ lọc làm danh sách ngắn lại thì kéo về trang cuối còn dữ liệu.
+  const currentScrapPage = Math.min(scrapPage, Math.max(0, Math.ceil(scraps.length / SCRAP_PAGE_SIZE) - 1))
+  const scrapRows = scraps.slice(currentScrapPage * SCRAP_PAGE_SIZE, (currentScrapPage + 1) * SCRAP_PAGE_SIZE)
   const headers = weekHeaders(data.metal)
   const metalLabel = LOSS_METAL_LABEL[data.metal].toLowerCase()
 
@@ -541,57 +547,69 @@ function WeekTable({
             Chưa ghi mạt vụn {metalLabel} nào cho tuần này.
           </Typography>
         ) : (
-          <TableContainer sx={{ overflowX: 'auto' }}>
-            <Table size="small" sx={{ ...TABLE_SX, minWidth: 560 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Thợ</TableCell>
-                  <TableCell className="num">Trọng lượng mạt vụn thu hồi (sau khi cô lại)</TableCell>
-                  <TableCell>Thủ kho nhận</TableCell>
-                  <TableCell>Ghi chú</TableCell>
-                  {canDelete ? <TableCell /> : null}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {scraps.map((scrap) => (
-                  <TableRow key={scrap.id}>
-                    <TableCell>{scrap.workerName}</TableCell>
-                    <TableCell className="num">{g(scrap.weightGram)} g</TableCell>
-                    <TableCell>
-                      {scrap.receivedByName}
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {new Date(scrap.receivedAt).toLocaleString('vi-VN')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{scrap.note ?? ''}</TableCell>
-                    {canDelete ? (
-                      <TableCell padding="checkbox">
-                        <Tooltip title="Xoá phiếu mạt (gỡ phiếu nhập kho NVL)">
-                          <span>
-                            <IconButton
-                              size="small"
-                              disabled={remove.isPending}
-                              onClick={async () => {
-                                const ok = await confirmDialog({
-                                  title: 'Xoá phiếu mạt vụn?',
-                                  message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL ${metalLabel} thu hồi đi kèm cũng bị gỡ.`,
-                                  confirmLabel: 'Xoá',
-                                  tone: 'error',
-                                })
-                                if (ok) remove.mutate(scrap.id)
-                              }}
-                            >
-                              <TrashIcon />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                    ) : null}
+          <>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ ...TABLE_SX, minWidth: 560 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Thợ</TableCell>
+                    <TableCell className="num">Trọng lượng mạt vụn thu hồi (sau khi cô lại)</TableCell>
+                    <TableCell>Thủ kho nhận</TableCell>
+                    <TableCell>Ghi chú</TableCell>
+                    {canDelete ? <TableCell /> : null}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {scrapRows.map((scrap) => (
+                    <TableRow key={scrap.id}>
+                      <TableCell>{scrap.workerName}</TableCell>
+                      <TableCell className="num">{g(scrap.weightGram)} g</TableCell>
+                      <TableCell>
+                        {scrap.receivedByName}
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {new Date(scrap.receivedAt).toLocaleString('vi-VN')}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{scrap.note ?? ''}</TableCell>
+                      {canDelete ? (
+                        <TableCell padding="checkbox">
+                          <Tooltip title="Xoá phiếu mạt (gỡ phiếu nhập kho NVL)">
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={remove.isPending}
+                                onClick={async () => {
+                                  const ok = await confirmDialog({
+                                    title: 'Xoá phiếu mạt vụn?',
+                                    message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL ${metalLabel} thu hồi đi kèm cũng bị gỡ.`,
+                                    confirmLabel: 'Xoá',
+                                    tone: 'error',
+                                  })
+                                  if (ok) remove.mutate(scrap.id)
+                                }}
+                              >
+                                <TrashIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              component="div"
+              count={scraps.length}
+              page={currentScrapPage}
+              onPageChange={(_, next) => setScrapPage(next)}
+              rowsPerPage={SCRAP_PAGE_SIZE}
+              rowsPerPageOptions={[]}
+              labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count} phiếu mạt`}
+              sx={{ borderTop: '1px solid #e9e0d4' }}
+            />
+          </>
         )}
       </Box>
     </Stack>
