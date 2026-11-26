@@ -76,9 +76,7 @@ import { inPeriod, useWarehousePeriod, vnDayOf } from './warehousePeriod'
 import { BTP_WAREHOUSE_CODE, invalidateBtpStock } from '../orders/btpStock'
 
 function canCreateManualOutbound(code: string) {
-  return (
-    code === NVL_WAREHOUSE_CODE || code === BTP_WAREHOUSE_CODE || code === 'nvl-tieu-hao' || code === 'dung-cu'
-  )
+  return code === NVL_WAREHOUSE_CODE || code === BTP_WAREHOUSE_CODE || code === 'nvl-tieu-hao'
 }
 
 export function StockOutboundPanel({ warehouseCode }: { warehouseCode: string }) {

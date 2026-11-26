@@ -2,10 +2,10 @@ export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 't
 
 export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
-/** Kho dụng cụ — có thêm tab Theo thợ / Phiếu dụng cụ. */
+/** Kho dụng cụ — tab Xuất là xuất cho thợ (theo dõi từng thợ đang giữ), thêm tab Phiếu dụng cụ. */
 export const TOOL_WAREHOUSE = 'dung-cu' as const
 
-export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts' | 'holders' | 'tool-moves'
+export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts' | 'tool-moves'
 
 export type WarehouseDef = {
   code: WarehouseCode
@@ -26,9 +26,7 @@ export const WAREHOUSE_SECTIONS: Array<{
   { code: 'outbound', name: 'Xuất' },
   /** Phiếu xuất nháp — đá cấp cho khâu Vào đá, chưa trừ tồn. */
   { code: 'drafts', name: 'Xuất nháp', only: ['nvl-chinh'] },
-  /** Kho dụng cụ: dụng cụ từng thợ đang giữ + hao mòn / hỏng / mất trong kỳ. */
-  { code: 'holders', name: 'Theo thợ', only: ['dung-cu'] },
-  /** Kho dụng cụ: phiếu cấp / trả / chuyển / hao mòn / hỏng / mất. */
+  /** Kho dụng cụ: lịch sử phiếu xuất / trả / chuyển / hao mòn / hỏng / mất. */
   { code: 'tool-moves', name: 'Phiếu dụng cụ', only: ['dung-cu'] },
 ]
 
@@ -214,7 +212,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     typeCodes: CONSUMABLE_TYPE_CODES,
     ...NVL_COPY,
   },
-  // Dụng cụ: không hình dạng / màu / vị trí / size / TL — cấp cho thợ ở tab Phiếu dụng cụ.
+  // Dụng cụ: không hình dạng / màu / vị trí / size / TL — xuất cho thợ ở tab Xuất.
   'dung-cu': {
     showSku: true,
     showLocation: false,

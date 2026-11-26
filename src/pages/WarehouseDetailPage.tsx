@@ -80,7 +80,7 @@ import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
-import { ToolHoldersPanel } from '../warehouses/tools/ToolHoldersPanel'
+import { ToolOutboundPanel } from '../warehouses/tools/ToolOutboundPanel'
 import { ToolMovesPanel } from '../warehouses/tools/ToolMovesPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
@@ -89,6 +89,7 @@ import {
   consumableCategoryIdOf,
   METAL_KINDS,
   THANH_PHAM_WAREHOUSE,
+  TOOL_WAREHOUSE,
   sectionsOf,
   catalogChildren,
   materialTypesFor,
@@ -117,6 +118,11 @@ export function WarehouseDetailPage() {
     bin?: string
     section?: string
   }>()
+
+  // Tab Theo thợ cũ của kho dụng cụ đã gộp vào tab Xuất.
+  if (code === 'dung-cu' && bin === 'holders') {
+    return <Navigate to="/warehouses/dung-cu/outbound" replace />
+  }
 
   if (code === 'ban-thanh-pham') {
     return <Navigate to="/warehouses/btp-cho-vao-da/stock" replace />
@@ -213,12 +219,12 @@ export function WarehouseDetailPage() {
         <FinishedGoodsPage section={activeSection.code} hideHeader />
       ) : activeSection?.code === 'inbound' ? (
         <StockInboundPanel warehouseCode={stockKey} />
+      ) : activeSection?.code === 'outbound' && warehouse.code === TOOL_WAREHOUSE ? (
+        <ToolOutboundPanel />
       ) : activeSection?.code === 'outbound' ? (
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'drafts' ? (
         <StockDraftPanel warehouseCode={stockKey} />
-      ) : activeSection?.code === 'holders' ? (
-        <ToolHoldersPanel />
       ) : activeSection?.code === 'tool-moves' ? (
         <ToolMovesPanel />
       ) : (

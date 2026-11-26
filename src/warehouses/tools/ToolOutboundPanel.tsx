@@ -42,10 +42,11 @@ const sumAmount = (rows: ToolSummaryRow[], pick: (row: ToolSummaryRow) => ToolFi
   rows.reduce((total, row) => total + Number(pick(row).amount), 0)
 
 /**
- * Tab Theo thợ của kho dụng cụ: mỗi thợ một dòng — đang giữ (hiện tại) và cấp / trả / hao mòn /
- * hỏng / mất trong kỳ đang chọn. Xổ dòng thợ để xem từng dụng cụ đang giữ và ghi phiếu cho món đó.
+ * Tab Xuất của kho dụng cụ — luồng xuất duy nhất: dụng cụ ra khỏi kho là xuất cho một thợ, nên tab
+ * này theo dõi luôn từng thợ. Mỗi thợ một dòng: đang giữ (hiện tại) và xuất / chuyển / trả / hao mòn /
+ * hỏng / mất trong kỳ. Xổ dòng thợ để xem từng dụng cụ đang giữ và ghi trả / báo cho món đó.
  */
-export function ToolHoldersPanel() {
+export function ToolOutboundPanel() {
   const { user } = useAuth()
   // Thủ kho và QC cùng quản lý kho dụng cụ; kế toán chỉ xem.
   const canWrite = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
@@ -135,7 +136,7 @@ export function ToolHoldersPanel() {
       },
       {
         key: 'issued',
-        header: 'Cấp trong kỳ',
+        header: 'Xuất trong kỳ',
         width: 130,
         numeric: true,
         cellSx: numCell,
@@ -199,7 +200,7 @@ export function ToolHoldersPanel() {
               card: 'actions' as const,
               render: (row: ToolSummaryRow) => (
                 <Button size="small" onClick={() => openDraft({ kind: 'ISSUE', toWorkerId: row.workerId })}>
-                  Cấp thêm
+                  Xuất thêm
                 </Button>
               ),
               renderSub: (item: ToolHolding) => (
@@ -221,10 +222,10 @@ export function ToolHoldersPanel() {
   return (
     <Stack spacing={1} sx={{ flex: { md: 1 }, minHeight: { md: 0 } }}>
       <PanelSummaryCard
-        title="Tổng hợp dụng cụ theo thợ"
+        title="Dụng cụ xuất cho thợ"
         stats={[
           { label: 'Thợ đang giữ (giá trị)', value: formatMoney(String(sumAmount(all, (row) => row.holding))), tone: 'stock' },
-          { label: 'Cấp trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.issued))), tone: 'out' },
+          { label: 'Xuất trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.issued))), tone: 'out' },
           { label: 'Hao mòn trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.worn))), tone: 'neutral' },
           { label: 'Hỏng trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.damaged))), tone: 'neutral' },
           { label: 'Mất trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.lost))), tone: 'neutral' },
@@ -256,7 +257,7 @@ export function ToolHoldersPanel() {
               <>
                 <Box sx={{ flex: 1, minWidth: 8 }} />
                 <Button variant="contained" onClick={() => openDraft({ kind: 'ISSUE' })}>
-                  Cấp dụng cụ
+                  Xuất dụng cụ cho thợ
                 </Button>
               </>
             ) : null}

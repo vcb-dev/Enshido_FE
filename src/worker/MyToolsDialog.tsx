@@ -17,7 +17,7 @@ import { getMyToolsApi } from '../api/tools'
 import { useIsMobile } from '../hooks/useBreakpoint'
 
 /**
- * Thợ xem dụng cụ mình đang giữ (cấp từ kho dụng cụ). Chỉ xem — trả / báo hỏng / mất thì mang tới
+ * Thợ xem dụng cụ mình đang giữ (xuất từ kho dụng cụ). Chỉ xem — trả / báo hỏng / mất thì mang tới
  * thủ kho ghi phiếu. Không hiện tiền.
  */
 export function MyToolsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

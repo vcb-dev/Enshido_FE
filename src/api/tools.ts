@@ -8,7 +8,7 @@ export type ToolMoveKind = 'ISSUE' | 'RETURN' | 'TRANSFER' | 'WORN' | 'DAMAGED' 
 export const TOOL_MOVE_KINDS: ToolMoveKind[] = ['ISSUE', 'RETURN', 'TRANSFER', 'WORN', 'DAMAGED', 'LOST']
 
 export const TOOL_MOVE_LABEL: Record<ToolMoveKind, string> = {
-  ISSUE: 'Cấp cho thợ',
+  ISSUE: 'Xuất cho thợ',
   RETURN: 'Trả về kho',
   TRANSFER: 'Chuyển thợ',
   WORN: 'Hao mòn',
@@ -86,7 +86,7 @@ export type ToolMoveRow = {
   note: string | null
   createdByName: string
   createdAt: string
-  /** Có phiếu nhập / xuất kho đi kèm (cấp / trả). */
+  /** Có phiếu nhập / xuất kho đi kèm (xuất / trả). */
   hasStockLine: boolean
 }
 

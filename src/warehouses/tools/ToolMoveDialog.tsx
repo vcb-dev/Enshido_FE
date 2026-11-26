@@ -44,7 +44,7 @@ type ToolOption = {
   sku: string | null
   name: string
   unitName: string
-  /** Tồn kho (cấp) hoặc SL thợ giao đang giữ (các loại khác). */
+  /** Tồn kho (xuất) hoặc SL thợ giao đang giữ (các loại khác). */
   available: number
   /** Giá trị phần thợ đang giữ — để hiện ước tính giá trị phiếu. */
   heldAmount?: number
@@ -53,7 +53,7 @@ type ToolOption = {
 const qtyOf = (raw: string) => Number(raw.replace(',', '.'))
 
 /**
- * Thủ kho ghi một phiếu dụng cụ. Cấp: chọn dụng cụ còn tồn kho; các loại khác: chọn trong dụng cụ
+ * Thủ kho ghi một phiếu dụng cụ. Xuất: chọn dụng cụ còn tồn kho; các loại khác: chọn trong dụng cụ
  * thợ giao đang giữ (không cho vượt số đang giữ).
  */
 export function ToolMoveDialog({
@@ -98,7 +98,7 @@ export function ToolMoveDialog({
     setNote('')
   }, [open, draft])
 
-  // Mở từ một dòng "Theo thợ": chọn sẵn thợ khi danh sách thợ về.
+  // Mở từ một dòng thợ ở tab Xuất: chọn sẵn thợ khi danh sách thợ về.
   useEffect(() => {
     if (!open) return
     setFromWorker(workers.data?.find((worker) => worker.id === draft.fromWorkerId) ?? null)
@@ -224,7 +224,7 @@ export function ToolMoveDialog({
           ) : null}
           {sides.to ? (
             <AutocompleteInput
-              label={kind === 'TRANSFER' ? 'Thợ nhận' : 'Cấp cho thợ'}
+              label={kind === 'TRANSFER' ? 'Thợ nhận' : 'Xuất cho thợ'}
               placeholder="Chọn thợ"
               options={activeWorkers.filter((worker) => worker.id !== fromWorker?.id)}
               value={toWorker}

@@ -39,7 +39,7 @@ const KIND_COLOR: Record<ToolMoveKind, 'primary' | 'success' | 'info' | 'default
 type KindFilter = ToolMoveKind | 'ALL'
 
 /**
- * Tab Phiếu dụng cụ: mọi phiếu cấp / trả / chuyển / hao mòn / hỏng / mất trong kỳ đang chọn. Thủ kho
+ * Tab Phiếu dụng cụ: mọi phiếu xuất / trả / chuyển / hao mòn / hỏng / mất trong kỳ đang chọn. Thủ kho
  * ghi phiếu mới và huỷ phiếu ghi nhầm (hệ thống đảo lại tồn thợ + phiếu kho đi kèm).
  */
 export function ToolMovesPanel() {
