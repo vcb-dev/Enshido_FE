@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   Alert,
   Box,
@@ -11,6 +11,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   ToggleButton,
   ToggleButtonGroup,
@@ -35,13 +36,25 @@ import {
   LOSS_STAGE_LABEL,
   type LossItem,
   type LossMetal,
+  type LossStage,
   type LossSums,
   type LossWorkerRow,
   type WeeklyLossReport,
 } from '../api/lossReports'
-import { confirmDialog, DateField, TableSkeleton, TrashIcon } from '../components/ui'
+import { confirmDialog, DateField, SelectInput, TableSkeleton, TrashIcon } from '../components/ui'
+import { SearchSelect } from '../warehouses/SearchSelect'
 import { LossLimitsDialog } from './LossLimitsDialog'
-import { addDays, buildLossSheets, isOver, todayKey, weekLabel, weekShort, weekStart } from './lossReport'
+import {
+  addDays,
+  buildLossSheets,
+  filterLossReport,
+  isOver,
+  lossWorkers,
+  todayKey,
+  weekLabel,
+  weekShort,
+  weekStart,
+} from './lossReport'
 import { OVERVIEW_COLOR } from './overviewShared'
 import { ScrapReturnDialog } from './ScrapReturnDialog'
 import { downloadXlsx } from './xlsx'
@@ -49,6 +62,11 @@ import { downloadXlsx } from './xlsx'
 type Mode = 'week' | 'compare'
 
 const COMPARE_WEEKS = 8
+const SCRAP_PAGE_SIZE = 10
+const STAGE_OPTIONS = (Object.keys(LOSS_STAGE_LABEL) as LossStage[]).map((stage) => ({
+  value: stage,
+  label: LOSS_STAGE_LABEL[stage],
+}))
 const OK_COLOR = '#1a8f63'
 
 const g = (value: string | null) => (value == null ? '—' : formatQty(String(Number(Number(value).toFixed(2)))))
@@ -92,6 +110,9 @@ export function LossReportPanel() {
   const [compareTo, setCompareTo] = useState(thisWeek)
   const [limitsOpen, setLimitsOpen] = useState(false)
   const [scrapOpen, setScrapOpen] = useState(false)
+  const [stage, setStage] = useState<LossStage | ''>('')
+  // Giữ cả tên để thợ đã chọn vẫn hiện trong ô khi đổi sang tuần thợ không có số.
+  const [worker, setWorker] = useState<{ key: string; name: string } | null>(null)
 
   const range =
     mode === 'week'
@@ -104,16 +125,30 @@ export function LossReportPanel() {
     enabled: validRange,
     placeholderData: keepPreviousData,
   })
-  const data = report.data
+  const raw = report.data
+  const data = useMemo(
+    () => (raw ? filterLossReport(raw, { stage, workerKey: worker?.key ?? '' }) : undefined),
+    [raw, stage, worker],
+  )
+  const workerOptions = useMemo(() => {
+    const list = raw ? lossWorkers(raw) : []
+    if (worker && !list.some((item) => item.key === worker.key)) list.unshift(worker)
+    return list.map((item) => ({ id: item.key, name: item.name }))
+  }, [raw, worker])
+  const filtered = Boolean(stage || worker)
 
   const exportExcel = () => {
     if (!data) return
     const prefix = data.metal === 'GOLD' ? 'hao-hut-vang' : 'hao-hut-bac'
-    const name =
+    const period =
       data.weeks.length === 1
-        ? `${prefix}-tuan-${data.weeks[0].start}`
-        : `${prefix}-${data.weeks[0].start}-den-${data.weeks[data.weeks.length - 1].start}`
-    downloadXlsx(name, buildLossSheets(data))
+        ? `tuan-${data.weeks[0].start}`
+        : `${data.weeks[0].start}-den-${data.weeks[data.weeks.length - 1].start}`
+    const suffix = [stage ? slug(LOSS_STAGE_LABEL[stage]) : '', worker ? slug(worker.name) : '']
+      .filter(Boolean)
+      .map((part) => `-${part}`)
+      .join('')
+    downloadXlsx(`${prefix}-${period}${suffix}`, buildLossSheets(data, stage))
   }
 
   return (
@@ -212,6 +247,44 @@ export function LossReportPanel() {
         )}
       </Stack>
 
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: 'center' } }}>
+        <SelectInput
+          size="small"
+          label="Khâu"
+          placeholder="Tất cả khâu"
+          clearable
+          options={STAGE_OPTIONS}
+          value={stage}
+          onChange={setStage}
+          sx={{ width: { xs: '100%', sm: 200 } }}
+        />
+        <SearchSelect
+          size="small"
+          label="Thợ"
+          placeholder="Tất cả thợ"
+          allowClear
+          options={workerOptions}
+          valueId={worker?.key ?? ''}
+          onChange={(id) => {
+            const next = workerOptions.find((item) => item.id === id)
+            setWorker(next ? { key: next.id, name: next.name } : null)
+          }}
+          noOptionsText="Không có thợ nào trong kỳ này"
+          sx={{ width: { xs: '100%', sm: 260 } }}
+        />
+        {filtered ? (
+          <Button
+            size="small"
+            onClick={() => {
+              setStage('')
+              setWorker(null)
+            }}
+          >
+            Bỏ lọc
+          </Button>
+        ) : null}
+      </Stack>
+
       {data && data.pendingCount > 0 ? (
         <Alert severity="info" sx={{ mb: 1.5 }}>
           {data.pendingCount} lượt khâu QC đã nhận lại nhưng thủ kho chưa xác nhận — chưa tính vào báo cáo.
@@ -226,7 +299,17 @@ export function LossReportPanel() {
         <TableSkeleton />
       ) : (
         <Box sx={{ opacity: report.isPlaceholderData ? 0.6 : 1 }}>
-          {mode === 'week' ? <WeekTable data={data} canDelete={isKeeper} /> : <CompareTable data={data} />}
+          {stage ? (
+            <Alert severity="info" sx={{ mb: 1.5 }}>
+              Đang xem riêng khâu {LOSS_STAGE_LABEL[stage]}. Mạt vụn thợ nộp chung cả tuần, không chia theo khâu nên các
+              cột mạt để trống; mức hao thực tế là của khâu này, chưa trừ mạt.
+            </Alert>
+          ) : null}
+          {mode === 'week' ? (
+            <WeekTable data={data} canDelete={isKeeper} stage={stage} filtered={filtered} />
+          ) : (
+            <CompareTable data={data} filtered={filtered} />
+          )}
         </Box>
       )}
 
@@ -241,6 +324,18 @@ export function LossReportPanel() {
       ) : null}
     </Paper>
   )
+}
+
+/** Tên thợ → đoạn tên file không dấu: "Bùi Văn Lân" → "bui-van-lan". */
+function slug(text: string) {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 /** Chênh lệch mạt có dấu: "+1,2" trả dư, "−10" thiếu (hao vượt mức). */
@@ -320,7 +415,18 @@ const weekHeaders = (metal: LossMetal) => [
 ]
 
 /** Một tuần: dòng tổng mỗi thợ (giống bảng Excel), bấm mở xem từng khâu và từng phiếu. */
-function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boolean }) {
+function WeekTable({
+  data,
+  canDelete,
+  stage,
+  filtered,
+}: {
+  data: WeeklyLossReport
+  canDelete: boolean
+  /** Đang lọc một khâu: dòng thợ đã là số của khâu, mở ra thấy thẳng từng phiếu. */
+  stage: LossStage | ''
+  filtered: boolean
+}) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const queryClient = useQueryClient()
   const remove = useMutation({
@@ -341,6 +447,10 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
       return next
     })
   const scraps = data.scrapReturns
+  const [scrapPage, setScrapPage] = useState(0)
+  // Đổi tuần / bộ lọc làm danh sách ngắn lại thì kéo về trang cuối còn dữ liệu.
+  const currentScrapPage = Math.min(scrapPage, Math.max(0, Math.ceil(scraps.length / SCRAP_PAGE_SIZE) - 1))
+  const scrapRows = scraps.slice(currentScrapPage * SCRAP_PAGE_SIZE, (currentScrapPage + 1) * SCRAP_PAGE_SIZE)
   const headers = weekHeaders(data.metal)
   const metalLabel = LOSS_METAL_LABEL[data.metal].toLowerCase()
 
@@ -363,7 +473,9 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
               <TableRow>
                 <TableCell colSpan={headers.length + 1}>
                   <Typography variant="body2" color="text.secondary">
-                    Tuần này chưa có lượt khâu nào được chốt số.
+                    {filtered
+                      ? 'Không có số liệu khớp bộ lọc trong tuần này.'
+                      : 'Tuần này chưa có lượt khâu nào được chốt số.'}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -381,23 +493,31 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
                           <KeyboardArrowRightIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
                         )}
                         {row.workerName}
+                        {stage ? (
+                          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                            {row.tickets.toLocaleString('vi-VN')} phiếu
+                          </Typography>
+                        ) : null}
                       </TableCell>
-                      <SumsCells row={row} scrapGram={row.scrapGram} due={row} />
+                      <SumsCells row={row} scrapGram={row.scrapGram} due={stage ? null : row} />
                     </TableRow>
-                    {expanded
-                      ? row.stages.map((stage) => (
-                          <Fragment key={stage.stage}>
+                    {expanded && stage
+                      ? items.map((item) => <ItemRow key={`${item.ticketCode}-${item.stage}-${item.attempt}`} item={item} />)
+                      : null}
+                    {expanded && !stage
+                      ? row.stages.map((sums) => (
+                          <Fragment key={sums.stage}>
                             <TableRow sx={{ bgcolor: '#fcfaf6' }}>
                               <TableCell sx={{ pl: 5, whiteSpace: 'nowrap' }}>
-                                <b>{LOSS_STAGE_LABEL[stage.stage]}</b>
+                                <b>{LOSS_STAGE_LABEL[sums.stage]}</b>
                                 <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                  {stage.tickets.toLocaleString('vi-VN')} phiếu
+                                  {sums.tickets.toLocaleString('vi-VN')} phiếu
                                 </Typography>
                               </TableCell>
-                              <SumsCells row={stage} scrapGram={null} due={null} />
+                              <SumsCells row={sums} scrapGram={null} due={null} />
                             </TableRow>
                             {items
-                              .filter((item) => item.stage === stage.stage)
+                              .filter((item) => item.stage === sums.stage)
                               .map((item) => (
                                 <ItemRow key={`${item.ticketCode}-${item.stage}-${item.attempt}`} item={item} />
                               ))}
@@ -427,57 +547,69 @@ function WeekTable({ data, canDelete }: { data: WeeklyLossReport; canDelete: boo
             Chưa ghi mạt vụn {metalLabel} nào cho tuần này.
           </Typography>
         ) : (
-          <TableContainer sx={{ overflowX: 'auto' }}>
-            <Table size="small" sx={{ ...TABLE_SX, minWidth: 560 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Thợ</TableCell>
-                  <TableCell className="num">Trọng lượng mạt vụn thu hồi (sau khi cô lại)</TableCell>
-                  <TableCell>Thủ kho nhận</TableCell>
-                  <TableCell>Ghi chú</TableCell>
-                  {canDelete ? <TableCell /> : null}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {scraps.map((scrap) => (
-                  <TableRow key={scrap.id}>
-                    <TableCell>{scrap.workerName}</TableCell>
-                    <TableCell className="num">{g(scrap.weightGram)} g</TableCell>
-                    <TableCell>
-                      {scrap.receivedByName}
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {new Date(scrap.receivedAt).toLocaleString('vi-VN')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{scrap.note ?? ''}</TableCell>
-                    {canDelete ? (
-                      <TableCell padding="checkbox">
-                        <Tooltip title="Xoá phiếu mạt (gỡ phiếu nhập kho NVL)">
-                          <span>
-                            <IconButton
-                              size="small"
-                              disabled={remove.isPending}
-                              onClick={async () => {
-                                const ok = await confirmDialog({
-                                  title: 'Xoá phiếu mạt vụn?',
-                                  message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL ${metalLabel} thu hồi đi kèm cũng bị gỡ.`,
-                                  confirmLabel: 'Xoá',
-                                  tone: 'error',
-                                })
-                                if (ok) remove.mutate(scrap.id)
-                              }}
-                            >
-                              <TrashIcon />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                    ) : null}
+          <>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ ...TABLE_SX, minWidth: 560 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Thợ</TableCell>
+                    <TableCell className="num">Trọng lượng mạt vụn thu hồi (sau khi cô lại)</TableCell>
+                    <TableCell>Thủ kho nhận</TableCell>
+                    <TableCell>Ghi chú</TableCell>
+                    {canDelete ? <TableCell /> : null}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {scrapRows.map((scrap) => (
+                    <TableRow key={scrap.id}>
+                      <TableCell>{scrap.workerName}</TableCell>
+                      <TableCell className="num">{g(scrap.weightGram)} g</TableCell>
+                      <TableCell>
+                        {scrap.receivedByName}
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {new Date(scrap.receivedAt).toLocaleString('vi-VN')}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{scrap.note ?? ''}</TableCell>
+                      {canDelete ? (
+                        <TableCell padding="checkbox">
+                          <Tooltip title="Xoá phiếu mạt (gỡ phiếu nhập kho NVL)">
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={remove.isPending}
+                                onClick={async () => {
+                                  const ok = await confirmDialog({
+                                    title: 'Xoá phiếu mạt vụn?',
+                                    message: `${scrap.workerName} · ${g(scrap.weightGram)} g. Phiếu nhập kho NVL ${metalLabel} thu hồi đi kèm cũng bị gỡ.`,
+                                    confirmLabel: 'Xoá',
+                                    tone: 'error',
+                                  })
+                                  if (ok) remove.mutate(scrap.id)
+                                }}
+                              >
+                                <TrashIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              component="div"
+              count={scraps.length}
+              page={currentScrapPage}
+              onPageChange={(_, next) => setScrapPage(next)}
+              rowsPerPage={SCRAP_PAGE_SIZE}
+              rowsPerPageOptions={[]}
+              labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count} phiếu mạt`}
+              sx={{ borderTop: '1px solid #e9e0d4' }}
+            />
+          </>
         )}
       </Box>
     </Stack>
@@ -536,7 +668,7 @@ function periodOf(rows: LossWorkerRow[]) {
 }
 
 /** So sánh nhiều tuần: mỗi thợ một dòng, mỗi tuần một cột % hao thực tế (kèm gram). */
-function CompareTable({ data }: { data: WeeklyLossReport }) {
+function CompareTable({ data, filtered }: { data: WeeklyLossReport; filtered: boolean }) {
   const byWorker = new Map<string, { name: string; weeks: Map<string, LossWorkerRow> }>()
   for (const row of data.workers) {
     const entry = byWorker.get(row.workerKey) ?? { name: row.workerName, weeks: new Map() }
@@ -566,7 +698,9 @@ function CompareTable({ data }: { data: WeeklyLossReport }) {
             <TableRow>
               <TableCell colSpan={data.weeks.length + 2}>
                 <Typography variant="body2" color="text.secondary">
-                  Khoảng tuần này chưa có lượt khâu nào được chốt số.
+                  {filtered
+                    ? 'Không có số liệu khớp bộ lọc trong khoảng tuần này.'
+                    : 'Khoảng tuần này chưa có lượt khâu nào được chốt số.'}
                 </Typography>
               </TableCell>
             </TableRow>
