@@ -15,6 +15,7 @@ import {
   ListItemText,
   Stack,
   Toolbar,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -41,6 +42,7 @@ import DiamondIcon from '@mui/icons-material/DiamondOutlined'
 import ExtensionIcon from '@mui/icons-material/ExtensionOutlined'
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasketOutlined'
 import StorefrontIcon from '@mui/icons-material/StorefrontOutlined'
+import BuildIcon from '@mui/icons-material/BuildOutlined'
 import ViewListIcon from '@mui/icons-material/ViewListOutlined'
 import TuneIcon from '@mui/icons-material/TuneOutlined'
 import PinDropIcon from '@mui/icons-material/PinDropOutlined'
@@ -59,6 +61,7 @@ import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
 import { can, Permission } from '../auth/permissions'
+import { MyToolsDialog } from '../worker/MyToolsDialog'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets, canUseQcTickets } from '../intake/intake3dAccess'
 import {
@@ -143,6 +146,12 @@ export function AppShell() {
       : theme.transitions.duration.leavingScreen,
   })
 
+  // Thợ 3D / sáp / đúc dùng khung này — xem được dụng cụ mình đang giữ.
+  const isWorker = Boolean(
+    user && [user.roleCode, ...(user.extraRoles ?? [])].includes('WORKER'),
+  )
+  const [toolsOpen, setToolsOpen] = useState(false)
+
   async function onLogout() {
     setLoggingOut(true)
     try {
@@ -186,6 +195,13 @@ export function AppShell() {
             <ScanQrButton compact />
             <InstallAppButton />
             <NotificationBell />
+            {isWorker ? (
+              <Tooltip title="Dụng cụ đang giữ">
+                <IconButton aria-label="Dụng cụ đang giữ" onClick={() => setToolsOpen(true)}>
+                  <BuildIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
             <Avatar
               sx={{
                 width: 32,
@@ -224,6 +240,7 @@ export function AppShell() {
           </Stack>
         </Toolbar>
       </AppBar>
+      {isWorker ? <MyToolsDialog open={toolsOpen} onClose={() => setToolsOpen(false)} /> : null}
 
       <Box
         component="nav"
@@ -483,6 +500,8 @@ function warehouseIcon(code: string) {
       return <ShoppingBasketIcon fontSize="small" />
     case 'thanh-pham':
       return <StorefrontIcon fontSize="small" />
+    case 'dung-cu':
+      return <BuildIcon fontSize="small" />
     default:
       return <WarehouseIcon fontSize="small" />
   }

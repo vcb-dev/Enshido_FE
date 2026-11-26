@@ -118,8 +118,8 @@ export function FinishedGoodsPage({
   section?: WarehouseSectionCode
   hideHeader?: boolean
 } = {}) {
-  // Kho thành phẩm không có mục Xuất nháp.
-  const tab: TabCode = section && section !== 'drafts' ? section : 'stock'
+  // Kho thành phẩm chỉ có Tồn / Nhập / Xuất (Xuất nháp, Theo thợ… là của kho khác).
+  const tab: TabCode = section === 'inbound' || section === 'outbound' ? section : 'stock'
   const warehouse = warehouseByCode(THANH_PHAM_WAREHOUSE)
 
   return (

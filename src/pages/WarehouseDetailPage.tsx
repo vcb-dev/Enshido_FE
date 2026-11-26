@@ -80,6 +80,8 @@ import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
+import { ToolHoldersPanel } from '../warehouses/tools/ToolHoldersPanel'
+import { ToolMovesPanel } from '../warehouses/tools/ToolMovesPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
@@ -215,6 +217,10 @@ export function WarehouseDetailPage() {
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'drafts' ? (
         <StockDraftPanel warehouseCode={stockKey} />
+      ) : activeSection?.code === 'holders' ? (
+        <ToolHoldersPanel />
+      ) : activeSection?.code === 'tool-moves' ? (
+        <ToolMovesPanel />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}
