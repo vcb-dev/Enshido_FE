@@ -12,7 +12,7 @@ import {
   type ToolMoveRow,
 } from '../../api/tools'
 import { useAuth } from '../../auth/AuthContext'
-import { can, Permission } from '../../auth/permissions'
+import { canAny, Permission } from '../../auth/permissions'
 import {
   confirmDialog,
   DataTable,
@@ -44,7 +44,8 @@ type KindFilter = ToolMoveKind | 'ALL'
  */
 export function ToolMovesPanel() {
   const { user } = useAuth()
-  const canWrite = can(user, Permission.WAREHOUSE_KEEPER)
+  // Thủ kho và QC cùng quản lý kho dụng cụ; kế toán chỉ xem.
+  const canWrite = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
   const queryClient = useQueryClient()
   const period = useWarehousePeriod()
   const [kind, setKind] = useState<KindFilter>('ALL')

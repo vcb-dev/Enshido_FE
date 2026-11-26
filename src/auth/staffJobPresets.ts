@@ -92,7 +92,7 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
     case 'warehouse':
       return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
-      return 'Nhận lại hàng từ thợ.'
+      return 'Nhận lại hàng từ thợ. Quản lý kho dụng cụ.'
     case 'accountant':
       return 'Kho thành phẩm: xác nhận phiếu xuất hàng. Xem kho dụng cụ.'
     case 'staff':
@@ -234,6 +234,7 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
           Permission.SCREEN_DASHBOARD,
           Permission.SCREEN_PRODUCTION_ORDERS,
           Permission.SCREEN_QC_TICKETS,
+          Permission.SCREEN_WAREHOUSE_DUNG_CU,
           Permission.PRODUCTION_QC,
         ],
       }

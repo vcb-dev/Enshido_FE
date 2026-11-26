@@ -10,7 +10,7 @@ import {
   type ToolSummaryRow,
 } from '../../api/tools'
 import { useAuth } from '../../auth/AuthContext'
-import { can, Permission } from '../../auth/permissions'
+import { canAny, Permission } from '../../auth/permissions'
 import { DataTable, PanelSummaryCard, SearchInput, type Column } from '../../components/ui'
 import { useWarehousePeriod } from '../warehousePeriod'
 import { ToolMoveDialog, type ToolMoveDraft } from './ToolMoveDialog'
@@ -47,7 +47,8 @@ const sumAmount = (rows: ToolSummaryRow[], pick: (row: ToolSummaryRow) => ToolFi
  */
 export function ToolHoldersPanel() {
   const { user } = useAuth()
-  const canWrite = can(user, Permission.WAREHOUSE_KEEPER)
+  // Thủ kho và QC cùng quản lý kho dụng cụ; kế toán chỉ xem.
+  const canWrite = canAny(user, Permission.WAREHOUSE_KEEPER, Permission.PRODUCTION_QC)
   const period = useWarehousePeriod()
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState<ToolMoveDraft>({ kind: 'ISSUE' })

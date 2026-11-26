@@ -7,7 +7,7 @@ export const Permission = {
   SCREEN_WAREHOUSE_BTP: 'screen.warehouse.btp-cho-vao-da',
   SCREEN_WAREHOUSE_TIEU_HAO: 'screen.warehouse.nvl-tieu-hao',
   SCREEN_WAREHOUSE_THANH_PHAM: 'screen.warehouse.thanh-pham',
-  /** Kho dụng cụ — xem tồn + dụng cụ từng thợ đang giữ; ghi phiếu vẫn cần `warehouse.keeper`. */
+  /** Kho dụng cụ — xem tồn + dụng cụ từng thợ đang giữ; ghi phiếu cần `warehouse.keeper` hoặc `production.qc`. */
   SCREEN_WAREHOUSE_DUNG_CU: 'screen.warehouse.dung-cu',
   SCREEN_LOCATIONS: 'screen.locations',
   SCREEN_CATALOGS: 'screen.catalogs',
