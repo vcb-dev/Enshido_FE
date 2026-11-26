@@ -95,6 +95,9 @@ type ProductionListRow =
   | { kind: 'intake'; row: IntakeOrder }
   | { kind: 'order'; row: ProductionOrderRow }
 
+/** Nút Duyệt / Chuyển khâu của đơn chờ duyệt — cùng bề rộng 112 với các nút khác trong cột. */
+const approveButtonSx = { minWidth: 0, maxWidth: '100%', width: 112, px: 0.75, py: 0.5 }
+
 const actionTextButtonSx = {
   minWidth: 0,
   maxWidth: '100%',
@@ -835,14 +838,21 @@ function renderIntakeWorkflowStep(
   if (order.status === 'PENDING_APPROVAL') {
     if (!actions.can.approve) return waiting('thủ kho duyệt')
     return (
-      <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)}>
+      // Cùng bề rộng với các nút khác trong cột; Duyệt là thao tác chính, Từ chối chỉ là chữ như "Xem chi tiết".
+      <Stack spacing={0.5} sx={{ alignItems: 'center' }}>
+        <Button size="small" variant="contained" onClick={() => actions.onIntakeApprove(order)} sx={approveButtonSx}>
           Duyệt
         </Button>
-        <Button size="small" variant="outlined" onClick={() => actions.onIntakeApproveSkip(order)}>
+        <Button size="small" variant="outlined" onClick={() => actions.onIntakeApproveSkip(order)} sx={approveButtonSx}>
           Chuyển khâu
         </Button>
-        <Button size="small" variant="outlined" color="error" onClick={() => actions.onIntakeReject(order)}>
+        <Button
+          size="small"
+          variant="text"
+          color="error"
+          onClick={() => actions.onIntakeReject(order)}
+          sx={actionTextButtonSx}
+        >
           Từ chối
         </Button>
       </Stack>
