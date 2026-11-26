@@ -45,8 +45,8 @@ export type LossWorkerRow = LossSums & {
   workerKey: string
   workerUserId: string | null
   workerName: string
-  /** Mạt vụn thợ trả cuối tuần — chỉ trừ ở dòng tổng của thợ. */
-  scrapGram: string
+  /** Mạt vụn thợ trả cuối tuần — chỉ trừ ở dòng tổng của thợ. null khi đang lọc theo khâu (mạt không chia theo khâu). */
+  scrapGram: string | null
   /** Mạt phải trả = TL thợ giữ − được hao (không âm). */
   dueGram: string | null
   /** Mạt đã trả − phải trả: âm = hao vượt mức, dương = trả dư. */

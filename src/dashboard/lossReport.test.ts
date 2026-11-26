@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WeeklyLossReport } from '../api/lossReports'
-import { buildLossSheets, isOver, weekLabel, weekStart } from './lossReport'
+import { buildLossSheets, filterLossReport, isOver, lossWorkers, weekLabel, weekStart } from './lossReport'
 import { buildXlsx, columnName, crc32 } from './xlsx'
 
 const sums = {
@@ -110,3 +110,72 @@ describe('xuất Excel', () => {
   })
 })
 
+
+describe('lọc báo cáo theo khâu / thợ', () => {
+  const multi: WeeklyLossReport = {
+    ...report,
+    weeks: [report.weeks[1]],
+    workers: [
+      report.workers[0],
+      {
+        ...report.workers[0],
+        workerKey: 'b',
+        workerUserId: 'b',
+        workerName: 'Thợ B',
+        stages: [{ stage: 'POLISHING', ...sums }],
+      },
+    ],
+    items: [
+      { week: '2026-10-19', workerKey: 'a', stage: 'FILING', ticketCode: 'P1', attempt: 1, confirmedAt: '2026-10-20T03:00:00Z', ...sums },
+      { week: '2026-10-19', workerKey: 'b', stage: 'POLISHING', ticketCode: 'P2', attempt: 1, confirmedAt: '2026-10-20T03:00:00Z', ...sums },
+    ],
+    scrapReturns: [
+      { id: 's1', week: '2026-10-19', workerKey: 'a', workerName: 'Thợ A', weightGram: '30', note: null, receivedAt: '2026-10-25T03:00:00Z', receivedByName: 'Kho' },
+      { id: 's2', week: '2026-10-19', workerKey: 'b', workerName: 'Thợ B', weightGram: '30', note: null, receivedAt: '2026-10-25T03:00:00Z', receivedByName: 'Kho' },
+    ],
+  }
+
+  it('không lọc thì trả nguyên báo cáo', () => {
+    expect(filterLossReport(multi, { stage: '', workerKey: '' })).toBe(multi)
+  })
+
+  it('lọc khâu: dòng thợ lấy số của khâu, bỏ thợ không làm khâu, cột mạt để trống', () => {
+    const out = filterLossReport(multi, { stage: 'FILING', workerKey: '' })
+    expect(out.workers).toHaveLength(1)
+    const row = out.workers[0]
+    expect(row.workerName).toBe('Thợ A')
+    expect(row.lossGram).toBe('35')
+    expect(row.lossPercent).toBe('9.33')
+    expect(row.scrapGram).toBeNull()
+    expect(row.dueGram).toBeNull()
+    expect(row.balanceGram).toBeNull()
+    expect(out.items.map((item) => item.ticketCode)).toEqual(['P1'])
+    expect(out.scrapReturns.map((scrap) => scrap.id)).toEqual(['s1'])
+  })
+
+  it('lọc thợ: giữ nguyên dòng tổng của thợ đó', () => {
+    const out = filterLossReport(multi, { stage: '', workerKey: 'b' })
+    expect(out.workers).toEqual([multi.workers[1]])
+    expect(out.items.map((item) => item.ticketCode)).toEqual(['P2'])
+    expect(out.scrapReturns.map((scrap) => scrap.id)).toEqual(['s2'])
+  })
+
+  it('lọc cả hai không khớp thì rỗng', () => {
+    const out = filterLossReport(multi, { stage: 'POLISHING', workerKey: 'a' })
+    expect(out.workers).toEqual([])
+    expect(out.items).toEqual([])
+  })
+
+  it('danh sách thợ theo tên, không trùng', () => {
+    expect(lossWorkers({ ...multi, workers: [...multi.workers, multi.workers[0]] })).toEqual([
+      { key: 'a', name: 'Thợ A' },
+      { key: 'b', name: 'Thợ B' },
+    ])
+  })
+
+  it('Excel khi lọc khâu: không lặp dòng khâu, tên thợ kèm khâu', () => {
+    const sheet = buildLossSheets(filterLossReport(multi, { stage: 'FILING', workerKey: '' }), 'FILING')[0]
+    expect(sheet.rows).toHaveLength(2)
+    expect(sheet.rows[1][1]).toEqual({ value: 'Thợ A · Nguội', style: 'bold' })
+  })
+})

@@ -1,4 +1,10 @@
-import { lossInHeader, LOSS_STAGE_LABEL, type LossWorkerRow, type WeeklyLossReport } from '../api/lossReports'
+import {
+  lossInHeader,
+  LOSS_STAGE_LABEL,
+  type LossStage,
+  type LossWorkerRow,
+  type WeeklyLossReport,
+} from '../api/lossReports'
 import type { XlsxCell, XlsxSheet } from './xlsx'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -41,6 +47,58 @@ export function isOver(row: { lossPercent: string | null; limitPercent: string |
 
 export function stagesCaption(row: LossWorkerRow) {
   return row.stages.map((stage) => LOSS_STAGE_LABEL[stage.stage]).join(', ')
+}
+
+export type LossFilter = { stage: LossStage | ''; workerKey: string }
+
+/**
+ * Lọc báo cáo theo khâu / thợ (lọc trên số đã tải, không gọi lại API).
+ * Lọc khâu: dòng thợ lấy đúng số của khâu đó, bỏ thợ không làm khâu đó. Mạt vụn nộp theo thợ cả tuần,
+ * không chia được cho từng khâu nên các cột mạt (đã trả / phải trả / chênh lệch) để trống.
+ */
+export function filterLossReport(report: WeeklyLossReport, filter: LossFilter): WeeklyLossReport {
+  const { stage, workerKey } = filter
+  if (!stage && !workerKey) return report
+  const workers: LossWorkerRow[] = []
+  for (const row of report.workers) {
+    if (workerKey && row.workerKey !== workerKey) continue
+    if (!stage) {
+      workers.push(row)
+      continue
+    }
+    const sums = row.stages.find((item) => item.stage === stage)
+    if (!sums) continue
+    workers.push({
+      ...sums,
+      week: row.week,
+      workerKey: row.workerKey,
+      workerUserId: row.workerUserId,
+      workerName: row.workerName,
+      scrapGram: null,
+      dueGram: null,
+      balanceGram: null,
+      stages: [sums],
+    })
+  }
+  const shown = new Set(workers.map((row) => row.workerKey))
+  return {
+    ...report,
+    workers,
+    items: report.items.filter(
+      (item) => (!stage || item.stage === stage) && (!workerKey || item.workerKey === workerKey),
+    ),
+    // Mạt theo thợ: giữ mạt của thợ còn trên bảng.
+    scrapReturns: report.scrapReturns.filter((scrap) => shown.has(scrap.workerKey)),
+  }
+}
+
+/** Danh sách thợ có trong báo cáo (chưa lọc), theo tên. */
+export function lossWorkers(report: WeeklyLossReport) {
+  const names = new Map<string, string>()
+  for (const row of report.workers) names.set(row.workerKey, row.workerName)
+  return [...names.entries()]
+    .map(([key, name]) => ({ key, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
 }
 
 const num = (value: string | null) => (value == null ? null : Number(value))
@@ -106,20 +164,22 @@ function sumsCells(
 }
 
 /** Các sheet xuất Excel: báo cáo theo tuần (thợ + từng khâu), so sánh tuần, chi tiết phiếu, mạt vụn. */
-export function buildLossSheets(report: WeeklyLossReport): XlsxSheet[] {
+export function buildLossSheets(report: WeeklyLossReport, stage: LossStage | '' = ''): XlsxSheet[] {
   const header = (titles: string[]): XlsxCell[] => titles.map((title) => ({ value: title, style: 'bold' }))
   const weekly: XlsxCell[][] = [header(headers(report))]
   for (const row of report.workers) {
     const week = weekLabel(row.week)
     weekly.push([
       { value: week, style: 'bold' },
-      { value: row.workerName, style: 'bold' },
+      { value: stage ? `${row.workerName} · ${LOSS_STAGE_LABEL[stage]}` : row.workerName, style: 'bold' },
       ...sumsCells(row, row.scrapGram, true, row),
     ])
-    for (const stage of row.stages) {
+    // Đã lọc một khâu thì dòng thợ chính là số của khâu đó — không lặp dòng khâu.
+    if (stage) continue
+    for (const sums of row.stages) {
       // Không có cột Khâu: dòng khâu ghi tên khâu cạnh tên thợ. Mạt nộp theo thợ nên dòng khâu
       // chỉ có gram được hao.
-      weekly.push([week, `${row.workerName} · ${LOSS_STAGE_LABEL[stage.stage]}`, ...sumsCells(stage, null, false, null)])
+      weekly.push([week, `${row.workerName} · ${LOSS_STAGE_LABEL[sums.stage]}`, ...sumsCells(sums, null, false, null)])
     }
   }
 
