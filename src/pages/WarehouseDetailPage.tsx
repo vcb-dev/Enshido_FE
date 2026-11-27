@@ -80,6 +80,7 @@ import { WarehouseStockView } from '../warehouses/StockView'
 import { StockInboundPanel } from '../warehouses/StockInboundPanel'
 import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
+import { ToolAssetsPanel } from '../warehouses/tools/ToolAssetsPanel'
 import { ToolOutboundPanel } from '../warehouses/tools/ToolOutboundPanel'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
@@ -158,7 +159,9 @@ export function WarehouseDetailPage() {
   const title = activeSection ? `${activeSection.name} — ${warehouse.shortName}` : warehouse.name
   const subtitle = warehouse.description
   // Kỳ xem áp cho Tồn / Nhập / Xuất của các kho NVL / BTP — Xuất nháp là phiếu đang mở, không theo kỳ.
-  const showPeriod = warehouse.code !== THANH_PHAM_WAREHOUSE && activeSection?.code !== 'drafts'
+  // Sổ tài sản (Tồn kho dụng cụ) là hiện trạng, không theo kỳ.
+  const toolAssets = warehouse.code === TOOL_WAREHOUSE && (!activeSection || activeSection.code === 'stock')
+  const showPeriod = warehouse.code !== THANH_PHAM_WAREHOUSE && activeSection?.code !== 'drafts' && !toolAssets
 
   return (
     <Stack
@@ -225,6 +228,8 @@ export function WarehouseDetailPage() {
         <StockOutboundPanel warehouseCode={stockKey} />
       ) : activeSection?.code === 'drafts' ? (
         <StockDraftPanel warehouseCode={stockKey} />
+      ) : warehouse.code === TOOL_WAREHOUSE ? (
+        <ToolAssetsPanel />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}

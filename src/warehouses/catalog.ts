@@ -73,7 +73,7 @@ export const WAREHOUSES: WarehouseDef[] = [
     code: 'dung-cu',
     name: 'Kho dụng cụ',
     shortName: 'Kho dụng cụ',
-    description: 'Nhập, xuất, tồn dụng cụ và dụng cụ từng thợ đang giữ.',
+    description: 'Sổ tài sản xưởng: thêm tài sản, xuất cho người giữ, theo dõi trạng thái và xác nhận kiểm kê.',
     sections: true,
   },
 ]
@@ -112,6 +112,8 @@ export type StockProfile = {
   unitNames?: string[]
   /// Bỏ NCC + Mã hàng NCC ở form và bảng Nhập (kho dụng cụ).
   hideSupplier?: boolean
+  /// Form Nhập chọn theo mã (hiện mã + tên) thay vì theo tên — kho có nhiều món trùng tên khác mã.
+  pickByCode?: boolean
   typeLabel: string
   /// Whitelist mã nhóm NVL. Bỏ trống = tất cả trừ nhóm của kho tiêu hao.
   typeCodes?: string[]
@@ -234,6 +236,7 @@ const STOCK_PROFILES: Record<string, StockProfile> = {
     hideCategory: true,
     unitNames: ['cái', 'bộ'],
     hideSupplier: true,
+    pickByCode: true,
     typeLabel: 'Chất loại',
     noun: 'dụng cụ',
     nameLabel: 'Tên dụng cụ',
