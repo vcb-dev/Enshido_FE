@@ -874,14 +874,20 @@ function InboundDialog({
               <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                   <FormRow>
-                    {profile.showBtpCategory ? (
+                    {profile.showBtpCategory || profile.pickByCode ? (
                       <>
                         <Controller
                           name={`lines.${index}.materialId`}
                           control={form.control}
-                          rules={{ required: 'Chọn mã sản phẩm từ Tồn' }}
+                          rules={{ required: `Chọn ${profile.skuLabel.toLowerCase()} từ Tồn` }}
                           render={({ field, fieldState }) => (
                             <ProductCodeField
+                              label={profile.skuLabel}
+                              noOptionsText={
+                                profile.pickByCode
+                                  ? `Chưa có ${profile.noun} khớp. ${profile.noun[0].toUpperCase()}${profile.noun.slice(1)} mới thì bấm Thêm tài sản ở tab Tồn.`
+                                  : undefined
+                              }
                               materials={materials}
                               materialId={field.value}
                               fallbackSku={line?.sku}
@@ -941,8 +947,15 @@ function InboundDialog({
                       label="Đơn vị tính"
                       options={unitOptions}
                       required
-                      readOnly={readOnly}
-                      displayValue={index === 0 ? row?.unit : undefined}
+                      // Kho dụng cụ nhập thêm vào mã đã có: đơn vị theo đúng tài sản, không chọn lại.
+                      readOnly={readOnly || Boolean(profile.pickByCode && line?.materialId)}
+                      displayValue={
+                        profile.pickByCode && line?.materialId
+                          ? materials.find((item) => item.id === line.materialId)?.unit
+                          : index === 0
+                            ? row?.unit
+                            : undefined
+                      }
                       placeholder="Tìm đơn vị…"
                     />
                     <FormQtyField<InboundFormValues>
@@ -1057,6 +1070,8 @@ function InboundDialog({
 }
 
 function ProductCodeField({
+  label = 'Mã sản phẩm',
+  noOptionsText,
   materials,
   materialId,
   fallbackSku,
@@ -1066,6 +1081,8 @@ function ProductCodeField({
   onBlur,
   onSelect,
 }: {
+  label?: string
+  noOptionsText?: string
   materials: StockMaterialOption[]
   materialId: string | null
   fallbackSku?: string
@@ -1077,7 +1094,7 @@ function ProductCodeField({
 }) {
   const current = materials.find((item) => item.id === materialId)
   if (readOnly) {
-    return <TextInput label="Mã sản phẩm" value={current?.sku || fallbackSku || '—'} readOnly />
+    return <TextInput label={label} value={current?.sku || fallbackSku || '—'} readOnly />
   }
   const selected =
     current ??
@@ -1112,7 +1129,7 @@ function ProductCodeField({
         return matched.slice(0, 50)
       }}
       onChange={(_, next) => onSelect(next)}
-      noOptionsText={loading ? 'Đang tải BTP…' : 'Chưa có mã sản phẩm. Nhập BTP ở Tồn.'}
+      noOptionsText={loading ? 'Đang tải…' : (noOptionsText ?? 'Chưa có mã sản phẩm. Nhập BTP ở Tồn.')}
       renderOption={(props, option) => {
         const { key, ...rest } = props
         return (
@@ -1129,7 +1146,8 @@ function ProductCodeField({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Mã sản phẩm"
+          label={label}
+          placeholder="Gõ mã hoặc tên…"
           required
           error={Boolean(errorText)}
           helperText={errorText}

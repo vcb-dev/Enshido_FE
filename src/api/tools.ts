@@ -20,7 +20,7 @@ export const TOOL_MOVE_LABEL: Record<ToolMoveKind, string> = {
 
 /** Mô tả ngắn từng loại trên hộp thoại ghi phiếu. */
 export const TOOL_MOVE_HINT: Record<ToolMoveKind, string> = {
-  ISSUE: 'Xuất khỏi kho dụng cụ (giá FIFO), giao cho một nhân viên giữ.',
+  ISSUE: 'Xuất khỏi kho dụng cụ, giao cho một nhân viên giữ.',
   RETURN: 'Thợ trả dụng cụ còn dùng được — nhập lại kho theo giá bình quân thợ đang giữ.',
   TRANSFER: 'Chuyển thẳng từ người này sang người khác, không qua kho.',
   WORN: 'Dùng tới mòn hết (mũi khoan, lưỡi cưa…) — hao mòn bình thường, không tính lỗi thợ.',
