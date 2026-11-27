@@ -4,7 +4,7 @@ import { Link as RouterLink } from 'react-router-dom'
 import type { IntakeOrder } from '../api/intakeOrders'
 import type { ReworkChainItem } from '../api/productionOrders'
 import { IntakeOrderDetailDialog } from '../intake/IntakeOrderDetailDialog'
-import { INTAKE_STATUS_META } from '../intake/catalog'
+import { intakeStatusTone } from '../intake/intakeStatusTone'
 import { STATUS_META } from './catalog'
 
 /**
@@ -29,7 +29,7 @@ export function ReworkChildren({ reworks, ticketCode, orderCode, title }: {
     }>
       <b>{item.orderCode ?? item.code}</b>
       {item.reworkOfCode && item.reworkOfCode !== orderCode ? ` · bù cho ${item.reworkOfCode}` : ''}
-      {' '}· Đơn {item.intake?.code ?? item.code} · {item.qty} sp · {item.intake?.productionOrderCode && item.productionStatus ? STATUS_META[item.productionStatus].label : INTAKE_STATUS_META[item.status].label}
+      {' '}· Đơn {item.intake?.code ?? item.code} · {item.qty} sp · {item.intake?.productionOrderCode && item.productionStatus ? STATUS_META[item.productionStatus].label : intakeStatusTone(item.status).label}
     </Alert>)}
     <IntakeOrderDetailDialog order={target} onClose={() => setTarget(null)} />
   </Stack>

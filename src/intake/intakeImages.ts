@@ -1,6 +1,6 @@
 import type { IntakeOrder, IntakeOrderStatus } from '../api/intakeOrders'
 import type { OrderImage } from '../api/productionOrders'
-import { INTAKE_STATUS_META } from './catalog'
+import { intakeStatusTone } from './intakeStatusTone'
 
 /** Ảnh lúc tạo đơn — cột Ảnh chi tiết. */
 export function intakeDetailImages(images: OrderImage[]) {
@@ -19,7 +19,7 @@ export function intakeCastingTreeImages(images: OrderImage[]) {
 
 
 function stageLabel(status: IntakeOrderStatus) {
-  return INTAKE_STATUS_META[status].label
+  return intakeStatusTone(status).label
 }
 
 /**
