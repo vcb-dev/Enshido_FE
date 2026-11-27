@@ -76,6 +76,7 @@ import { canConfirmIntakeWarehouse } from '../intake/intakeWarehouseAccess'
 import {
   applyCastingSlipCreated,
   applyCastingSlipRejected,
+  castFailToast,
   applyCastingSlipUpdate,
 } from '../casting/castingSlipsCache'
 import { scheduleMyTicketsRefresh } from '../orders/myTicketsRefresh'
@@ -288,15 +289,9 @@ export function CastingOrdersPage() {
   const rejectCast = useMutation({
     mutationFn: ({ slip, payload }: { slip: CastingSlip; payload: RejectCastingSlipPayload }) =>
       rejectCastingSlipApi(slip.id, payload),
-    onSuccess: (redo, { slip: failedSlip }) => {
-      toast.success(
-        `Đã báo lỗi đúc, cây hỏng nhập kho NVL — phiếu làm lại ${redo.code} chờ cấp vật tư${failedSlip.isServiceCast ? ' (đúc dịch vụ)' : ''}.`,
-      )
-      applyCastingSlipRejected(
-        queryClient,
-        { ...failedSlip, status: 'CAST_FAILED' },
-        redo,
-      )
+    onSuccess: (result, { slip: failedSlip }) => {
+      toast.success(castFailToast(result.backToWax))
+      applyCastingSlipRejected(queryClient, { ...failedSlip, status: 'CAST_FAILED' })
       invalidateBtpStock(queryClient)
       invalidateNvlStock(queryClient)
       scheduleMyTicketsRefresh(queryClient)

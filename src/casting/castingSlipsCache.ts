@@ -1,5 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type { CastingSlip, CastingSlipList, CastingSlipStatus } from '../api/castingSlips'
+import type {
+  CastFailBackToWax,
+  CastingSlip,
+  CastingSlipList,
+  CastingSlipStatus,
+} from '../api/castingSlips'
 import type { IntakeOrderStatus } from '../api/intakeOrders'
 import type { MyCastingSlipItem, MyTickets } from '../api/productionOrders'
 import { findIntakeOrderInCaches, moveIntakeOrderInCaches } from '../intake/intakeOrderCache'
@@ -93,36 +98,41 @@ export function applyCastingSlipUpdate(queryClient: QueryClient, updated: Castin
   notifyWorkflowChanged('casting')
 }
 
-/** Thủ kho báo lỗi đúc — phiếu lỗi + phiếu làm lại dưới phiếu gốc. */
-export function applyCastingSlipRejected(
-  queryClient: QueryClient,
-  failed: CastingSlip,
-  redo: CastingSlip,
-) {
+/**
+ * Thủ kho báo lỗi đúc — phiếu chuyển Lỗi đúc, không còn phiếu làm lại (2026-11-27): đơn trên
+ * phiếu đi lại từ bước sáp (lô SX SLL → lệnh bù mới) nên tải lại danh sách đơn tạo / lệnh SX.
+ */
+export function applyCastingSlipRejected(queryClient: QueryClient, failed: CastingSlip) {
   const rootId = failed.redoOfSlipId ?? failed.id
   patchCastingSlipLists(queryClient, (items) =>
     items.map((root) => {
       if (root.id !== rootId) return root
-      let next = { ...root }
-      if (failed.id === root.id) {
-        next = { ...next, status: 'CAST_FAILED' as const }
-      } else {
-        next = {
-          ...next,
-          redos: (next.redos ?? []).map((r) =>
-            r.id === failed.id ? { ...r, status: 'CAST_FAILED' as const } : r,
-          ),
-        }
+      if (failed.id === root.id) return { ...root, status: 'CAST_FAILED' as const }
+      return {
+        ...root,
+        redos: (root.redos ?? []).map((r) =>
+          r.id === failed.id ? { ...r, status: 'CAST_FAILED' as const } : r,
+        ),
       }
-      const redos = [...(next.redos ?? []).filter((r) => r.id !== redo.id), redo]
-      return { ...next, redos }
     }),
   )
-  syncIntakeFromSlip(queryClient, redo)
+  void queryClient.invalidateQueries({ queryKey: ['casting-slips'] })
+  void queryClient.invalidateQueries({ queryKey: ['intake-orders'] })
+  void queryClient.invalidateQueries({ queryKey: ['production-orders'] })
   patchMyTicketsFromCastingSlip(queryClient, { ...failed, status: 'CAST_FAILED' })
-  patchMyTicketsFromCastingSlip(queryClient, redo)
   scheduleMyTicketsRefresh(queryClient)
   notifyWorkflowChanged('casting')
+}
+
+/** Câu báo sau khi báo lỗi đúc: đơn nào đi lại từ bước sáp, lô nào tách sang lệnh bù. */
+export function castFailToast(backToWax: CastFailBackToWax[] | undefined) {
+  const parts = (backToWax ?? []).map((item) => {
+    const label = item.intakeCode ?? item.orderCode
+    return item.reworkCode
+      ? `${label} ${item.qty} sp → lệnh bù ${item.reworkCode}`
+      : `${label} về Chờ SX · Đã có 3D`
+  })
+  return `Đã báo lỗi đúc, cây hỏng nhập kho NVL — đi lại từ bước sáp${parts.length ? `: ${parts.join('; ')}` : ''}.`
 }
 
 export function syncIntakeFromSlip(queryClient: QueryClient, slip: CastingSlip) {

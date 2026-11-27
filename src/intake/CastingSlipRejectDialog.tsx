@@ -45,7 +45,7 @@ function issuedTotal(slip: CastingSlip) {
 
 /**
  * Báo lỗi đúc cả phiếu: thủ kho cân cây hỏng nhập về kho NVL (S925 A00001 / bạc thu hồi A00189,
- * giống phần cây còn lại lúc cắt cây). Phiếu làm lại về Chờ cấp vật tư — cấp lại bạc từ kho NVL.
+ * giống phần cây còn lại lúc cắt cây). Đơn đi lại từ bước sáp (lô SX SLL → lệnh bù).
  */
 export function CastingSlipRejectDialog({
   slip,
@@ -131,9 +131,9 @@ export function CastingSlipRejectDialog({
                 .
               </Typography>
               <Alert severity="info">
-                Cân cây đúc lỗi nhập về kho NVL. Hệ thống tạo phiếu đúc lại cùng đơn ở{' '}
-                <strong>Chờ cấp vật tư</strong>: thủ kho cấp lại bạc nguyên liệu từ kho NVL rồi
-                thợ mới đúc.
+                Cân cây đúc lỗi nhập về kho NVL. Sáp đã cháy theo cây nên các đơn{' '}
+                <strong>đi lại từ bước sáp</strong>: lô SX SLL tách sang lệnh bù, đơn khác về Chờ
+                SX · Đã có 3D để in / bơm sáp lại.
               </Alert>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 Cây đúc lỗi nhập kho NVL
