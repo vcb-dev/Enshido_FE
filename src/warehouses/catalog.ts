@@ -1,9 +1,12 @@
-export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 'thanh-pham' | 'dung-cu'
+export type WarehouseCode = 'nvl-chinh' | 'btp-cho-vao-da' | 'nvl-tieu-hao' | 'thanh-pham' | 'dung-cu' | 'sua-chua'
 
 export const THANH_PHAM_WAREHOUSE = 'thanh-pham' as const
 
 /** Kho dụng cụ — tab Xuất là xuất cho thợ (theo dõi từng thợ đang giữ + lịch sử phiếu của thợ). */
 export const TOOL_WAREHOUSE = 'dung-cu' as const
+
+/** Kho sửa chữa — chỉ một bảng sổ phiếu sửa chữa, không có Tồn / Nhập / Xuất. */
+export const REPAIR_WAREHOUSE = 'sua-chua' as const
 
 export type WarehouseSectionCode = 'stock' | 'inbound' | 'outbound' | 'drafts'
 
@@ -75,6 +78,12 @@ export const WAREHOUSES: WarehouseDef[] = [
     shortName: 'Kho dụng cụ',
     description: 'Sổ tài sản xưởng: thêm tài sản, xuất cho người giữ, theo dõi trạng thái và xác nhận kiểm kê.',
     sections: true,
+  },
+  {
+    code: 'sua-chua',
+    name: 'Kho sửa chữa',
+    shortName: 'Kho sửa chữa',
+    description: 'Sổ phiếu sửa chữa: hàng trước khi nhập kho / trong kho, hàng VPC / VCB.',
   },
 ]
 

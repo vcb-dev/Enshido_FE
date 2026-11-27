@@ -46,6 +46,7 @@ import {
   STAFF_JOB_OPTIONS,
   workerStagesForSave,
   type StaffJobPreset,
+  isCustomerPreset,
 } from '../auth/staffJobPresets'
 import {
   departmentOptions,
@@ -346,7 +347,7 @@ function ExtraJobRoles({ primary }: { primary: StaffJobPreset }) {
       )
     }
   }, [primary, getValues, setValue])
-  if (primary === 'vcb') return null
+  if (isCustomerPreset(primary)) return null
   return (
     <Controller<{ extraRoles: (StaffJobPreset | '')[] }, 'extraRoles'>
       name="extraRoles"
@@ -374,7 +375,10 @@ function ExtraJobRoles({ primary }: { primary: StaffJobPreset }) {
                   onChange={(event) => setRow(index, event.target.value as StaffJobPreset)}
                 >
                   {staffJobSelectOptions()
-                    .filter((option) => option.value !== 'vcb' && (option.value === row || !taken.includes(option.value)))
+                    .filter(
+                      (option) =>
+                        !isCustomerPreset(option.value) && (option.value === row || !taken.includes(option.value)),
+                    )
                     .map((option) => (
                       <MenuItem key={option.value} value={option.value}>
                         {option.label}

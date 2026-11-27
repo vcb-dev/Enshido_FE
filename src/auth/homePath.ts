@@ -23,8 +23,10 @@ export function canAccessPath(
   path: string,
 ): boolean {
   const p = (path.split('?')[0] || '/').replace(/\/$/, '') || '/'
-  // Khách VCB ngoài xưởng: chỉ màn Tạo đơn, kể cả gõ thẳng link phiếu / lệnh SX.
-  if (isCustomerOnly(user)) return p === '/intake-orders'
+  // Khách VCB / VPC ngoài xưởng: chỉ màn Tạo đơn và Hàng sửa chữa, kể cả gõ thẳng link phiếu / lệnh SX.
+  if (isCustomerOnly(user)) {
+    return p === '/intake-orders' || (p === '/warehouses/sua-chua' && canSeeWarehouse(user, 'sua-chua'))
+  }
   if (p === '/' || p === '') {
     return can(user, Permission.SCREEN_DASHBOARD) || firstAllowedPath(user) === '/'
   }

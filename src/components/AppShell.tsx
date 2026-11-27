@@ -43,6 +43,7 @@ import ExtensionIcon from '@mui/icons-material/ExtensionOutlined'
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasketOutlined'
 import StorefrontIcon from '@mui/icons-material/StorefrontOutlined'
 import BuildIcon from '@mui/icons-material/BuildOutlined'
+import HomeRepairServiceIcon from '@mui/icons-material/HomeRepairServiceOutlined'
 import ViewListIcon from '@mui/icons-material/ViewListOutlined'
 import TuneIcon from '@mui/icons-material/TuneOutlined'
 import PinDropIcon from '@mui/icons-material/PinDropOutlined'
@@ -60,7 +61,7 @@ import { NotificationBell } from '../notifications/NotificationBell'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
-import { can, Permission } from '../auth/permissions'
+import { can, isCustomerOnly, Permission } from '../auth/permissions'
 import { MyToolsDialog } from '../worker/MyToolsDialog'
 import { canSeeWarehouse, hasAnyWarehouse } from '../auth/screens'
 import { canAccessProductionOrdersPage, canUseMyTickets, canUseQcTickets } from '../intake/intake3dAccess'
@@ -71,7 +72,7 @@ import {
   canSeeLossReport,
   canSeeWaxTreeMenu,
 } from '../auth/screenAccess'
-import { WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
+import { REPAIR_WAREHOUSE, WAREHOUSES, sectionsOf, warehousePath, type WarehouseDef } from '../warehouses/catalog'
 
 const DRAWER_WIDTH = 260
 const SIDEBAR_OPEN_KEY = 'enshido.sidebarOpen'
@@ -117,7 +118,10 @@ export function AppShell() {
   const showCastingCuts = canSeeCastingCutsMenu(user)
   const showWaxTree = canSeeWaxTreeMenu(user)
   const warehouses = WAREHOUSES.filter((warehouse) => canSeeWarehouse(user, warehouse.code))
-  const showKho = hasAnyWarehouse(user)
+  // Khách VCB / VPC không vào danh sách kho — chỉ có mục Hàng sửa chữa riêng.
+  const customer = isCustomerOnly(user)
+  const showKho = !customer && hasAnyWarehouse(user)
+  const showCustomerRepairs = customer && canSeeWarehouse(user, REPAIR_WAREHOUSE)
 
   // Đóng drawer sau mỗi lần điều hướng — kể cả từ breadcrumb hay tab, không chỉ
   // từ menu bên trong drawer.
@@ -269,6 +273,7 @@ export function AppShell() {
             showCastingCuts={showCastingCuts}
             showWaxTree={showWaxTree}
             showKho={showKho}
+            showCustomerRepairs={showCustomerRepairs}
             warehouses={warehouses}
           />
         </Drawer>
@@ -298,6 +303,7 @@ export function AppShell() {
             showCastingCuts={showCastingCuts}
             showWaxTree={showWaxTree}
             showKho={showKho}
+            showCustomerRepairs={showCustomerRepairs}
             warehouses={warehouses}
           />
         </Drawer>
@@ -397,6 +403,7 @@ function DrawerNav({
   showCastingCuts,
   showWaxTree,
   showKho,
+  showCustomerRepairs,
   warehouses,
 }: {
   canManageUsers: boolean
@@ -411,6 +418,7 @@ function DrawerNav({
   showCastingCuts: boolean
   showWaxTree: boolean
   showKho: boolean
+  showCustomerRepairs: boolean
   warehouses: WarehouseDef[]
 }) {
   return (
@@ -437,6 +445,13 @@ function DrawerNav({
         ) : null}
         {showIntakeOrders ? (
           <NavItem to="/intake-orders" icon={<PostAddIcon fontSize="small" />} label="Tạo đơn" />
+        ) : null}
+        {showCustomerRepairs ? (
+          <NavItem
+            to={`/warehouses/${REPAIR_WAREHOUSE}`}
+            icon={<HomeRepairServiceIcon fontSize="small" />}
+            label="Hàng sửa chữa"
+          />
         ) : null}
         {showProductionOrders ? (
           <NavItem to="/orders" icon={<PrecisionManufacturingIcon fontSize="small" />} label="Lệnh sản xuất" />
@@ -502,6 +517,8 @@ function warehouseIcon(code: string) {
       return <StorefrontIcon fontSize="small" />
     case 'dung-cu':
       return <BuildIcon fontSize="small" />
+    case 'sua-chua':
+      return <HomeRepairServiceIcon fontSize="small" />
     default:
       return <WarehouseIcon fontSize="small" />
   }

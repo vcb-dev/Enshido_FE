@@ -16,6 +16,7 @@ export type StaffJobPreset =
   | 'worker_polish'
   | 'worker_plate'
   | 'vcb'
+  | 'vpc'
   | 'warehouse'
   | 'kcs'
   | 'accountant'
@@ -34,6 +35,11 @@ export const STAGE_WORKER_ROLES = [
 
 export type StageWorkerPreset = (typeof STAGE_WORKER_ROLES)[number]['preset']
 
+/** Vai trò khách ngoài xưởng (VCB / VPC) — bị khoá riêng, luôn đứng một mình. */
+export function isCustomerPreset(preset: StaffJobPreset | ''): boolean {
+  return preset === 'vcb' || preset === 'vpc'
+}
+
 export function isStageWorkerPreset(preset: StaffJobPreset | ''): preset is StageWorkerPreset {
   return STAGE_WORKER_ROLES.some((role) => role.preset === preset)
 }
@@ -41,7 +47,8 @@ export function isStageWorkerPreset(preset: StaffJobPreset | ''): preset is Stag
 export const STAFF_JOB_OPTIONS: { value: StaffJobPreset; label: string }[] = [
   { value: 'admin', label: 'Admin' },
   { value: 'staff', label: 'Nhân viên' },
-  { value: 'vcb', label: 'Khách hàng' },
+  { value: 'vcb', label: 'Khách VCB' },
+  { value: 'vpc', label: 'Khách VPC' },
   { value: 'worker_3d', label: 'Thợ 3D' },
   { value: 'worker_wax', label: 'Thợ sáp' },
   { value: 'worker_casting', label: 'Thợ đúc' },
@@ -69,6 +76,7 @@ const WAREHOUSE_SCREENS: PermissionCode[] = [
   Permission.SCREEN_WAREHOUSE_TIEU_HAO,
   Permission.SCREEN_WAREHOUSE_THANH_PHAM,
   Permission.SCREEN_WAREHOUSE_DUNG_CU,
+  Permission.SCREEN_WAREHOUSE_SUA_CHUA,
 ]
 
 export function staffJobPresetHint(preset: StaffJobPreset): string {
@@ -88,7 +96,9 @@ export function staffJobPresetHint(preset: StaffJobPreset): string {
     case 'worker_plate':
       return 'Màn Phiếu của tôi — nhận và xem phiếu khâu của mình.'
     case 'vcb':
-      return 'Khách ngoài xưởng: chỉ lên đơn, xem đơn, sửa đơn đang chờ duyệt.'
+      return 'Khách VCB: lên đơn, xem / sửa đơn đang chờ duyệt, gửi hàng sửa chữa (hàng VCB).'
+    case 'vpc':
+      return 'Khách VPC: lên đơn, xem / sửa đơn đang chờ duyệt, gửi hàng sửa chữa (hàng VPC).'
     case 'warehouse':
       return 'Tạo / duyệt đơn, các kho, xác nhận số liệu.'
     case 'kcs':
@@ -150,14 +160,16 @@ export function jobPresetsOf(
   primary: StaffJobPreset,
   extras: readonly (StaffJobPreset | '')[] = [],
 ): StaffJobPreset[] {
-  if (primary === 'vcb') return ['vcb']
-  const picked = extras.filter((preset): preset is StaffJobPreset => preset !== '' && preset !== 'vcb' && preset !== 'staff')
+  if (isCustomerPreset(primary)) return [primary]
+  const picked = extras.filter(
+    (preset): preset is StaffJobPreset => preset !== '' && !isCustomerPreset(preset) && preset !== 'staff',
+  )
   return Array.from(new Set<StaffJobPreset>([primary, ...picked]))
 }
 
 /** Vai trò chọn thêm được: mọi vai trò trừ VCB (khách bị khoá riêng), bỏ những vai trò đã có. */
 export function extraJobOptions(taken: readonly StaffJobPreset[]) {
-  return staffJobSelectOptions().filter((option) => option.value !== 'vcb' && !taken.includes(option.value))
+  return staffJobSelectOptions().filter((option) => !isCustomerPreset(option.value) && !taken.includes(option.value))
 }
 
 /**
@@ -168,14 +180,14 @@ export function extraJobOptions(taken: readonly StaffJobPreset[]) {
 export function roleCodeForPresets(input: JobPresetInput): RoleCode {
   const presets = asList(input)
   if (presets.includes('admin')) return 'ADMIN'
-  if (presets.includes('vcb')) return 'USER'
+  if (presets.some(isCustomerPreset)) return 'USER'
   return presets.length > 0 && presets.every(isWorkerKindPreset) ? 'WORKER' : 'USER'
 }
 
 /** Màn hình tích thêm: Admin xem mọi màn, khách VCB cố định màn Tạo đơn — không cho tích. */
 export function presetShowsScreenEditor(input: JobPresetInput): boolean {
   const presets = asList(input)
-  return !presets.includes('admin') && !presets.includes('vcb')
+  return !presets.includes('admin') && !presets.some(isCustomerPreset)
 }
 
 export function roleAndScreensForPreset(preset: StaffJobPreset): {
@@ -210,10 +222,21 @@ export function roleAndScreensForPreset(preset: StaffJobPreset): {
         ],
       }
     case 'vcb':
-      // Khách VCB ngoài xưởng: chỉ lên đơn, xem và sửa đơn — mã CUSTOMER khoá mọi việc khác.
+      // Khách VCB ngoài xưởng: lên đơn, xem và sửa đơn, gửi hàng sửa chữa — mã CUSTOMER khoá mọi việc khác.
       return {
         roleCode: 'USER',
-        allowedScreens: [Permission.SCREEN_INTAKE_ORDERS, Permission.INTAKE_CREATE, Permission.CUSTOMER],
+        allowedScreens: [
+          Permission.SCREEN_INTAKE_ORDERS,
+          Permission.INTAKE_CREATE,
+          Permission.SCREEN_WAREHOUSE_SUA_CHUA,
+          Permission.CUSTOMER,
+        ],
+      }
+    case 'vpc':
+      // Khách VPC: như khách VCB, thêm mã VPC để hàng gửi sửa ghi là hàng VPC.
+      return {
+        roleCode: 'USER',
+        allowedScreens: [...roleAndScreensForPreset('vcb').allowedScreens, Permission.CUSTOMER_VPC],
       }
     case 'warehouse':
       return {
@@ -259,7 +282,8 @@ function jobPermissionsOf(preset: StaffJobPreset): PermissionCode[] {
 export function allowedScreensForSave(input: JobPresetInput, pickedScreens: PermissionCode[]): PermissionCode[] {
   const presets = asList(input)
   // Khách VCB: đúng bộ quyền cố định, bỏ mọi màn còn tick từ vai trò cũ.
-  if (presets.includes('vcb')) return roleAndScreensForPreset('vcb').allowedScreens
+  const customer = presets.find(isCustomerPreset)
+  if (customer) return roleAndScreensForPreset(customer).allowedScreens
   // Admin xem mọi màn: chỉ lưu quyền việc của các vai trò kiêm để nhận diện vai trò.
   if (presets.includes('admin')) return Array.from(new Set(presets.flatMap(jobPermissionsOf)))
   const screenKeys = new Set(USER_EDIT_SCREEN_KEYS)
@@ -302,7 +326,7 @@ export function inferStaffJobPresets(
 ): StaffJobPreset[] {
   const screens = new Set(user.allowedScreens ?? [])
   const admin = user.roleCode === 'ADMIN'
-  if (!admin && screens.has(Permission.CUSTOMER)) return ['vcb']
+  if (!admin && screens.has(Permission.CUSTOMER)) return [screens.has(Permission.CUSTOMER_VPC) ? 'vpc' : 'vcb']
   const worker = user.roleCode === 'WORKER'
   const stages = user.workerStages ?? []
   const has = (preset: StaffJobPreset): boolean => {

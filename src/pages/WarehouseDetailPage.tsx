@@ -82,6 +82,9 @@ import { StockOutboundPanel } from '../warehouses/StockOutboundPanel'
 import { StockDraftPanel } from '../warehouses/StockDraftPanel'
 import { ToolAssetsPanel } from '../warehouses/tools/ToolAssetsPanel'
 import { ToolOutboundPanel } from '../warehouses/tools/ToolOutboundPanel'
+import { RepairItemsPanel } from '../warehouses/repairs/RepairItemsPanel'
+import { useAuth } from '../auth/AuthContext'
+import { isCustomerOnly } from '../auth/permissions'
 import { FinishedGoodsPage } from '../pages/FinishedGoodsPage'
 import {
   CATEGORY_GROUPS,
@@ -89,6 +92,7 @@ import {
   consumableCategoryIdOf,
   METAL_KINDS,
   THANH_PHAM_WAREHOUSE,
+  REPAIR_WAREHOUSE,
   TOOL_WAREHOUSE,
   sectionsOf,
   catalogChildren,
@@ -114,6 +118,7 @@ import { useWarehousePeriod } from '../warehouses/warehousePeriod'
 const LEGACY_BINS = new Set(['bac', 'da'])
 
 export function WarehouseDetailPage() {
+  const { user } = useAuth()
   const { code, bin, section } = useParams<{
     code: string
     bin?: string
@@ -155,13 +160,31 @@ export function WarehouseDetailPage() {
     return <Navigate to={warehousePath(warehouse, 'stock')} replace />
   }
 
+  // Khách VCB / VPC chỉ vào được kho sửa chữa — trang gọn, không breadcrumb về danh sách kho.
+  if (warehouse.code === REPAIR_WAREHOUSE && isCustomerOnly(user)) {
+    return (
+      <Stack
+        spacing={1.25}
+        sx={{ flex: { md: 1 }, minHeight: { md: 0 }, height: { md: '100%' }, overflow: { xs: 'visible', md: 'hidden' } }}
+      >
+        <PageHeader title="Hàng sửa chữa" subtitle="Gửi hàng cần sửa và theo dõi thủ kho nhận, sửa, trả." compactSubtitle />
+        <RepairItemsPanel />
+      </Stack>
+    )
+  }
+
   const stockKey = stockWarehouseCode(warehouse)
   const title = activeSection ? `${activeSection.name} — ${warehouse.shortName}` : warehouse.name
   const subtitle = warehouse.description
   // Kỳ xem áp cho Tồn / Nhập / Xuất của các kho NVL / BTP — Xuất nháp là phiếu đang mở, không theo kỳ.
   // Sổ tài sản (Tồn kho dụng cụ) là hiện trạng, không theo kỳ.
   const toolAssets = warehouse.code === TOOL_WAREHOUSE && (!activeSection || activeSection.code === 'stock')
-  const showPeriod = warehouse.code !== THANH_PHAM_WAREHOUSE && activeSection?.code !== 'drafts' && !toolAssets
+  // Kho sửa chữa là sổ phiếu, không có tồn theo kỳ.
+  const showPeriod =
+    warehouse.code !== THANH_PHAM_WAREHOUSE &&
+    warehouse.code !== REPAIR_WAREHOUSE &&
+    activeSection?.code !== 'drafts' &&
+    !toolAssets
 
   return (
     <Stack
@@ -230,6 +253,8 @@ export function WarehouseDetailPage() {
         <StockDraftPanel warehouseCode={stockKey} />
       ) : warehouse.code === TOOL_WAREHOUSE ? (
         <ToolAssetsPanel />
+      ) : warehouse.code === REPAIR_WAREHOUSE ? (
+        <RepairItemsPanel />
       ) : (
         <StockOnHandTable warehouseCode={stockKey} />
       )}

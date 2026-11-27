@@ -136,4 +136,11 @@ describe('khách VCB chỉ vào màn Tạo đơn', () => {
     expect(canAccessPath(vcb, '/intake-orders')).toBe(true)
     expect(canAccessPath({ ...admin, permissions: [Permission.CUSTOMER] }, '/orders')).toBe(true)
   })
+  it('có quyền kho sửa chữa thì vào được Hàng sửa chữa, các kho khác vẫn không', () => {
+    const withRepairs = { ...vcb, permissions: [...(vcb.permissions ?? []), Permission.SCREEN_WAREHOUSE_SUA_CHUA] }
+    expect(canAccessPath(vcb, '/warehouses/sua-chua')).toBe(false)
+    expect(canAccessPath(withRepairs, '/warehouses/sua-chua')).toBe(true)
+    expect(canAccessPath(withRepairs, '/warehouses')).toBe(false)
+    expect(canAccessPath(withRepairs, '/warehouses/nvl-chinh/stock')).toBe(false)
+  })
 })
