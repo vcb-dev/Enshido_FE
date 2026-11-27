@@ -5,7 +5,7 @@
       "destination": "https://enshido-be-production-bf2b.up.railway.app/api/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ],

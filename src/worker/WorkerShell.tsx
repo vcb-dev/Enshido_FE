@@ -21,12 +21,13 @@ import BuildIcon from '@mui/icons-material/BuildOutlined'
 import CloudOffIcon from '@mui/icons-material/CloudOff'
 import LogoutIcon from '@mui/icons-material/Logout'
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo.png'
 import { useAuth } from '../auth/AuthContext'
 import { InstallAppBanner } from '../components/InstallAppBanner'
 import { InstallAppButton } from '../components/InstallAppButton'
 import { QrScannerDialog } from '../components/QrScannerDialog'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { RouteSkeleton } from '../components/RouteSkeleton'
 import { ScreenLoadingBar } from '../components/ScreenLoadingBar'
 import { useOpenScannedPath } from '../components/ScanQrButton'
@@ -50,6 +51,7 @@ function initials(name?: string, username?: string) {
 export function WorkerShell() {
   const { user, logout, offline } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const openScanned = useOpenScannedPath()
   const waiting = useWaitingCount()
   const [scanning, setScanning] = useState(false)
@@ -163,9 +165,11 @@ export function WorkerShell() {
               {waiting > 0 ? `, ${waiting} thao tác sẽ tự gửi khi có mạng` : ''}.
             </Alert>
           ) : null}
-          <Suspense fallback={<RouteSkeleton />}>
-            <Outlet />
-          </Suspense>
+          <ErrorBoundary resetKey={pathname}>
+            <Suspense fallback={<RouteSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </Box>
       </Box>
 
