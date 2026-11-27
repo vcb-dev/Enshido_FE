@@ -134,7 +134,7 @@ export function RepairItemsPanel() {
         render: (row) => fullDate(row.receivedAt),
       },
       text('productCode', 'Mã sản phẩm', 150),
-      text('ticketCode', 'Mã số phiếu', 110),
+      text('ticketCode', 'Số phiếu sửa', 110),
       text('productName', 'Tên sản phẩm', 200),
       { key: 'qty', header: 'Số lượng', width: 80, numeric: true, cellSx: numCell, render: (row) => row.qty },
       text('content', 'Chi tiết sửa', 220),

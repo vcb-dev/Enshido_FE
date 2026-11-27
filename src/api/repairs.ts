@@ -40,11 +40,12 @@ export type RepairCustomerPart = {
   qty: number
   content: string
   senderName: string | null
+  /** Số phiếu sửa — một phiếu gom nhiều mã, các dòng cùng phiếu ghi cùng số. */
+  ticketCode: string | null
 }
 
 /** Phần thủ kho nhập. */
 export type RepairKeeperPart = {
-  ticketCode: string | null
   /** null = chưa trả. */
   returnedQty: number | null
   returnedAt: string | null
@@ -78,6 +79,11 @@ export function getRepairItemsApi() {
 
 export function createRepairItemApi(payload: RepairItemPayload) {
   return apiFetch<RepairItem>(BASE, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+/** Một phiếu sửa nhiều mã sản phẩm — mỗi mã một dòng, BE lưu cùng lúc. */
+export function createRepairItemsApi(items: RepairItemPayload[]) {
+  return apiFetch<RepairItem[]>(`${BASE}/batch`, { method: 'POST', body: JSON.stringify({ items }) })
 }
 
 export function updateRepairItemApi(id: string, payload: RepairItemPayload) {
