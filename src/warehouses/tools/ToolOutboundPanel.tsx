@@ -99,7 +99,7 @@ export function ToolOutboundPanel() {
     () => [
       {
         key: 'workerName',
-        header: 'Thợ / dụng cụ',
+        header: 'Người giữ / dụng cụ',
         width: 260,
         card: 'title',
         render: (row) => (
@@ -205,9 +205,9 @@ export function ToolOutboundPanel() {
   return (
     <Stack spacing={1} sx={{ flex: { md: 1 }, minHeight: { md: 0 } }}>
       <PanelSummaryCard
-        title="Dụng cụ xuất cho thợ"
+        title="Dụng cụ xuất cho người giữ"
         stats={[
-          { label: 'Thợ đang giữ (giá trị)', value: formatMoney(String(sumAmount(all, (row) => row.holding))), tone: 'stock' },
+          { label: 'Đang giữ (giá trị)', value: formatMoney(String(sumAmount(all, (row) => row.holding))), tone: 'stock' },
           { label: 'Xuất trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.issued))), tone: 'out' },
           { label: 'Hỏng trong kỳ', value: formatMoney(String(sumAmount(all, (row) => row.damaged))), tone: 'neutral' },
         ]}
@@ -225,20 +225,20 @@ export function ToolOutboundPanel() {
         errorText={summary.error instanceof Error ? summary.error.message : undefined}
         emptyText={
           search.trim()
-            ? 'Không có thợ hoặc dụng cụ khớp tìm kiếm.'
-            : 'Chưa thợ nào giữ dụng cụ và không có phiếu dụng cụ trong kỳ.'
+            ? 'Không có người giữ hoặc dụng cụ khớp tìm kiếm.'
+            : 'Chưa ai giữ dụng cụ và không có phiếu dụng cụ trong kỳ.'
         }
         variant="grid"
         minWidth={960}
         sx={{ flex: { md: 1 } }}
         toolbar={
           <>
-            <SearchInput value={search} onChange={setSearch} placeholder="Tìm thợ hoặc dụng cụ…" />
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm người giữ hoặc dụng cụ…" />
             {canWrite ? (
               <>
                 <Box sx={{ flex: 1, minWidth: 8 }} />
                 <Button variant="contained" onClick={() => openDraft({ kind: 'ISSUE' })}>
-                  Xuất dụng cụ cho thợ
+                  Xuất dụng cụ
                 </Button>
               </>
             ) : null}

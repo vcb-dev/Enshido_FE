@@ -35,6 +35,7 @@ import { useCrudDialog } from '../hooks/useCrudDialog'
 import { useDeleteRowDialog } from '../hooks/useDeleteRowDialog'
 import { paginate, useTableParams } from '../hooks/useTableParams'
 import { ConfirmDeleteDialog } from '../warehouses/ConfirmDeleteDialog'
+import { ToolGroupsTab } from '../warehouses/tools/ToolGroupsTab'
 
 const BRAND = '#6b4513'
 const BORDER = '#ded3c3'
@@ -103,19 +104,19 @@ const BTP_COPY: Copy = {
 }
 
 export function CatalogsPage() {
-  const [tab, setTab] = useState<CatalogKind>('CATALOG')
+  const [tab, setTab] = useState<CatalogKind | 'TOOL_GROUPS'>('CATALOG')
   const copy = tab === 'OTHER' ? BTP_COPY : NVL_COPY
   return (
     <Stack spacing={2} sx={{ minHeight: 0, flex: 1 }}>
       <Stack spacing={0.5}>
         <Typography variant="h5">Danh mục</Typography>
         <Typography variant="body2" color="text.secondary">
-          Tách riêng danh mục NVL và danh mục BTP vì hai kho dùng bộ giá trị khác nhau.
+          Tách riêng danh mục NVL, danh mục BTP và nhóm tài sản (kho dụng cụ) vì mỗi kho dùng bộ giá trị khác nhau.
         </Typography>
       </Stack>
       <Tabs
         value={tab}
-        onChange={(_event, next: CatalogKind) => setTab(next)}
+        onChange={(_event, next: CatalogKind | 'TOOL_GROUPS') => setTab(next)}
         sx={{
           minHeight: 36,
           borderBottom: `1px solid ${BORDER}`,
@@ -124,8 +125,9 @@ export function CatalogsPage() {
       >
         <Tab value="CATALOG" label="Danh mục NVL" />
         <Tab value="OTHER" label="Danh mục BTP" />
+        <Tab value="TOOL_GROUPS" label="Nhóm tài sản" />
       </Tabs>
-      <CatalogTreePage key={tab} copy={copy} />
+      {tab === 'TOOL_GROUPS' ? <ToolGroupsTab /> : <CatalogTreePage key={tab} copy={copy} />}
     </Stack>
   )
 }

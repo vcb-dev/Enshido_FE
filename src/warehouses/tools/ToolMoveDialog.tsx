@@ -212,32 +212,32 @@ export function ToolMoveDialog({
           />
           {sides.from ? (
             <AutocompleteInput
-              label={kind === 'TRANSFER' ? 'Thợ giao' : 'Thợ'}
-              placeholder="Chọn thợ đang giữ dụng cụ"
+              label={kind === 'TRANSFER' ? 'Người giao' : 'Người giữ'}
+              placeholder="Chọn người đang giữ dụng cụ"
               options={workers.data ?? []}
               value={fromWorker}
               onChange={setFromWorker}
               getOptionLabel={workerLabel}
               isOptionEqualToValue={(option, value) => option.id === value.id}
-              noOptionsText={workers.isLoading ? 'Đang tải…' : 'Không có thợ nào'}
+              noOptionsText={workers.isLoading ? 'Đang tải…' : 'Không có nhân viên nào'}
             />
           ) : null}
           {sides.to ? (
             <AutocompleteInput
-              label={kind === 'TRANSFER' ? 'Thợ nhận' : 'Xuất cho thợ'}
-              placeholder="Chọn thợ"
+              label={kind === 'TRANSFER' ? 'Người nhận' : 'Xuất cho'}
+              placeholder="Chọn nhân viên"
               options={activeWorkers.filter((worker) => worker.id !== fromWorker?.id)}
               value={toWorker}
               onChange={setToWorker}
               getOptionLabel={workerLabel}
               isOptionEqualToValue={(option, value) => option.id === value.id}
-              noOptionsText={workers.isLoading ? 'Đang tải…' : 'Không có thợ nào'}
+              noOptionsText={workers.isLoading ? 'Đang tải…' : 'Không có nhân viên nào'}
             />
           ) : null}
           <AutocompleteInput
             label="Dụng cụ"
             placeholder={
-              sides.from && !fromWorker ? 'Chọn thợ trước' : kind === 'ISSUE' ? 'Chọn dụng cụ còn tồn' : 'Chọn dụng cụ thợ đang giữ'
+              sides.from && !fromWorker ? 'Chọn người giữ trước' : kind === 'ISSUE' ? 'Chọn dụng cụ còn tồn' : 'Chọn dụng cụ người này đang giữ'
             }
             disabled={sides.from && !fromWorker}
             options={toolOptions}
@@ -247,7 +247,7 @@ export function ToolMoveDialog({
             isOptionEqualToValue={(option, value) => option.id === value.id}
             loading={kind === 'ISSUE' ? stock.isLoading : holdings.isLoading}
             noOptionsText={
-              kind === 'ISSUE' ? 'Kho dụng cụ chưa có dụng cụ nào còn tồn' : 'Thợ này không giữ dụng cụ nào'
+              kind === 'ISSUE' ? 'Kho dụng cụ chưa có dụng cụ nào còn tồn' : 'Người này không giữ dụng cụ nào'
             }
           />
           <TextField
@@ -258,9 +258,9 @@ export function ToolMoveDialog({
             error={overAvailable}
             helperText={
               overAvailable
-                ? `Vượt số ${kind === 'ISSUE' ? 'tồn kho' : 'thợ đang giữ'} (${formatQty(String(tool!.available))} ${tool!.unitName})`
+                ? `Vượt số ${kind === 'ISSUE' ? 'tồn kho' : 'người này đang giữ'} (${formatQty(String(tool!.available))} ${tool!.unitName})`
                 : estimate != null
-                  ? `Giá trị theo bình quân thợ đang giữ: ${formatMoney(String(estimate))} đ`
+                  ? `Giá trị theo bình quân đang giữ: ${formatMoney(String(estimate))} đ`
                   : kind === 'ISSUE'
                     ? 'Giá trị tính theo FIFO lúc xuất kho'
                     : undefined
@@ -277,7 +277,7 @@ export function ToolMoveDialog({
             minRows={needsReason ? 2 : 1}
             slotProps={{ htmlInput: { maxLength: 500 } }}
           />
-          {sameWorker ? <Alert severity="warning">Thợ nhận phải khác thợ giao.</Alert> : null}
+          {sameWorker ? <Alert severity="warning">Người nhận phải khác người giao.</Alert> : null}
         </Stack>
       </DialogContent>
       <DialogActions>

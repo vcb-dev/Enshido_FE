@@ -73,7 +73,7 @@ export const WAREHOUSES: WarehouseDef[] = [
     code: 'dung-cu',
     name: 'Kho dụng cụ',
     shortName: 'Kho dụng cụ',
-    description: 'Nhập, xuất, tồn dụng cụ và dụng cụ từng thợ đang giữ.',
+    description: 'Sổ tài sản xưởng: thêm tài sản, xuất cho người giữ, theo dõi trạng thái và xác nhận kiểm kê.',
     sections: true,
   },
 ]

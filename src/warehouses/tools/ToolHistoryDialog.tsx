@@ -84,7 +84,7 @@ export function ToolHistoryDialog({
         title: `Huỷ phiếu ${row.code}?`,
         message: `${row.kindLabel} ${formatQty(row.qty)} ${row.material.unitName} ${row.material.name}.`,
         items: [
-          'Tồn dụng cụ của thợ trở về như trước phiếu này.',
+          'Dụng cụ người giữ trở về như trước phiếu này.',
           ...(row.hasStockLine
             ? [row.kind === 'ISSUE' ? 'Xoá phiếu xuất kho đi kèm — hàng về lại kho.' : 'Xoá phiếu nhập kho đi kèm.']
             : []),
@@ -174,7 +174,7 @@ export function ToolHistoryDialog({
             rowKey={(row) => row.id}
             loading={moves.isLoading}
             errorText={moves.error instanceof Error ? moves.error.message : undefined}
-            emptyText={kind === 'ALL' ? 'Thợ này không có phiếu dụng cụ trong kỳ.' : 'Không có phiếu loại này trong kỳ.'}
+            emptyText={kind === 'ALL' ? 'Người này không có phiếu dụng cụ trong kỳ.' : 'Không có phiếu loại này trong kỳ.'}
             variant="grid"
             minWidth={1000}
             toolbar={
