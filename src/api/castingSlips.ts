@@ -385,9 +385,20 @@ export type RejectCastingSlipPayload = {
   restImages: CastingSlipImage[]
 }
 
-/** Thủ kho báo lỗi đúc — cây hỏng về NVL, trả về phiếu làm lại (Chờ cấp vật tư). */
+/** Đơn trên phiếu đúc lỗi đã đi lại từ bước sáp — `reworkCode` có khi tách sang lệnh bù. */
+export type CastFailBackToWax = {
+  orderCode: string
+  intakeCode: string | null
+  qty: number
+  reworkCode: string | null
+}
+
+/**
+ * Thủ kho báo lỗi đúc — cây hỏng về NVL, phiếu đóng, đơn đi lại từ bước sáp (2026-11-27): lô con
+ * SX SLL tách sang lệnh bù, đơn thường về Chờ SX · Đã có 3D. Trả về chính phiếu lỗi.
+ */
 export function rejectCastingSlipApi(id: string, payload: RejectCastingSlipPayload) {
-  return apiFetch<CastingSlip>(`/casting-slips/${id}/reject-cast`, {
+  return apiFetch<CastingSlip & { backToWax?: CastFailBackToWax[] }>(`/casting-slips/${id}/reject-cast`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
