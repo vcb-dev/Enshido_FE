@@ -58,6 +58,7 @@ import logo from '../assets/logo.png'
 import { InstallAppBanner } from './InstallAppBanner'
 import { InstallAppButton } from './InstallAppButton'
 import { NotificationBell } from '../notifications/NotificationBell'
+import { ErrorBoundary } from './ErrorBoundary'
 import { RouteSkeleton } from './RouteSkeleton'
 import { ScreenLoadingBar } from './ScreenLoadingBar'
 import { prefetchStaff, prefetchWarehouseStock } from '../auth/prefetchWarehouse'
@@ -330,9 +331,11 @@ export function AppShell() {
           </Alert>
         ) : null}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          <Suspense fallback={<RouteSkeleton />}>
-            <Outlet />
-          </Suspense>
+          <ErrorBoundary resetKey={location.pathname}>
+            <Suspense fallback={<RouteSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </Box>
       </Box>
     </Box>

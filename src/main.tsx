@@ -7,12 +7,14 @@ import './auth/sessionBoot'
 // Bắt beforeinstallprompt trước khi React dựng xong — sự kiện có thể bắn rất sớm.
 import './pwa/installPrompt'
 import { registerServiceWorker } from './pwa/registerServiceWorker'
+import { installChunkErrorReload } from './pwa/chunkReload'
 import { persistOptions } from './auth/offlineCache'
 import { watchConnectivity } from './auth/connectivity'
 import { AuthProvider } from './auth/AuthContext'
 import { registerSubTicketActions } from './orders/subTicketActions'
 import { guardNumberInputs } from './numberInputGuard'
 import { AppProviders } from './theme/AppProviders'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import App from './App.tsx'
 
 void import('@fontsource/roboto/400.css')
@@ -32,6 +34,8 @@ const queryClient = new QueryClient({
   },
 })
 
+// Trước mọi import trang: tab bản cũ mở trang mới sau deploy thì tự tải lại, không trắng màn.
+installChunkErrorReload()
 watchConnectivity()
 guardNumberInputs()
 registerServiceWorker()
@@ -48,9 +52,11 @@ createRoot(document.getElementById('root')!).render(
     >
       <BrowserRouter>
         <AppProviders>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          <ErrorBoundary variant="page">
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </ErrorBoundary>
         </AppProviders>
       </BrowserRouter>
     </PersistQueryClientProvider>
