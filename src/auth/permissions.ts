@@ -9,6 +9,8 @@ export const Permission = {
   SCREEN_WAREHOUSE_THANH_PHAM: 'screen.warehouse.thanh-pham',
   /** Kho dụng cụ — xem tồn + dụng cụ từng thợ đang giữ; ghi phiếu cần `warehouse.keeper` hoặc `production.qc`. */
   SCREEN_WAREHOUSE_DUNG_CU: 'screen.warehouse.dung-cu',
+  /** Kho sửa chữa — sổ phiếu sửa chữa, không nhập / xuất. Được xem là được thêm / sửa / xoá dòng. */
+  SCREEN_WAREHOUSE_SUA_CHUA: 'screen.warehouse.sua-chua',
   SCREEN_LOCATIONS: 'screen.locations',
   SCREEN_CATALOGS: 'screen.catalogs',
   SCREEN_INTAKE_ORDERS: 'screen.intake-orders',
@@ -41,6 +43,8 @@ export const Permission = {
   ACCOUNTING_APPROVE: 'accounting.approve',
   /** Đánh dấu tài khoản khách (VCB) — khoá tài khoản chỉ còn lên đơn, xem và sửa đơn. */
   CUSTOMER: 'customer',
+  /** Đi kèm `customer`: khách là VPC (không có = khách VCB) — hàng gửi sửa ghi là hàng VPC. */
+  CUSTOMER_VPC: 'customer.vpc',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]

@@ -84,6 +84,17 @@ describe('vai trò ở màn Nhân sự', () => {
     expect(inferStaffJobPreset({ roleCode: 'USER', allowedScreens: saved })).toBe('vcb')
   })
 
+  it('VPC như VCB, thêm mã VPC; cả hai có kho sửa chữa', () => {
+    const vcb = allowedScreensForSave('vcb', [])
+    const vpc = allowedScreensForSave('vpc', [Permission.SCREEN_WAREHOUSE_NVL_CHINH])
+    expect(vcb).toContain(Permission.SCREEN_WAREHOUSE_SUA_CHUA)
+    expect(vcb).not.toContain(Permission.CUSTOMER_VPC)
+    expect(vpc).toEqual([...vcb, Permission.CUSTOMER_VPC])
+    expect(inferStaffJobPreset({ roleCode: 'USER', allowedScreens: vpc })).toBe('vpc')
+    expect(jobPresetsOf('vpc', ['warehouse'])).toEqual(['vpc'])
+    expect(extraJobOptions(['kcs']).map((o) => o.value)).not.toContain('vpc')
+  })
+
   it('thủ kho lưu kèm quyền tạo đơn và duyệt đơn', () => {
     const saved = allowedScreensForSave('warehouse', [Permission.SCREEN_WAREHOUSE_NVL_CHINH])
     expect(saved).toContain(Permission.INTAKE_CREATE)
