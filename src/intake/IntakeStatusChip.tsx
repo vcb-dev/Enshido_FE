@@ -2,7 +2,7 @@ import { Chip, Stack } from '@mui/material'
 import type { IntakeOrder, IntakeOrderStatus } from '../api/intakeOrders'
 import { productionStatusLabel } from '../orders/catalog'
 import { StatusChip } from '../orders/OrderChips'
-import { INTAKE_STATUS_META } from './catalog'
+import { intakeStatusTone } from './intakeStatusTone'
 
 export function IntakeStatusChip({
   status,
@@ -11,7 +11,7 @@ export function IntakeStatusChip({
   status: IntakeOrderStatus
   size?: 'small' | 'medium'
 }) {
-  const meta = INTAKE_STATUS_META[status]
+  const meta = intakeStatusTone(status)
   return (
     <Chip
       size={size}
