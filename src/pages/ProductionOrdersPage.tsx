@@ -1231,8 +1231,8 @@ function orderColumns(
             {released > 0 ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {row.row.status === 'READY_FOR_PRODUCTION'
-                  ? `${row.row.hasMold ? 'Đã bơm sáp' : 'Đã in sáp'} ${released} đơn`
-                  : `Đang đúc ${released} đơn`}
+                  ? `${row.row.hasMold ? 'Đã bơm sáp' : 'Đã in sáp'} ${released} sp`
+                  : `Đang đúc ${released} sp`}
               </Typography>
             ) : null}
           </Stack>
