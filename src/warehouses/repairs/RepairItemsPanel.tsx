@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -69,7 +69,7 @@ export function RepairItemsPanel() {
   const [editing, setEditing] = useState<RepairItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   // Thủ kho xác nhận — tách khỏi hộp thoại khách gửi sửa.
-  const [confirming, setConfirming] = useState<RepairItem | null>(null)
+  const [confirming, setConfirming] = useState<RepairItem[] | null>(null)
 
   const items = useQuery({ queryKey: ['repairs'], queryFn: getRepairItemsApi })
   const remove = useMutation({
@@ -82,6 +82,16 @@ export function RepairItemsPanel() {
   })
 
   const all = useMemo(() => items.data ?? [], [items.data])
+  /** Cả phiếu sửa chứa dòng này: cùng số phiếu + cùng hàng VPC / VCB. Không số phiếu thì chỉ dòng đó. */
+  const slipRowsOf = useCallback(
+    (row: RepairItem) =>
+      row.ticketCode
+        ? all
+            .filter((other) => other.ticketCode === row.ticketCode && other.source === row.source)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        : [row],
+    [all],
+  )
   const rows = useMemo(() => {
     const needle = params.search.trim().toLowerCase()
     return all.filter((row) => {
@@ -186,7 +196,7 @@ export function RepairItemsPanel() {
               <Button
                 size="small"
                 variant={row.keeperTouched ? 'text' : 'outlined'}
-                onClick={() => setConfirming(row)}
+                onClick={() => setConfirming(slipRowsOf(row))}
                 sx={{ whiteSpace: 'nowrap' }}
               >
                 {row.keeperTouched ? 'Sửa xác nhận' : 'Xác nhận'}
@@ -210,7 +220,7 @@ export function RepairItemsPanel() {
         ),
       },
     ]
-  }, [customer, remove])
+  }, [customer, remove, slipRowsOf])
 
   const sum = (pick: (row: RepairItem) => number) => rows.reduce((total, row) => total + pick(row), 0)
   const filtering = Boolean(params.search || params.stage || params.source || params.status)
@@ -308,7 +318,7 @@ export function RepairItemsPanel() {
         defaults={{ stage: params.stage as RepairStage | '', source: params.source as RepairSource | '' }}
         onClose={() => setDialogOpen(false)}
       />
-      <RepairConfirmDialog item={confirming} onClose={() => setConfirming(null)} />
+      <RepairConfirmDialog rows={confirming} onClose={() => setConfirming(null)} />
       {customer ? (
         <Typography variant="caption" color="text.secondary">
           Đang xem hàng {customerSource}. Thủ kho nhận hàng xong thì dòng bị khoá, không sửa / xoá được nữa.
