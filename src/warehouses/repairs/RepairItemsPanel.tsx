@@ -27,7 +27,7 @@ import {
   type Column,
 } from '../../components/ui'
 import { paginate, useTableParams } from '../../hooks/useTableParams'
-import { RepairConfirmDialog } from './RepairConfirmDialog'
+import { RepairConfirmDialog, type RepairConfirmMode } from './RepairConfirmDialog'
 import { RepairItemDialog } from './RepairItemDialog'
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
@@ -51,8 +51,8 @@ function fullDate(value: string | null) {
 
 /**
  * Kho sửa chữa: một bảng hàng gửi sửa. Khách VCB / VPC gửi hàng (ngày, mã / tên sản phẩm, số lượng,
- * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho nhập phần còn lại ở nút Xác nhận
- * từng dòng (RepairConfirmDialog) — tách khỏi hộp thoại khách gửi sửa. Lọc theo loại
+ * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho làm hai bước ở nút trên
+ * dòng (RepairConfirmDialog, cả phiếu một lần): Nhận hàng lúc khách gửi, Trả hàng khi sửa xong. Lọc theo loại
  * hàng (trước khi nhập kho / trong kho), VPC / VCB và tình trạng. Không động tồn kho nào.
  */
 export function RepairItemsPanel() {
@@ -69,7 +69,7 @@ export function RepairItemsPanel() {
   const [editing, setEditing] = useState<RepairItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   // Thủ kho xác nhận — tách khỏi hộp thoại khách gửi sửa.
-  const [confirming, setConfirming] = useState<RepairItem[] | null>(null)
+  const [confirming, setConfirming] = useState<{ rows: RepairItem[]; mode: RepairConfirmMode } | null>(null)
 
   const items = useQuery({ queryKey: ['repairs'], queryFn: getRepairItemsApi })
   const remove = useMutation({
@@ -188,19 +188,12 @@ export function RepairItemsPanel() {
       {
         key: 'actions',
         header: '',
-        width: customer ? 90 : 200,
+        width: customer ? 90 : 250,
         card: 'actions',
         render: (row) => (
           <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
             {customer ? null : (
-              <Button
-                size="small"
-                variant={row.keeperTouched ? 'text' : 'outlined'}
-                onClick={() => setConfirming(slipRowsOf(row))}
-                sx={{ whiteSpace: 'nowrap' }}
-              >
-                {row.keeperTouched ? 'Sửa xác nhận' : 'Xác nhận'}
-              </Button>
+              <KeeperButtons row={row} onOpen={(mode) => setConfirming({ rows: slipRowsOf(row), mode })} />
             )}
             <RowActions
               onEdit={() => {
@@ -318,12 +311,41 @@ export function RepairItemsPanel() {
         defaults={{ stage: params.stage as RepairStage | '', source: params.source as RepairSource | '' }}
         onClose={() => setDialogOpen(false)}
       />
-      <RepairConfirmDialog rows={confirming} onClose={() => setConfirming(null)} />
+      <RepairConfirmDialog
+        rows={confirming?.rows ?? null}
+        mode={confirming?.mode ?? 'receive'}
+        onClose={() => setConfirming(null)}
+      />
       {customer ? (
         <Typography variant="caption" color="text.secondary">
           Đang xem hàng {customerSource}. Thủ kho nhận hàng xong thì dòng bị khoá, không sửa / xoá được nữa.
         </Typography>
       ) : null}
     </Box>
+  )
+}
+
+/**
+ * Nút thủ kho theo tình trạng: chờ nhận → Nhận hàng; đang sửa → Trả hàng (sửa xong mới biết ngày
+ * trả, người sửa, người lấy hàng); đã trả → sửa lại. Nhận hàng luôn sửa lại được.
+ */
+function KeeperButtons({ row, onOpen }: { row: RepairItem; onOpen: (mode: RepairConfirmMode) => void }) {
+  const button = (mode: RepairConfirmMode, label: string, primary: boolean) => (
+    <Button
+      key={mode}
+      size="small"
+      variant={primary ? 'outlined' : 'text'}
+      onClick={() => onOpen(mode)}
+      sx={{ whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+    >
+      {label}
+    </Button>
+  )
+  if (row.status === 'WAITING') return button('receive', 'Nhận hàng', true)
+  return (
+    <>
+      {row.status === 'RETURNED' ? button('return', 'Sửa trả', false) : button('return', 'Trả hàng', true)}
+      {button('receive', 'Sửa nhận', false)}
+    </>
   )
 }

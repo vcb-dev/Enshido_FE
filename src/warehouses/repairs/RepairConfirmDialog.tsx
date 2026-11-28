@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   Stack,
   TextField,
   Typography,
@@ -21,6 +23,7 @@ import {
 } from '../../api/repairs'
 import { DateField } from '../../components/ui'
 import { useIsMobile } from '../../hooks/useBreakpoint'
+import { vnToday } from '../warehousePeriod'
 
 const digitsOf = (raw: string) => raw.replace(/\D/g, '')
 const textOrNull = (raw: string) => raw.trim() || null
@@ -32,128 +35,165 @@ function fullDate(value: string | null) {
   return `${d}/${m}/${y}`
 }
 
-/** Ô thủ kho ghi chung cho cả phiếu. */
+/**
+ * Hai bước của thủ kho, theo đúng lúc biết thông tin:
+ * - `receive` — nhận hàng khách gửi: người xác nhận chuyển hàng sửa chữa, người lập phiếu, note;
+ * - `return` — sửa xong trả hàng: ngày trả, SL trả từng mã, người sửa, người trả, người nhận.
+ */
+export type RepairConfirmMode = 'receive' | 'return'
+
 type SharedKey = keyof RepairConfirmShared
-const SHARED_KEYS: SharedKey[] = [
-  'returnedAt',
-  'transferConfirmedBy',
-  'issuerName',
-  'repairedBy',
-  'returnedBy',
-  'receiverName',
-]
+const MODE_KEYS: Record<RepairConfirmMode, SharedKey[]> = {
+  receive: ['transferConfirmedBy', 'issuerName'],
+  return: ['returnedAt', 'repairedBy', 'returnedBy', 'receiverName'],
+}
 const SHARED_LABEL: Record<SharedKey, string> = {
   returnedAt: 'Ngày trả',
   transferConfirmedBy: 'Người xác nhận chuyển hàng sửa chữa',
   issuerName: 'Người lập phiếu',
   repairedBy: 'Người sửa',
   returnedBy: 'Người trả',
-  receiverName: 'Người nhận',
+  receiverName: 'Người nhận (người lấy hàng)',
 }
 
-type SharedState = Record<SharedKey, { value: string; mixed: boolean; touched: boolean }>
-type LineState = { returnedQty: string; note: string }
+type Field = { value: string; mixed: boolean; touched: boolean }
+type SharedState = Partial<Record<SharedKey, Field>>
+type LineState = { selected: boolean; returnedQty: string; note: string }
+
+const MIXED_HINT = 'Các mã đang khác nhau — để trống là giữ nguyên'
 
 /** Ô chung: các dòng cùng giá trị thì điền sẵn; khác nhau thì để trống, không gõ là giữ của từng dòng. */
-function sharedOf(rows: RepairItem[]): SharedState {
+function sharedOf(rows: RepairItem[], mode: RepairConfirmMode): SharedState {
   return Object.fromEntries(
-    SHARED_KEYS.map((key) => {
+    MODE_KEYS[mode].map((key) => {
       const values = new Set(rows.map((row) => row[key] ?? ''))
       const mixed = values.size > 1
-      return [key, { value: mixed ? '' : (rows[0]?.[key] ?? ''), mixed, touched: false }]
+      let value = mixed ? '' : (rows[0]?.[key] ?? '')
+      // Trả hàng thường là hôm nay.
+      if (key === 'returnedAt' && !mixed && !value) value = vnToday()
+      return [key, { value, mixed, touched: false }]
     }),
-  ) as SharedState
+  )
+}
+
+/** Trả hàng: mặc định tick các mã chưa trả đủ; cả phiếu đã trả hết (sửa lại) thì tick hết. */
+function defaultReturnRows(rows: RepairItem[]) {
+  const pending = rows.filter((row) => row.status !== 'RETURNED')
+  return pending.length > 0 ? pending : rows
+}
+
+function linesOf(rows: RepairItem[]): Record<string, LineState> {
+  const picked = new Set(defaultReturnRows(rows).map((row) => row.id))
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.id,
+      {
+        selected: picked.has(row.id),
+        returnedQty: String(row.returnedQty ?? row.qty),
+        note: row.note ?? '',
+      },
+    ]),
+  )
 }
 
 /**
  * Thủ kho xác nhận một phiếu sửa — mọi dòng cùng số phiếu sửa (dòng không có số phiếu thì chỉ
- * dòng đó). Ngày trả + các người ký nhập một lần cho cả phiếu; SL trả + note theo từng mã như
- * phiếu giấy. Phần khách gửi chỉ xem ở đây (sửa ở nút Sửa). Lưu là khách hết sửa / xoá các dòng.
+ * dòng đó), tách hai bước Nhận hàng / Trả hàng. Ô chung nhập một lần cho cả phiếu; SL trả và note
+ * theo từng mã như phiếu giấy. Trả hàng chỉ ghi các mã được tick — mã chưa sửa xong để lần sau.
  */
-export function RepairConfirmDialog({ rows, onClose }: { rows: RepairItem[] | null; onClose: () => void }) {
+export function RepairConfirmDialog({
+  rows,
+  mode,
+  onClose,
+}: {
+  rows: RepairItem[] | null
+  mode: RepairConfirmMode
+  onClose: () => void
+}) {
   const fullScreen = useIsMobile()
   const queryClient = useQueryClient()
-  const [shared, setShared] = useState<SharedState>(() => sharedOf([]))
+  const [shared, setShared] = useState<SharedState>({})
   const [lines, setLines] = useState<Record<string, LineState>>({})
 
   useEffect(() => {
     if (!rows) return
-    setShared(sharedOf(rows))
-    setLines(
-      Object.fromEntries(
-        rows.map((row) => [
-          row.id,
-          { returnedQty: row.returnedQty != null ? String(row.returnedQty) : '', note: row.note ?? '' },
-        ]),
-      ),
-    )
-  }, [rows])
+    // Trả đợt sau: ô chung điền theo các mã sắp trả, không lẫn ngày / người của mã đã trả trước.
+    setShared(sharedOf(mode === 'return' ? defaultReturnRows(rows) : rows, mode))
+    setLines(linesOf(rows))
+  }, [rows, mode])
 
-  const setSharedValue = (key: SharedKey, value: string) =>
-    setShared((current) => ({ ...current, [key]: { ...current[key], value, touched: true } }))
-  const setLine = (id: string, patch: Partial<LineState>) =>
-    setLines((current) => ({ ...current, [id]: { ...current[id], ...patch } }))
-
+  const receive = mode === 'receive'
   const list = rows ?? []
   const first = list[0]
-  const returnedAt = shared.returnedAt.value
-  // Ngày trả để trống vì các dòng khác nhau thì BE tự kiểm tra từng dòng.
-  const returnedBeforeReceived = Boolean(returnedAt) && list.some((row) => returnedAt < row.receivedAt)
-  const tooMany = (row: RepairItem) => {
+  const field = (key: SharedKey): Field => shared[key] ?? { value: '', mixed: false, touched: false }
+  const setSharedValue = (key: SharedKey, value: string) =>
+    setShared((current) => ({ ...current, [key]: { ...field(key), value, touched: true } }))
+  const setLine = (id: string, patch: Partial<LineState>) =>
+    setLines((current) => ({ ...current, [id]: { ...current[id], ...patch } }))
+  /** Ô chung không gửi: các dòng khác nhau mà thủ kho không gõ — BE giữ của từng dòng. */
+  const keeps = (key: SharedKey) => field(key).mixed && !field(key).touched
+
+  const picked = receive ? list : list.filter((row) => lines[row.id]?.selected)
+  const returnedAt = field('returnedAt').value
+  const returnedBeforeReceived =
+    !receive && Boolean(returnedAt) && picked.some((row) => returnedAt < row.receivedAt)
+  const lineError = (row: RepairItem) => {
+    if (receive || !lines[row.id]?.selected) return null
     const raw = lines[row.id]?.returnedQty ?? ''
-    return raw !== '' && Number(raw) > row.qty
+    if (raw === '') return 'Nhập SL trả'
+    return Number(raw) > row.qty ? `Lớn hơn ${row.qty}` : null
   }
-  const ready = list.length > 0 && !returnedBeforeReceived && !list.some(tooMany)
+  // Nhận hàng phải ghi ít nhất một người, không thì dòng vẫn "Chờ thủ kho nhận".
+  const receiveNamed = MODE_KEYS.receive.some((key) => keeps(key) || field(key).value.trim() !== '')
+  const ready = receive
+    ? list.length > 0 && receiveNamed
+    : picked.length > 0 && returnedAt !== '' && !returnedBeforeReceived && !picked.some(lineError)
 
   const save = useMutation({
     mutationFn: () => {
       const payload: RepairConfirmShared = {}
-      for (const key of SHARED_KEYS) {
-        const field = shared[key]
-        // Các dòng đang khác nhau mà thủ kho không gõ → không gửi, BE giữ giá trị từng dòng.
-        if (field.mixed && !field.touched) continue
-        payload[key] = key === 'returnedAt' ? field.value || null : textOrNull(field.value)
+      for (const key of MODE_KEYS[mode]) {
+        if (keeps(key)) continue
+        payload[key] = key === 'returnedAt' ? field(key).value || null : textOrNull(field(key).value)
       }
       return confirmRepairSlipApi({
         ...payload,
-        lines: list.map((row) => {
-          const line = lines[row.id] ?? { returnedQty: '', note: '' }
-          return {
-            id: row.id,
-            returnedQty: line.returnedQty === '' ? null : Number(line.returnedQty),
-            note: textOrNull(line.note),
-          }
+        lines: picked.map((row) => {
+          const line = lines[row.id]
+          return receive
+            ? { id: row.id, note: textOrNull(line?.note ?? '') }
+            : { id: row.id, returnedQty: Number(line?.returnedQty ?? 0), note: textOrNull(line?.note ?? '') }
         }),
       })
     },
     onSuccess: () => {
-      toast.success(list.length > 1 ? `Đã xác nhận phiếu (${list.length} mã)` : 'Đã lưu xác nhận của thủ kho')
+      const count = picked.length > 1 ? ` (${picked.length} mã)` : ''
+      toast.success(receive ? `Đã nhận hàng sửa${count}` : `Đã ghi trả hàng${count}`)
       void queryClient.invalidateQueries({ queryKey: ['repairs'] })
       onClose()
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const mixedHint = (key: SharedKey) =>
-    shared[key].mixed && !shared[key].touched ? 'Các mã đang khác nhau — để trống là giữ nguyên' : undefined
-
-  const sharedText = (key: Exclude<SharedKey, 'returnedAt'>) => (
+  const sharedText = (key: SharedKey) => (
     <TextField
       key={key}
       size="small"
       label={SHARED_LABEL[key]}
-      value={shared[key].value}
+      value={field(key).value}
       onChange={(event) => setSharedValue(key, event.target.value)}
-      helperText={mixedHint(key)}
+      helperText={keeps(key) ? MIXED_HINT : undefined}
       slotProps={{ htmlInput: { maxLength: 100 } }}
     />
   )
 
+  const title = receive ? 'Thủ kho nhận hàng sửa' : 'Trả hàng sửa xong'
+
   return (
     <Dialog open={rows != null} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="md">
       <DialogTitle>
-        Thủ kho xác nhận
-        {first?.ticketCode ? ` phiếu ${first.ticketCode}` : ''}
+        {title}
+        {first?.ticketCode ? ` — phiếu ${first.ticketCode}` : ''}
         {list.length > 1 ? ` (${list.length} mã)` : ''}
       </DialogTitle>
       <DialogContent dividers>
@@ -165,69 +205,113 @@ export function RepairConfirmDialog({ rows, onClose }: { rows: RepairItem[] | nu
             </Typography>
 
             <Stack spacing={1.5}>
-              {list.map((row, index) => (
-                <Box
-                  key={row.id}
-                  sx={{
-                    display: 'grid',
-                    gap: 1.5,
-                    alignItems: 'start',
-                    gridTemplateColumns: { xs: '1fr 1fr', sm: '2.4fr 0.8fr 1.6fr' },
-                    pb: 1.5,
-                    borderBottom: index < list.length - 1 ? 1 : 0,
-                    borderColor: 'divider',
-                  }}
-                >
-                  <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' }, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
-                      {[row.productCode, row.productName].filter(Boolean).join(' · ')} — SL {row.qty}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-                      {row.content}
-                    </Typography>
+              {list.map((row, index) => {
+                const line = lines[row.id]
+                const off = !receive && !line?.selected
+                const error = lineError(row)
+                const label = [row.productCode, row.productName].filter(Boolean).join(' · ')
+                return (
+                  <Box
+                    key={row.id}
+                    sx={{
+                      display: 'grid',
+                      gap: 1.5,
+                      alignItems: 'start',
+                      gridTemplateColumns: receive
+                        ? { xs: '1fr', sm: '2.4fr 1.6fr' }
+                        : { xs: '1fr 1fr', sm: '2.4fr 0.8fr 1.6fr' },
+                      pb: 1.5,
+                      borderBottom: index < list.length - 1 ? 1 : 0,
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Box sx={{ gridColumn: receive ? 'auto' : { xs: '1 / -1', sm: 'auto' }, minWidth: 0 }}>
+                      {receive ? (
+                        <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                          {label} — SL {row.qty}
+                        </Typography>
+                      ) : (
+                        <FormControlLabel
+                          sx={{ m: 0, alignItems: 'flex-start' }}
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={Boolean(line?.selected)}
+                              onChange={(event) => setLine(row.id, { selected: event.target.checked })}
+                              slotProps={{ input: { 'aria-label': `Trả lần này ${label}` } }}
+                              sx={{ p: 0.5, mr: 0.5 }}
+                            />
+                          }
+                          label={
+                            <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word', pt: 0.5 }}>
+                              {label} — SL {row.qty}
+                              {row.status === 'RETURNED' ? ' · đã trả' : ''}
+                            </Typography>
+                          }
+                        />
+                      )}
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', wordBreak: 'break-word', pl: receive ? 0 : 4 }}
+                      >
+                        {row.content}
+                      </Typography>
+                    </Box>
+                    {receive ? null : (
+                      <TextField
+                        size="small"
+                        label="SL trả"
+                        disabled={off}
+                        value={line?.returnedQty ?? ''}
+                        onChange={(event) => setLine(row.id, { returnedQty: digitsOf(event.target.value) })}
+                        error={Boolean(error)}
+                        helperText={error ?? (off ? 'Chưa trả lần này' : undefined)}
+                        slotProps={{ htmlInput: { inputMode: 'numeric', 'aria-label': `SL trả ${label}` } }}
+                      />
+                    )}
+                    <TextField
+                      size="small"
+                      label="Note"
+                      disabled={off}
+                      value={line?.note ?? ''}
+                      onChange={(event) => setLine(row.id, { note: event.target.value })}
+                      slotProps={{ htmlInput: { maxLength: 1000, 'aria-label': `Note ${label}` } }}
+                    />
                   </Box>
-                  <TextField
-                    size="small"
-                    label="SL trả"
-                    value={lines[row.id]?.returnedQty ?? ''}
-                    onChange={(event) => setLine(row.id, { returnedQty: digitsOf(event.target.value) })}
-                    error={tooMany(row)}
-                    helperText={tooMany(row) ? `Lớn hơn ${row.qty}` : 'Trống = chưa trả'}
-                    slotProps={{ htmlInput: { inputMode: 'numeric', 'aria-label': `SL trả ${row.productCode ?? row.productName ?? ''}` } }}
-                  />
-                  <TextField
-                    size="small"
-                    label="Note"
-                    value={lines[row.id]?.note ?? ''}
-                    onChange={(event) => setLine(row.id, { note: event.target.value })}
-                    slotProps={{ htmlInput: { maxLength: 1000 } }}
-                  />
-                </Box>
-              ))}
+                )
+              })}
             </Stack>
 
             <Divider />
             <Typography variant="subtitle2" color="text.secondary">
-              Ghi chung{list.length > 1 ? ' cho cả phiếu' : ''}
+              Ghi chung{list.length > 1 ? (receive ? ' cho cả phiếu' : ' cho các mã trả lần này') : ''}
             </Typography>
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-              <DateField
-                size="small"
-                label={SHARED_LABEL.returnedAt}
-                value={returnedAt}
-                onChange={(next) => setSharedValue('returnedAt', next ?? '')}
-                error={returnedBeforeReceived}
-                helperText={returnedBeforeReceived ? 'Trước ngày gửi' : mixedHint('returnedAt')}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              {sharedText('transferConfirmedBy')}
-              {sharedText('issuerName')}
-              {sharedText('repairedBy')}
-              {sharedText('returnedBy')}
-              {sharedText('receiverName')}
+              {receive ? (
+                MODE_KEYS.receive.map(sharedText)
+              ) : (
+                <>
+                  <DateField
+                    size="small"
+                    label="Ngày trả"
+                    required
+                    value={returnedAt}
+                    onChange={(next) => setSharedValue('returnedAt', next ?? '')}
+                    error={returnedBeforeReceived}
+                    helperText={returnedBeforeReceived ? 'Trước ngày gửi' : returnedAt === '' ? 'Chọn ngày trả' : undefined}
+                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: vnToday() } }}
+                  />
+                  {sharedText('repairedBy')}
+                  {sharedText('returnedBy')}
+                  {sharedText('receiverName')}
+                </>
+              )}
             </Box>
             <Typography variant="caption" color="text.secondary">
-              Lưu xác nhận thì khách không sửa / xoá {list.length > 1 ? 'các dòng của phiếu này' : 'dòng này'} được nữa.
+              {receive
+                ? 'Nhận hàng thì khách không sửa / xoá các dòng này được nữa. Sửa xong mới ghi trả hàng (ngày trả, người sửa, người lấy hàng).'
+                : 'Mã chưa sửa xong thì bỏ tick — ghi trả lần sau.'}
             </Typography>
           </Stack>
         ) : null}
@@ -240,7 +324,7 @@ export function RepairConfirmDialog({ rows, onClose }: { rows: RepairItem[] | nu
           loading={save.isPending}
           onClick={() => save.mutate()}
         >
-          Lưu xác nhận
+          {receive ? 'Xác nhận nhận hàng' : `Ghi trả hàng${picked.length > 1 ? ` (${picked.length} mã)` : ''}`}
         </Button>
       </DialogActions>
     </Dialog>

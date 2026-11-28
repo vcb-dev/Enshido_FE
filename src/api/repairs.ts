@@ -92,7 +92,8 @@ export type RepairConfirmShared = Partial<
 >
 
 export type RepairConfirmPayload = RepairConfirmShared & {
-  lines: Array<{ id: string; returnedQty: number | null; note: string | null }>
+  /** Không gửi returnedQty / note = giữ của dòng (bước Nhận hàng không gửi SL trả). */
+  lines: Array<{ id: string; returnedQty?: number | null; note?: string | null }>
 }
 
 /** Thủ kho xác nhận cả phiếu sửa một lần (chỉ thủ kho). */
