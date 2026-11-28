@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -19,7 +19,6 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -51,7 +50,7 @@ const digitsOf = (raw: string) => raw.replace(/\D/g, '')
 const textOrNull = (raw: string) => raw.trim() || null
 
 /** Tối đa số mã trên một phiếu — khớp giới hạn BE. */
-const MAX_LINES = 50
+const MAX_LINES = 200
 
 /** Một mã sản phẩm trên phiếu sửa. */
 type Line = {
@@ -89,23 +88,26 @@ const cellInputSx = {
   '& .MuiInputBase-multiline .MuiInputBase-input': { p: 0 },
 } as const
 
+type LineField = 'productCode' | 'productName' | 'qty' | 'content'
+
 /**
- * Phiếu nhiều mã (thêm tay hoặc nhập từ file Excel): bảng gọn mỗi mã một dòng, sửa thẳng trên ô.
- * Ô thiếu / sai tô đỏ; đầu bảng đếm số dòng còn thiếu để khách biết vì sao chưa Gửi được.
+ * Một dòng của bảng — memo để gõ ở một ô chỉ vẽ lại dòng đó (phiếu tới 200 mã, vẽ lại cả bảng mỗi
+ * phím thì gõ bị trễ). onChange / onRemove phải giữ nguyên tham chiếu (useCallback ở hộp thoại).
  */
-function RepairLinesTable({
-  lines,
+const RepairLineRow = memo(function RepairLineRow({
+  line,
+  index,
   onChange,
   onRemove,
 }: {
-  lines: Line[]
+  line: Line
+  index: number
   onChange: (key: number, patch: Partial<Line>) => void
   onRemove: (key: number) => void
 }) {
-  const invalid = lines.filter((line) => !lineErrors(line).ok).length
+  const errors = lineErrors(line)
   const input = (
-    line: Line,
-    field: 'productCode' | 'productName' | 'qty' | 'content',
+    field: LineField,
     label: string,
     error: boolean,
     extra: { maxLength?: number; numeric?: boolean; multiline?: boolean } = {},
@@ -126,13 +128,45 @@ function RepairLinesTable({
         htmlInput: {
           maxLength: extra.maxLength,
           inputMode: extra.numeric ? 'numeric' : undefined,
-          'aria-label': label,
+          'aria-label': `${label} dòng ${index + 1}`,
           style: extra.numeric ? { textAlign: 'right' } : undefined,
         },
       }}
       sx={cellInputSx}
     />
   )
+  return (
+    <TableRow sx={{ verticalAlign: 'top' }}>
+      <TableCell align="center" sx={{ color: 'text.secondary', pt: 1.5 }}>
+        {index + 1}
+      </TableCell>
+      <TableCell>{input('productCode', 'Mã sản phẩm', errors.missingProduct, { maxLength: 100 })}</TableCell>
+      <TableCell>{input('productName', 'Tên sản phẩm', errors.missingProduct, { maxLength: 300 })}</TableCell>
+      <TableCell>{input('qty', 'Số lượng', errors.badQty, { numeric: true })}</TableCell>
+      <TableCell>{input('content', 'Chi tiết sửa', errors.missingContent, { maxLength: 1000, multiline: true })}</TableCell>
+      <TableCell align="center">
+        <IconButton size="small" title="Bỏ mã này" aria-label={`Bỏ mã ${index + 1}`} onClick={() => onRemove(line.key)}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </TableCell>
+    </TableRow>
+  )
+})
+
+/**
+ * Phiếu nhiều mã (thêm tay hoặc nhập từ file Excel): bảng gọn mỗi mã một dòng, sửa thẳng trên ô.
+ * Ô thiếu / sai tô đỏ; đầu bảng đếm số dòng còn thiếu để khách biết vì sao chưa Gửi được.
+ */
+function RepairLinesTable({
+  lines,
+  onChange,
+  onRemove,
+}: {
+  lines: Line[]
+  onChange: (key: number, patch: Partial<Line>) => void
+  onRemove: (key: number) => void
+}) {
+  const invalid = lines.filter((line) => !lineErrors(line).ok).length
 
   return (
     <Stack spacing={0.75}>
@@ -161,36 +195,9 @@ function RepairLinesTable({
             </TableRow>
           </TableHead>
           <TableBody>
-            {lines.map((line, index) => {
-              const errors = lineErrors(line)
-              return (
-                <TableRow key={line.key} sx={{ verticalAlign: 'top' }}>
-                  <TableCell align="center" sx={{ color: 'text.secondary', pt: 1.5 }}>
-                    {index + 1}
-                  </TableCell>
-                  <TableCell>
-                    {input(line, 'productCode', `Mã sản phẩm dòng ${index + 1}`, errors.missingProduct, { maxLength: 100 })}
-                  </TableCell>
-                  <TableCell>
-                    {input(line, 'productName', `Tên sản phẩm dòng ${index + 1}`, errors.missingProduct, { maxLength: 300 })}
-                  </TableCell>
-                  <TableCell>{input(line, 'qty', `Số lượng dòng ${index + 1}`, errors.badQty, { numeric: true })}</TableCell>
-                  <TableCell>
-                    {input(line, 'content', `Chi tiết sửa dòng ${index + 1}`, errors.missingContent, {
-                      maxLength: 1000,
-                      multiline: true,
-                    })}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Bỏ mã này">
-                      <IconButton size="small" aria-label={`Bỏ mã ${index + 1}`} onClick={() => onRemove(line.key)}>
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {lines.map((line, index) => (
+              <RepairLineRow key={line.key} line={line} index={index} onChange={onChange} onRemove={onRemove} />
+            ))}
           </TableBody>
         </Table>
       </TableContainer>
@@ -293,10 +300,17 @@ export function RepairItemDialog({
     // defaults (bộ lọc đang chọn) chỉ lấy lúc mở hộp thoại, không theo dõi.
   }, [open, item, customerSource])
 
-  const setLine = (key: number, patch: Partial<Line>) =>
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
+  // useCallback: các dòng bảng memo theo tham chiếu hàm.
+  const setLine = useCallback(
+    (key: number, patch: Partial<Line>) =>
+      setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line))),
+    [],
+  )
   const addLine = () => setLines((current) => [...current, emptyLine(nextKey.current++)])
-  const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key))
+  const removeLine = useCallback(
+    (key: number) => setLines((current) => current.filter((line) => line.key !== key)),
+    [],
+  )
 
   // Khách soạn sẵn file Excel (theo file mẫu) rồi tải lên một lượt — các mã điền vào phiếu để xem
   // lại trước khi bấm Gửi. Tải nhiều file thì cộng dồn; dòng trống đang có thì bỏ.

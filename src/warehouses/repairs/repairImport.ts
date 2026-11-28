@@ -115,7 +115,7 @@ export function repairImportTemplate(): XlsxSheet[] {
         ['Số lượng: số nguyên; bỏ trống tính là 1.'],
         ['Chi tiết sửa: bắt buộc, vd "Sửa thành size 5 và xi lại".'],
         ['Ngày, loại hàng, số phiếu sửa, người gửi sửa chọn trên màn hình sau khi tải file lên.'],
-        ['Một lần gửi tối đa 50 mã.'],
+        ['Một lần gửi tối đa 200 mã.'],
       ],
       widths: [90],
     },
