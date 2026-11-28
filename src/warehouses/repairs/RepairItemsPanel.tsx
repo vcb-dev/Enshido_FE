@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Box, Button, Chip, Typography } from '@mui/material'
+import { useCallback, useMemo, useState } from 'react'
+import { Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -27,6 +27,7 @@ import {
   type Column,
 } from '../../components/ui'
 import { paginate, useTableParams } from '../../hooks/useTableParams'
+import { RepairConfirmDialog, type RepairConfirmMode } from './RepairConfirmDialog'
 import { RepairItemDialog } from './RepairItemDialog'
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
@@ -50,7 +51,8 @@ function fullDate(value: string | null) {
 
 /**
  * Kho sửa chữa: một bảng hàng gửi sửa. Khách VCB / VPC gửi hàng (ngày, mã / tên sản phẩm, số lượng,
- * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho nhập phần còn lại. Lọc theo loại
+ * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho làm hai bước ở nút trên
+ * dòng (RepairConfirmDialog, cả phiếu một lần): Nhận hàng lúc khách gửi, Trả hàng khi sửa xong. Lọc theo loại
  * hàng (trước khi nhập kho / trong kho), VPC / VCB và tình trạng. Không động tồn kho nào.
  */
 export function RepairItemsPanel() {
@@ -66,6 +68,8 @@ export function RepairItemsPanel() {
   const { params } = table
   const [editing, setEditing] = useState<RepairItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Thủ kho xác nhận — tách khỏi hộp thoại khách gửi sửa.
+  const [confirming, setConfirming] = useState<{ rows: RepairItem[]; mode: RepairConfirmMode } | null>(null)
 
   const items = useQuery({ queryKey: ['repairs'], queryFn: getRepairItemsApi })
   const remove = useMutation({
@@ -78,6 +82,16 @@ export function RepairItemsPanel() {
   })
 
   const all = useMemo(() => items.data ?? [], [items.data])
+  /** Cả phiếu sửa chứa dòng này: cùng số phiếu + cùng hàng VPC / VCB. Không số phiếu thì chỉ dòng đó. */
+  const slipRowsOf = useCallback(
+    (row: RepairItem) =>
+      row.ticketCode
+        ? all
+            .filter((other) => other.ticketCode === row.ticketCode && other.source === row.source)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        : [row],
+    [all],
+  )
   const rows = useMemo(() => {
     const needle = params.search.trim().toLowerCase()
     return all.filter((row) => {
@@ -155,7 +169,7 @@ export function RepairItemsPanel() {
       },
       ...(customer
         ? []
-        : [{ key: 'source', header: 'Hàng của', width: 80, render: (row: RepairItem) => row.source }]),
+        : [{ key: 'source', header: 'Khách hàng', width: 100, render: (row: RepairItem) => row.source }]),
       {
         key: 'returnedQty',
         header: 'SL trả',
@@ -174,27 +188,32 @@ export function RepairItemsPanel() {
       {
         key: 'actions',
         header: '',
-        width: 90,
+        width: customer ? 90 : 250,
         card: 'actions',
         render: (row) => (
-          <RowActions
-            onEdit={() => {
-              setEditing(row)
-              setDialogOpen(true)
-            }}
-            editDisabled={locked(row)}
-            onDelete={() => void askRemove(row)}
-            deleteDisabled={locked(row)}
-            titles={
-              locked(row)
-                ? { edit: 'Thủ kho đã nhận hàng — báo thủ kho nếu cần đổi', delete: 'Thủ kho đã nhận hàng' }
-                : undefined
-            }
-          />
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+            {customer ? null : (
+              <KeeperButtons row={row} onOpen={(mode) => setConfirming({ rows: slipRowsOf(row), mode })} />
+            )}
+            <RowActions
+              onEdit={() => {
+                setEditing(row)
+                setDialogOpen(true)
+              }}
+              editDisabled={locked(row)}
+              onDelete={() => void askRemove(row)}
+              deleteDisabled={locked(row)}
+              titles={
+                locked(row)
+                  ? { edit: 'Thủ kho đã nhận hàng — báo thủ kho nếu cần đổi', delete: 'Thủ kho đã nhận hàng' }
+                  : undefined
+              }
+            />
+          </Stack>
         ),
       },
     ]
-  }, [customer, remove])
+  }, [customer, remove, slipRowsOf])
 
   const sum = (pick: (row: RepairItem) => number) => rows.reduce((total, row) => total + pick(row), 0)
   const filtering = Boolean(params.search || params.stage || params.source || params.status)
@@ -250,7 +269,7 @@ export function RepairItemsPanel() {
             {customer ? null : (
               <SelectInput
                 size="small"
-                label="Hàng của"
+                label="Khách hàng"
                 value={params.source}
                 onChange={(value) => table.setFilter({ source: String(value) })}
                 options={REPAIR_SOURCE_OPTIONS}
@@ -292,11 +311,41 @@ export function RepairItemsPanel() {
         defaults={{ stage: params.stage as RepairStage | '', source: params.source as RepairSource | '' }}
         onClose={() => setDialogOpen(false)}
       />
+      <RepairConfirmDialog
+        rows={confirming?.rows ?? null}
+        mode={confirming?.mode ?? 'receive'}
+        onClose={() => setConfirming(null)}
+      />
       {customer ? (
         <Typography variant="caption" color="text.secondary">
           Đang xem hàng {customerSource}. Thủ kho nhận hàng xong thì dòng bị khoá, không sửa / xoá được nữa.
         </Typography>
       ) : null}
     </Box>
+  )
+}
+
+/**
+ * Nút thủ kho theo tình trạng: chờ nhận → Nhận hàng; đang sửa → Trả hàng (sửa xong mới biết ngày
+ * trả, người sửa, người lấy hàng); đã trả → sửa lại. Nhận hàng luôn sửa lại được.
+ */
+function KeeperButtons({ row, onOpen }: { row: RepairItem; onOpen: (mode: RepairConfirmMode) => void }) {
+  const button = (mode: RepairConfirmMode, label: string, primary: boolean) => (
+    <Button
+      key={mode}
+      size="small"
+      variant={primary ? 'outlined' : 'text'}
+      onClick={() => onOpen(mode)}
+      sx={{ whiteSpace: 'nowrap', minWidth: 0, px: 1 }}
+    >
+      {label}
+    </Button>
+  )
+  if (row.status === 'WAITING') return button('receive', 'Nhận hàng', true)
+  return (
+    <>
+      {row.status === 'RETURNED' ? button('return', 'Sửa trả', false) : button('return', 'Trả hàng', true)}
+      {button('receive', 'Sửa nhận', false)}
+    </>
   )
 }

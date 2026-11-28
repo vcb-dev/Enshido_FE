@@ -86,6 +86,21 @@ export function createRepairItemsApi(items: RepairItemPayload[]) {
   return apiFetch<RepairItem[]>(`${BASE}/batch`, { method: 'POST', body: JSON.stringify({ items }) })
 }
 
+/** Ô thủ kho ghi chung khi xác nhận cả phiếu. Không gửi key = giữ nguyên từng dòng; null = xoá. */
+export type RepairConfirmShared = Partial<
+  Pick<RepairKeeperPart, 'returnedAt' | 'transferConfirmedBy' | 'issuerName' | 'repairedBy' | 'returnedBy' | 'receiverName'>
+>
+
+export type RepairConfirmPayload = RepairConfirmShared & {
+  /** Không gửi returnedQty / note = giữ của dòng (bước Nhận hàng không gửi SL trả). */
+  lines: Array<{ id: string; returnedQty?: number | null; note?: string | null }>
+}
+
+/** Thủ kho xác nhận cả phiếu sửa một lần (chỉ thủ kho). */
+export function confirmRepairSlipApi(payload: RepairConfirmPayload) {
+  return apiFetch<RepairItem[]>(`${BASE}/confirm`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export function updateRepairItemApi(id: string, payload: RepairItemPayload) {
   return apiFetch<RepairItem>(`${BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
