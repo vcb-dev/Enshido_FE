@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -10,10 +10,15 @@ import {
   DialogTitle,
   IconButton,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -45,7 +50,7 @@ const digitsOf = (raw: string) => raw.replace(/\D/g, '')
 const textOrNull = (raw: string) => raw.trim() || null
 
 /** Tối đa số mã trên một phiếu — khớp giới hạn BE. */
-const MAX_LINES = 50
+const MAX_LINES = 200
 
 /** Một mã sản phẩm trên phiếu sửa. */
 type Line = {
@@ -70,10 +75,134 @@ const isBlankLine = (line: Line) =>
 
 function lineErrors(line: Line) {
   const missingProduct = line.productCode.trim() === '' && line.productName.trim() === ''
-  return {
-    missingProduct,
-    ok: !missingProduct && Number(line.qty) > 0 && line.content.trim() !== '',
-  }
+  const badQty = !(Number(line.qty) > 0)
+  const missingContent = line.content.trim() === ''
+  return { missingProduct, badQty, missingContent, ok: !missingProduct && !badQty && !missingContent }
+}
+
+const cellInputSx = {
+  '& .MuiInputBase-root': { fontSize: 14, bgcolor: 'background.paper' },
+  '& .MuiInputBase-input': { py: 0.75, px: 1 },
+  // Ô nhiều dòng (Chi tiết sửa): lề nằm ở root — gom về như ô một dòng cho các dòng cao bằng nhau.
+  '& .MuiInputBase-multiline': { py: 0.75, px: 1 },
+  '& .MuiInputBase-multiline .MuiInputBase-input': { p: 0 },
+} as const
+
+type LineField = 'productCode' | 'productName' | 'qty' | 'content'
+
+/**
+ * Một dòng của bảng — memo để gõ ở một ô chỉ vẽ lại dòng đó (phiếu tới 200 mã, vẽ lại cả bảng mỗi
+ * phím thì gõ bị trễ). onChange / onRemove phải giữ nguyên tham chiếu (useCallback ở hộp thoại).
+ */
+const RepairLineRow = memo(function RepairLineRow({
+  line,
+  index,
+  onChange,
+  onRemove,
+}: {
+  line: Line
+  index: number
+  onChange: (key: number, patch: Partial<Line>) => void
+  onRemove: (key: number) => void
+}) {
+  const errors = lineErrors(line)
+  const input = (
+    field: LineField,
+    label: string,
+    error: boolean,
+    extra: { maxLength?: number; numeric?: boolean; multiline?: boolean } = {},
+  ) => (
+    <TextField
+      size="small"
+      hiddenLabel
+      fullWidth
+      placeholder={label}
+      value={line[field]}
+      error={error}
+      multiline={extra.multiline}
+      maxRows={extra.multiline ? 3 : undefined}
+      onChange={(event) =>
+        onChange(line.key, { [field]: extra.numeric ? digitsOf(event.target.value) : event.target.value })
+      }
+      slotProps={{
+        htmlInput: {
+          maxLength: extra.maxLength,
+          inputMode: extra.numeric ? 'numeric' : undefined,
+          'aria-label': `${label} dòng ${index + 1}`,
+          style: extra.numeric ? { textAlign: 'right' } : undefined,
+        },
+      }}
+      sx={cellInputSx}
+    />
+  )
+  return (
+    <TableRow sx={{ verticalAlign: 'top' }}>
+      <TableCell align="center" sx={{ color: 'text.secondary', pt: 1.5 }}>
+        {index + 1}
+      </TableCell>
+      <TableCell>{input('productCode', 'Mã sản phẩm', errors.missingProduct, { maxLength: 100 })}</TableCell>
+      <TableCell>{input('productName', 'Tên sản phẩm', errors.missingProduct, { maxLength: 300 })}</TableCell>
+      <TableCell>{input('qty', 'Số lượng', errors.badQty, { numeric: true })}</TableCell>
+      <TableCell>{input('content', 'Chi tiết sửa', errors.missingContent, { maxLength: 1000, multiline: true })}</TableCell>
+      <TableCell align="center">
+        <IconButton size="small" title="Bỏ mã này" aria-label={`Bỏ mã ${index + 1}`} onClick={() => onRemove(line.key)}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </TableCell>
+    </TableRow>
+  )
+})
+
+/**
+ * Phiếu nhiều mã (thêm tay hoặc nhập từ file Excel): bảng gọn mỗi mã một dòng, sửa thẳng trên ô.
+ * Ô thiếu / sai tô đỏ; đầu bảng đếm số dòng còn thiếu để khách biết vì sao chưa Gửi được.
+ */
+function RepairLinesTable({
+  lines,
+  onChange,
+  onRemove,
+}: {
+  lines: Line[]
+  onChange: (key: number, patch: Partial<Line>) => void
+  onRemove: (key: number) => void
+}) {
+  const invalid = lines.filter((line) => !lineErrors(line).ok).length
+
+  return (
+    <Stack spacing={0.75}>
+      <Typography variant="caption" color={invalid ? 'error' : 'text.secondary'} sx={{ fontWeight: 600 }}>
+        {lines.length} mã
+        {invalid
+          ? ` · ${invalid} dòng còn thiếu (mã hoặc tên, số lượng, chi tiết sửa) — ô đỏ`
+          : ` · tổng SL ${lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0)}`}
+      </Typography>
+      <TableContainer
+        sx={{ maxHeight: { xs: 'none', sm: '46vh' }, border: 1, borderColor: 'divider', borderRadius: 1 }}
+      >
+        <Table size="small" stickyHeader sx={{ minWidth: 640, '& td, & th': { px: 0.75 } }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ width: 32 }} align="center">
+                #
+              </TableCell>
+              <TableCell sx={{ width: 140 }}>Mã sản phẩm</TableCell>
+              <TableCell>Tên sản phẩm</TableCell>
+              <TableCell sx={{ width: 64 }} align="right">
+                SL *
+              </TableCell>
+              <TableCell sx={{ width: '36%' }}>Chi tiết sửa *</TableCell>
+              <TableCell sx={{ width: 36 }} />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {lines.map((line, index) => (
+              <RepairLineRow key={line.key} line={line} index={index} onChange={onChange} onRemove={onRemove} />
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  )
 }
 
 function ChoiceGroup<V extends string>({
@@ -171,10 +300,17 @@ export function RepairItemDialog({
     // defaults (bộ lọc đang chọn) chỉ lấy lúc mở hộp thoại, không theo dõi.
   }, [open, item, customerSource])
 
-  const setLine = (key: number, patch: Partial<Line>) =>
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
+  // useCallback: các dòng bảng memo theo tham chiếu hàm.
+  const setLine = useCallback(
+    (key: number, patch: Partial<Line>) =>
+      setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line))),
+    [],
+  )
   const addLine = () => setLines((current) => [...current, emptyLine(nextKey.current++)])
-  const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key))
+  const removeLine = useCallback(
+    (key: number) => setLines((current) => current.filter((line) => line.key !== key)),
+    [],
+  )
 
   // Khách soạn sẵn file Excel (theo file mẫu) rồi tải lên một lượt — các mã điền vào phiếu để xem
   // lại trước khi bấm Gửi. Tải nhiều file thì cộng dồn; dòng trống đang có thì bỏ.
@@ -264,7 +400,7 @@ export function RepairItemDialog({
   const multi = lines.length > 1
 
   return (
-    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth={multi ? "md" : "sm"}>
       <DialogTitle>
         {item ? 'Sửa phần khách gửi sửa' : keeper ? 'Khách gửi sửa — thủ kho nhập hộ' : 'Gửi hàng sửa chữa'}
       </DialogTitle>
@@ -303,70 +439,54 @@ export function RepairItemDialog({
             />
           </Box>
 
-          {lines.map((line, index) => {
-            const errors = lineErrors(line)
-            return (
-              <Stack
-                key={line.key}
-                spacing={1.5}
-                sx={
-                  multi
-                    ? { border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, pt: 1 }
-                    : undefined
-                }
-              >
-                {multi ? (
-                  <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                      Mã {index + 1}
-                    </Typography>
-                    <Tooltip title="Bỏ mã này">
-                      <IconButton size="small" aria-label={`Bỏ mã ${index + 1}`} onClick={() => removeLine(line.key)}>
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                ) : null}
-                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1.6fr 0.7fr' }}>
+          {multi ? (
+            <RepairLinesTable lines={lines} onChange={setLine} onRemove={removeLine} />
+          ) : (
+            lines.map((line) => {
+              const errors = lineErrors(line)
+              return (
+                <Stack key={line.key} spacing={1.5}>
+                  <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1.6fr 0.7fr' }}>
+                    <TextField
+                      size="small"
+                      label="Mã sản phẩm"
+                      value={line.productCode}
+                      onChange={(event) => setLine(line.key, { productCode: event.target.value })}
+                      error={errors.missingProduct}
+                      slotProps={{ htmlInput: { maxLength: 100 } }}
+                    />
+                    <TextField
+                      size="small"
+                      label="Số lượng"
+                      required
+                      value={line.qty}
+                      onChange={(event) => setLine(line.key, { qty: digitsOf(event.target.value) })}
+                      slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                    />
+                  </Box>
                   <TextField
                     size="small"
-                    label="Mã sản phẩm"
-                    value={line.productCode}
-                    onChange={(event) => setLine(line.key, { productCode: event.target.value })}
+                    label="Tên sản phẩm"
+                    value={line.productName}
+                    onChange={(event) => setLine(line.key, { productName: event.target.value })}
                     error={errors.missingProduct}
-                    slotProps={{ htmlInput: { maxLength: 100 } }}
+                    helperText={errors.missingProduct ? 'Nhập mã sản phẩm hoặc tên sản phẩm' : undefined}
+                    slotProps={{ htmlInput: { maxLength: 300 } }}
                   />
                   <TextField
                     size="small"
-                    label="Số lượng"
+                    label="Chi tiết sửa"
                     required
-                    value={line.qty}
-                    onChange={(event) => setLine(line.key, { qty: digitsOf(event.target.value) })}
-                    slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                    placeholder="Vd: Sửa thành size 5 và xi lại"
+                    value={line.content}
+                    onChange={(event) => setLine(line.key, { content: event.target.value })}
+                    multiline
+                    slotProps={{ htmlInput: { maxLength: 1000 } }}
                   />
-                </Box>
-                <TextField
-                  size="small"
-                  label="Tên sản phẩm"
-                  value={line.productName}
-                  onChange={(event) => setLine(line.key, { productName: event.target.value })}
-                  error={errors.missingProduct}
-                  helperText={errors.missingProduct ? 'Nhập mã sản phẩm hoặc tên sản phẩm' : undefined}
-                  slotProps={{ htmlInput: { maxLength: 300 } }}
-                />
-                <TextField
-                  size="small"
-                  label="Chi tiết sửa"
-                  required
-                  placeholder="Vd: Sửa thành size 5 và xi lại"
-                  value={line.content}
-                  onChange={(event) => setLine(line.key, { content: event.target.value })}
-                  multiline
-                  slotProps={{ htmlInput: { maxLength: 1000 } }}
-                />
-              </Stack>
-            )
-          })}
+                </Stack>
+              )
+            })
+          )}
           {creating ? (
             <Stack spacing={1}>
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
