@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Box, Button, Chip, Stack, Typography } from '@mui/material'
+import { Box, Button, Checkbox, Chip, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -27,6 +27,7 @@ import {
   type Column,
 } from '../../components/ui'
 import { paginate, useTableParams } from '../../hooks/useTableParams'
+import { RepairBulkReturnDialog } from './RepairBulkReturnDialog'
 import { RepairConfirmDialog, type RepairConfirmMode } from './RepairConfirmDialog'
 import { RepairItemDialog } from './RepairItemDialog'
 
@@ -70,6 +71,9 @@ export function RepairItemsPanel() {
   const [dialogOpen, setDialogOpen] = useState(false)
   // Thủ kho xác nhận — tách khỏi hộp thoại khách gửi sửa.
   const [confirming, setConfirming] = useState<{ rows: RepairItem[]; mode: RepairConfirmMode } | null>(null)
+  // Thủ kho tick các mã đã trả rồi bấm một lần.
+  const [selected, setSelected] = useState<string[]>([])
+  const [bulkReturn, setBulkReturn] = useState<RepairItem[] | null>(null)
 
   const items = useQuery({ queryKey: ['repairs'], queryFn: getRepairItemsApi })
   const remove = useMutation({
@@ -117,6 +121,22 @@ export function RepairItemsPanel() {
     })
   }, [all, params])
   const pageRows = paginate(rows, params.page, params.pageSize)
+  // Chọn được: thủ kho, mã chưa trả đủ. Lọc lại theo dữ liệu mới — dòng vừa trả / bị xoá tự rơi ra.
+  const canPick = (row: RepairItem) => !customer && row.status !== 'RETURNED'
+  const pickedRows = useMemo(
+    () => all.filter((row) => selected.includes(row.id) && row.status !== 'RETURNED'),
+    [all, selected],
+  )
+  const picked = useMemo(() => pickedRows.map((row) => row.id), [pickedRows])
+  const pagePickable = pageRows.filter(canPick).map((row) => row.id)
+  const pageAllPicked = pagePickable.length > 0 && pagePickable.every((id) => picked.includes(id))
+  const pageSomePicked = pagePickable.some((id) => picked.includes(id))
+  const togglePage = () =>
+    setSelected((current) =>
+      pageAllPicked ? current.filter((id) => !pagePickable.includes(id)) : Array.from(new Set([...current, ...pagePickable])),
+    )
+  const toggleRow = (id: string) =>
+    setSelected((current) => (current.includes(id) ? current.filter((key) => key !== id) : [...current, id]))
 
   const columns = useMemo<Column<RepairItem>[]>(() => {
     const askRemove = async (row: RepairItem) => {
@@ -138,7 +158,36 @@ export function RepairItemsPanel() {
     })
     // Khách VCB / VPC: hết sửa / xoá khi thủ kho đã nhận hàng.
     const locked = (row: RepairItem) => customer && row.keeperTouched
+    const select: Column<RepairItem>[] = customer
+      ? []
+      : [
+          {
+            key: 'select',
+            width: 44,
+            align: 'center',
+            header: (
+              <Checkbox
+                size="small"
+                checked={pageAllPicked}
+                indeterminate={!pageAllPicked && pageSomePicked}
+                disabled={!pagePickable.length}
+                onChange={togglePage}
+                slotProps={{ input: { 'aria-label': 'Chọn mọi mã chưa trả trên trang' } }}
+              />
+            ),
+            render: (row) =>
+              row.status === 'RETURNED' ? null : (
+                <Checkbox
+                  size="small"
+                  checked={picked.includes(row.id)}
+                  onChange={() => toggleRow(row.id)}
+                  slotProps={{ input: { 'aria-label': `Chọn ${row.productCode ?? row.productName ?? ''}` } }}
+                />
+              ),
+          },
+        ]
     return [
+      ...select,
       {
         key: 'receivedAt',
         header: 'Ngày',
@@ -213,7 +262,7 @@ export function RepairItemsPanel() {
         ),
       },
     ]
-  }, [customer, remove, slipRowsOf])
+  }, [customer, remove, slipRowsOf, picked, pageAllPicked, pageSomePicked, pagePickable.length, togglePage])
 
   const sum = (pick: (row: RepairItem) => number) => rows.reduce((total, row) => total + pick(row), 0)
   const filtering = Boolean(params.search || params.stage || params.source || params.status)
@@ -237,6 +286,7 @@ export function RepairItemsPanel() {
         columns={columns}
         rows={pageRows}
         rowKey={(row) => row.id}
+        isRowSelected={(row) => picked.includes(row.id)}
         loading={items.isLoading}
         errorText={items.error instanceof Error ? items.error.message : undefined}
         emptyText={
@@ -244,10 +294,10 @@ export function RepairItemsPanel() {
             ? 'Không có hàng sửa chữa khớp bộ lọc.'
             : customer
               ? 'Chưa gửi hàng sửa chữa nào. Bấm Gửi hàng sửa chữa.'
-              : 'Chưa có hàng sửa chữa.'
+              : 'Chưa có hàng sửa chữa — khách gửi lên bằng tài khoản khách.'
         }
         variant="grid"
-        minWidth={customer ? 2150 : 2230}
+        minWidth={customer ? 2150 : 2280}
         page={params.page}
         pageSize={params.pageSize}
         total={rows.length}
@@ -292,15 +342,31 @@ export function RepairItemsPanel() {
               </Button>
             ) : null}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button
-              variant="contained"
-              onClick={() => {
-                setEditing(null)
-                setDialogOpen(true)
-              }}
-            >
-              {customer ? 'Gửi hàng sửa chữa' : 'Thêm hàng sửa chữa'}
-            </Button>
+            {customer ? (
+              // Khách gửi lên là người điền — thủ kho không nhập hộ.
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setEditing(null)
+                  setDialogOpen(true)
+                }}
+              >
+                Gửi hàng sửa chữa
+              </Button>
+            ) : picked.length ? (
+              <>
+                <Button size="small" onClick={() => setSelected([])}>
+                  Bỏ chọn
+                </Button>
+                <Button variant="contained" onClick={() => setBulkReturn(pickedRows)}>
+                  Đã trả ({picked.length} mã)
+                </Button>
+              </>
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                Tick các mã đã trả rồi bấm Đã trả
+              </Typography>
+            )}
           </>
         }
       />
@@ -311,6 +377,7 @@ export function RepairItemsPanel() {
         defaults={{ stage: params.stage as RepairStage | '', source: params.source as RepairSource | '' }}
         onClose={() => setDialogOpen(false)}
       />
+      <RepairBulkReturnDialog rows={bulkReturn} onClose={() => setBulkReturn(null)} onDone={() => setSelected([])} />
       <RepairConfirmDialog
         rows={confirming?.rows ?? null}
         mode={confirming?.mode ?? 'receive'}
