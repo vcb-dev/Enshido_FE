@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -17,6 +18,8 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
+import DownloadIcon from '@mui/icons-material/Download'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -31,6 +34,9 @@ import {
   type RepairStage,
 } from '../../api/repairs'
 import { DateField } from '../../components/ui'
+import { downloadXlsx } from '../../dashboard/xlsx'
+import { readXlsxRows, XlsxReadError } from '../../dashboard/xlsxRead'
+import { parseRepairImport, repairImportTemplate, type ImportedRepairLine } from './repairImport'
 import { keeperPartOf } from './repairKeeperPart'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { vnToday } from '../warehousePeriod'
@@ -57,6 +63,10 @@ const emptyLine = (key: number): Line => ({
   qty: '1',
   content: '',
 })
+
+/** Dòng còn y như lúc thêm (chưa gõ gì) — nhập file thì thay bằng dòng trong file. */
+const isBlankLine = (line: Line) =>
+  !line.productCode.trim() && !line.productName.trim() && !line.content.trim() && line.qty === '1'
 
 function lineErrors(line: Line) {
   const missingProduct = line.productCode.trim() === '' && line.productName.trim() === ''
@@ -134,6 +144,9 @@ export function RepairItemDialog({
   const [ticketCode, setTicketCode] = useState('')
   const [senderName, setSenderName] = useState('')
   const [lines, setLines] = useState<Line[]>([emptyLine(0)])
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
+  const [importErrors, setImportErrors] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -143,6 +156,7 @@ export function RepairItemDialog({
     setSource(item?.source ?? customerSource ?? defaults?.source ?? '')
     setTicketCode(item?.ticketCode ?? '')
     setSenderName(item?.senderName ?? '')
+    setImportErrors([])
     setLines([
       item
         ? {
@@ -161,6 +175,45 @@ export function RepairItemDialog({
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
   const addLine = () => setLines((current) => [...current, emptyLine(nextKey.current++)])
   const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key))
+
+  // Khách soạn sẵn file Excel (theo file mẫu) rồi tải lên một lượt — các mã điền vào phiếu để xem
+  // lại trước khi bấm Gửi. Tải nhiều file thì cộng dồn; dòng trống đang có thì bỏ.
+  const importFile = async (file: File) => {
+    setImporting(true)
+    setImportErrors([])
+    try {
+      if (!/\.xlsx$/i.test(file.name)) {
+        throw new XlsxReadError('Chỉ nhận file Excel .xlsx — file .xls / .csv thì mở bằng Excel rồi lưu lại dạng .xlsx')
+      }
+      const { lines: imported, errors } = parseRepairImport(await readXlsxRows(await file.arrayBuffer()))
+      if (errors.length) {
+        setImportErrors(errors)
+        return
+      }
+      const kept = lines.filter((line) => !isBlankLine(line))
+      if (kept.length + imported.length > MAX_LINES) {
+        setImportErrors([
+          `Một lần gửi tối đa ${MAX_LINES} mã — file có ${imported.length} mã${kept.length ? `, phiếu đang có ${kept.length} mã` : ''}. Chia file ra gửi nhiều lần.`,
+        ])
+        return
+      }
+      const toLine = (row: ImportedRepairLine): Line => ({
+        key: nextKey.current++,
+        productCode: row.productCode,
+        productName: row.productName,
+        qty: String(row.qty),
+        content: row.content,
+      })
+      setLines([...kept, ...imported.map(toLine)])
+      toast.success(`Đã thêm ${imported.length} mã từ file ${file.name}`)
+    } catch (error) {
+      setImportErrors([
+        error instanceof XlsxReadError ? error.message : 'Không đọc được file — mở bằng Excel rồi lưu lại dạng .xlsx',
+      ])
+    } finally {
+      setImporting(false)
+    }
+  }
 
   // Phần thủ kho đã nhập không có ô ở đây: thủ kho sửa phần khách phải gửi lại nguyên, không thì
   // BE ghi trống. Đổi ngày gửi sang sau ngày trả thì BE báo lỗi.
@@ -315,16 +368,60 @@ export function RepairItemDialog({
             )
           })}
           {creating ? (
-            <Box>
-              <Button
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={addLine}
-                disabled={lines.length >= MAX_LINES}
-              >
-                Thêm mã sản phẩm
-              </Button>
-            </Box>
+            <Stack spacing={1}>
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                <Button
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={addLine}
+                  disabled={lines.length >= MAX_LINES}
+                >
+                  Thêm mã sản phẩm
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<UploadFileIcon />}
+                  loading={importing}
+                  loadingPosition="start"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  Nhập từ file Excel
+                </Button>
+                <Button
+                  size="small"
+                  color="inherit"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => downloadXlsx('mau-gui-hang-sua-chua.xlsx', repairImportTemplate())}
+                >
+                  Tải file mẫu
+                </Button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  hidden
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    // Cho chọn lại cùng file sau khi sửa.
+                    event.target.value = ''
+                    if (file) void importFile(file)
+                  }}
+                />
+              </Stack>
+              {importErrors.length ? (
+                <Alert severity="error" onClose={() => setImportErrors([])}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Chưa nhập được file — sửa rồi tải lại:
+                  </Typography>
+                  <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                    {importErrors.slice(0, 8).map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                    {importErrors.length > 8 ? <li>… và {importErrors.length - 8} dòng lỗi khác</li> : null}
+                  </Box>
+                </Alert>
+              ) : null}
+            </Stack>
           ) : null}
 
           <TextField
