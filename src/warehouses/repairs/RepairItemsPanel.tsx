@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Box, Button, Chip, Typography } from '@mui/material'
+import { Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -27,6 +27,7 @@ import {
   type Column,
 } from '../../components/ui'
 import { paginate, useTableParams } from '../../hooks/useTableParams'
+import { RepairConfirmDialog } from './RepairConfirmDialog'
 import { RepairItemDialog } from './RepairItemDialog'
 
 const numCell = { fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
@@ -50,7 +51,8 @@ function fullDate(value: string | null) {
 
 /**
  * Kho sửa chữa: một bảng hàng gửi sửa. Khách VCB / VPC gửi hàng (ngày, mã / tên sản phẩm, số lượng,
- * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho nhập phần còn lại. Lọc theo loại
+ * chi tiết sửa, người gửi sửa) và chỉ thấy hàng của mình; thủ kho nhập phần còn lại ở nút Xác nhận
+ * từng dòng (RepairConfirmDialog) — tách khỏi hộp thoại khách gửi sửa. Lọc theo loại
  * hàng (trước khi nhập kho / trong kho), VPC / VCB và tình trạng. Không động tồn kho nào.
  */
 export function RepairItemsPanel() {
@@ -66,6 +68,8 @@ export function RepairItemsPanel() {
   const { params } = table
   const [editing, setEditing] = useState<RepairItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Thủ kho xác nhận — tách khỏi hộp thoại khách gửi sửa.
+  const [confirming, setConfirming] = useState<RepairItem | null>(null)
 
   const items = useQuery({ queryKey: ['repairs'], queryFn: getRepairItemsApi })
   const remove = useMutation({
@@ -174,23 +178,35 @@ export function RepairItemsPanel() {
       {
         key: 'actions',
         header: '',
-        width: 90,
+        width: customer ? 90 : 200,
         card: 'actions',
         render: (row) => (
-          <RowActions
-            onEdit={() => {
-              setEditing(row)
-              setDialogOpen(true)
-            }}
-            editDisabled={locked(row)}
-            onDelete={() => void askRemove(row)}
-            deleteDisabled={locked(row)}
-            titles={
-              locked(row)
-                ? { edit: 'Thủ kho đã nhận hàng — báo thủ kho nếu cần đổi', delete: 'Thủ kho đã nhận hàng' }
-                : undefined
-            }
-          />
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+            {customer ? null : (
+              <Button
+                size="small"
+                variant={row.keeperTouched ? 'text' : 'outlined'}
+                onClick={() => setConfirming(row)}
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                {row.keeperTouched ? 'Sửa xác nhận' : 'Xác nhận'}
+              </Button>
+            )}
+            <RowActions
+              onEdit={() => {
+                setEditing(row)
+                setDialogOpen(true)
+              }}
+              editDisabled={locked(row)}
+              onDelete={() => void askRemove(row)}
+              deleteDisabled={locked(row)}
+              titles={
+                locked(row)
+                  ? { edit: 'Thủ kho đã nhận hàng — báo thủ kho nếu cần đổi', delete: 'Thủ kho đã nhận hàng' }
+                  : undefined
+              }
+            />
+          </Stack>
         ),
       },
     ]
@@ -292,6 +308,7 @@ export function RepairItemsPanel() {
         defaults={{ stage: params.stage as RepairStage | '', source: params.source as RepairSource | '' }}
         onClose={() => setDialogOpen(false)}
       />
+      <RepairConfirmDialog item={confirming} onClose={() => setConfirming(null)} />
       {customer ? (
         <Typography variant="caption" color="text.secondary">
           Đang xem hàng {customerSource}. Thủ kho nhận hàng xong thì dòng bị khoá, không sửa / xoá được nữa.

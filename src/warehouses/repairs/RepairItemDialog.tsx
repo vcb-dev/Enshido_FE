@@ -7,7 +7,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   IconButton,
   Stack,
   TextField,
@@ -32,6 +31,7 @@ import {
   type RepairStage,
 } from '../../api/repairs'
 import { DateField } from '../../components/ui'
+import { keeperPartOf } from './repairKeeperPart'
 import { useIsMobile } from '../../hooks/useBreakpoint'
 import { vnToday } from '../warehousePeriod'
 
@@ -48,8 +48,6 @@ type Line = {
   productName: string
   qty: string
   content: string
-  /** Thủ kho: SL trả của riêng mã này. */
-  returnedQty: string
 }
 
 const emptyLine = (key: number): Line => ({
@@ -58,18 +56,13 @@ const emptyLine = (key: number): Line => ({
   productName: '',
   qty: '1',
   content: '',
-  returnedQty: '',
 })
 
 function lineErrors(line: Line) {
-  const qty = Number(line.qty)
-  const returned = line.returnedQty === '' ? null : Number(line.returnedQty)
   const missingProduct = line.productCode.trim() === '' && line.productName.trim() === ''
-  const returnedTooMany = returned !== null && qty > 0 && returned > qty
   return {
     missingProduct,
-    returnedTooMany,
-    ok: !missingProduct && qty > 0 && line.content.trim() !== '' && !returnedTooMany,
+    ok: !missingProduct && Number(line.qty) > 0 && line.content.trim() !== '',
   }
 }
 
@@ -107,10 +100,10 @@ function ChoiceGroup<V extends string>({
 }
 
 /**
- * Thêm / sửa hàng sửa chữa. Thêm mới là một phiếu sửa: ngày, loại hàng, số phiếu sửa, người gửi dùng
- * chung, bấm "+" để gom nhiều mã sản phẩm — lưu ra mỗi mã một dòng cùng số phiếu. Sửa thì chỉ một
- * dòng. Phần thủ kho (SL trả từng mã, ngày trả, các người ký, note) chỉ hiện với thủ kho. Khách
- * không chọn VPC / VCB — lấy theo tài khoản.
+ * Khách gửi lên sửa — thêm / sửa phần khách. Thêm mới là một phiếu sửa: ngày, loại hàng, số phiếu
+ * sửa, người gửi dùng chung, bấm "+" để gom nhiều mã sản phẩm — lưu ra mỗi mã một dòng cùng số
+ * phiếu. Sửa thì chỉ một dòng. Phần thủ kho tách riêng ở RepairConfirmDialog. Khách không chọn
+ * VPC / VCB — lấy theo tài khoản; thủ kho nhập hộ thì chọn.
  */
 export function RepairItemDialog({
   open,
@@ -141,14 +134,6 @@ export function RepairItemDialog({
   const [ticketCode, setTicketCode] = useState('')
   const [senderName, setSenderName] = useState('')
   const [lines, setLines] = useState<Line[]>([emptyLine(0)])
-  // Phần thủ kho — chung cho cả phiếu (SL trả nằm theo từng mã)
-  const [returnedAt, setReturnedAt] = useState('')
-  const [transferConfirmedBy, setTransferConfirmedBy] = useState('')
-  const [issuerName, setIssuerName] = useState('')
-  const [repairedBy, setRepairedBy] = useState('')
-  const [returnedBy, setReturnedBy] = useState('')
-  const [receiverName, setReceiverName] = useState('')
-  const [note, setNote] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -166,17 +151,9 @@ export function RepairItemDialog({
             productName: item.productName ?? '',
             qty: String(item.qty),
             content: item.content,
-            returnedQty: item.returnedQty != null ? String(item.returnedQty) : '',
           }
         : emptyLine(0),
     ])
-    setReturnedAt(item?.returnedAt ?? '')
-    setTransferConfirmedBy(item?.transferConfirmedBy ?? '')
-    setIssuerName(item?.issuerName ?? '')
-    setRepairedBy(item?.repairedBy ?? '')
-    setReturnedBy(item?.returnedBy ?? '')
-    setReceiverName(item?.receiverName ?? '')
-    setNote(item?.note ?? '')
     // defaults (bộ lọc đang chọn) chỉ lấy lúc mở hộp thoại, không theo dõi.
   }, [open, item, customerSource])
 
@@ -185,14 +162,14 @@ export function RepairItemDialog({
   const addLine = () => setLines((current) => [...current, emptyLine(nextKey.current++)])
   const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key))
 
-  const returnedBeforeReceived = Boolean(returnedAt) && returnedAt < receivedAt
+  // Phần thủ kho đã nhập không có ô ở đây: thủ kho sửa phần khách phải gửi lại nguyên, không thì
+  // BE ghi trống. Đổi ngày gửi sang sau ngày trả thì BE báo lỗi.
   const ready =
     Boolean(receivedAt) &&
     Boolean(stage) &&
     Boolean(source) &&
     lines.length > 0 &&
-    lines.every((line) => lineErrors(line).ok) &&
-    !returnedBeforeReceived
+    lines.every((line) => lineErrors(line).ok)
 
   const payloadOf = (line: Line): RepairItemPayload => ({
     receivedAt,
@@ -203,19 +180,7 @@ export function RepairItemDialog({
     qty: Number(line.qty),
     content: line.content.trim(),
     senderName: textOrNull(senderName),
-    ...(keeper
-      ? {
-          source: source as RepairSource,
-          returnedQty: line.returnedQty === '' ? null : Number(line.returnedQty),
-          returnedAt: returnedAt || null,
-          transferConfirmedBy: textOrNull(transferConfirmedBy),
-          issuerName: textOrNull(issuerName),
-          repairedBy: textOrNull(repairedBy),
-          returnedBy: textOrNull(returnedBy),
-          receiverName: textOrNull(receiverName),
-          note: textOrNull(note),
-        }
-      : {}),
+    ...(keeper ? { source: source as RepairSource, ...(item ? keeperPartOf(item) : {}) } : {}),
   })
 
   const save = useMutation({
@@ -243,28 +208,15 @@ export function RepairItemDialog({
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const text = (label: string, value: string, set: (next: string) => void, maxLength = 100) => (
-    <TextField
-      size="small"
-      label={label}
-      value={value}
-      onChange={(event) => set(event.target.value)}
-      slotProps={{ htmlInput: { maxLength } }}
-    />
-  )
-
   const multi = lines.length > 1
 
   return (
     <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="sm">
-      <DialogTitle>{item ? 'Sửa hàng sửa chữa' : keeper ? 'Thêm hàng sửa chữa' : 'Gửi hàng sửa chữa'}</DialogTitle>
+      <DialogTitle>
+        {item ? 'Sửa phần khách gửi sửa' : keeper ? 'Khách gửi sửa — thủ kho nhập hộ' : 'Gửi hàng sửa chữa'}
+      </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          {keeper ? (
-            <Typography variant="subtitle2" color="text.secondary">
-              Khách gửi sửa
-            </Typography>
-          ) : null}
           <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
             <ChoiceGroup label="Loại hàng" value={stage} options={REPAIR_STAGE_OPTIONS} onChange={setStage} />
             {keeper ? (
@@ -322,20 +274,13 @@ export function RepairItemDialog({
                     </Tooltip>
                   </Stack>
                 ) : null}
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gap: 1.5,
-                    gridTemplateColumns: keeper ? { xs: '1fr 1fr', sm: '1.6fr 0.7fr 0.7fr' } : '1.6fr 0.7fr',
-                  }}
-                >
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1.6fr 0.7fr' }}>
                   <TextField
                     size="small"
                     label="Mã sản phẩm"
                     value={line.productCode}
                     onChange={(event) => setLine(line.key, { productCode: event.target.value })}
                     error={errors.missingProduct}
-                    sx={keeper ? { gridColumn: { xs: '1 / -1', sm: 'auto' } } : undefined}
                     slotProps={{ htmlInput: { maxLength: 100 } }}
                   />
                   <TextField
@@ -346,17 +291,6 @@ export function RepairItemDialog({
                     onChange={(event) => setLine(line.key, { qty: digitsOf(event.target.value) })}
                     slotProps={{ htmlInput: { inputMode: 'numeric' } }}
                   />
-                  {keeper ? (
-                    <TextField
-                      size="small"
-                      label="SL trả"
-                      value={line.returnedQty}
-                      onChange={(event) => setLine(line.key, { returnedQty: digitsOf(event.target.value) })}
-                      error={errors.returnedTooMany}
-                      helperText={errors.returnedTooMany ? 'Lớn hơn số lượng' : 'Trống = chưa trả'}
-                      slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-                    />
-                  ) : null}
                 </Box>
                 <TextField
                   size="small"
@@ -393,45 +327,18 @@ export function RepairItemDialog({
             </Box>
           ) : null}
 
-          {text('Người gửi sửa', senderName, setSenderName)}
-
-          {keeper ? (
-            <>
-              <Divider />
-              <Typography variant="subtitle2" color="text.secondary">
-                Thủ kho{multi ? ' — ghi chung cho cả phiếu' : ''}
-              </Typography>
-              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
-                <DateField
-                  size="small"
-                  label="Ngày trả"
-                  value={returnedAt}
-                  onChange={(next) => setReturnedAt(next ?? '')}
-                  error={returnedBeforeReceived}
-                  helperText={returnedBeforeReceived ? 'Trước ngày gửi' : undefined}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                />
-                {text('Người xác nhận chuyển hàng sửa chữa', transferConfirmedBy, setTransferConfirmedBy)}
-                {text('Người lập phiếu', issuerName, setIssuerName)}
-                {text('Người sửa', repairedBy, setRepairedBy)}
-                {text('Người trả', returnedBy, setReturnedBy)}
-                {text('Người nhận', receiverName, setReceiverName)}
-              </Box>
-              <TextField
-                size="small"
-                label="Note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                multiline
-                minRows={2}
-                slotProps={{ htmlInput: { maxLength: 1000 } }}
-              />
-            </>
-          ) : (
-            <Typography variant="caption" color="text.secondary">
-              Sau khi thủ kho nhận hàng thì không sửa / xoá được nữa.
-            </Typography>
-          )}
+          <TextField
+            size="small"
+            label="Người gửi sửa"
+            value={senderName}
+            onChange={(event) => setSenderName(event.target.value)}
+            slotProps={{ htmlInput: { maxLength: 100 } }}
+          />
+          <Typography variant="caption" color="text.secondary">
+            {keeper
+              ? 'Phần thủ kho (SL trả, ngày trả, người ký, note) nhập ở nút Xác nhận trên từng dòng.'
+              : 'Sau khi thủ kho nhận hàng thì không sửa / xoá được nữa.'}
+          </Typography>
           {item ? (
             <Typography variant="caption" color="text.secondary">
               Tạo bởi: {item.createdByName}
