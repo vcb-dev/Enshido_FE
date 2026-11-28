@@ -159,7 +159,7 @@ function FinishedGoodsStockTable() {
       index: 0,
     })
   }
-  const table = useTableParams({ pageSize: 8, filters: { status: 'ALL', flowStatus: 'ALL' } })
+  const table = useTableParams({ pageSize: 8, filters: { status: 'ALL', flowStatus: 'ALL', intakeCode: '' } })
   const { params } = table
   // Thêm / sửa thành phẩm là việc của thủ kho — khớp quyền phía BE.
   const { user } = useAuth()
@@ -209,9 +209,12 @@ function FinishedGoodsStockTable() {
     [flowCounts],
   )
 
+  const intakeCodeOptions = useMemo(() => uniqueFilterOptions(items.map((row) => row.intakeCode)), [items])
+
   const visible = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
     return items.filter((row) => {
+      if (params.intakeCode && row.intakeCode !== params.intakeCode) return false
       if (
         nameQuery &&
         !row.description.toLocaleLowerCase('vi').includes(nameQuery) &&
@@ -226,10 +229,10 @@ function FinishedGoodsStockTable() {
       if (params.flowStatus !== 'ALL' && fgFlowStatus(row) !== params.flowStatus) return false
       return true
     })
-  }, [items, params.flowStatus, params.search, params.status])
+  }, [items, params.flowStatus, params.intakeCode, params.search, params.status])
 
   const filtered = Boolean(
-    params.search.trim() || params.status !== 'ALL' || params.flowStatus !== 'ALL',
+    params.search.trim() || params.status !== 'ALL' || params.flowStatus !== 'ALL' || params.intakeCode,
   )
   const totals = filtered ? sumStockTotals(visible) : stock.data?.totals
   const pageCount = Math.max(1, Math.ceil(visible.length / params.pageSize))
@@ -290,6 +293,11 @@ function FinishedGoodsStockTable() {
         totals,
         {
           name: <ColumnHeaderSearch value={params.search} onChange={table.setSearch} placeholder="Tìm tên…" />,
+          intakeCode: {
+            valueId: params.intakeCode,
+            options: intakeCodeOptions,
+            onChange: (id) => table.setFilter({ intakeCode: id }),
+          },
           status: {
             valueId: params.status === 'ALL' ? '' : params.status,
             options: statusFilterOptions,
@@ -309,7 +317,7 @@ function FinishedGoodsStockTable() {
       ),
     // openImages chỉ gọi setState — không cần đưa vào deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, params.flowStatus, params.search, params.status, statusFilterOptions, table, totals],
+    [canEdit, dialog.openEdit, dialog.openView, flowFilterOptions, intakeCodeOptions, params.flowStatus, params.intakeCode, params.search, params.status, statusFilterOptions, table, totals],
   )
 
   const save = useMutation({
@@ -573,7 +581,7 @@ function FinishedGoodsOutboundTable() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const profile = stockProfile(THANH_PHAM_WAREHOUSE)
-  const table = useTableParams({ pageSize: 8, filters: { issuedBy: '', receivedBy: '' } })
+  const table = useTableParams({ pageSize: 8, filters: { issuedBy: '', receivedBy: '', intakeCode: '' } })
   const { params } = table
   const dialog = useCrudDialog<OutboundMoveRow>()
   const [creating, setCreating] = useState<{ orderCodes: string[] } | null>(null)
@@ -628,6 +636,7 @@ function FinishedGoodsOutboundTable() {
     () => uniqueFilterOptions(moves.map((row) => row.receivedBy)),
     [moves],
   )
+  const intakeCodeOptions = useMemo(() => uniqueFilterOptions(moves.map((row) => row.intakeCode)), [moves])
 
   const rows = useMemo(() => {
     const nameQuery = params.search.trim().toLocaleLowerCase('vi')
@@ -642,11 +651,12 @@ function FinishedGoodsOutboundTable() {
       }
       if (params.issuedBy && row.issuedBy !== params.issuedBy) return false
       if (params.receivedBy && row.receivedBy !== params.receivedBy) return false
+      if (params.intakeCode && row.intakeCode !== params.intakeCode) return false
       return true
     })
-  }, [moves, params.issuedBy, params.receivedBy, params.search])
+  }, [moves, params.intakeCode, params.issuedBy, params.receivedBy, params.search])
 
-  const filtering = Boolean(params.search.trim() || params.issuedBy || params.receivedBy)
+  const filtering = Boolean(params.search.trim() || params.issuedBy || params.receivedBy || params.intakeCode)
   const totals = sumMoveTotals(rows)
   const pageCount = Math.max(1, Math.ceil(rows.length / params.pageSize))
   const page = Math.min(params.page, pageCount)
@@ -687,14 +697,19 @@ function FinishedGoodsOutboundTable() {
         receivedBy: params.receivedBy,
         receivedByOptions: receiverOptions,
         onReceivedBy: (id) => table.setFilter({ receivedBy: id }),
+        intakeCode: params.intakeCode,
+        intakeCodeOptions,
+        onIntakeCode: (id) => table.setFilter({ intakeCode: id }),
         onView: (row) => navigate(`/finished-goods/shipments/${row.shipmentCode}`),
         onEdit: canEdit ? dialog.openEdit : undefined,
       }),
     [
       canEdit,
       dialog.openEdit,
+      intakeCodeOptions,
       issuerOptions,
       navigate,
+      params.intakeCode,
       params.issuedBy,
       params.receivedBy,
       params.search,
@@ -1047,7 +1062,7 @@ type HeaderFilter = {
 
 function stockColumns(
   totals: StockTotals | undefined,
-  filters: { name: ReactNode; status: HeaderFilter; flowStatus: HeaderFilter },
+  filters: { name: ReactNode; intakeCode: HeaderFilter; status: HeaderFilter; flowStatus: HeaderFilter },
   actions: {
     onView: (row: FinishedGoodsStockRow) => void
     onEdit?: (row: FinishedGoodsStockRow) => void
@@ -1077,6 +1092,7 @@ function stockColumns(
       key: 'intakeCode',
       header: 'Mã đơn hàng',
       cellSx: { whiteSpace: 'nowrap' },
+      filter: <ColumnHeaderFilter {...filters.intakeCode} />,
       render: (row) => row.intakeCode ?? '—',
     },
     {
@@ -1465,6 +1481,9 @@ function outboundColumns(
     receivedBy: string
     receivedByOptions: Array<{ id: string; name: string }>
     onReceivedBy: (id: string) => void
+    intakeCode: string
+    intakeCodeOptions: Array<{ id: string; name: string }>
+    onIntakeCode: (id: string) => void
     onView: (row: OutboundMoveRow) => void
     onEdit?: (row: OutboundMoveRow) => void
   },
@@ -1484,6 +1503,9 @@ function outboundColumns(
       header: 'Mã đơn hàng',
       width: 110,
       cellSx: { fontWeight: 700, whiteSpace: 'nowrap' },
+      filter: (
+        <ColumnHeaderFilter valueId={opts.intakeCode} options={opts.intakeCodeOptions} onChange={opts.onIntakeCode} />
+      ),
       render: (row) =>
         row.intakeCode ? (
           <Link component={RouterLink} to={`/orders/${row.sku}`} sx={{ fontWeight: 700 }}>
