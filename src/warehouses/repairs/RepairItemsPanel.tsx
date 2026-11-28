@@ -169,7 +169,7 @@ export function RepairItemsPanel() {
       },
       ...(customer
         ? []
-        : [{ key: 'source', header: 'Hàng của', width: 80, render: (row: RepairItem) => row.source }]),
+        : [{ key: 'source', header: 'Khách hàng', width: 100, render: (row: RepairItem) => row.source }]),
       {
         key: 'returnedQty',
         header: 'SL trả',
@@ -269,7 +269,7 @@ export function RepairItemsPanel() {
             {customer ? null : (
               <SelectInput
                 size="small"
-                label="Hàng của"
+                label="Khách hàng"
                 value={params.source}
                 onChange={(value) => table.setFilter({ source: String(value) })}
                 options={REPAIR_SOURCE_OPTIONS}

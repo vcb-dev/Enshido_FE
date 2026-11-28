@@ -220,11 +220,11 @@ export function RepairItemDialog({
           <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
             <ChoiceGroup label="Loại hàng" value={stage} options={REPAIR_STAGE_OPTIONS} onChange={setStage} />
             {keeper ? (
-              <ChoiceGroup label="Hàng của" value={source} options={REPAIR_SOURCE_OPTIONS} onChange={setSource} />
+              <ChoiceGroup label="Khách hàng" value={source} options={REPAIR_SOURCE_OPTIONS} onChange={setSource} />
             ) : (
               <Stack spacing={0.5}>
                 <Typography variant="caption" color="text.secondary">
-                  Hàng của
+                  Khách hàng
                 </Typography>
                 <Box>
                   <Chip variant="outlined" label={`Hàng ${customerSource}`} />
